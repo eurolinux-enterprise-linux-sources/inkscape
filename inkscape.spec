@@ -1,6 +1,8 @@
+%define imagemagick_ver   6.7.2.7
+
 Name:           inkscape
 Version:        0.47
-Release:        6%{?dist}
+Release:        10%{?dist}
 Summary:        Vector-based drawing program using SVG
 
 Group:          Applications/Productivity
@@ -15,6 +17,8 @@ Patch6:         inkscape-20091101svn-icon.patch
 Patch7:         inkscape-0.47-newpoppler.patch
 
 BuildRoot:      %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
+
+# Do not bother building this desktop app on s390*
 ExcludeArch: s390 s390x
 
 BuildRequires:  atk-devel
@@ -38,7 +42,7 @@ BuildRequires:  poppler-devel
 BuildRequires:  boost-devel
 BuildRequires:  gsl-devel
 BuildRequires:  libwpg-devel
-BuildRequires:  ImageMagick-c++-devel
+BuildRequires:  ImageMagick-c++-devel >= %{imagemagick_ver}
 BuildRequires:  perl(XML::Parser)
 BuildRequires:  perl(ExtUtils::Embed)
 BuildRequires:  intltool
@@ -56,7 +60,7 @@ BuildRequires:  automake
 Requires:       dia
 Requires:       pstoedit
 Requires:       ghostscript
-Requires:       perl(Image::Magick)
+Requires:       perl(Image::Magick) >= %{imagemagick_ver}
 Requires:       tex(latex)
 Requires:       tex(dvips)
 Requires:       transfig
@@ -147,6 +151,11 @@ dos2unix -k -q share/extensions/*.py
 
 
 %build
+
+# fixing strict aliasing warnings
+CFLAGS="$RPM_OPT_FLAGS -fno-strict-aliasing"
+CXXFLAGS="$RPM_OPT_FLAGS -fno-strict-aliasing"
+
 autoreconf -i
 rm intltool*
 intltoolize --automake
@@ -225,6 +234,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Feb 19 2015 Jan Horak <jhorak@redhat.com> - 0.47-10
+- Rebuild due to rebase of ImageMagick
+
 * Wed Jan 20 2010 Stepan Kasal <skasal@redhat.com> - 0.47-6
 - ExcludeArch: s390 s390x
 
