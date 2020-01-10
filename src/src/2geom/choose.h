@@ -1,7 +1,7 @@
 /**
- * \file
- * \brief Calculation of binomial cefficients
- *//*
+ * \file choose.h
+ * \brief  \todo brief description
+ *
  * Copyright 2006 Nathan Hurst <njh@mail.csse.monash.edu.au>
  *
  * This library is free software; you can redistribute it and/or
@@ -29,14 +29,11 @@
  *
  */
 
-#ifndef LIB2GEOM_SEEN_CHOOSE_H
-#define LIB2GEOM_SEEN_CHOOSE_H
-
+#ifndef _CHOOSE_H
+#define _CHOOSE_H
 #include <vector>
 
-namespace Geom {
-
-// XXX: Can we keep only the left terms easily?
+// XXX: Can we keep only the left terms easily? 
 // this would more than halve the array
 // row index becomes n2 = n/2, row2 = n2*(n2+1)/2, row = row2*2+(n&1)?n2:0
 // we could also leave off the ones
@@ -57,7 +54,7 @@ T choose(unsigned n, unsigned k) {
             unsigned p = pascals_triangle.size() - rows_done;
             pascals_triangle.push_back(1);
             for(unsigned i = 0; i < rows_done-1; i++) {
-                pascals_triangle.push_back(pascals_triangle[p]
+                pascals_triangle.push_back(pascals_triangle[p] 
                                            + pascals_triangle[p+1]);
 		p++;
             }
@@ -78,55 +75,7 @@ T choose(unsigned n, unsigned k) {
 	return r;
 	}*/
 
-
-
-template <typename ValueType>
-class BinomialCoefficient
-{
-  public:
-    typedef ValueType value_type;
-    typedef std::vector<value_type> container_type;
-
-    BinomialCoefficient(unsigned int _n)
-        : n(_n), m(n >> 1)
-    {
-        coefficients.reserve(m+1);
-        coefficients.push_back(1);
-        int h = m + 1;
-        value_type bct = 1;
-        for (int i = 1; i < h; ++i)
-        {
-            bct *= (n-i+1);
-            bct /= i;
-            coefficients.push_back(bct);
-        }
-    }
-
-    unsigned int size() const
-    {
-        return degree() +1;
-    }
-
-    unsigned int degree() const
-    {
-        return n;
-    }
-
-    value_type operator[] (unsigned int k) const
-    {
-        if (k > m)  k = n - k;
-        return coefficients[k];
-    }
-
-  private:
-    const int n;
-    const unsigned int m;
-    container_type coefficients;
-};
-
-} // end namespace Geom
-
-#endif // LIB2GEOM_SEEN_CHOOSE_H
+#endif
 
 /*
   Local Variables:
@@ -137,4 +86,4 @@ class BinomialCoefficient
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

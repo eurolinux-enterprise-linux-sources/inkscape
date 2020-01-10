@@ -33,7 +33,7 @@ public:
     virtual gchar * param_getSVGValue() const;
     virtual void param_set_default();
 
-    virtual Gtk::Widget * param_newWidget();
+    virtual Gtk::Widget * param_newWidget(Gtk::Tooltips * tooltips);
 
     void param_set_value(gdouble val, long newseed);
     void param_make_integer(bool yes = true);
@@ -42,7 +42,8 @@ public:
     void resetRandomizer();
 
     operator gdouble();
-    inline gdouble get_value() { return value; } ;
+    inline gdouble get_value()
+        { return value; } ;
 
 protected:
     long startseed;

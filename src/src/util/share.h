@@ -12,7 +12,7 @@
 #ifndef SEEN_INKSCAPE_UTIL_SHARE_H
 #define SEEN_INKSCAPE_UTIL_SHARE_H
 
-#include "inkgc/gc-core.h"
+#include "gc-core.h"
 #include <cstring>
 #include <cstddef>
 
@@ -146,4 +146,4 @@ inline ptr_shared<T1> reinterpret_cast_shared(ptr_shared<T2> const &ref) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

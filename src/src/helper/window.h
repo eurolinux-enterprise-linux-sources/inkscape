@@ -1,7 +1,7 @@
-#ifndef SEEN_SP_WINDOW_H
-#define SEEN_SP_WINDOW_H
+#ifndef __SP_WINDOW_H__
+#define __SP_WINDOW_H__
 
-/**
+/*
  * Generic window implementation
  *
  * Author:
@@ -10,18 +10,13 @@
  * This code is in public domain
  */
 
-struct _GtkWidget;
-typedef _GtkWidget GtkWidget;
+#include <gtk/gtk.h>
+#include <gtkmm/window.h>
 
-namespace Gtk {
-class Window;
-}
-
-// Can we just get rid of this altogether?
-#if defined(GCC_VERSION) || defined(__clang__)
-__attribute__((deprecated))
-#endif
-GtkWidget * sp_window_new (const gchar *title, unsigned int resizeable);
+/*
+ * This function is depreciated. Use Inkscape::UI::window_new instead.
+ */
+GtkWidget *sp_window_new (const gchar *title, unsigned int resizeable);
 
 namespace Inkscape {
 namespace UI {
@@ -31,7 +26,7 @@ Gtk::Window *window_new (const gchar *title, unsigned int resizeable);
 }
 }
 
-#endif // !SEEN_SP_WINDOW_H
+#endif
 
 /*
   Local Variables:
@@ -42,4 +37,4 @@ Gtk::Window *window_new (const gchar *title, unsigned int resizeable);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

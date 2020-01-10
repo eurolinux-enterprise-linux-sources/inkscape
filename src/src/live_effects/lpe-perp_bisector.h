@@ -27,7 +27,7 @@ namespace PB {
   class KnotHolderEntityEnd;
   class KnotHolderEntityLeftEnd;
   class KnotHolderEntityRightEnd;
-  void bisector_end_set(SPItem *item, Geom::Point const &p, guint state, bool left = true);
+  void bisector_end_set(SPItem *item, Geom::Point const &p, bool left);
 }
 
 class LPEPerpBisector : public Effect {
@@ -37,7 +37,7 @@ public:
 
     virtual EffectType effectType () { return PERP_BISECTOR; }
 
-    void doOnApply (SPLPEItem const* lpeitem);
+    void doOnApply (SPLPEItem *lpeitem);
 
     virtual Geom::Piecewise<Geom::D2<Geom::SBasis> >
       doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in);
@@ -46,8 +46,7 @@ public:
     friend class PB::KnotHolderEntityEnd;
     friend class PB::KnotHolderEntityLeftEnd;
     friend class PB::KnotHolderEntityRightEnd;
-    friend void PB::bisector_end_set(SPItem *item, Geom::Point const &p, guint state, bool left);
-    void addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item);
+    friend void PB::bisector_end_set(SPItem *item, Geom::Point const &p, bool left = true);
 
 private:
     ScalarParam length_left;

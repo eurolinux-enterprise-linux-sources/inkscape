@@ -9,7 +9,6 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glibmm.h>
 #include <glibmm/i18n.h>
 
 #include "filter-enums.h"
@@ -49,30 +48,16 @@ const EnumDataConverter<FilterPrimitiveInput> FPInputConverter(FPInputData, FPIN
 
 // feBlend
 const EnumData<Inkscape::Filters::FilterBlendMode> BlendModeData[Inkscape::Filters::BLEND_ENDMODE] = {
-    {Inkscape::Filters::BLEND_NORMAL,       _("Normal"),      "normal"},
-    {Inkscape::Filters::BLEND_MULTIPLY,     _("Multiply"),    "multiply"},
-    {Inkscape::Filters::BLEND_SCREEN,       _("Screen"),      "screen"},
-    {Inkscape::Filters::BLEND_DARKEN,       _("Darken"),      "darken"},
-    {Inkscape::Filters::BLEND_LIGHTEN,      _("Lighten"),     "lighten"},
-// New in Compositing and Blending Level 1
-    {Inkscape::Filters::BLEND_OVERLAY,      _("Overlay"),     "overlay"},
-    {Inkscape::Filters::BLEND_COLORDODGE,   _("Color Dodge"), "color-dodge"},
-    {Inkscape::Filters::BLEND_COLORBURN,    _("Color Burn"),  "color-burn"},
-    {Inkscape::Filters::BLEND_HARDLIGHT,    _("Hard Light"),  "hard-light"},
-    {Inkscape::Filters::BLEND_SOFTLIGHT,    _("Soft Light"),  "soft-light"},
-    {Inkscape::Filters::BLEND_DIFFERENCE,   _("Difference"),  "difference"},
-    {Inkscape::Filters::BLEND_EXCLUSION,    _("Exclusion"),   "exclusion"},
-    {Inkscape::Filters::BLEND_HUE,          _("Hue"),         "hue"},
-    {Inkscape::Filters::BLEND_SATURATION,   _("Saturation"),  "saturation"},
-    {Inkscape::Filters::BLEND_COLOR,        _("Color"),       "color"},
-    {Inkscape::Filters::BLEND_LUMINOSITY,   _("Luminosity"),  "luminosity"}
+    //TRANSLATORS: only translate "string" in "context|string".
+    // For more details, see http://developer.gnome.org/doc/API/2.0/glib/glib-I18N.html#Q-:CAPS
+    {Inkscape::Filters::BLEND_NORMAL,   Q_("filterBlendMode|Normal"),   "normal"},
+    {Inkscape::Filters::BLEND_MULTIPLY, _("Multiply"), "multiply"},
+    {Inkscape::Filters::BLEND_SCREEN,   _("Screen"),   "screen"},
+    {Inkscape::Filters::BLEND_DARKEN,   _("Darken"),   "darken"},
+    {Inkscape::Filters::BLEND_LIGHTEN,  _("Lighten"),  "lighten"}
 };
-#ifdef WITH_CSSBLEND
 const EnumDataConverter<Inkscape::Filters::FilterBlendMode> BlendModeConverter(BlendModeData, Inkscape::Filters::BLEND_ENDMODE);
-#else
-// Disable new blend modes in GUI until widely implemented.
-const EnumDataConverter<Inkscape::Filters::FilterBlendMode> BlendModeConverter(BlendModeData, Inkscape::Filters::BLEND_OVERLAY);
-#endif
+
 
 const EnumData<Inkscape::Filters::FilterColorMatrixType> ColorMatrixTypeData[Inkscape::Filters::COLORMATRIX_ENDTYPE] = {
     {Inkscape::Filters::COLORMATRIX_MATRIX,           _("Matrix"),             "matrix"},
@@ -84,24 +69,13 @@ const EnumDataConverter<Inkscape::Filters::FilterColorMatrixType> ColorMatrixTyp
 
 // feComposite
 const EnumData<FeCompositeOperator> CompositeOperatorData[COMPOSITE_ENDOPERATOR] = {
-    {COMPOSITE_DEFAULT,          _("Default"),         ""                 },
-    {COMPOSITE_OVER,             _("Over"),            "over"             },
-    {COMPOSITE_IN,               _("In"),              "in"               },
-    {COMPOSITE_OUT,              _("Out"),             "out"              },
-    {COMPOSITE_ATOP,             _("Atop"),            "atop"             },
-    {COMPOSITE_XOR,              _("XOR"),             "xor"              },
-#ifdef WITH_CSSCOMPOSITE
-// New CSS
-    {COMPOSITE_CLEAR,            _("Clear"),           "clear"            },
-    {COMPOSITE_COPY,             _("Copy"),            "copy"             },
-    {COMPOSITE_DESTINATION,      _("Destination"),     "destination"      },
-    {COMPOSITE_DESTINATION_OVER, _("Destination Over"),"destination-over" },
-    {COMPOSITE_DESTINATION_IN,   _("Destination In"),  "destination-in"   },
-    {COMPOSITE_DESTINATION_OUT,  _("Destination Out"), "destination-out"  },
-    {COMPOSITE_DESTINATION_ATOP, _("Destination Atop"),"destination-atop" },
-    {COMPOSITE_LIGHTER,          _("Lighter"),         "lighter"          },
-#endif
-    {COMPOSITE_ARITHMETIC,       _("Arithmetic"),      "arithmetic"       }
+    {COMPOSITE_DEFAULT,    _("Default"),    ""},
+    {COMPOSITE_OVER,       _("Over"),       "over"},
+    {COMPOSITE_IN,         _("In"),         "in"},
+    {COMPOSITE_OUT,        _("Out"),        "out"},
+    {COMPOSITE_ATOP,       _("Atop"),       "atop"},
+    {COMPOSITE_XOR,        _("XOR"),        "xor"},
+    {COMPOSITE_ARITHMETIC, _("Arithmetic"), "arithmetic"}
 };
 const EnumDataConverter<FeCompositeOperator> CompositeOperatorConverter(CompositeOperatorData, COMPOSITE_ENDOPERATOR);
 
@@ -119,7 +93,7 @@ const EnumDataConverter<Inkscape::Filters::FilterComponentTransferType> Componen
 const EnumData<Inkscape::Filters::FilterConvolveMatrixEdgeMode> ConvolveMatrixEdgeModeData[Inkscape::Filters::CONVOLVEMATRIX_EDGEMODE_ENDTYPE] = {
     {Inkscape::Filters::CONVOLVEMATRIX_EDGEMODE_DUPLICATE, _("Duplicate"), "duplicate"},
     {Inkscape::Filters::CONVOLVEMATRIX_EDGEMODE_WRAP,      _("Wrap"),      "wrap"},
-    {Inkscape::Filters::CONVOLVEMATRIX_EDGEMODE_NONE,      C_("Convolve matrix, edge mode", "None"),      "none"}
+    {Inkscape::Filters::CONVOLVEMATRIX_EDGEMODE_NONE,      _("None"),      "none"}
 };
 const EnumDataConverter<Inkscape::Filters::FilterConvolveMatrixEdgeMode> ConvolveMatrixEdgeModeConverter(ConvolveMatrixEdgeModeData, Inkscape::Filters::CONVOLVEMATRIX_EDGEMODE_ENDTYPE);
 
@@ -163,4 +137,4 @@ const EnumDataConverter<LightSource> LightSourceConverter(LightSourceData, LIGHT
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

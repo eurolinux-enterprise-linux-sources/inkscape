@@ -1,8 +1,9 @@
-/*
+/** \file
+ * \brief
+ *
  * Authors:
  *   Ralf Stephan <ralf@ark.in-berlin.de>
  *   Johan Engelen <j.b.c.engelen@utwente.nl>
- *   Abhishek Sharma
  *
  * Copyright (C) 2005-2008 Authors
  *
@@ -12,11 +13,15 @@
 #ifndef INKSCAPE_UI_WIDGET_REGISTERED_WIDGET__H_
 #define INKSCAPE_UI_WIDGET_REGISTERED_WIDGET__H_
 
-#include "ui/widget/scalar.h"
-#include <2geom/affine.h>
+#include <gtkmm/box.h>
+#include <gtkmm/adjustment.h>
+#include <gtkmm/tooltips.h>
+#include <gtkmm/togglebutton.h>
+#include <2geom/matrix.h>
 #include "xml/node.h"
 #include "registry.h"
 
+#include "ui/widget/scalar.h"
 #include "ui/widget/scalar-unit.h"
 #include "ui/widget/point.h"
 #include "ui/widget/text.h"
@@ -26,12 +31,10 @@
 #include "inkscape.h"
 
 #include "document.h"
-#include "document-undo.h"
-#include "desktop.h"
+#include "desktop-handles.h"
 #include "sp-namedview.h"
 
-#include <gtkmm/checkbutton.h>
-
+class SPUnit;
 class SPDocument;
 
 namespace Gtk {
@@ -55,13 +58,11 @@ public:
         event_description = _event_description;
         write_undo = true;
     }
-    void set_xml_target(Inkscape::XML::Node *xml_node, SPDocument *document)
-    {
-        repr = xml_node;
-        doc = document;
-    }
 
     bool is_updating() {if (_wr) return _wr->isUpdating(); else return false;}
+
+    // provide automatic 'upcast' for ease of use. (do it 'dynamic_cast' instead of 'static' because who knows what W is)
+    operator const Gtk::Widget () { return dynamic_cast<Gtk::Widget*>(this); }
 
 protected:
     RegisteredWidget() : W() { construct(); }
@@ -99,22 +100,20 @@ protected:
         if (!local_repr) {
             // no repr specified, use active desktop's namedview's repr
             SPDesktop* dt = SP_ACTIVE_DESKTOP;
-            local_repr = reinterpret_cast<SPObject *>(dt->getNamedView())->getRepr();
-            local_doc = dt->getDocument();
+            local_repr = SP_OBJECT_REPR (sp_desktop_namedview(dt));
+            local_doc = sp_desktop_document(dt);
         }
 
-        bool saved = DocumentUndo::getUndoSensitive(local_doc);
-        DocumentUndo::setUndoSensitive(local_doc, false);
-        if (!write_undo) {
-            local_repr->setAttribute(_key.c_str(), svgstr);
-        }
-        DocumentUndo::setUndoSensitive(local_doc, saved);
+        bool saved = sp_document_get_undo_sensitive (local_doc);
+        sp_document_set_undo_sensitive (local_doc, false);
+        if (!write_undo) local_repr->setAttribute(_key.c_str(), svgstr);
+        sp_document_set_undo_sensitive (local_doc, saved);
 
         local_doc->setModifiedSinceSave();
 
         if (write_undo) {
             local_repr->setAttribute(_key.c_str(), svgstr);
-            DocumentUndo::done(local_doc, event_type, event_description);
+            sp_document_done (local_doc, event_type, event_description);
         }
     }
 
@@ -132,7 +131,6 @@ private:
         repr = NULL;
         doc = NULL;
         write_undo = false;
-        event_type = -1;
     }
 };
 
@@ -141,7 +139,7 @@ private:
 class RegisteredCheckButton : public RegisteredWidget<Gtk::CheckButton> {
 public:
     virtual ~RegisteredCheckButton();
-    RegisteredCheckButton (const Glib::ustring& label, const Glib::ustring& tip, const Glib::ustring& key, Registry& wr, bool right=true, Inkscape::XML::Node* repr_in=NULL, SPDocument *doc_in=NULL, char const *active_str = "true", char const *inactive_str = "false");
+    RegisteredCheckButton (const Glib::ustring& label, const Glib::ustring& tip, const Glib::ustring& key, Registry& wr, bool right=true, Inkscape::XML::Node* repr_in=NULL, SPDocument *doc_in=NULL);
 
     void setActive (bool);
 
@@ -158,31 +156,7 @@ public:
                                 // if a callback checks it, it must reset it back to false
 
 protected:
-    char const *_active_str, *_inactive_str;
-    sigc::connection  _toggled_connection;
-    void on_toggled();
-};
-
-class RegisteredToggleButton : public RegisteredWidget<Gtk::ToggleButton> {
-public:
-    virtual ~RegisteredToggleButton();
-    RegisteredToggleButton (const Glib::ustring& label, const Glib::ustring& tip, const Glib::ustring& key, Registry& wr, bool right=true, Inkscape::XML::Node* repr_in=NULL, SPDocument *doc_in=NULL, char const *icon_active = "true", char const *icon_inactive = "false");
-
-    void setActive (bool);
-
-    std::list<Gtk::Widget*> _slavewidgets;
-
-    // a slave button is only sensitive when the master button is active
-    // i.e. a slave button is greyed-out when the master button is not checked
-
-    void setSlaveWidgets(std::list<Gtk::Widget*> btns) {
-        _slavewidgets = btns;
-    }
-
-    bool setProgrammatically; // true if the value was set by setActive, not changed by the user;
-                                // if a callback checks it, it must reset it back to false
-
-protected:
+    Gtk::Tooltips     _tt;
     sigc::connection  _toggled_connection;
     void on_toggled();
 };
@@ -196,21 +170,13 @@ public:
                          Inkscape::XML::Node* repr_in = NULL,
                          SPDocument *doc_in = NULL );
 
-    void setUnit (const Glib::ustring);
-    Unit const * getUnit() const { return static_cast<UnitMenu*>(_widget)->getUnit(); };
+    void setUnit (const SPUnit*);
+    Unit getUnit() const { return static_cast<UnitMenu*>(_widget)->getUnit(); };
     UnitMenu* getUnitMenu() const { return static_cast<UnitMenu*>(_widget); };
     sigc::connection _changed_connection;
 
 protected:
     void on_changed();
-};
-
-// Allow RegisteredScalarUnit to output lengths in 'user units' (which may have direction dependent
-// scale factors).
-enum RSU_UserUnits {
-    RSU_none,
-    RSU_x,
-    RSU_y
 };
 
 class RegisteredScalarUnit : public RegisteredWidget<ScalarUnit> {
@@ -222,14 +188,12 @@ public:
                            const RegisteredUnitMenu &rum,
                            Registry& wr,
                            Inkscape::XML::Node* repr_in = NULL,
-                           SPDocument *doc_in = NULL,
-                           RSU_UserUnits _user_units = RSU_none );
+                           SPDocument *doc_in = NULL );
 
 protected:
     sigc::connection  _value_changed_connection;
     UnitMenu         *_um;
     void on_value_changed();
-    RSU_UserUnits _user_units;
 };
 
 class RegisteredScalar : public RegisteredWidget<Scalar> {
@@ -324,6 +288,7 @@ public:
                                     // if a callback checks it, it must reset it back to false
 protected:
     Gtk::RadioButton *_rb1, *_rb2;
+    Gtk::Tooltips     _tt;
     sigc::connection _changed_connection;
     void on_value_changed();
 };
@@ -358,14 +323,14 @@ public:
     // redefine setValue, because transform must be applied
     void setValue(Geom::Point const & p);
 
-    void setTransform(Geom::Affine const & canvas_to_svg);
+    void setTransform(Geom::Matrix const & canvas_to_svg);
 
 protected:
     sigc::connection  _value_x_changed_connection;
     sigc::connection  _value_y_changed_connection;
     void on_value_changed();
 
-    Geom::Affine to_svg;
+    Geom::Matrix to_svg;
 };
 
 
@@ -382,12 +347,6 @@ public:
     // redefine setValue, because transform must be applied
     void setValue(Geom::Point const & p);
     void setValue(Geom::Point const & p, Geom::Point const & origin);
-
-    /**
-     * Changes the widgets text to polar coordinates. The SVG output will still be a normal carthesian vector.
-     * Careful: when calling getValue(), the return value's X-coord will be the angle, Y-value will be the distance/length. 
-     * After changing the coords type (polar/non-polar), the value has to be reset (setValue).
-     */
     void setPolarCoords(bool polar_coords = true);
 
 protected:
@@ -428,9 +387,9 @@ protected:
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  c-file-offsets:((innamespace . 0)(inline-open . 0))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

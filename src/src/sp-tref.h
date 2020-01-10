@@ -22,19 +22,21 @@
 
 /* tref base class */
 
-#define SP_TREF(obj) (dynamic_cast<SPTRef*>((SPObject*)obj))
-#define SP_IS_TREF(obj) (dynamic_cast<const SPTRef*>((SPObject*)obj) != NULL)
+#define SP_TYPE_TREF (sp_tref_get_type())
+#define SP_TREF(o) (G_TYPE_CHECK_INSTANCE_CAST((o), SP_TYPE_TREF, SPTRef))
+#define SP_TREF_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), SP_TYPE_TREF, SPTSpanClass))
+#define SP_IS_TREF(o) (G_TYPE_CHECK_INSTANCE_TYPE((o), SP_TYPE_TREF))
+#define SP_IS_TREF_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), SP_TYPE_TREF))
 
-class SPTRef : public SPItem {
-public:
-	SPTRef();
-	virtual ~SPTRef();
+class SPTRef;
+class SPTRef;
 
+struct SPTRef : public SPItem {
     // Attributes that are used in the same way they would be in a tspan
     TextTagAttributes attributes;
     
     // Text stored in the xlink:href attribute
-    char *href;
+    gchar *href;
     
     // URI reference to original object
     SPTRefReference *uriOriginalRef;
@@ -49,19 +51,13 @@ public:
     sigc::connection _changed_connection;
     
     SPObject * getObjectReferredTo();
-    SPObject const *getObjectReferredTo() const;
-
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-	virtual void set(unsigned int key, char const* value);
-	virtual void update(SPCtx* ctx, unsigned int flags);
-	virtual void modified(unsigned int flags);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
-
-	virtual Geom::OptRect bbox(Geom::Affine const &transform, SPItem::BBoxType type) const;
-        virtual const char* displayName() const;
-	virtual char* description() const;
 };
+
+struct SPTRefClass {
+    SPItemClass parent_class;
+};
+
+GType sp_tref_get_type();
 
 void sp_tref_update_text(SPTRef *tref);
 bool sp_tref_reference_allowed(SPTRef *tref, SPObject *possible_ref);
@@ -81,4 +77,4 @@ SPObject * sp_tref_convert_to_tspan(SPObject *item);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

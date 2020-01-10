@@ -55,8 +55,8 @@ def create_equation_tex(filename, equation, add_header=""):
     tex.close()
 
 def svg_open(self,filename):
-    doc_width = self.unittouu(self.document.getroot().get('width'))
-    doc_height = self.unittouu(self.document.getroot().get('height'))
+    doc_width = inkex.unittouu(self.document.getroot().get('width'))
+    doc_height = inkex.unittouu(self.document.getroot().get('height'))
     doc_sizeH = min(doc_width,doc_height)
     doc_sizeW = max(doc_width,doc_height)
 
@@ -118,10 +118,6 @@ class EQTEXSVG(inkex.Effect):
                 os.remove(err_file)
             os.rmdir(base_dir)
 
-        if self.options.formula == "":
-            print >>sys.stderr, "empty LaTeX input.  Nothing to be done"
-            return
-
         add_header = parse_pkgs(self.options.packages)
         create_equation_tex(latex_file, self.options.formula, add_header)
         os.system('latex "-output-directory=%s" -halt-on-error "%s" > "%s"' \
@@ -160,4 +156,4 @@ if __name__ == '__main__':
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

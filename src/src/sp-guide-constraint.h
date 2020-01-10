@@ -1,7 +1,7 @@
-#ifndef SEEN_SP_GUIDE_CONSTRAINT_H
-#define SEEN_SP_GUIDE_CONSTRAINT_H
+#ifndef __SP_GUIDE_CONSTRAINT_H__
+#define __SP_GUIDE_CONSTRAINT_H__
 
-class SPGuide;
+#include <forward.h>
 
 class SPGuideConstraint {
 public:
@@ -10,8 +10,7 @@ public:
 
 public:
     explicit SPGuideConstraint() :
-        g(static_cast<SPGuide *>(0)),
-        snappoint_ix(0)
+        g(static_cast<SPGuide *>(0))
     { }
 
     explicit SPGuideConstraint(SPGuide *g, int snappoint_ix) :
@@ -29,7 +28,9 @@ public:
     }
 };
 
-#endif // SEEN_SP_GUIDE_CONSTRAINT_H
+
+#endif /* !__SP_GUIDE_CONSTRAINT_H__ */
+
 
 /*
   Local Variables:
@@ -40,4 +41,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

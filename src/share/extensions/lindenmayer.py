@@ -14,10 +14,9 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
 import inkex, simplestyle, pturtle, random
-from simpletransform import computePointInNode
 
 def stripme(s):
     return s.strip()
@@ -69,7 +68,7 @@ class LSystem(inkex.Effect):
         return self.turtle.getPath()
     def __compose_path(self, string):
         self.turtle.pu()
-        self.turtle.setpos(computePointInNode(list(self.view_center), self.current_layer))
+        self.turtle.setpos(self.view_center)
         self.turtle.pd()
         for c in string:
             if c in 'ABCDEF':
@@ -105,8 +104,7 @@ class LSystem(inkex.Effect):
         return level_string
             
     def effect(self):
-        self.options.step = self.unittouu(str(self.options.step) + 'px')
-        s = {'stroke-linejoin': 'miter', 'stroke-width': str(self.unittouu('1px')), 
+        s = {'stroke-linejoin': 'miter', 'stroke-width': '1.0px', 
             'stroke-opacity': '1.0', 'fill-opacity': '1.0', 
             'stroke': '#000000', 'stroke-linecap': 'butt', 
             'fill': 'none'}
@@ -118,4 +116,4 @@ if __name__ == '__main__':
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

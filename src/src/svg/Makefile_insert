@@ -3,8 +3,10 @@
 ink_common_sources +=	\
 	svg/css-ostringstream.h	\
 	svg/css-ostringstream.cpp	\
+	svg/itos.cpp	\
 	svg/path-string.h	\
 	svg/path-string.cpp \
+	svg/round.cpp	\
 	svg/stringstream.h	\
 	svg/stringstream.cpp	\
 	svg/strip-trailing-zeros.h	\
@@ -13,8 +15,6 @@ ink_common_sources +=	\
 	svg/svg-color.cpp	\
 	svg/svg-color.h 	\
 	svg/svg-icc-color.h \
-	svg/svg-angle.cpp   \
-	svg/svg-angle.h     \
 	svg/svg-length.cpp	\
 	svg/svg-length.h	\
 	svg/svg-path.cpp	\

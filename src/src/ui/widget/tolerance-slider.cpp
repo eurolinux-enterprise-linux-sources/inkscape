@@ -1,7 +1,9 @@
-/*
+/** \file
+ *
+ Implementation of tolerance slider widget.
+ *
  * Authors:
  *   Ralf Stephan <ralf@ark.in-berlin.de> 
- *   Abhishek Sharma
  *
  * Copyright (C) 2006 Authors
  *
@@ -15,7 +17,6 @@
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
-#include <gtkmm/radiobutton.h>
 #include <gtkmm/scale.h>
 
 #include "xml/repr.h"
@@ -23,9 +24,7 @@
 
 #include "inkscape.h"
 #include "document.h"
-#include "document-undo.h"
-#include "desktop.h"
-
+#include "desktop-handles.h"
 #include "sp-namedview.h"
 
 #include "registry.h"
@@ -43,10 +42,9 @@ namespace Widget {
 
 //====================================================
 
-ToleranceSlider::ToleranceSlider(const Glib::ustring& label1, const Glib::ustring& label2, const Glib::ustring& label3, const Glib::ustring& tip1, const Glib::ustring& tip2, const Glib::ustring& tip3, const Glib::ustring& key, Registry& wr)
+ToleranceSlider::ToleranceSlider()
 : _vbox(0)
 {
-    init(label1, label2, label3, tip1, tip2, tip3, key, wr);
 }
 
 ToleranceSlider::~ToleranceSlider()
@@ -55,7 +53,8 @@ ToleranceSlider::~ToleranceSlider()
     _scale_changed_connection.disconnect();
 }
 
-void ToleranceSlider::init (const Glib::ustring& label1, const Glib::ustring& label2, const Glib::ustring& label3, const Glib::ustring& tip1, const Glib::ustring& tip2, const Glib::ustring& tip3, const Glib::ustring& key, Registry& wr)
+void
+ToleranceSlider::init (const Glib::ustring& label1, const Glib::ustring& label2, const Glib::ustring& label3, const Glib::ustring& tip1, const Glib::ustring& tip2, const Glib::ustring& tip3, const Glib::ustring& key, Registry& wr)
 {
     // hbox = label + slider
     //
@@ -68,41 +67,34 @@ void ToleranceSlider::init (const Glib::ustring& label1, const Glib::ustring& la
     //           hbox
     
     _vbox = new Gtk::VBox;
-    _hbox = Gtk::manage(new Gtk::HBox);
+    _hbox = manage (new Gtk::HBox);
     
-    Gtk::Label *theLabel1 = Gtk::manage(new Gtk::Label(label1));
+    Gtk::Label *theLabel1 = manage (new Gtk::Label (label1));
     theLabel1->set_use_underline();
     theLabel1->set_alignment(0, 0.5);
     // align the label with the checkbox text above by indenting 22 px.
-    _hbox->pack_start(*theLabel1, Gtk::PACK_EXPAND_WIDGET, 22);
-
-#if WITH_GTKMM_3_0
-    _hscale = Gtk::manage(new Gtk::Scale(Gtk::ORIENTATION_HORIZONTAL));
-    _hscale->set_range(1.0, 51.0);
-#else 
-    _hscale = Gtk::manage (new Gtk::HScale (1.0, 51, 1.0));
-#endif
-
+    _hbox->pack_start(*theLabel1, Gtk::PACK_EXPAND_WIDGET, 22); 
+    _hscale = manage (new Gtk::HScale (1.0, 51, 1.0));
     theLabel1->set_mnemonic_widget (*_hscale);
     _hscale->set_draw_value (true);
     _hscale->set_value_pos (Gtk::POS_RIGHT);
     _hscale->set_size_request (100, -1);
     _old_val = 10;
     _hscale->set_value (_old_val);
-    _hscale->set_tooltip_text (tip1);
+    _tt.set_tip (*_hscale, tip1);
     _hbox->add (*_hscale);    
     
     
-    Gtk::Label *theLabel2 = Gtk::manage(new Gtk::Label(label2));
+    Gtk::Label *theLabel2 = manage (new Gtk::Label (label2));
     theLabel2->set_use_underline();
-    Gtk::Label *theLabel3 = Gtk::manage(new Gtk::Label(label3));
+    Gtk::Label *theLabel3 = manage (new Gtk::Label (label3));
     theLabel3->set_use_underline();    
-    _button1 = Gtk::manage(new Gtk::RadioButton);
+    _button1 = manage (new Gtk::RadioButton);
     _radio_button_group = _button1->get_group();
-    _button2 = Gtk::manage(new Gtk::RadioButton);
+    _button2 = manage (new Gtk::RadioButton);
     _button2->set_group(_radio_button_group);    
-    _button1->set_tooltip_text (tip2);
-    _button2->set_tooltip_text (tip3);    
+    _tt.set_tip (*_button1, tip2);
+    _tt.set_tip (*_button2, tip3);    
     _button1->add (*theLabel3);
     _button1->set_alignment (0.0, 0.5);    
     _button2->add (*theLabel2);
@@ -119,13 +111,10 @@ void ToleranceSlider::init (const Glib::ustring& label1, const Glib::ustring& la
     _vbox->show_all_children();
 }
 
-void ToleranceSlider::setValue (double val)
+void 
+ToleranceSlider::setValue (double val)
 {
-#if WITH_GTKMM_3_0
-    Glib::RefPtr<Gtk::Adjustment> adj = _hscale->get_adjustment();
-#else
     Gtk::Adjustment *adj = _hscale->get_adjustment();
-#endif
 
     adj->set_lower (1.0);
     adj->set_upper (51.0);
@@ -148,18 +137,21 @@ void ToleranceSlider::setValue (double val)
     _hbox->show_all();
 }
 
-void ToleranceSlider::setLimits (double theMin, double theMax)
+void
+ToleranceSlider::setLimits (double theMin, double theMax)
 {
     _hscale->set_range (theMin, theMax);
     _hscale->get_adjustment()->set_step_increment (1);
 }
 
-void ToleranceSlider::on_scale_changed()
+void
+ToleranceSlider::on_scale_changed()
 {
     update (_hscale->get_value());
 }
 
-void ToleranceSlider::on_toggled()
+void
+ToleranceSlider::on_toggled()
 {
     if (!_button2->get_active())
     {
@@ -178,7 +170,8 @@ void ToleranceSlider::on_toggled()
     }
 }
 
-void ToleranceSlider::update (double val)
+void
+ToleranceSlider::update (double val)
 {
     if (_wr->isUpdating())
         return;
@@ -192,12 +185,12 @@ void ToleranceSlider::update (double val)
 
     _wr->setUpdating (true);
 
-    SPDocument *doc = dt->getDocument();
-    bool saved = DocumentUndo::getUndoSensitive(doc);
-    DocumentUndo::setUndoSensitive(doc, false);
-    Inkscape::XML::Node *repr = dt->getNamedView()->getRepr();
+    SPDocument *doc = sp_desktop_document(dt);
+    bool saved = sp_document_get_undo_sensitive (doc);
+    sp_document_set_undo_sensitive (doc, false);
+    Inkscape::XML::Node *repr = SP_OBJECT_REPR (sp_desktop_namedview(dt));
     repr->setAttribute(_key.c_str(), os.str().c_str());
-    DocumentUndo::setUndoSensitive(doc, saved);
+    sp_document_set_undo_sensitive (doc, saved);
 
     doc->setModifiedSinceSave();
     
@@ -213,9 +206,9 @@ void ToleranceSlider::update (double val)
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  c-file-offsets:((innamespace . 0)(inline-open . 0))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

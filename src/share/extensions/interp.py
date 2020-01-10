@@ -14,9 +14,9 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
-import inkex, cubicsuperpath, simplestyle, copy, math, bezmisc, simpletransform, pathmodifier
+import inkex, cubicsuperpath, simplestyle, copy, math, bezmisc, simpletransform
 
 def numsegs(csp):
     return sum([len(p)-1 for p in csp])
@@ -59,6 +59,10 @@ def csplength(csp):
 def tweenstylefloat(property, start, end, time):
     sp = float(start[property])
     ep = float(end[property])
+    return str(sp + (time * (ep - sp)))
+def tweenstyleunit(property, start, end, time):
+    sp = inkex.unittouu(start[property])
+    ep = inkex.unittouu(end[property])
     return str(sp + (time * (ep - sp)))
 def tweenstylecolor(property, start, end, time):
     sr,sg,sb = parsecolor(start[property])
@@ -103,17 +107,6 @@ class Interp(inkex.Effect):
                         action="store", type="inkbool", 
                         dest="style", default=True,
                         help="try interpolation of some style properties")    
-        self.OptionParser.add_option("--zsort",
-                        action="store", type="inkbool",
-                        dest="zsort", default=False,
-                        help="use z-order instead of selection order")
-
-    def tweenstyleunit(self, property, start, end, time): # moved here so we can call 'unittouu'
-        scale = self.unittouu('1px')
-        sp = self.unittouu(start.get(property, '1px')) / scale
-        ep = self.unittouu(end.get(property, '1px')) / scale
-        return str(sp + (time * (ep - sp)))
-
     def effect(self):
         exponent = self.options.exponent
         if exponent>= 0:
@@ -127,15 +120,7 @@ class Interp(inkex.Effect):
             
         paths = {}            
         styles = {}
-
-        if self.options.zsort:
-            # work around selection order swapping with Live Preview
-            sorted_ids = pathmodifier.zSort(self.document.getroot(),self.selected.keys())
-        else:
-            # use selection order (default)
-            sorted_ids = self.options.ids
-
-        for id in sorted_ids:
+        for id in self.options.ids:
             node = self.selected[id]
             if node.tag ==inkex.addNS('path','svg'):
                 paths[id] = cubicsuperpath.parsePath(node.get('d'))
@@ -144,16 +129,14 @@ class Interp(inkex.Effect):
                 if trans:
                     simpletransform.applyTransformToPath(simpletransform.parseTransform(trans), paths[id])
             else:
-                sorted_ids.remove(id)
+                self.options.ids.remove(id)
 
-        for i in range(1,len(sorted_ids)):
-            start = copy.deepcopy(paths[sorted_ids[i-1]])
-            end = copy.deepcopy(paths[sorted_ids[i]])
-            sst = copy.deepcopy(styles[sorted_ids[i-1]])
-            est = copy.deepcopy(styles[sorted_ids[i]])
+        for i in range(1,len(self.options.ids)):
+            start = copy.deepcopy(paths[self.options.ids[i-1]])
+            end = copy.deepcopy(paths[self.options.ids[i]])
+            sst = copy.deepcopy(styles[self.options.ids[i-1]])
+            est = copy.deepcopy(styles[self.options.ids[i]])
             basestyle = copy.deepcopy(sst)
-            if basestyle.has_key('stroke-width'):
-                basestyle['stroke-width'] = self.tweenstyleunit('stroke-width',sst,est,0)
 
             #prepare for experimental style tweening
             if self.options.style:
@@ -320,7 +303,7 @@ class Interp(inkex.Effect):
                     basestyle['opacity'] = tweenstylefloat('opacity',sst,est,time)
                     if dostroke:
                         basestyle['stroke-opacity'] = tweenstylefloat('stroke-opacity',sst,est,time)
-                        basestyle['stroke-width'] = self.tweenstyleunit('stroke-width',sst,est,time)
+                        basestyle['stroke-width'] = tweenstyleunit('stroke-width',sst,est,time)
                         basestyle['stroke'] = tweenstylecolor('stroke',sst,est,time)
                     if dofill:
                         basestyle['fill-opacity'] = tweenstylefloat('fill-opacity',sst,est,time)
@@ -333,4 +316,4 @@ if __name__ == '__main__':
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

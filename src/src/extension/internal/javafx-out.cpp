@@ -9,7 +9,6 @@
  *   Silveira Neto <silveiraneto@gmail.com>
  *   Jim Clarke <Jim.Clarke@sun.com>
  *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 2008,2009 Authors
  *
@@ -20,8 +19,6 @@
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
-
-#include <glibmm/miscutils.h>
 #include "javafx-out.h"
 #include <inkscape.h>
 #include <inkscape-version.h>
@@ -35,16 +32,16 @@
 #include <extension/system.h>
 #include <2geom/pathvector.h>
 #include <2geom/rect.h>
-#include <2geom/curves.h>
+#include <2geom/bezier-curve.h>
+#include <2geom/hvlinesegment.h>
 #include "helper/geom.h"
 #include "helper/geom-curves.h"
 #include <io/sys.h>
-#include "sp-root.h"
+
 
 #include <string>
 #include <stdio.h>
 #include <stdarg.h>
-#include "extension/extension.h"
 
 
 namespace Inkscape
@@ -88,11 +85,12 @@ static double effective_opacity(const SPStyle *style)
 {
     double val = 1.0;
     for (SPObject const *obj = style->object; obj ; obj = obj->parent)
-    {
-        if (obj->style) {
-            val *= SP_SCALE24_TO_FLOAT(obj->style->opacity.value);
+        {
+        style = SP_OBJECT_STYLE(obj);
+        if (style) {
+            val *= SP_SCALE24_TO_FLOAT(style->opacity.value);
         }
-    }
+        }
     return val;
 }
 
@@ -100,19 +98,6 @@ static double effective_opacity(const SPStyle *style)
 //# OUTPUT FORMATTING
 //########################################################################
 
-JavaFXOutput::JavaFXOutput(void) :
-    name(),
-    outbuf(),
-    foutbuf(),
-    nrNodes(0),
-    nrShapes(0),
-    idindex(0),
-    minx(0),
-    miny(0),
-    maxx(0),
-    maxy(0)
-{
-}
 
 /**
  * We want to control floating output format.
@@ -128,6 +113,21 @@ static JavaFXOutput::String dstr(double d)
 }
 
 #define DSTR(d) (dstr(d).c_str())
+
+
+/**
+ * Format a double as an integer
+ */
+static JavaFXOutput::String istr(double d)
+{
+    char dbuf[G_ASCII_DTOSTR_BUF_SIZE+1];
+    g_ascii_formatd(dbuf, G_ASCII_DTOSTR_BUF_SIZE,
+                  "%.0f", (gdouble)d);
+    JavaFXOutput::String s = dbuf;
+    return s;
+}
+
+#define ISTR(d) (istr(d).c_str())
 
 
 /**
@@ -311,7 +311,7 @@ bool JavaFXOutput::doGradient(SPGradient *grad, const String &id)
         out("    function %s(): LinearGradient {\n",  jfxid.c_str());
         out("        LinearGradient {\n");
         std::vector<SPGradientStop> stops = g->vector.stops;
-        if (!stops.empty())
+        if (stops.size() > 0)
             {
             out("            stops:\n");
             out("                [\n");
@@ -341,7 +341,7 @@ bool JavaFXOutput::doGradient(SPGradient *grad, const String &id)
         out("            focusY: %s\n",  DSTR(g->fy.value));
         out("            radius: %s\n",  DSTR(g->r.value ));
         std::vector<SPGradientStop> stops = g->vector.stops;
-        if (!stops.empty())
+        if (stops.size() > 0)
             {
             out("            stops:\n");
             out("            [\n");
@@ -386,7 +386,7 @@ bool JavaFXOutput::doStyle(SPStyle *style)
     /**
      * Fill
      */
-    SPIPaint const &fill = style->fill;
+    SPIPaint fill = style->fill;
     if (fill.isColor())
         {
         // see color.h for how to parse SPColor
@@ -395,14 +395,12 @@ bool JavaFXOutput::doStyle(SPStyle *style)
         }
     else if (fill.isPaintserver()){
         if (fill.value.href && fill.value.href->getURI() ){
-            gchar *str = fill.value.href->getURI()->toString();
-            String uri = (str ? str : "");
+            String uri = fill.value.href->getURI()->toString();
             /* trim the anchor '#' from the front */
             if (uri.size() > 0 && uri[0]=='#') {
                 uri = uri.substr(1);
             }
             out("            fill: %s()\n", sanatize(uri).c_str());
-            g_free(str);
         }
     }
 
@@ -417,13 +415,15 @@ bool JavaFXOutput::doStyle(SPStyle *style)
      * SPIEnum stroke_linecap;
      * SPIEnum stroke_linejoin;
      * SPIFloat stroke_miterlimit;
-     * SPIDashArray stroke_dasharray;
-     * SPILength stroke_dashoffset;
+     * NRVpathDash stroke_dash;
+     * unsigned stroke_dasharray_set : 1;
+     * unsigned stroke_dasharray_inherit : 1;
+     * unsigned stroke_dashoffset_set : 1;
      * SPIScale24 stroke_opacity;
      */
     if (style->stroke_opacity.value > 0)
         {
-        SPIPaint const &stroke = style->stroke;
+        SPIPaint stroke = style->stroke;
         out("            stroke: %s\n",
             rgba(stroke.value.color, SP_SCALE24_TO_FLOAT(style->stroke_opacity.value)).c_str());
         double strokewidth = style->stroke_width.value;
@@ -433,16 +433,16 @@ bool JavaFXOutput::doStyle(SPStyle *style)
         out("            strokeLineCap: %s\n",    getStrokeLineCap(linecap).c_str());
         out("            strokeLineJoin: %s\n",   getStrokeLineJoin(linejoin).c_str());
         out("            strokeMiterLimit: %s\n", DSTR(style->stroke_miterlimit.value));
-        if (style->stroke_dasharray.set) {
-           if (style->stroke_dashoffset.set) {
-               out("            strokeDashOffset: %s\n", DSTR(style->stroke_dashoffset.value));
+        if (style->stroke_dasharray_set) {
+           if (style->stroke_dashoffset_set) {
+               out("            strokeDashOffset: %s\n", DSTR(style->stroke_dash.offset));
            }
            out("            strokeDashArray: [ ");
-           for(unsigned i = 0; i < style->stroke_dasharray.values.size(); i++ ) {
+           for(int i = 0; i < style->stroke_dash.n_dash; i++ ) {
                if (i > 0) {
-                   out(", %.2lf", style->stroke_dasharray.values[i]);
+                   out(", %.2lf", style->stroke_dash.dash[i]);
                }else {
-                   out(" %.2lf", style->stroke_dasharray.values[i]);
+                   out(" %.2lf", style->stroke_dash.dash[i]);
                }
            }
            out(" ]\n");
@@ -472,7 +472,8 @@ bool JavaFXOutput::doCurve(SPItem *item, const String &id)
     }
 
     SPShape *shape = SP_SHAPE(item);
-    if (shape->_curve->is_empty()) {
+    SPCurve *curve = shape->curve;
+    if (curve->is_empty()) {
         return true;
     }
 
@@ -486,14 +487,14 @@ bool JavaFXOutput::doCurve(SPItem *item, const String &id)
     /**
      * Output the style information
      */
-    if (!doStyle(shape->style)) {
+    if (!doStyle(SP_OBJECT_STYLE(shape))) {
         return false;
     }
 
     // convert the path to only lineto's and cubic curveto's:
-    Geom::Scale yflip(1.0, -1.0); /// @fixme  hardcoded desktop transform!
-    Geom::Affine tf = item->i2dt_affine() * yflip;
-    Geom::PathVector pathv = pathv_to_linear_and_cubic_beziers( shape->_curve->get_pathvector() * tf );
+    Geom::Scale yflip(1.0, -1.0);
+    Geom::Matrix tf = sp_item_i2d_affine(item) * yflip;
+    Geom::PathVector pathv = pathv_to_linear_and_cubic_beziers( curve->get_pathvector() * tf );
 
     //Count the NR_CURVETOs/LINETOs (including closing line segment)
     guint segmentCount = 0;
@@ -530,7 +531,9 @@ bool JavaFXOutput::doCurve(SPItem *item, const String &id)
         for (Geom::Path::const_iterator cit = pit->begin(); cit != pit->end_closed(); ++cit)
             {
             //### LINE
-            if ( dynamic_cast<Geom::LineSegment  const *> (&*cit) )
+            if ( dynamic_cast<Geom::LineSegment  const *> (&*cit) ||
+                dynamic_cast<Geom::HLineSegment const *> (&*cit) ||
+                dynamic_cast<Geom::VLineSegment const *> (&*cit) )
                 {
                 Geom::Point p = cit->finalPoint();
                 out("                LineTo {\n");
@@ -542,7 +545,7 @@ bool JavaFXOutput::doCurve(SPItem *item, const String &id)
             //### BEZIER
             else if (Geom::CubicBezier const *cubic = dynamic_cast<Geom::CubicBezier const*>(&*cit))
                 {
-                std::vector<Geom::Point> points = cubic->controlPoints();
+                std::vector<Geom::Point> points = cubic->points();
                 Geom::Point p1 = points[1];
                 Geom::Point p2 = points[2];
                 Geom::Point p3 = points[3];
@@ -626,13 +629,13 @@ bool JavaFXOutput::doCurve(SPItem *item, const String &id)
     /**
      * Output the style information
      */
-    if (!doStyle(shape->style)) {
+    if (!doStyle(SP_OBJECT_STYLE(shape))) {
         return false;
     }
 
     // convert the path to only lineto's and cubic curveto's:
-    Geom::Scale yflip(1.0, -1.0); /// @fixme hardcoded desktop transform
-    Geom::Affine tf = item->i2dt_affine() * yflip;
+    Geom::Scale yflip(1.0, -1.0);
+    Geom::Matrix tf = sp_item_i2d_affine(item) * yflip;
     Geom::PathVector pathv = pathv_to_linear_and_cubic_beziers( curve->get_pathvector() * tf );
 
     //Count the NR_CURVETOs/LINETOs (including closing line segment)
@@ -755,7 +758,7 @@ bool JavaFXOutput::doTree(SPDocument *doc)
     miny  =  bignum;
     maxy  = -bignum;
 
-    if (!doTreeRecursive(doc, doc->getRoot())) {
+    if (!doTreeRecursive(doc, doc->root)) {
         return false;
     }
 
@@ -786,7 +789,7 @@ bool JavaFXOutput::doBody(SPDocument *doc, SPObject *obj)
         //### Get the Shape
         if (SP_IS_SHAPE(item)) {//Bulia's suggestion.  Allow all shapes
             SPShape *shape = SP_SHAPE(item);
-            SPCurve *curve = shape->_curve;
+            SPCurve *curve = shape->curve;
             if (!curve->is_empty()) {
                 String jfxid = sanatize(id);
                 out("               %s(),\n", jfxid.c_str());
@@ -872,7 +875,7 @@ bool JavaFXOutput::saveDocument(SPDocument *doc, gchar const *filename_utf8)
     out("           content: [\n");
     idindex    = 0;
 
-    doBody(doc, doc->getRoot());
+    doBody(doc, doc->root);
 
     if (!doTail()) {
         return false;
@@ -888,7 +891,7 @@ bool JavaFXOutput::saveDocument(SPDocument *doc, gchar const *filename_utf8)
         return false;
         }
 
-    for (String::iterator iter = outbuf.begin() ; iter!=outbuf.end(); ++iter)
+    for (String::iterator iter = outbuf.begin() ; iter!=outbuf.end(); iter++)
         {
         fputc(*iter, f);
         }
@@ -990,4 +993,4 @@ JavaFXOutput::init()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

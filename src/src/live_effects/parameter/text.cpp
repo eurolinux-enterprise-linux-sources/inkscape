@@ -1,3 +1,5 @@
+#define INKSCAPE_LIVEPATHEFFECT_PARAMETER_TEXT_CPP
+
 /*
  * Copyright (C) Maximilian Albert 2008 <maximilian.albert@gmail.com>
  *
@@ -8,18 +10,16 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "ui/widget/registered-widget.h"
-#include <glibmm/i18n.h>
-
 #include "live_effects/parameter/text.h"
 #include "live_effects/effect.h"
 #include "svg/svg.h"
 #include "svg/stringstream.h"
+#include <gtkmm.h>
 #include "widgets/icon.h"
+#include "ui/widget/registered-widget.h"
 #include "inkscape.h"
 #include "verbs.h"
 #include "display/canvas-text.h"
-
 #include <2geom/sbasis-geometric.h>
 
 namespace Inkscape {
@@ -33,8 +33,8 @@ TextParam::TextParam( const Glib::ustring& label, const Glib::ustring& tip,
       value(default_value),
       defvalue(default_value)
 {
-    SPDesktop *desktop = SP_ACTIVE_DESKTOP; // FIXME: we shouldn't use this!
-    canvas_text = (SPCanvasText *) sp_canvastext_new(desktop->getTempGroup(), desktop, Geom::Point(0,0), "");
+    SPDesktop *desktop = inkscape_active_desktop(); // FIXME: we shouldn't use this!
+    canvas_text = (SPCanvasText *) sp_canvastext_new(sp_desktop_tempgroup(desktop), desktop, Geom::Point(0,0), "");
     sp_canvastext_set_text (canvas_text, default_value.c_str());
     sp_canvastext_set_coords (canvas_text, 0, 0);
 }
@@ -65,7 +65,7 @@ TextParam::setPosAndAnchor(const Geom::Piecewise<Geom::D2<Geom::SBasis> > &pwd2,
     double angle = Geom::angle_between(dir, Point(1,0));
 
     sp_canvastext_set_coords(canvas_text, pos + n * length);
-    sp_canvastext_set_anchor_manually(canvas_text, std::sin(angle), -std::cos(angle));
+    sp_canvastext_set_anchor(canvas_text, std::sin(angle), -std::cos(angle));
 }
 
 void
@@ -73,7 +73,7 @@ TextParam::setAnchor(double x_value, double y_value)
 {
     anchor_x = x_value;
     anchor_y = y_value;
-    sp_canvastext_set_anchor_manually (canvas_text, anchor_x, anchor_y);
+    sp_canvastext_set_anchor (canvas_text, anchor_x, anchor_y);
 }
 
 bool
@@ -86,11 +86,11 @@ TextParam::param_readSVGValue(const gchar * strvalue)
 gchar *
 TextParam::param_getSVGValue() const
 {
-    return g_strdup(value.c_str());
+    return (gchar *) value.c_str();
 }
 
 Gtk::Widget *
-TextParam::param_newWidget()
+TextParam::param_newWidget(Gtk::Tooltips * /*tooltips*/)
 {
     Inkscape::UI::Widget::RegisteredText *rsu = Gtk::manage(new Inkscape::UI::Widget::RegisteredText(
         param_label, param_tooltip, param_key, *param_wr, param_effect->getRepr(), param_effect->getSPDoc()));

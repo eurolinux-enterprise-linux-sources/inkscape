@@ -1,30 +1,6 @@
-/*
- * Author:
- *   Gustav Broberg <broberg@kth.se>
- *   Jon A. Cruz <jon@joncruz.org>
- *
- * Copyright (c) 2014 Authors
- *
- * Released under GNU GPL, read the file 'COPYING' for more information
- */
-
-#ifndef INKSCAPE_EVENT_LOG_H
-#define INKSCAPE_EVENT_LOG_H
-
-#include <gtkmm/treestore.h>
-#include <glibmm/refptr.h>
-#include <gtkmm/treeselection.h>
-#include <gtkmm/treeview.h>
-#include <sigc++/trackable.h>
-
-#include "undo-stack-observer.h"
-#include "event.h"
-
-namespace Inkscape {
-
-class EventLogPrivate;
-
 /**
+ * Inkscape::EventLog
+ *
  * A simple log for maintaining a history of commited, undone and redone events along with their
  * type. It implements the UndoStackObserver and should be registered with a
  * CompositeUndoStackObserver for each document. The event log is then notified on all commit, undo
@@ -36,9 +12,33 @@ class EventLogPrivate;
  * If a Gtk::TreeView is connected to the event log, the TreeView's selection and its nodes
  * expanded/collapsed state will be updated as events are commited, undone and redone. Whenever
  * this happens, the event log will block the TreeView's callbacks to prevent circular updates.
+ *
+ * Author:
+ *   Gustav Broberg <broberg@kth.se>
+ *
+ * Copyright (c) 2006, 2007 Authors
+ *
+ * Released under GNU GPL, read the file 'COPYING' for more information
  */
-class EventLog : public UndoStackObserver, public sigc::trackable
-{
+
+#ifndef INKSCAPE_EVENT_LOG_H
+#define INKSCAPE_EVENT_LOG_H
+
+#include <gdkmm/pixbuf.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/treestore.h>
+#include <gtkmm/treeselection.h>
+#include <gtkmm/treeview.h>
+
+#include "undo-stack-observer.h"
+#include "event.h"
+
+namespace Inkscape {
+
+/**
+ *     
+ */
+class EventLog : public UndoStackObserver {
         
 public:
     typedef Gtk::TreeModel::iterator iterator;
@@ -50,6 +50,7 @@ public:
     /**
      * Event datatype
      */
+
     struct EventModelColumns : public Gtk::TreeModelColumnRecord
     {
         Gtk::TreeModelColumn<Event *> event;
@@ -63,18 +64,20 @@ public:
         }
     };
 
-    // Implementation of Inkscape::UndoStackObserver methods
-
     /**
-     * Modifies the log's entries and the view's selection when triggered.
+     * Implementation of Inkscape::UndoStackObserver methods
+     * \brief Modifies the log's entries and the view's selection when triggered
      */
+
     void notifyUndoEvent(Event *log);
     void notifyRedoEvent(Event *log);
     void notifyUndoCommitEvent(Event *log);
     void notifyClearUndoEvent();
     void notifyClearRedoEvent();
 
-    // Accessor functions
+    /**
+     * Accessor functions
+     */
 
     Glib::RefPtr<Gtk::TreeModel> getEventListStore() const { return _event_list_store; }
     const EventModelColumns& getColumns() const            { return _columns; }
@@ -86,7 +89,9 @@ public:
     void blockNotifications(bool status=true)  { _notifications_blocked = status; }
     void rememberFileSave()                    { _last_saved = _curr_event; }
 
-    // Callback types for TreeView changes.
+    /* 
+     * Callback types for TreeView changes.
+     */
 
     enum CallbackTypes { 
         CALLB_SELECTION_CHANGE, 
@@ -100,12 +105,7 @@ public:
     /**
      * Connect with a TreeView.
      */
-    void addDialogConnection(Gtk::TreeView *event_list_view, CallbackMap *callback_connections);
-
-    /**
-     * Disconnect from a TreeView.
-     */
-    void removeDialogConnection(Gtk::TreeView *event_list_view, CallbackMap *callback_connections);
+    void connectWithDialog(Gtk::TreeView *event_list_view, CallbackMap *callback_connections);
 
     /*
      * Updates the sensitivity and names of SP_VERB_EDIT_UNDO and SP_VERB_EDIT_REDO to reflect the
@@ -114,13 +114,14 @@ public:
     void updateUndoVerbs();
 
 private:
-    EventLogPrivate *_priv;
-
+    bool _connected;             //< connected with dialog
     SPDocument *_document;       //< document that is logged
 
     const EventModelColumns _columns;
 
     Glib::RefPtr<Gtk::TreeStore> _event_list_store; 
+    Glib::RefPtr<Gtk::TreeSelection> _event_list_selection;
+    Gtk::TreeView *_event_list_view;
 
     iterator _curr_event;        //< current event in _event_list_store
     iterator _last_event;        //< end position in _event_list_store
@@ -130,7 +131,12 @@ private:
 
     bool _notifications_blocked; //< if notifications should be handled
 
-    // Helper functions
+    // Map of connections used to temporary block/unblock callbacks in a TreeView
+    CallbackMap *_callback_connections;
+
+    /**
+     * Helper functions
+     */
 
     const_iterator _getUndoEvent() const; //< returns the current undoable event or NULL if none
     const_iterator _getRedoEvent() const; //< returns the current redoable event or NULL if none
@@ -143,6 +149,7 @@ private:
     // noncopyable, nonassignable
     EventLog(EventLog const &other);
     EventLog& operator=(EventLog const &other);
+
 };
 
 } // namespace Inkscape
@@ -158,4 +165,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

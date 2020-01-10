@@ -2,10 +2,8 @@
 #define INKSCAPE_HELPER_GEOM_CURVES_H
 
 /**
- * @file
  * Specific curve type functions for Inkscape, not provided by lib2geom.
- */
-/*
+ *
  * Author:
  *   Johan Engelen <goejendaagh@zonnet.nl>
  *
@@ -14,27 +12,31 @@
  * Released under GNU GPL
  */
 
+#include <2geom/hvlinesegment.h>
 #include <2geom/line.h>
 #include <2geom/bezier-curve.h>
 
 /// \todo un-inline this function
-inline bool is_straight_curve(Geom::Curve const & c)
-{
-    if( dynamic_cast<Geom::LineSegment const*>(&c) )
+inline bool is_straight_curve(Geom::Curve const & c) {
+    if( dynamic_cast<Geom::LineSegment const*>(&c) ||
+        dynamic_cast<Geom::HLineSegment const*>(&c) ||
+        dynamic_cast<Geom::VLineSegment const*>(&c) )
     {
         return true;
     }
     // the curve can be a quad/cubic bezier, but could still be a perfect straight line
     // if the control points are exactly on the line connecting the initial and final points.
-    Geom::BezierCurve const *curve = dynamic_cast<Geom::BezierCurve const *>(&c);
-    if (curve) {
-        Geom::Line line(curve->initialPoint(), curve->finalPoint());
-        std::vector<Geom::Point> pts = curve->controlPoints();
-        for (unsigned i = 1; i < pts.size() - 1; ++i) {
-            if (!are_near(pts[i], line))
-                return false;
+    else if ( Geom::QuadraticBezier const *quad = dynamic_cast<Geom::QuadraticBezier const*>(&c) ) {
+        Geom::Line line( quad->initialPoint(), quad->finalPoint() );
+        if ( are_near((*quad)[1], line) ) {
+            return true;
         }
-        return true;
+    }
+    else if ( Geom::CubicBezier const *cubic = dynamic_cast<Geom::CubicBezier const*>(&c) ) {
+        Geom::Line line( cubic->initialPoint(), cubic->finalPoint() );
+        if ( are_near((*cubic)[1], line) && are_near((*cubic)[2], line) ) {
+            return true;
+        }
     }
 
     return false;
@@ -51,4 +53,4 @@ inline bool is_straight_curve(Geom::Curve const & c)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

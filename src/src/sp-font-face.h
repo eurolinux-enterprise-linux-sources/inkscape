@@ -1,7 +1,10 @@
-#ifndef SEEN_SP_FONTFACE_H
-#define SEEN_SP_FONTFACE_H
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
-#include <vector>
+#ifdef ENABLE_SVG_FONTS
+#ifndef __SP_FONTFACE_H__
+#define __SP_FONTFACE_H__
 
 /*
  * SVG <font-face> element implementation
@@ -20,8 +23,11 @@
 
 #include "sp-object.h"
 
-#define SP_FONTFACE(obj) (dynamic_cast<SPFontFace*>((SPObject*)obj))
-#define SP_IS_FONTFACE(obj) (dynamic_cast<const SPFontFace*>((SPObject*)obj) != NULL)
+#define SP_TYPE_FONTFACE (sp_fontface_get_type ())
+#define SP_FONTFACE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_FONTFACE, SPFontFace))
+#define SP_FONTFACE_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_FONTFACE, SPFontFaceClass))
+#define SP_IS_FONTFACE(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_FONTFACE))
+#define SP_IS_FONTFACE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_FONTFACE))
 
 enum FontFaceStyleType{
 	SP_FONTFACE_STYLE_ALL,
@@ -67,11 +73,7 @@ enum FontFaceUnicodeRangeType{
 	FONTFACE_UNICODERANGE_FIXME_HERE,
 };
 
-class SPFontFace : public SPObject {
-public:
-	SPFontFace();
-	virtual ~SPFontFace();
-
+struct SPFontFace : public SPObject {
     char* font_family;
     std::vector<FontFaceStyleType> font_style;
     std::vector<FontFaceVariantType> font_variant;
@@ -105,19 +107,13 @@ public:
     double strikethrough_thickness;
     double overline_position;
     double overline_thickness;
-
-protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-
-	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
-	virtual void remove_child(Inkscape::XML::Node* child);
-
-	virtual void set(unsigned int key, const char* value);
-
-	virtual void update(SPCtx* ctx, unsigned int flags);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
 };
 
+struct SPFontFaceClass {
+	SPObjectClass parent_class;
+};
+
+GType sp_fontface_get_type (void);
+
 #endif //#ifndef __SP_FONTFACE_H__
+#endif //#ifdef ENABLE_SVG_FONTS

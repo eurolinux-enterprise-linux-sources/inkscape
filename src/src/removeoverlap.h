@@ -13,6 +13,8 @@
 #ifndef SEEN_REMOVEOVERLAP_H
 #define SEEN_REMOVEOVERLAP_H
 
-void removeoverlap(std::vector<SPItem*> const &items, double xGap, double yGap);
+#include <glib.h>
+
+void removeoverlap(GSList const *items, double xGap, double yGap);
 
 #endif // SEEN_REMOVEOVERLAP_H

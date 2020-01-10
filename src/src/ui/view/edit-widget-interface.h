@@ -1,4 +1,8 @@
-/*
+/**
+ * \file
+ *
+ * Abstract base class for all EditWidget implementations.
+ *
  * Authors:
  *     Ralf Stephan <ralf@ark.in-berlin.de>
  *     John Bintz <jcoswell@coswellproductions.org>
@@ -12,16 +16,9 @@
 #ifndef INKSCAPE_UI_VIEW_EDIT_WIDGET_IFACE_H
 #define INKSCAPE_UI_VIEW_EDIT_WIDGET_IFACE_H
 
+#include "libnr/nr-point.h"
 #include "message.h"
-#include <2geom/point.h>
-
-namespace Gtk {
-class Window;
-}
-
-namespace Glib {
-class ustring;
-}
+#include <gtkmm/window.h>
 
 namespace Inkscape { namespace UI { namespace Widget { class Dock; } } }
 
@@ -29,9 +26,6 @@ namespace Inkscape {
 namespace UI {
 namespace View {
 
-/**
- * Abstract base class for all EditWidget implementations.
- */
 struct EditWidgetInterface
 {
     EditWidgetInterface() {}
@@ -101,6 +95,9 @@ struct EditWidgetInterface
     /// Update the "inactive desktop" indicator
     virtual void deactivateDesktop() = 0;
 
+    /// Set rulers to position
+    virtual void viewSetPosition (Geom::Point p) = 0;
+
     /// Update rulers from current values
     virtual void updateRulers() = 0;
 
@@ -115,12 +112,6 @@ struct EditWidgetInterface
 
     /// Toggle CMS on/off and set preference value accordingly
     virtual void toggleColorProfAdjust() = 0;
-
-    /// Toggle lock guides on/off and set namedview value accordingly
-    virtual void toggleGuidesLock() = 0;
-
-    /// Is CMS on/off
-    virtual bool colorProfAdjustEnabled() = 0;
 
     /// Temporarily block signals and update zoom display
     virtual void updateZoom() = 0;
@@ -146,12 +137,8 @@ struct EditWidgetInterface
     /// Message widget will get no content
     virtual void setMessage (Inkscape::MessageType type, gchar const* msg) = 0;
 
-
-    /** Show an info dialog with the given message */
-    virtual bool showInfoDialog( Glib::ustring const &message ) = 0;
-
     /// Open yes/no dialog with warning text and confirmation question.
-    virtual bool warnDialog (Glib::ustring const &) = 0;
+    virtual bool warnDialog (gchar*) = 0;
 
     virtual Inkscape::UI::Widget::Dock* getDock () = 0;
 };
@@ -171,4 +158,4 @@ struct EditWidgetInterface
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

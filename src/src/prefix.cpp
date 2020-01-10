@@ -44,6 +44,9 @@ extern "C" {
 #endif /* __cplusplus */
 
 
+#undef NULL
+#define NULL ((void *) 0)
+
 #ifdef __GNUC__
     #define br_return_val_if_fail(expr,val) if (!(expr)) {fprintf (stderr, "** BinReloc (%s): assertion %s failed\n", __PRETTY_FUNCTION__, #expr); return val;}
 #else
@@ -186,7 +189,7 @@ br_locate_prefix (void *symbol)
  * br_prepend_prefix (&argc, "/share/foo/data.png");   --> Returns "/usr/share/foo/data.png"
  */
 char *
-br_prepend_prefix (void *symbol, char const *path)
+br_prepend_prefix (void *symbol, char *path)
 {
     char *tmp, *newpath;
 
@@ -337,8 +340,8 @@ br_strndup (char *str, size_t size)
  * path: A path.
  * Returns: A directory name. This string should be freed when no longer needed.
  *
- * Extracts the directory component of path. Similar to g_path_get_dirname()
- * or the dirname commandline application.
+ * Extracts the directory component of path. Similar to g_dirname() or the dirname
+ * commandline application.
  *
  * Example:
  * br_extract_dir ("/usr/local/foobar");  --> Returns: "/usr/local"

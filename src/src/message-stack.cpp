@@ -62,12 +62,6 @@ void MessageStack::cancel(MessageId id) {
     }
 }
 
-MessageId MessageStack::flash(MessageType type, Glib::ustring const &message)
-{
-    MessageId id = flash( type, message.c_str() );
-    return id;
-}
-
 MessageId MessageStack::flash(MessageType type, gchar const *message) {
     switch (type) {
     case INFORMATION_MESSAGE: // stay rather long so as to seem permanent, but eventually disappear
@@ -169,4 +163,4 @@ gboolean MessageStack::_timeout(gpointer data) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

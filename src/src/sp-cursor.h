@@ -1,13 +1,10 @@
 #ifndef SP_CURSOR_H
 #define SP_CURSOR_H
 
-typedef unsigned int guint32;
-typedef struct _GdkPixbuf GdkPixbuf;
-typedef struct _GdkCursor GdkCursor;
-typedef struct _GdkColor GdkColor;
+#include <gdk/gdk.h>
 
-GdkPixbuf* sp_cursor_pixbuf_from_xpm(char const *const *xpm, GdkColor const& black, GdkColor const& white, guint32 fill, guint32 stroke);
-GdkCursor *sp_cursor_new_from_xpm(char const *const *xpm, int hot_x, int hot_y);
+void sp_cursor_bitmap_and_mask_from_xpm(GdkBitmap **bitmap, GdkBitmap **mask, gchar const *const *xpm);
+GdkCursor *sp_cursor_new_from_xpm(gchar const *const *xpm, gint hot_x, gint hot_y);
 
 #endif
 
@@ -20,4 +17,4 @@ GdkCursor *sp_cursor_new_from_xpm(char const *const *xpm, int hot_x, int hot_y);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -1,3 +1,7 @@
+/**
+ * Glyph selector dialog.
+ */
+
 /* Authors:
  *   Jon A. Cruz
  *
@@ -7,14 +11,16 @@
 #ifndef SEEN_DIALOG_DESKTOP_TRACKER
 #define SEEN_DIALOG_DESKTOP_TRACKER
 
-#include <cstddef>
+#include <stddef.h>
 #include <sigc++/connection.h>
+#include <glib.h>
 
 typedef struct _GtkWidget GtkWidget;
 class SPDesktop;
-struct InkscapeApplication;
 
 namespace Inkscape {
+
+class Application;
 
 namespace UI {
 namespace Dialog {
@@ -36,7 +42,7 @@ public:
     sigc::connection connectDesktopChanged( const sigc::slot<void, SPDesktop*> & slot );
 
 private:
-    static void activateDesktopCB(SPDesktop *desktop, DesktopTracker *self );
+    static gboolean activateDesktopCB(Inkscape::Application *inkscape, SPDesktop *desktop, DesktopTracker *self );
     static bool hierarchyChangeCB(GtkWidget *widget, GtkWidget* prev, DesktopTracker *self);
 
     void handleHierarchyChange();
@@ -46,7 +52,7 @@ private:
     SPDesktop *desktop;
     GtkWidget *widget;
     gulong hierID;
-    sigc::connection inkID;
+    gulong inkID;
     bool trackActive;
     sigc::signal<void, SPDesktop*> desktopChangedSig;
 };
@@ -65,4 +71,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

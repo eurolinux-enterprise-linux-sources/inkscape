@@ -1,5 +1,5 @@
-#ifndef SEEN_NR_FILTER_COMPONENT_TRANSFER_H
-#define SEEN_NR_FILTER_COMPONENT_TRANSFER_H
+#ifndef __NR_FILTER_COMPONENT_TRANSFER_H__
+#define __NR_FILTER_COMPONENT_TRANSFER_H__
 
 /*
  * feComponentTransfer filter primitive renderer
@@ -12,13 +12,13 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <vector>
 #include "display/nr-filter-primitive.h"
+#include "display/nr-filter-slot.h"
+#include "display/nr-filter-units.h"
+#include <vector>
 
 namespace Inkscape {
 namespace Filters {
-
-class FilterSlot;
 
 enum FilterComponentTransferType {
     COMPONENTTRANSFER_TYPE_IDENTITY,
@@ -35,12 +35,11 @@ public:
     static FilterPrimitive *create();
     virtual ~FilterComponentTransfer();
 
-    virtual void render_cairo(FilterSlot &slot);
-    virtual bool can_handle_affine(Geom::Affine const &);
-    virtual double complexity(Geom::Affine const &ctm);
+    virtual int render(FilterSlot &slot, FilterUnits const &units);
+    virtual void area_enlarge(NRRectL &area, Geom::Matrix const &trans);
 
     FilterComponentTransferType type[4];
-    std::vector<double> tableValues[4];
+    std::vector<gdouble> tableValues[4];
     double slope[4];
     double intercept[4];
     double amplitude[4];
@@ -61,4 +60,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

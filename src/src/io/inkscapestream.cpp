@@ -1,4 +1,4 @@
-/*
+/**
  * Our base input/output stream classes.  These are is directly
  * inherited from iostreams, and includes any extra
  * functionality that we might need.
@@ -11,7 +11,7 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <cstdlib>
+
 #include "inkscapestream.h"
 
 namespace Inkscape
@@ -125,12 +125,11 @@ void BasicOutputStream::flush()
 /**
  * Writes the specified byte to this output stream.
  */ 
-int BasicOutputStream::put(gunichar ch)
+void BasicOutputStream::put(int ch)
 {
     if (closed)
-        return -1;
+        return;
     destination.put(ch);
-    return 1;
 }
 
 
@@ -138,6 +137,8 @@ int BasicOutputStream::put(gunichar ch)
 //#########################################################################
 //# B A S I C    R E A D E R
 //#########################################################################
+
+
 /**
  *
  */ 
@@ -181,6 +182,10 @@ gunichar BasicReader::get()
         return (gunichar)-1;
 }
    
+
+
+
+
 
 /**
  * Reads a line of data from the reader.
@@ -250,6 +255,13 @@ static bool getDouble(Glib::ustring &str, double *val)
 
 
 
+
+
+
+
+/**
+ *
+ */
 const Reader &BasicReader::readBool (bool& val )
 {
     Glib::ustring buf = readWord();
@@ -260,6 +272,9 @@ const Reader &BasicReader::readBool (bool& val )
     return *this;
 }
 
+/**
+ *
+ */
 const Reader &BasicReader::readShort (short& val )
 {
     Glib::ustring buf = readWord();
@@ -269,6 +284,9 @@ const Reader &BasicReader::readShort (short& val )
     return *this;
 }
 
+/**
+ *
+ */
 const Reader &BasicReader::readUnsignedShort (unsigned short& val )
 {
     Glib::ustring buf = readWord();
@@ -278,6 +296,9 @@ const Reader &BasicReader::readUnsignedShort (unsigned short& val )
     return *this;
 }
 
+/**
+ *
+ */
 const Reader &BasicReader::readInt (int& val )
 {
     Glib::ustring buf = readWord();
@@ -287,6 +308,9 @@ const Reader &BasicReader::readInt (int& val )
     return *this;
 }
 
+/**
+ *
+ */
 const Reader &BasicReader::readUnsignedInt (unsigned int& val )
 {
     Glib::ustring buf = readWord();
@@ -296,6 +320,9 @@ const Reader &BasicReader::readUnsignedInt (unsigned int& val )
     return *this;
 }
 
+/**
+ *
+ */
 const Reader &BasicReader::readLong (long& val )
 {
     Glib::ustring buf = readWord();
@@ -305,6 +332,9 @@ const Reader &BasicReader::readLong (long& val )
     return *this;
 }
 
+/**
+ *
+ */
 const Reader &BasicReader::readUnsignedLong (unsigned long& val )
 {
     Glib::ustring buf = readWord();
@@ -314,6 +344,9 @@ const Reader &BasicReader::readUnsignedLong (unsigned long& val )
     return *this;
 }
 
+/**
+ *
+ */
 const Reader &BasicReader::readFloat (float& val )
 {
     Glib::ustring buf = readWord();
@@ -323,6 +356,9 @@ const Reader &BasicReader::readFloat (float& val )
     return *this;
 }
 
+/**
+ *
+ */
 const Reader &BasicReader::readDouble (double& val )
 {
     Glib::ustring buf = readWord();
@@ -739,7 +775,9 @@ void OutputStreamWriter::flush()
  */
 void OutputStreamWriter::put(gunichar ch)
 {
-    outputStream.put(ch);
+    //Do we need conversions here?
+    int intCh = (int) ch;
+    outputStream.put(intCh);
 }
 
 //#########################################################################
@@ -789,7 +827,9 @@ void StdWriter::flush()
  */
 void StdWriter::put(gunichar ch)
 {
-    outputStream->put(ch);
+    //Do we need conversions here?
+    int intCh = (int) ch;
+    outputStream->put(intCh);
 }
 
 

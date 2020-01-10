@@ -1,7 +1,7 @@
 #ifndef __INKSCAPE_IO_STRINGSTREAM_H__
 #define __INKSCAPE_IO_STRINGSTREAM_H__
 
-#include <glibmm/ustring.h>
+#include <glibmm.h>
 
 #include "inkscapestream.h"
 
@@ -67,7 +67,7 @@ public:
     
     virtual void flush();
     
-    virtual int put(gunichar ch);
+    virtual void put(int ch);
 
     virtual Glib::ustring &getString()
         { return buffer; }

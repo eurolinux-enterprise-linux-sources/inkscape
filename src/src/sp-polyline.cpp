@@ -1,10 +1,10 @@
+#define __SP_POLYLINE_C__
+
 /*
  * SVG <polyline> implementation
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
- *   Abhishek Sharma
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 1999-2002 Lauris Kaplinski
  *
@@ -20,115 +20,159 @@
 #include "xml/repr.h"
 #include "document.h"
 
-SPPolyLine::SPPolyLine() : SPShape() {
+static void sp_polyline_class_init (SPPolyLineClass *klass);
+static void sp_polyline_init (SPPolyLine *polyline);
+
+static void sp_polyline_build (SPObject * object, SPDocument * document, Inkscape::XML::Node * repr);
+static void sp_polyline_set (SPObject *object, unsigned int key, const gchar *value);
+static Inkscape::XML::Node *sp_polyline_write (SPObject *object, Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags);
+
+static gchar * sp_polyline_description (SPItem * item);
+
+static SPShapeClass *parent_class;
+
+GType
+sp_polyline_get_type (void)
+{
+	static GType polyline_type = 0;
+
+	if (!polyline_type) {
+		GTypeInfo polyline_info = {
+			sizeof (SPPolyLineClass),
+			NULL,	/* base_init */
+			NULL,	/* base_finalize */
+			(GClassInitFunc) sp_polyline_class_init,
+			NULL,	/* klass_finalize */
+			NULL,	/* klass_data */
+			sizeof (SPPolyLine),
+			16,	/* n_preallocs */
+			(GInstanceInitFunc) sp_polyline_init,
+			NULL,	/* value_table */
+		};
+		polyline_type = g_type_register_static (SP_TYPE_SHAPE, "SPPolyLine", &polyline_info, (GTypeFlags)0);
+	}
+	return polyline_type;
 }
 
-SPPolyLine::~SPPolyLine() {
+static void
+sp_polyline_class_init (SPPolyLineClass *klass)
+{
+	GObjectClass * gobject_class;
+	SPObjectClass * sp_object_class;
+	SPItemClass * item_class;
+
+	gobject_class = (GObjectClass *) klass;
+	sp_object_class = (SPObjectClass *) klass;
+	item_class = (SPItemClass *) klass;
+
+	parent_class = (SPShapeClass *)g_type_class_ref (SP_TYPE_SHAPE);
+
+	sp_object_class->build = sp_polyline_build;
+	sp_object_class->set = sp_polyline_set;
+	sp_object_class->write = sp_polyline_write;
+
+	item_class->description = sp_polyline_description;
 }
 
-void SPPolyLine::build(SPDocument * document, Inkscape::XML::Node * repr) {
-    SPShape::build(document, repr);
-
-    this->readAttr("points");
+static void
+sp_polyline_init (SPPolyLine * /*polyline*/)
+{
+    /* Nothing here */
 }
 
-void SPPolyLine::set(unsigned int key, const gchar* value) {
-    switch (key) {
+static void
+sp_polyline_build (SPObject * object, SPDocument * document, Inkscape::XML::Node * repr)
+{
+
+	if (((SPObjectClass *) parent_class)->build)
+		((SPObjectClass *) parent_class)->build (object, document, repr);
+
+	sp_object_read_attr (object, "points");
+}
+
+static void
+sp_polyline_set (SPObject *object, unsigned int key, const gchar *value)
+{
+	SPPolyLine *polyline;
+
+	polyline = SP_POLYLINE (object);
+
+	switch (key) {
 	case SP_ATTR_POINTS: {
-            SPCurve * curve;
-            const gchar * cptr;
-            char * eptr;
-            gboolean hascpt;
+		SPCurve * curve;
+		const gchar * cptr;
+		char * eptr;
+		gboolean hascpt;
 
-            if (!value) {
-            	break;
-            }
+		if (!value) break;
+		curve = new SPCurve ();
+		hascpt = FALSE;
 
-            curve = new SPCurve ();
-            hascpt = FALSE;
+		cptr = value;
+		eptr = NULL;
 
-            cptr = value;
-            eptr = NULL;
+		while (TRUE) {
+			gdouble x, y;
 
-            while (TRUE) {
-                gdouble x, y;
+			while (*cptr != '\0' && (*cptr == ',' || *cptr == '\x20' || *cptr == '\x9' || *cptr == '\xD' || *cptr == '\xA')) {
+				cptr++;
+			}
+			if (!*cptr) break;
 
-                while (*cptr != '\0' && (*cptr == ',' || *cptr == '\x20' || *cptr == '\x9' || *cptr == '\xD' || *cptr == '\xA')) {
-                    cptr++;
-                }
+			x = g_ascii_strtod (cptr, &eptr);
+			if (eptr == cptr) break;
+			cptr = eptr;
 
-                if (!*cptr) {
-                	break;
-                }
+			while (*cptr != '\0' && (*cptr == ',' || *cptr == '\x20' || *cptr == '\x9' || *cptr == '\xD' || *cptr == '\xA')) {
+				cptr++;
+			}
+			if (!*cptr) break;
 
-                x = g_ascii_strtod (cptr, &eptr);
-
-                if (eptr == cptr) {
-                	break;
-                }
-
-                cptr = eptr;
-
-                while (*cptr != '\0' && (*cptr == ',' || *cptr == '\x20' || *cptr == '\x9' || *cptr == '\xD' || *cptr == '\xA')) {
-                    cptr++;
-                }
-
-                if (!*cptr) {
-                	break;
-                }
-
-                y = g_ascii_strtod (cptr, &eptr);
-
-                if (eptr == cptr) {
-                	break;
-                }
-
-                cptr = eptr;
-
-                if (hascpt) {
-                    curve->lineto(x, y);
-                } else {
-                    curve->moveto(x, y);
-                    hascpt = TRUE;
-                }
-            }
+			y = g_ascii_strtod (cptr, &eptr);
+			if (eptr == cptr) break;
+			cptr = eptr;
+			if (hascpt) {
+				curve->lineto(x, y);
+			} else {
+				curve->moveto(x, y);
+				hascpt = TRUE;
+			}
+		}
 		
-            this->setCurve(curve, TRUE);
-            curve->unref();
-            break;
+		sp_shape_set_curve (SP_SHAPE (polyline), curve, TRUE);
+		curve->unref();
+		break;
 	}
 	default:
-            SPShape::set(key, value);
-            break;
-    }
+		if (((SPObjectClass *) parent_class)->set)
+			((SPObjectClass *) parent_class)->set (object, key, value);
+		break;
+	}
 }
 
-Inkscape::XML::Node* SPPolyLine::write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags) {
-    if ((flags & SP_OBJECT_WRITE_BUILD) && !repr) {
-        repr = xml_doc->createElement("svg:polyline");
-    }
+static Inkscape::XML::Node *
+sp_polyline_write (SPObject *object, Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags)
+{
+	SPPolyLine *polyline;
 
-    if (repr != this->getRepr()) {
-        repr->mergeFrom(this->getRepr(), "id");
-    }
+	polyline = SP_POLYLINE (object);
 
-    SPShape::write(xml_doc, repr, flags);
+	if ((flags & SP_OBJECT_WRITE_BUILD) && !repr) {
+		repr = xml_doc->createElement("svg:polyline");
+	}
 
-    return repr;
+	if (repr != SP_OBJECT_REPR (object)) {
+		repr->mergeFrom(SP_OBJECT_REPR (object), "id");
+	}
+
+	if (((SPObjectClass *) (parent_class))->write)
+		((SPObjectClass *) (parent_class))->write (object, xml_doc, repr, flags);
+
+	return repr;
 }
 
-gchar* SPPolyLine::description() const {
-	return g_strdup(_("<b>Polyline</b>"));
+static gchar *
+sp_polyline_description(SPItem */*item*/)
+{
+    return g_strdup(_("<b>Polyline</b>"));
 }
-
-
-/*
-  Local Variables:
-  mode:c++
-  c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
-  indent-tabs-mode:nil
-  fill-column:99
-  End:
-*/
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

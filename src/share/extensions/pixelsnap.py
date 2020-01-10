@@ -77,6 +77,7 @@ import simplestyle, simpletransform, simplepath
 
 try:
     import inkex
+    from inkex import unittouu
 except ImportError:
     raise ImportError("No module named inkex.\nPlease edit the file %s and see the section titled 'INKEX MODULE'" % __file__)
 
@@ -169,7 +170,7 @@ class PixelSnapEffect(inkex.Effect):
             
         stroke_width = 0
         if stroke and setval is None:
-            stroke_width = self.unittouu(style.get('stroke-width', '').strip())
+            stroke_width = unittouu(style.get('stroke-width', '').strip())
             
         if setval:
             style['stroke-width'] = str(setval)
@@ -435,10 +436,10 @@ class PixelSnapEffect(inkex.Effect):
         
         offset = self.elem_offset(elem, parent_transform) % 1
 
-        width = self.unittouu(elem.attrib['width'])
-        height = self.unittouu(elem.attrib['height'])
-        x = self.unittouu(elem.attrib['x'])
-        y = self.unittouu(elem.attrib['y'])
+        width = unittouu(elem.attrib['width'])
+        height = unittouu(elem.attrib['height'])
+        x = unittouu(elem.attrib['x'])
+        y = unittouu(elem.attrib['y'])
 
         width, height = transform_dimensions(transform, width, height)
         x, y = transform_point(transform, [x, y])
@@ -493,7 +494,7 @@ class PixelSnapEffect(inkex.Effect):
     def effect(self):
         svg = self.document.getroot()
         
-        self.document_offset = self.unittouu(svg.attrib['height']) % 1       # although SVG units are absolute, the elements are positioned relative to the top of the page, rather than zero
+        self.document_offset = unittouu(svg.attrib['height']) % 1       # although SVG units are absolute, the elements are positioned relative to the top of the page, rather than zero
 
         for id, elem in self.selected.iteritems():
             try:

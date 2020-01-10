@@ -5,9 +5,7 @@
  * Authors:
  *   Ted Gould <ted@gould.cx>
  *   Ulf Erikson <ulferikson@users.sf.net>
- *   Adib Taraben <theAdib@gmail.com>
- *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
+ *   Adib Taraben <theAdib@yahoo.com>
  *
  * Copyright (C) 2004-2006 Authors
  *
@@ -20,7 +18,6 @@
 
 #ifdef HAVE_CAIRO_PDF
 
-#include "cairo-ps.h"
 #include "cairo-ps-out.h"
 #include "cairo-render-context.h"
 #include "cairo-renderer.h"
@@ -30,7 +27,8 @@
 #include "extension/print.h"
 #include "extension/db.h"
 #include "extension/output.h"
-#include "display/drawing.h"
+#include "display/nr-arena.h"
+#include "display/nr-arena-item.h"
 
 #include "display/curve.h"
 #include "display/canvas-bpath.h"
@@ -40,7 +38,6 @@
 #include "sp-shape.h"
 
 #include "io/sys.h"
-#include "document.h"
 
 namespace Inkscape {
 namespace Extension {
@@ -66,9 +63,9 @@ bool CairoEpsOutput::check (Inkscape::Extension::Extension * /*module*/)
 
 static bool
 ps_print_document_to_file(SPDocument *doc, gchar const *filename, unsigned int level, bool texttopath, bool omittext,
-                          bool filtertobitmap, int resolution, const gchar * const exportId, bool exportDrawing, bool exportCanvas, float bleedmargin_px, bool eps = false)
+                          bool filtertobitmap, int resolution, const gchar * const exportId, bool exportDrawing, bool exportCanvas, bool eps = false)
 {
-    doc->ensureUpToDate();
+    sp_document_ensure_up_to_date(doc);
 
     SPItem *base = NULL;
 
@@ -80,16 +77,17 @@ ps_print_document_to_file(SPDocument *doc, gchar const *filename, unsigned int l
     }
     else {
         // we want to export the entire document from root
-        base = doc->getRoot();
+        base = SP_ITEM(sp_document_root(doc));
         pageBoundingBox = !exportDrawing;
     }
 
     if (!base)
         return false;
 
-    Inkscape::Drawing drawing;
-    unsigned dkey = SPItem::display_key_new(1);
-    base->invoke_show(drawing, dkey, SP_ITEM_SHOW_DISPLAY);
+    /* Create new arena */
+    NRArena *arena = NRArena::create();
+    unsigned dkey = sp_item_display_key_new(1);
+    sp_item_invoke_show(base, arena, dkey, SP_ITEM_SHOW_DISPLAY);
 
     /* Create renderer and context */
     CairoRenderer *renderer = new CairoRenderer();
@@ -97,21 +95,23 @@ ps_print_document_to_file(SPDocument *doc, gchar const *filename, unsigned int l
     ctx->setPSLevel(level);
     ctx->setEPS(eps);
     ctx->setTextToPath(texttopath);
-    ctx->setOmitText(omittext);
+    renderer->_omitText = omittext;
     ctx->setFilterToBitmap(filtertobitmap);
     ctx->setBitmapResolution(resolution);
 
     bool ret = ctx->setPsTarget(filename);
     if(ret) {
         /* Render document */
-        ret = renderer->setupDocument(ctx, doc, pageBoundingBox, bleedmargin_px, base);
+        ret = renderer->setupDocument(ctx, doc, pageBoundingBox, base);
         if (ret) {
             renderer->renderItem(ctx, base);
             ret = ctx->finish();
         }
     }
 
-    base->invoke_hide(dkey);
+    /* Release arena */
+    sp_item_invoke_hide(base, dkey);
+    nr_object_unref((NRObject *) arena);
 
     renderer->destroyContext(ctx);
     delete renderer;
@@ -136,22 +136,22 @@ CairoPsOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar con
     if (ext == NULL)
         return;
 
+    const gchar *new_level = NULL;
     int level = CAIRO_PS_LEVEL_2;
     try {
-        const gchar *new_level = mod->get_param_enum("PSlevel");
-        if((new_level != NULL) && (g_ascii_strcasecmp("PS3", new_level) == 0)) {
+        new_level = mod->get_param_enum("PSlevel");
+        if((new_level != NULL) && (g_ascii_strcasecmp("PS3", new_level) == 0))
             level = CAIRO_PS_LEVEL_3;
-        }
     } catch(...) {}
 
     bool new_textToPath  = FALSE;
     try {
-        new_textToPath = (strcmp(mod->get_param_optiongroup("textToPath"), "paths") == 0);
+        new_textToPath  = mod->get_param_bool("textToPath");
     } catch(...) {}
 
     bool new_textToLaTeX  = FALSE;
     try {
-        new_textToLaTeX = (strcmp(mod->get_param_optiongroup("textToPath"), "LaTeX") == 0);
+        new_textToLaTeX  = mod->get_param_bool("textToLaTeX");
     }
     catch(...) {
         g_warning("Parameter <textToLaTeX> might not exist");
@@ -169,14 +169,12 @@ CairoPsOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar con
 
     bool new_areaPage  = true;
     try {
-        new_areaPage = (strcmp(mod->get_param_optiongroup("area"), "page") == 0);
+        new_areaPage = mod->get_param_bool("areaPage");
     } catch(...) {}
 
-    bool new_areaDrawing  = !new_areaPage;
-
-    float bleedmargin_px = 0.;
+    bool new_areaDrawing  = true;
     try {
-        bleedmargin_px = mod->get_param_float("bleed");
+        new_areaDrawing = mod->get_param_bool("areaDrawing");
     } catch(...) {}
 
     const gchar *new_exportId = NULL;
@@ -188,11 +186,7 @@ CairoPsOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar con
     {
         gchar * final_name;
         final_name = g_strdup_printf("> %s", filename);
-        ret = ps_print_document_to_file(doc, final_name, level, new_textToPath,
-                                        new_textToLaTeX, new_blurToBitmap,
-                                        new_bitmapResolution, new_exportId,
-                                        new_areaDrawing, new_areaPage,
-                                        bleedmargin_px);
+        ret = ps_print_document_to_file(doc, final_name, level, new_textToPath, new_textToLaTeX, new_blurToBitmap, new_bitmapResolution, new_exportId, new_areaDrawing, new_areaPage);
         g_free(final_name);
 
         if (!ret)
@@ -201,7 +195,7 @@ CairoPsOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar con
 
     // Create LaTeX file (if requested)
     if (new_textToLaTeX) {
-        ret = latex_render_document_text_to_file(doc, filename, new_exportId, new_areaDrawing, new_areaPage, 0., false);
+        ret = latex_render_document_text_to_file(doc, filename, new_exportId, new_areaDrawing, new_areaPage, false);
 
         if (!ret)
             throw Inkscape::Extension::Output::save_failed();
@@ -221,26 +215,26 @@ CairoEpsOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar co
     Inkscape::Extension::Extension * ext;
     unsigned int ret;
 
-    ext = Inkscape::Extension::db.get(SP_MODULE_KEY_PRINT_CAIRO_EPS);
+    ext = Inkscape::Extension::db.get(SP_MODULE_KEY_PRINT_CAIRO_PS);
     if (ext == NULL)
         return;
 
+    const gchar *new_level = NULL;
     int level = CAIRO_PS_LEVEL_2;
     try {
-        const gchar *new_level = mod->get_param_enum("PSlevel");
-        if((new_level != NULL) && (g_ascii_strcasecmp("PS3", new_level) == 0)) {
+        new_level = mod->get_param_enum("PSlevel");
+        if((new_level != NULL) && (g_ascii_strcasecmp("PS3", new_level) == 0))
             level = CAIRO_PS_LEVEL_3;
-        }
     } catch(...) {}
 
     bool new_textToPath  = FALSE;
     try {
-        new_textToPath = (strcmp(mod->get_param_optiongroup("textToPath"), "paths") == 0);
+        new_textToPath  = mod->get_param_bool("textToPath");
     } catch(...) {}
 
     bool new_textToLaTeX  = FALSE;
     try {
-        new_textToLaTeX = (strcmp(mod->get_param_optiongroup("textToPath"), "LaTeX") == 0);
+        new_textToLaTeX  = mod->get_param_bool("textToLaTeX");
     }
     catch(...) {
         g_warning("Parameter <textToLaTeX> might not exist");
@@ -258,14 +252,12 @@ CairoEpsOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar co
 
     bool new_areaPage  = true;
     try {
-        new_areaPage = (strcmp(mod->get_param_optiongroup("area"), "page") == 0);
+        new_areaPage = mod->get_param_bool("areaPage");
     } catch(...) {}
 
-    bool new_areaDrawing  = !new_areaPage;
-
-    float bleedmargin_px = 0.;
+    bool new_areaDrawing  = true;
     try {
-        bleedmargin_px = mod->get_param_float("bleed");
+        new_areaDrawing = mod->get_param_bool("areaDrawing");
     } catch(...) {}
 
     const gchar *new_exportId = NULL;
@@ -277,11 +269,7 @@ CairoEpsOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar co
     {
         gchar * final_name;
         final_name = g_strdup_printf("> %s", filename);
-        ret = ps_print_document_to_file(doc, final_name, level, new_textToPath,
-                                        new_textToLaTeX, new_blurToBitmap,
-                                        new_bitmapResolution, new_exportId,
-                                        new_areaDrawing, new_areaPage,
-                                        bleedmargin_px, true);
+        ret = ps_print_document_to_file(doc, final_name, level, new_textToPath, new_textToLaTeX, new_blurToBitmap, new_bitmapResolution, new_exportId, new_areaDrawing, new_areaPage, true);
         g_free(final_name);
 
         if (!ret)
@@ -290,7 +278,7 @@ CairoEpsOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar co
 
     // Create LaTeX file (if requested)
     if (new_textToLaTeX) {
-        ret = latex_render_document_text_to_file(doc, filename, new_exportId, new_areaDrawing, new_areaPage, 0., false);
+        ret = latex_render_document_text_to_file(doc, filename, new_exportId, new_areaDrawing, new_areaPage, false);
 
         if (!ret)
             throw Inkscape::Extension::Output::save_failed();
@@ -322,36 +310,32 @@ CairoEpsOutput::textToPath(Inkscape::Extension::Print * ext)
 void
 CairoPsOutput::init (void)
 {
-    Inkscape::Extension::build_from_mem(
-        "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
-            "<name>" N_("PostScript") "</name>\n"
-            "<id>" SP_MODULE_KEY_PRINT_CAIRO_PS "</id>\n"
-            "<param name=\"PSlevel\" _gui-text=\"" N_("Restrict to PS level:") "\" type=\"enum\" >\n"
-                "<_item value='PS3'>" N_("PostScript level 3") "</_item>\n"
+	Inkscape::Extension::build_from_mem(
+		"<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
+			"<name>" N_("PostScript") "</name>\n"
+			"<id>" SP_MODULE_KEY_PRINT_CAIRO_PS "</id>\n"
+			"<param name=\"PSlevel\" gui-text=\"" N_("Restrict to PS level") "\" type=\"enum\" >\n"
+				"<_item value='PS3'>" N_("PostScript level 3") "</_item>\n"
+#if (CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1, 5, 2))
                 "<_item value='PS2'>" N_("PostScript level 2") "</_item>\n"
+#endif
             "</param>\n"
-            "<param name=\"textToPath\" _gui-text=\"" N_("Text output options:") "\" type=\"optiongroup\">\n"
-                "<_option value=\"embed\">" N_("Embed fonts") "</_option>\n"
-                "<_option value=\"paths\">" N_("Convert text to paths") "</_option>\n"
-                "<_option value=\"LaTeX\">" N_("Omit text in PDF and create LaTeX file") "</_option>\n"
-            "</param>\n"
-            "<param name=\"blurToBitmap\" _gui-text=\"" N_("Rasterize filter effects") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"resolution\" _gui-text=\"" N_("Resolution for rasterization (dpi):") "\" type=\"int\" min=\"1\" max=\"10000\">96</param>\n"
-            "<param name=\"area\" _gui-text=\"" N_("Output page size") "\" type=\"optiongroup\" >\n"
-                "<_option value=\"page\">" N_("Use document's page size") "</_option>"
-                "<_option value=\"drawing\">" N_("Use exported object's size") "</_option>"
-            "</param>"
-            "<param name=\"bleed\" _gui-text=\"" N_("Bleed/margin (mm):") "\" type=\"float\" min=\"-10000\" max=\"10000\">0</param>\n"
-            "<param name=\"exportId\" _gui-text=\"" N_("Limit export to the object with ID:") "\" type=\"string\"></param>\n"
-            "<output>\n"
-            "<extension>.ps</extension>\n"
-                "<mimetype>image/x-postscript</mimetype>\n"
-                "<filetypename>" N_("PostScript (*.ps)") "</filetypename>\n"
-                "<filetypetooltip>" N_("PostScript File") "</filetypetooltip>\n"
-            "</output>\n"
-        "</inkscape-extension>", new CairoPsOutput());
+			"<param name=\"textToPath\" gui-text=\"" N_("Convert texts to paths") "\" type=\"boolean\">false</param>\n"
+			"<param name=\"textToLaTeX\" gui-text=\"" N_("PS+LaTeX: Omit text in PS, and create LaTeX file") "\" type=\"boolean\">false</param>\n"
+			"<param name=\"blurToBitmap\" gui-text=\"" N_("Rasterize filter effects") "\" type=\"boolean\">true</param>\n"
+			"<param name=\"resolution\" gui-text=\"" N_("Resolution for rasterization (dpi)") "\" type=\"int\" min=\"1\" max=\"10000\">90</param>\n"
+			"<param name=\"areaDrawing\" gui-text=\"" N_("Export area is drawing") "\" type=\"boolean\">true</param>\n"
+			"<param name=\"areaPage\" gui-text=\"" N_("Export area is page") "\" type=\"boolean\">true</param>\n"
+			"<param name=\"exportId\" gui-text=\"" N_("Limit export to the object with ID") "\" type=\"string\"></param>\n"
+			"<output>\n"
+				"<extension>.ps</extension>\n"
+                                "<mimetype>image/x-postscript</mimetype>\n"
+				"<filetypename>" N_("PostScript (*.ps)") "</filetypename>\n"
+				"<filetypetooltip>" N_("PostScript File") "</filetypetooltip>\n"
+			"</output>\n"
+		"</inkscape-extension>", new CairoPsOutput());
 
-    return;
+	return;
 }
 
 /**
@@ -364,36 +348,32 @@ CairoPsOutput::init (void)
 void
 CairoEpsOutput::init (void)
 {
-    Inkscape::Extension::build_from_mem(
-        "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
-            "<name>" N_("Encapsulated PostScript") "</name>\n"
-            "<id>" SP_MODULE_KEY_PRINT_CAIRO_EPS "</id>\n"
-            "<param name=\"PSlevel\" _gui-text=\"" N_("Restrict to PS level:") "\" type=\"enum\" >\n"
-                "<_item value='PS3'>" N_("PostScript level 3") "</_item>\n"
+	Inkscape::Extension::build_from_mem(
+		"<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
+			"<name>" N_("Encapsulated PostScript") "</name>\n"
+			"<id>" SP_MODULE_KEY_PRINT_CAIRO_EPS "</id>\n"
+			"<param name=\"PSlevel\" gui-text=\"" N_("Restrict to PS level") "\" type=\"enum\" >\n"
+				"<_item value='PS3'>" N_("PostScript level 3") "</_item>\n"
+#if (CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1, 5, 2))
                 "<_item value='PS2'>" N_("PostScript level 2") "</_item>\n"
+#endif
             "</param>\n"
-            "<param name=\"textToPath\" _gui-text=\"" N_("Text output options:") "\" type=\"optiongroup\">\n"
-                "<_option value=\"embed\">" N_("Embed fonts") "</_option>\n"
-                "<_option value=\"paths\">" N_("Convert text to paths") "</_option>\n"
-                "<_option value=\"LaTeX\">" N_("Omit text in PDF and create LaTeX file") "</_option>\n"
-            "</param>\n"
-            "<param name=\"blurToBitmap\" _gui-text=\"" N_("Rasterize filter effects") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"resolution\" _gui-text=\"" N_("Resolution for rasterization (dpi):") "\" type=\"int\" min=\"1\" max=\"10000\">96</param>\n"
-            "<param name=\"area\" _gui-text=\"" N_("Output page size") "\" type=\"optiongroup\" >\n"
-                "<_option value=\"page\">" N_("Use document's page size") "</_option>"
-                "<_option value=\"drawing\">" N_("Use exported object's size") "</_option>"
-            "</param>"
-            "<param name=\"bleed\" _gui-text=\"" N_("Bleed/margin (mm)") "\" type=\"float\" min=\"-10000\" max=\"10000\">0</param>\n"
-            "<param name=\"exportId\" _gui-text=\"" N_("Limit export to the object with ID:") "\" type=\"string\"></param>\n"
-            "<output>\n"
-                "<extension>.eps</extension>\n"
-                "<mimetype>image/x-e-postscript</mimetype>\n"
-                "<filetypename>" N_("Encapsulated PostScript (*.eps)") "</filetypename>\n"
-                "<filetypetooltip>" N_("Encapsulated PostScript File") "</filetypetooltip>\n"
-            "</output>\n"
-        "</inkscape-extension>", new CairoEpsOutput());
+			"<param name=\"textToPath\" gui-text=\"" N_("Convert texts to paths") "\" type=\"boolean\">false</param>\n"
+			"<param name=\"textToLaTeX\" gui-text=\"" N_("EPS+LaTeX: Omit text in EPS, and create LaTeX file") "\" type=\"boolean\">false</param>\n"
+			"<param name=\"blurToBitmap\" gui-text=\"" N_("Rasterize filter effects") "\" type=\"boolean\">true</param>\n"
+			"<param name=\"resolution\" gui-text=\"" N_("Resolution for rasterization (dpi)") "\" type=\"int\" min=\"1\" max=\"10000\">90</param>\n"
+			"<param name=\"areaDrawing\" gui-text=\"" N_("Export area is drawing") "\" type=\"boolean\">true</param>\n"
+			"<param name=\"areaPage\" gui-text=\"" N_("Export area is page") "\" type=\"boolean\">true</param>\n"
+			"<param name=\"exportId\" gui-text=\"" N_("Limit export to the object with ID") "\" type=\"string\"></param>\n"
+			"<output>\n"
+				"<extension>.eps</extension>\n"
+                                "<mimetype>image/x-e-postscript</mimetype>\n"
+				"<filetypename>" N_("Encapsulated PostScript (*.eps)") "</filetypename>\n"
+				"<filetypetooltip>" N_("Encapsulated PostScript File") "</filetypetooltip>\n"
+			"</output>\n"
+		"</inkscape-extension>", new CairoEpsOutput());
 
-    return;
+	return;
 }
 
 } } }  /* namespace Inkscape, Extension, Implementation */

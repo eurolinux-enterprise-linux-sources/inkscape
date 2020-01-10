@@ -16,14 +16,9 @@ namespace Text {
 const gunichar Layout::UNICODE_SOFT_HYPHEN = 0x00AD;
 const double Layout::LINE_HEIGHT_NORMAL = 1.25;
 
-Layout::Layout() :
-    _input_truncated(0),
-    _path_fitted(NULL)
+Layout::Layout()
 {
-      textLength._set = false;
-      textLengthMultiplier = 1;
-      textLengthIncrement = 0;
-      lengthAdjust = LENGTHADJUST_SPACING;
+    _path_fitted = NULL;
 }
 
 Layout::~Layout()
@@ -35,11 +30,6 @@ void Layout::clear()
 {
     _clearInputObjects();
     _clearOutputObjects();
-
-     textLength._set = false;
-     textLengthMultiplier = 1;
-     textLengthIncrement = 0;
-     lengthAdjust = LENGTHADJUST_SPACING;
 }
 
 bool Layout::_directions_are_orthogonal(Direction d1, Direction d2)

@@ -1,7 +1,9 @@
 #ifndef SEEN_SP_DESKTOP_H
 #define SEEN_SP_DESKTOP_H
 
-/*
+/** \file
+ * SPDesktop: an editable view.
+ *
  * Author:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Frank Felfe <innerspace@iname.com>
@@ -9,8 +11,6 @@
  *   Ralf Stephan <ralf@ark.in-berlin.de>
  *   John Bintz <jcoswell@coswellproductions.org>
  *   Johan Engelen <j.b.c.engelen@ewi.utwente.nl>
- *   Jon A. Cruz <jon@joncruz.org>get
- *   Abhishek Sharma
  *
  * Copyright (C) 2007 Johan Engelen
  * Copyright (C) 2006 John Bintz
@@ -25,40 +25,29 @@
 #include "config.h"
 #endif
 
+#include <gdk/gdk.h>
+#include <gtk/gtk.h>
 #include <stddef.h>
 #include <sigc++/sigc++.h>
 
-#include <2geom/affine.h>
+#include <2geom/matrix.h>
 #include <2geom/rect.h>
 
 #include "ui/view/view.h"
-#include "display/rendermode.h"
-#include <glibmm/ustring.h>
+#include "ui/view/edit-widget-interface.h"
 
-#include "preferences.h"
-#include "sp-gradient.h" // TODO refactor enums out to their own .h file
+#include "display/rendermode.h"
+#include "display/snap-indicator.h"
 
 class SPCSSAttr;
 struct SPCanvas;
 struct SPCanvasItem;
 struct SPCanvasGroup;
-struct DesktopPrefObserver;
-
-namespace Inkscape {
-namespace UI {
-namespace Tools {
-
-class ToolBase;
-
-}
-}
-}
-
-class SPItem;
-class SPNamedView;
-class SPObject;
-class SPStyle;
-typedef struct _DocumentInterface DocumentInterface;//struct DocumentInterface;
+struct SPEventContext;
+struct SPItem;
+struct SPNamedView;
+struct SPObject;
+struct SPStyle;
 
 namespace Gtk
 {
@@ -67,30 +56,18 @@ namespace Gtk
 
 typedef int sp_verb_t;
 
-struct _GdkEventAny;
-typedef struct _GdkEventAny GdkEventAny;
-struct _GdkEventWindowState;
-typedef struct _GdkEventWindowState GdkEventWindowState;
 
-struct InkscapeApplication;
 
 namespace Inkscape {
-  class LayerModel;
+  class Application;
   class MessageContext;
   class Selection;
+  class ObjectHierarchy;
   class LayerManager;
   class EventLog;
   namespace UI {
       namespace Dialog {
           class DialogManager;
-      }
-
-      namespace Widget {
-	      class Dock;
-      }
-
-      namespace View {
-	      struct EditWidgetInterface;
       }
   }
   namespace Whiteboard {
@@ -99,72 +76,28 @@ namespace Inkscape {
   namespace Display {
       class TemporaryItemList;
       class TemporaryItem;
-      class SnapIndicator;
+      //class SnapIndicator;
   }
 }
 
-#define SP_DESKTOP_ZOOM_MAX 256.0
-#define SP_DESKTOP_ZOOM_MIN 0.01
-
 /**
- * SPDesktop is a subclass of View, implementing an editable document
- * canvas.  It is extensively used by many UI controls that need certain
- * visual representations of their own.
- *
- * SPDesktop provides a certain set of SPCanvasItems, serving as GUI
- * layers of different control objects. The one containing the whole
- * document is the drawing layer. In addition to it, there are grid,
- * guide, sketch and control layers. The sketch layer is used for
- * temporary drawing objects, before the real objects in document are
- * created. The control layer contains editing knots, rubberband and
- * similar non-document UI objects.
- *
- * Each SPDesktop is associated with a SPNamedView node of the document
- * tree.  Currently, all desktops are created from a single main named
- * view, but in the future there may be support for different ones.
- * SPNamedView serves as an in-document container for desktop-related
- * data, like grid and guideline placement, snapping options and so on.
- *
- * Associated with each SPDesktop are the two most important editing
- * related objects - SPSelection and ToolBase.
- *
- * Sodipodi keeps track of the active desktop and invokes notification
- * signals whenever it changes. UI elements can use these to update their
- * display to the selection of the currently active editing window.
- * (Lauris Kaplinski)
+ * Editable view.
  *
  * @see \ref desktop-handles.h for desktop macros.
  */
-class SPDesktop : public Inkscape::UI::View::View
+struct SPDesktop : public Inkscape::UI::View::View
 {
-public:
     Inkscape::UI::Dialog::DialogManager *_dlg_mgr;
     SPNamedView               *namedview;
     SPCanvas                  *canvas;
-    Inkscape::LayerModel      *layers;
     /// current selection; will never generally be NULL
     Inkscape::Selection       *selection;
-    Inkscape::UI::Tools::ToolBase            *event_context;
+    SPEventContext            *event_context;
     Inkscape::LayerManager    *layer_manager;
     Inkscape::EventLog        *event_log;
-    DocumentInterface *dbus_document_interface;
+
     Inkscape::Display::TemporaryItemList *temporary_item_list;
     Inkscape::Display::SnapIndicator *snapindicator;
-
-    Inkscape::UI::Tools::ToolBase* getEventContext() const;
-    Inkscape::Selection* getSelection() const;
-    SPDocument* getDocument() const;
-    SPCanvas* getCanvas() const;
-    SPCanvasItem* getAcetate() const;
-    SPCanvasGroup* getMain() const;
-    SPCanvasGroup* getGridGroup() const;
-    SPCanvasGroup* getGuides() const;
-    SPCanvasItem* getDrawing() const;
-    SPCanvasGroup* getSketch() const;
-    SPCanvasGroup* getControls() const;
-    SPCanvasGroup* getTempGroup() const;
-    Inkscape::MessageStack* getMessageStack() const;
-    SPNamedView* getNamedView() const;
 
     SPCanvasItem  *acetate;
     SPCanvasGroup *main;
@@ -180,9 +113,8 @@ public:
     SPCSSAttr     *current;     ///< current style
     bool           _focusMode;  ///< Whether we're focused working or general working
 
-    std::list<Geom::Rect> zooms_past;
-    std::list<Geom::Rect> zooms_future;
-
+    GList *zooms_past;
+    GList *zooms_future;
     bool _quick_zoom_enabled; ///< Signifies that currently we're in quick zoom mode
     Geom::Rect _quick_zoom_stored_area;  ///< The area of the screen before quick zoom
     unsigned int dkey;
@@ -190,7 +122,6 @@ public:
     guint window_state;
     unsigned int interaction_disabled_counter;
     bool waiting_cursor;
-    bool showing_dialogs;
 
     /// \todo fixme: This has to be implemented in different way */
     guint guides_active : 1;
@@ -198,11 +129,13 @@ public:
     // storage for selected dragger used by GrDrag as it's
     // created and deleted by tools
     SPItem *gr_item;
-    GrPointType  gr_point_type;
+    guint  gr_point_type;
     guint  gr_point_i;
-    Inkscape::PaintTarget gr_fill_or_stroke;
+    bool   gr_fill_or_stroke;
 
-    Glib::ustring _reconstruction_old_layer_id;
+
+    Inkscape::ObjectHierarchy *_layer_hierarchy;
+    gchar * _reconstruction_old_layer_id;
 
     sigc::signal<void, sp_verb_t>      _tool_changed;
     sigc::signal<void, SPObject *>     _layer_changed_signal;
@@ -212,18 +145,13 @@ public:
     /// Emitted when the zoom factor changes (not emitted when scrolling).
     /// The parameter is the new zoom factor
     sigc::signal<void, double> signal_zoom_changed;
-
-    sigc::connection connectDestroy(const sigc::slot<void, SPDesktop*> &slot)
-    {
-        return _destroy_signal.connect(slot);
-    }
-
+    
     sigc::connection connectDocumentReplaced (const sigc::slot<void,SPDesktop*,SPDocument*> & slot)
     {
         return _document_replaced_signal.connect (slot);
     }
 
-    sigc::connection connectEventContextChanged (const sigc::slot<void,SPDesktop*,Inkscape::UI::Tools::ToolBase*> & slot)
+    sigc::connection connectEventContextChanged (const sigc::slot<void,SPDesktop*,SPEventContext*> & slot)
     {
         return _event_context_changed_signal.connect (slot);
     }
@@ -244,13 +172,17 @@ public:
         return _layer_changed_signal.connect(slot);
     }
 
-    /**
-     * Return new desktop object.
-     * \pre namedview != NULL.
-     * \pre canvas != NULL.
-     */
-    SPDesktop();
+    // Whiteboard changes
 
+#ifdef WITH_INKBOARD
+    Inkscape::Whiteboard::SessionManager* whiteboard_session_manager() {
+        return _whiteboard_session_manager;
+    }
+
+    Inkscape::Whiteboard::SessionManager* _whiteboard_session_manager;
+#endif
+
+    SPDesktop();
     void init (SPNamedView* nv, SPCanvas* canvas, Inkscape::UI::View::EditWidgetInterface *widget);
     virtual ~SPDesktop();
     void destroy();
@@ -262,8 +194,6 @@ public:
     Inkscape::Display::TemporaryItem * add_temporary_canvasitem (SPCanvasItem *item, guint lifetime, bool move_to_bottom = true);
     void remove_temporary_canvasitem (Inkscape::Display::TemporaryItem * tempitem);
 
-    void redrawDesktop();
-
     void _setDisplayMode(Inkscape::RenderMode mode);
     void setDisplayModeNormal() {
         _setDisplayMode(Inkscape::RENDERMODE_NORMAL);
@@ -274,54 +204,35 @@ public:
     void setDisplayModeOutline() {
         _setDisplayMode(Inkscape::RENDERMODE_OUTLINE);
     }
+//    void setDisplayModePrintColorsPreview() {
+//        _setDisplayMode(Inkscape::RENDERMODE_PRINT_COLORS_PREVIEW);
+//    }
     void displayModeToggle();
     Inkscape::RenderMode _display_mode;
     Inkscape::RenderMode getMode() const { return _display_mode; }
 
-    void _setDisplayColorMode(Inkscape::ColorMode mode);
-    void setDisplayColorModeNormal() {
-        _setDisplayColorMode(Inkscape::COLORMODE_NORMAL);
-    }
-    void setDisplayColorModeGrayscale() {
-        _setDisplayColorMode(Inkscape::COLORMODE_GRAYSCALE);
-    }
-//    void setDisplayColorModePrintColorsPreview() {
-//        _setDisplayColorMode(Inkscape::COLORMODE_PRINT_COLORS_PREVIEW);
-//    }
-    void displayColorModeToggle();
-    Inkscape::ColorMode _display_color_mode;
-    Inkscape::ColorMode getColorMode() const { return _display_color_mode; }
-
-    Inkscape::UI::Widget::Dock* getDock();
+    Inkscape::UI::Widget::Dock* getDock() { return _widget->getDock(); }
 
     void set_active (bool new_active);
-
-    // Could make all callers use this->layers instead of passing calls through?
     SPObject *currentRoot() const;
     SPObject *currentLayer() const;
     void setCurrentLayer(SPObject *object);
     void toggleLayerSolo(SPObject *object);
-    void toggleHideAllLayers(bool hide);
-    void toggleLockAllLayers(bool lock);
-    void toggleLockOtherLayers(SPObject *object);
+    SPObject *layerForObject(SPObject *object);
     bool isLayer(SPObject *object) const;
-
     bool isWithinViewport(SPItem *item) const;
     bool itemIsHidden(SPItem const *item) const;
 
     void activate_guides (bool activate);
     void change_document (SPDocument *document);
 
-
-    void set_event_context2(const std::string& toolName);
-
-    //void set_event_context (GType type, const gchar *config);
-    //void push_event_context (GType type, const gchar *config, unsigned int key);
+    void set_event_context (GtkType type, const gchar *config);
+    void push_event_context (GtkType type, const gchar *config, unsigned int key);
 
     void set_coordinate_status (Geom::Point p);
-    SPItem *getItemFromListAtPointBottom(const std::vector<SPItem*> &list, Geom::Point const &p) const;
-    SPItem *getItemAtPoint(Geom::Point const &p, bool into_groups, SPItem *upto = NULL) const;
-    SPItem *getGroupAtPoint(Geom::Point const &p) const;
+    SPItem *item_from_list_at_point_bottom (const GSList *list, Geom::Point const p) const;
+    SPItem *item_at_point (Geom::Point const p, bool into_groups, SPItem *upto = NULL) const;
+    SPItem *group_at_point (Geom::Point const p) const;
     Geom::Point point() const;
 
     Geom::Rect get_display_area() const;
@@ -345,13 +256,12 @@ public:
     void prev_zoom();
     void next_zoom();
     void zoom_quick(bool enable = true);
-
-    /** \brief  Returns whether the desktop is in quick zoom mode or not */
-    bool quick_zoomed(void) { return _quick_zoom_enabled; }
+	/** \brief  Returns whether the desktop is in quick zoom mode or not */
+	bool quick_zoomed(void) { return _quick_zoom_enabled; }
 
     bool scroll_to_point (Geom::Point const &s_dt, gdouble autoscrollspeed = 0);
     void scroll_world (double dx, double dy, bool is_scrolling = false);
-    void scroll_world (Geom::Point const &scroll, bool is_scrolling = false)
+    void scroll_world (Geom::Point const scroll, bool is_scrolling = false)
     {
         scroll_world(scroll[Geom::X], scroll[Geom::Y], is_scrolling);
     }
@@ -363,8 +273,7 @@ public:
     void setWindowTransient (void* p, int transient_policy=1);
     Gtk::Window* getToplevel();
     void presentWindow();
-    bool showInfoDialog( Glib::ustring const &message );
-    bool warnDialog (Glib::ustring const &text);
+    bool warnDialog (gchar *text);
     void toggleRulers();
     void toggleScrollbars();
     void layoutWidget();
@@ -383,16 +292,12 @@ public:
     void clearWaitingCursor();
     bool isWaitingCursor() const { return waiting_cursor; };
 
-    void toggleGuidesLock();
-
     void toggleColorProfAdjust();
-    bool colorProfAdjustEnabled();
 
     void toggleGrids();
     void toggleSnapGlobal();
     bool gridsEnabled() const { return grids_visible; };
     void showGrids(bool show, bool dirty_document = true);
-    void toggleToolbar(gchar const *toolbar_name);
 
     bool is_iconified();
     bool is_maximized();
@@ -403,16 +308,12 @@ public:
     void maximize();
     void fullscreen();
     void focusMode(bool mode = true);
-    /**
-     * Reopen any dialogs that were open when inkscape last shutdown
-     */
-    void show_dialogs();
 
-    Geom::Affine w2d() const; //transformation from window to desktop coordinates (used for zooming)
+    Geom::Matrix w2d() const; //transformation from window to desktop coordinates (used for zooming)
     Geom::Point w2d(Geom::Point const &p) const;
     Geom::Point d2w(Geom::Point const &p) const;
-    Geom::Affine doc2dt() const;
-    Geom::Affine dt2doc() const;
+    Geom::Matrix doc2dt() const;
+    Geom::Matrix dt2doc() const;
     Geom::Point doc2dt(Geom::Point const &p) const;
     Geom::Point dt2doc(Geom::Point const &p) const;
 
@@ -421,50 +322,27 @@ public:
     virtual void mouseover() {}
     virtual void mouseout() {}
 
-
     virtual bool onDeleteUI (GdkEventAny*);
     virtual bool onWindowStateEvent (GdkEventWindowState* event);
 
-    void applyCurrentOrToolStyle(SPObject *obj, Glib::ustring const &tool_path, bool with_text);
-
 private:
     Inkscape::UI::View::EditWidgetInterface       *_widget;
+    Inkscape::Application     *_inkscape;
     Inkscape::MessageContext  *_guides_message_context;
     bool _active;
-    Geom::Affine _w2d;
-    Geom::Affine _d2w;
-    Geom::Affine _doc2dt;
-
-    /*
-     * Allow redrawing or refreshing if preferences change
-     */
-    class DesktopPrefObserver : public Inkscape::Preferences::Observer {
-      public:
-        DesktopPrefObserver(SPDesktop *desktop, Glib::ustring const &path)
-            : Inkscape::Preferences::Observer(path)
-            , _desktop(desktop) {
-            Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-            prefs->addObserver(*this);
-        }
-      private:
-        void notify(Inkscape::Preferences::Entry const &) {
-            _desktop->redrawDesktop();
-        }
-        SPDesktop *_desktop;
-    };
-
-    DesktopPrefObserver _image_render_observer;
+    Geom::Matrix _w2d;
+    Geom::Matrix _d2w;
+    Geom::Matrix _doc2dt;
 
     bool grids_visible; /* don't set this variable directly, use the method below */
     void set_grids_visible(bool visible);
 
-    void push_current_zoom(std::list<Geom::Rect> &);
+    void push_current_zoom (GList**);
 
-    sigc::signal<void, SPDesktop*> _destroy_signal;
     sigc::signal<void,SPDesktop*,SPDocument*>     _document_replaced_signal;
     sigc::signal<void>                 _activate_signal;
     sigc::signal<void>                 _deactivate_signal;
-    sigc::signal<void,SPDesktop*,Inkscape::UI::Tools::ToolBase*> _event_context_changed_signal;
+    sigc::signal<void,SPDesktop*,SPEventContext*> _event_context_changed_signal;
     sigc::signal<void, gpointer>       _tool_subselection_changed;
 
     sigc::connection _activate_connection;
@@ -476,6 +354,7 @@ private:
     sigc::connection _commit_connection;
     sigc::connection _modified_connection;
 
+    virtual void onPositionSet (double, double);
     virtual void onResized (double, double);
     virtual void onRedrawRequested();
     virtual void onStatusMessage (Inkscape::MessageType type, gchar const *message);

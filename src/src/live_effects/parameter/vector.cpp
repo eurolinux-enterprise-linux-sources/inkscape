@@ -1,21 +1,21 @@
+#define INKSCAPE_LIVEPATHEFFECT_PARAMETER_VECTOR_CPP
+
 /*
  * Copyright (C) Johan Engelen 2008 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "ui/widget/registered-widget.h"
-#include <glibmm/i18n.h>
-
 #include "live_effects/parameter/vector.h"
 #include "sp-lpe-item.h"
 #include "knotholder.h"
 #include "svg/svg.h"
 #include "svg/stringstream.h"
+#include <gtkmm.h>
 
+#include "ui/widget/registered-widget.h"
 #include "live_effects/effect.h"
 #include "desktop.h"
-#include "verbs.h"
 
 namespace Inkscape {
 
@@ -53,12 +53,9 @@ bool
 VectorParam::param_readSVGValue(const gchar * strvalue)
 {
     gchar ** strarray = g_strsplit(strvalue, ",", 4);
-    if (!strarray) {
-        return false;
-    }
     double val[4];
     unsigned int i = 0;
-    while (i < 4 && strarray[i]) {
+    while (strarray[i] && i < 4) {
         if (sp_svg_number_read_d(strarray[i], &val[i]) != 0) {
             i++;
         } else {
@@ -84,7 +81,7 @@ VectorParam::param_getSVGValue() const
 }
 
 Gtk::Widget *
-VectorParam::param_newWidget()
+VectorParam::param_newWidget(Gtk::Tooltips * /*tooltips*/)
 {
     Inkscape::UI::Widget::RegisteredVector * pointwdg = Gtk::manage(
         new Inkscape::UI::Widget::RegisteredVector( param_label,
@@ -115,9 +112,9 @@ VectorParam::set_and_write_new_values(Geom::Point const &new_origin, Geom::Point
 }
 
 void
-VectorParam::param_transform_multiply(Geom::Affine const& postmul, bool /*set*/)
+VectorParam::param_transform_multiply(Geom::Matrix const& postmul, bool /*set*/)
 {
-    set_and_write_new_values( origin * postmul, vector * postmul.withoutTranslation() );
+        set_and_write_new_values( origin * postmul, vector * postmul.without_translation() );
 }
 
 
@@ -137,24 +134,17 @@ VectorParam::set_origin_oncanvas_looks(SPKnotShapeType shape, SPKnotModeType mod
     ori_knot_color = color;
 }
 
-void
-VectorParam::set_oncanvas_color(guint32 color)
-{
-    vec_knot_color = color;
-    ori_knot_color = color;
-}
-
-class VectorParamKnotHolderEntity_Origin : public KnotHolderEntity {
+class VectorParamKnotHolderEntity_Origin : public LPEKnotHolderEntity {
 public:
     VectorParamKnotHolderEntity_Origin(VectorParam *p) : param(p) { }
     virtual ~VectorParamKnotHolderEntity_Origin() {}
 
-    virtual void knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint state) {
-        Geom::Point const s = snap_knot_position(p, state);
+    virtual void knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint /*state*/) {
+        Geom::Point const s = snap_knot_position(p);
         param->setOrigin(s);
         sp_lpe_item_update_patheffect(SP_LPE_ITEM(item), false, false);
     };
-    virtual Geom::Point knot_get() const {
+    virtual Geom::Point knot_get(){
         return param->origin;
     };
     virtual void knot_click(guint /*state*/){
@@ -165,7 +155,7 @@ private:
     VectorParam *param;
 };
 
-class VectorParamKnotHolderEntity_Vector : public KnotHolderEntity {
+class VectorParamKnotHolderEntity_Vector : public LPEKnotHolderEntity {
 public:
     VectorParamKnotHolderEntity_Vector(VectorParam *p) : param(p) { }
     virtual ~VectorParamKnotHolderEntity_Vector() {}
@@ -176,7 +166,7 @@ public:
         param->setVector(s);
         sp_lpe_item_update_patheffect(SP_LPE_ITEM(item), false, false);
     };
-    virtual Geom::Point knot_get() const {
+    virtual Geom::Point knot_get(){
         return param->origin + param->vector;
     };
     virtual void knot_click(guint /*state*/){
@@ -191,11 +181,11 @@ void
 VectorParam::addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item)
 {
     VectorParamKnotHolderEntity_Origin *origin_e = new VectorParamKnotHolderEntity_Origin(this);
-    origin_e->create(desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN, handleTip(), ori_knot_shape, ori_knot_mode, ori_knot_color);
+    origin_e->create(desktop, item, knotholder, handleTip(), ori_knot_shape, ori_knot_mode, ori_knot_color);
     knotholder->add(origin_e);
 
     VectorParamKnotHolderEntity_Vector *vector_e = new VectorParamKnotHolderEntity_Vector(this);
-    vector_e->create(desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN, handleTip(), vec_knot_shape, vec_knot_mode, vec_knot_color);
+    vector_e->create(desktop, item, knotholder, handleTip(), vec_knot_shape, vec_knot_mode, vec_knot_color);
     knotholder->add(vector_e);
 }
 

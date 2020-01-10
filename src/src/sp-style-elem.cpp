@@ -7,27 +7,75 @@
 #include "style.h"
 using Inkscape::XML::TEXT_NODE;
 
-SPStyleElem::SPStyleElem() : SPObject() {
-    media_set_all(this->media);
-    this->is_css = false;
+static void sp_style_elem_init(SPStyleElem *style_elem);
+static void sp_style_elem_class_init(SPStyleElemClass *klass);
+static void sp_style_elem_build(SPObject *object, SPDocument *doc, Inkscape::XML::Node *repr);
+static void sp_style_elem_set(SPObject *object, unsigned const key, gchar const *const value);
+static void sp_style_elem_read_content(SPObject *);
+static Inkscape::XML::Node *sp_style_elem_write(SPObject *, Inkscape::XML::Document *, Inkscape::XML::Node *, guint flags);
+
+static SPObjectClass *parent_class;
+
+GType
+sp_style_elem_get_type()
+{
+    static GType type = 0;
+    if (!type) {
+        GTypeInfo info = {
+            sizeof(SPStyleElemClass),
+            NULL,   /* base_init */
+            NULL,   /* base_finalize */
+            (GClassInitFunc) sp_style_elem_class_init,
+            NULL,   /* class_finalize */
+            NULL,   /* class_data */
+            sizeof(SPStyleElem),
+            16,     /* n_preallocs */
+            (GInstanceInitFunc) sp_style_elem_init,
+            NULL,   /* value_table */
+        };
+        type = g_type_register_static(SP_TYPE_OBJECT, "SPStyleElem", &info, (GTypeFlags) 0);
+    }
+
+    return type;
 }
 
-SPStyleElem::~SPStyleElem() {
+static void
+sp_style_elem_class_init(SPStyleElemClass *klass)
+{
+    parent_class = (SPObjectClass *)g_type_class_ref(SP_TYPE_OBJECT);
+    /* FIXME */
+
+    klass->build = sp_style_elem_build;
+    klass->set = sp_style_elem_set;
+    klass->read_content = sp_style_elem_read_content;
+    klass->write = sp_style_elem_write;
 }
 
-void SPStyleElem::set(unsigned int key, const gchar* value) {
+static void
+sp_style_elem_init(SPStyleElem *style_elem)
+{
+    media_set_all(style_elem->media);
+    style_elem->is_css = false;
+}
+
+static void
+sp_style_elem_set(SPObject *object, unsigned const key, gchar const *const value)
+{
+    g_return_if_fail(object);
+    SPStyleElem &style_elem = *SP_STYLE_ELEM(object);
+
     switch (key) {
         case SP_ATTR_TYPE: {
             if (!value) {
                 /* TODO: `type' attribute is required.  Give error message as per
                    http://www.w3.org/TR/SVG11/implnote.html#ErrorProcessing. */
-                is_css = false;
+                style_elem.is_css = false;
             } else {
                 /* fixme: determine what whitespace is allowed.  Will probably need to ask on SVG
-                  list; though the relevant RFC may give info on its lexer. */
-                is_css = ( g_ascii_strncasecmp(value, "text/css", 8) == 0
-                           && ( value[8] == '\0' ||
-                                value[8] == ';'    ) );
+                 * list; though the relevant RFC may give info on its lexer. */
+                style_elem.is_css = ( g_ascii_strncasecmp(value, "text/css", 8) == 0
+                                      && ( value[8] == '\0' ||
+                                           value[8] == ';'    ) );
             }
             break;
         }
@@ -41,29 +89,26 @@ void SPStyleElem::set(unsigned int key, const gchar* value) {
 
         /* title is ignored. */
         default: {
-            SPObject::set(key, value);
+            if (parent_class->set) {
+                parent_class->set(object, key, value);
+            }
             break;
         }
     }
 }
 
-
 static void
 child_add_rm_cb(Inkscape::XML::Node *, Inkscape::XML::Node *, Inkscape::XML::Node *,
                 void *const data)
 {
-    SPObject *obj = reinterpret_cast<SPObject *>(data);
-    g_assert(data != NULL);
-    obj->read_content();
+    sp_style_elem_read_content(static_cast<SPObject *>(data));
 }
 
 static void
 content_changed_cb(Inkscape::XML::Node *, gchar const *, gchar const *,
                    void *const data)
 {
-    SPObject *obj = reinterpret_cast<SPObject *>(data);
-    g_assert(data != NULL);
-    obj->read_content();
+    sp_style_elem_read_content(static_cast<SPObject *>(data));
 }
 
 static void
@@ -71,27 +116,30 @@ child_order_changed_cb(Inkscape::XML::Node *, Inkscape::XML::Node *,
                        Inkscape::XML::Node *, Inkscape::XML::Node *,
                        void *const data)
 {
-    SPObject *obj = reinterpret_cast<SPObject *>(data);
-    g_assert(data != NULL);
-    obj->read_content();
+    sp_style_elem_read_content(static_cast<SPObject *>(data));
 }
 
-Inkscape::XML::Node* SPStyleElem::write(Inkscape::XML::Document* xml_doc, Inkscape::XML::Node* repr, guint flags) {
+static Inkscape::XML::Node *
+sp_style_elem_write(SPObject *const object, Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint const flags)
+{
     if ((flags & SP_OBJECT_WRITE_BUILD) && !repr) {
         repr = xml_doc->createElement("svg:style");
     }
 
+    g_return_val_if_fail(object, repr);
+    SPStyleElem &style_elem = *SP_STYLE_ELEM(object);
     if (flags & SP_OBJECT_WRITE_BUILD) {
         g_warning("nyi: Forming <style> content for SP_OBJECT_WRITE_BUILD.");
         /* fixme: Consider having the CRStyleSheet be a member of SPStyleElem, and then
            pretty-print to a string s, then repr->addChild(xml_doc->createTextNode(s), NULL). */
     }
-    if (is_css) {
+    if (style_elem.is_css) {
         repr->setAttribute("type", "text/css");
     }
     /* todo: media */
 
-    SPObject::write(xml_doc, repr, flags);
+    if (((SPObjectClass *) parent_class)->write)
+        ((SPObjectClass *) parent_class)->write(object, xml_doc, repr, flags);
 
     return repr;
 }
@@ -249,7 +297,11 @@ property_cb(CRDocHandler *const a_handler,
     g_return_if_fail(append_status == CR_OK);
 }
 
-void SPStyleElem::read_content() {
+static void
+sp_style_elem_read_content(SPObject *const object)
+{
+    SPStyleElem &style_elem = *SP_STYLE_ELEM(object);
+
     /* fixme: If there's more than one <style> element in a document, then the document stylesheet
      * will be set to a random one of them, even switching between them.
      *
@@ -265,8 +317,7 @@ void SPStyleElem::read_content() {
      * Dodji replies "right, that's *bug*"; just an unexpected oversight.
      */
 
-    //XML Tree being used directly here while it shouldn't be.
-    GString *const text = concat_children(*getRepr());
+    GString *const text = concat_children(*style_elem.repr);
     CRParser *parser = cr_parser_new_from_buf(reinterpret_cast<guchar *>(text->str), text->len,
                                               CR_UTF_8, FALSE);
 
@@ -295,7 +346,7 @@ void SPStyleElem::read_content() {
     CRStatus const parse_status = cr_parser_parse(parser);
     g_assert(sac_handler->app_data == &parse_tmp);
     if (parse_status == CR_OK) {
-        cr_cascade_set_sheet(document->style_cascade, stylesheet, ORIGIN_AUTHOR);
+        cr_cascade_set_sheet(style_elem.document->style_cascade, stylesheet, ORIGIN_AUTHOR);
     } else {
         if (parse_status != CR_PARSING_ERROR) {
             g_printerr("parsing error code=%u\n", unsigned(parse_status));
@@ -306,17 +357,17 @@ void SPStyleElem::read_content() {
         }
     }
     cr_parser_destroy(parser);
-    //requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+    //object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 
     // Style references via class= do not, and actually cannot, use autoupdating URIReferences.
-    // Therefore, if an object refers to a stylesheet which has not yet loaded when the object is
-    // being loaded (e.g. if the stylesheet is below or inside the object in XML), its class= has
-    // no effect (bug 1491639).  Below is a partial hack that fixes this for a single case: when
-    // the <style> is a child of the object that uses a style from it. It just forces the parent of
-    // <style> to reread its style as soon as the stylesheet is fully loaded. Naturally, this won't
-    // work if the user of the stylesheet is its grandparent or precedent.
+    // Therefore, if an object refers to a stylesheet which has not yet loaded when the object is being loaded
+    // (e.g. if the stylesheet is below or inside the object in XML), its class= has no effect (bug 1491639).
+    // Below is a partial hack that fixes this for a single case: when the <style> is a child of the object
+    // that uses a style from it. It just forces the parent of <style> to reread its style as soon as the stylesheet
+    // is fully loaded. Naturally, this won't work if the user of the stylesheet is its grandparent or precedent.
+    SPObject *parent = SP_OBJECT_PARENT (object);
     if ( parent ) {
-        parent->style->readFromObject( parent );
+        sp_style_read_from_object(parent->style, parent);
     }
 }
 
@@ -333,11 +384,13 @@ rec_add_listener(Inkscape::XML::Node &repr,
     }
 }
 
-void SPStyleElem::build(SPDocument *document, Inkscape::XML::Node *repr) {
-    read_content();
+static void
+sp_style_elem_build(SPObject *object, SPDocument *document, Inkscape::XML::Node *repr)
+{
+    sp_style_elem_read_content(object);
 
-    readAttr( "type" );
-    readAttr( "media" );
+    sp_object_read_attr(object, "type");
+    sp_object_read_attr(object, "media");
 
     static Inkscape::XML::NodeEventVector const nodeEventVector = {
         child_add_rm_cb,   // child_added
@@ -346,11 +399,12 @@ void SPStyleElem::build(SPDocument *document, Inkscape::XML::Node *repr) {
         content_changed_cb,   // content_changed
         child_order_changed_cb,   // order_changed
     };
-    rec_add_listener(*repr, &nodeEventVector, this);
+    rec_add_listener(*repr, &nodeEventVector, object);
 
-    SPObject::build(document, repr);
+    if (((SPObjectClass *) parent_class)->build) {
+        ((SPObjectClass *) parent_class)->build(object, document, repr);
+    }
 }
-
 
 
 /*
@@ -362,4 +416,4 @@ void SPStyleElem::build(SPDocument *document, Inkscape::XML::Node *repr) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

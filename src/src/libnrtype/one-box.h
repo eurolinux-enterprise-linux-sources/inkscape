@@ -9,7 +9,7 @@
 // this time for sp-typeset
 struct one_box {
     int g_st, g_en; ///< First and last glyph of this word.
-    double ascent, descent, xheight;
+    double ascent, descent, leading;
     double width;
     bool word_start, word_end;
 };
@@ -26,5 +26,5 @@ struct one_box {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
 

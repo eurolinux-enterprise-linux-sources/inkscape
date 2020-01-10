@@ -5,8 +5,7 @@
  * Authors:
  *   Ted Gould <ted@gould.cx>
  *   Ulf Erikson <ulferikson@users.sf.net>
- *   Adib Taraben <theAdib@gmail.com>
- *   Abhishek Sharma
+ *   Adib Taraben <theAdib@yahoo.com>
  *
  * Copyright (C) 2004-2006 Authors
  *
@@ -17,7 +16,6 @@
 #define EXTENSION_INTERNAL_CAIRO_PS_OUT_H
 
 #include "extension/implementation/implementation.h"
-#include "sp-item.h"
 
 #ifdef HAVE_CAIRO_PDF
 
@@ -64,4 +62,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

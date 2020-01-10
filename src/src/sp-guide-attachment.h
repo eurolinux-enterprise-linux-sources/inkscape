@@ -1,7 +1,7 @@
-#ifndef SEEN_SP_GUIDE_ATTACHMENT_H
-#define SEEN_SP_GUIDE_ATTACHMENT_H
+#ifndef __SP_GUIDE_ATTACHMENT_H__
+#define __SP_GUIDE_ATTACHMENT_H__
 
-#include "sp-item.h"
+#include <forward.h>
 
 class SPGuideAttachment {
 public:
@@ -10,8 +10,7 @@ public:
 
 public:
     SPGuideAttachment() :
-        item(static_cast<SPItem *>(0)),
-        snappoint_ix(0)
+        item(static_cast<SPItem *>(0))
     { }
 
     SPGuideAttachment(SPItem *i, int s) :
@@ -29,7 +28,8 @@ public:
     }
 };
 
-#endif // SEEN_SP_GUIDE_ATTACHMENT_H
+
+#endif /* !__SP_GUIDE_ATTACHMENT_H__ */
 
 /*
   Local Variables:
@@ -40,4 +40,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

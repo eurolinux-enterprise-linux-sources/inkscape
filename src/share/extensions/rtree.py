@@ -1,7 +1,6 @@
 #!/usr/bin/env python 
 '''
 Copyright (C) 2005 Aaron Spike, aaron@ekips.org
-Copyright (C) 2015 su_v, suv-sf@users.sf.net
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,28 +14,23 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
 import inkex, simplestyle, pturtle, random
-from simpletransform import computePointInNode
 
-def rtree(turtle, size, min, pt=False):
+def rtree(turtle, size, min):
     if size < min:
         return
     turtle.fd(size)
     turn = random.uniform(20, 40)
     turtle.lt(turn)
-    rtree(turtle, size*random.uniform(0.5,0.9), min, pt)
+    rtree(turtle, size*random.uniform(0.5,0.9), min)
     turtle.rt(turn)
     turn = random.uniform(20, 40)
     turtle.rt(turn)
-    rtree(turtle, size*random.uniform(0.5,0.9), min, pt)
+    rtree(turtle, size*random.uniform(0.5,0.9), min)
     turtle.lt(turn)
-    if pt:
-        turtle.pu()
     turtle.bk(size)
-    if pt:
-        turtle.pd()
 
 class RTreeTurtle(inkex.Effect):
     def __init__(self):
@@ -49,22 +43,16 @@ class RTreeTurtle(inkex.Effect):
                         action="store", type="float", 
                         dest="minimum", default=4.0,
                         help="minimum branch size")
-        self.OptionParser.add_option("--pentoggle",
-                        action="store", type="inkbool", 
-                        dest="pentoggle", default=False,
-                        help="Lift pen for backward steps")
     def effect(self):
-        self.options.size = self.unittouu(str(self.options.size) + 'px')
-        self.options.minimum = self.unittouu(str(self.options.minimum) + 'px')
-        s = {'stroke-linejoin': 'miter', 'stroke-width': str(self.unittouu('1px')), 
+        s = {'stroke-linejoin': 'miter', 'stroke-width': '1.0px', 
             'stroke-opacity': '1.0', 'fill-opacity': '1.0', 
             'stroke': '#000000', 'stroke-linecap': 'butt', 
             'fill': 'none'}
         t = pturtle.pTurtle()
         t.pu()
-        t.setpos(computePointInNode(list(self.view_center), self.current_layer))
+        t.setpos(self.view_center)
         t.pd()
-        rtree(t, self.options.size, self.options.minimum, self.options.pentoggle)
+        rtree(t, self.options.size, self.options.minimum)
         
         attribs = {'d':t.getPath(),'style':simplestyle.formatStyle(s)}
         inkex.etree.SubElement(self.current_layer, inkex.addNS('path','svg'), attribs)
@@ -74,4 +62,4 @@ if __name__ == '__main__':
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

@@ -1,3 +1,4 @@
+#define INKSCAPE_LPE_PATH_LENGTH_CPP
 /** \file
  * LPE <path_length> implementation.
  */
@@ -11,10 +12,8 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glibmm/i18n.h>
-
 #include "live_effects/lpe-path_length.h"
-#include "util/units.h"
+#include "sp-metrics.h"
 
 #include "2geom/sbasis-geometric.h"
 
@@ -23,9 +22,9 @@ namespace LivePathEffect {
 
 LPEPathLength::LPEPathLength(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    scale(_("Scale:"), _("Scaling factor"), "scale", &wr, this, 1.0),
+    scale(_("Scale"), _("Scaling factor"), "scale", &wr, this, 1.0),
     info_text(this),
-    unit(_("Unit:"), _("Unit"), "unit", &wr, this),
+    unit(_("Unit"), _("Unit"), "unit", &wr, this),
     display_unit(_("Display unit"), _("Print unit after path length"), "display_unit", &wr, this, true)
 {
     registerParameter(dynamic_cast<Parameter *>(&scale));
@@ -39,6 +38,12 @@ LPEPathLength::~LPEPathLength()
 
 }
 
+void
+LPEPathLength::hideCanvasText() {
+    // this is only used in sp-lpe-item.cpp to hide the canvas text when the effect is invisible
+    info_text.param_setValue("");
+}
+
 Geom::Piecewise<Geom::D2<Geom::SBasis> >
 LPEPathLength::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in)
 {
@@ -46,11 +51,11 @@ LPEPathLength::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & p
 
     /* convert the measured length to the correct unit ... */
     double lengthval = Geom::length(pwd2_in) * scale;
-    lengthval = Inkscape::Util::Quantity::convert(lengthval, "px", unit.get_abbreviation());
+    gboolean success = sp_convert_distance(&lengthval, &sp_unit_get_by_id(SP_UNIT_PX), unit);
 
     /* ... set it as the canvas text ... */
     gchar *arc_length = g_strdup_printf("%.2f %s", lengthval,
-                                        display_unit ? unit.get_abbreviation() : "");
+                                        display_unit ? (success ? unit.get_abbreviation() : "px") : "");
     info_text.param_setValue(arc_length);
     g_free(arc_length);
 
@@ -65,9 +70,7 @@ LPEPathLength::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & p
         //g_print ("Area is zero\n");
     }
     //g_print ("Area: %f\n", area);
-    if (!this->isVisible()) {
-        info_text.param_setValue("");
-    }
+
     return pwd2_in;
 }
 

@@ -18,8 +18,7 @@
 #ifndef SEEN_INKSCAPE_XML_SIMPLE_NODE_H
 #define SEEN_INKSCAPE_XML_SIMPLE_NODE_H
 
-#include <cassert>
-#include <iostream>
+#include <glib.h> // g_assert()
 
 #include "xml/node.h"
 #include "xml/attribute-record.h"
@@ -39,7 +38,7 @@ class SimpleNode
 : virtual public Node, public Inkscape::GC::Managed<>
 {
 public:
-    char const *name() const;
+    gchar const *name() const;
     int code() const { return _name; }
     void setCodeUnsafe(int code) {
         _name = code;
@@ -84,14 +83,14 @@ public:
     unsigned position() const;
     void setPosition(int pos);
 
-    char const *attribute(char const *key) const;
-    void setAttribute(char const *key, char const *value, bool is_interactive=false);
-    bool matchAttributeName(char const *partial_name) const;
+    gchar const *attribute(gchar const *key) const;
+    void setAttribute(gchar const *key, gchar const *value, bool is_interactive=false);
+    bool matchAttributeName(gchar const *partial_name) const;
 
-    char const *content() const;
-    void setContent(char const *value);
+    gchar const *content() const;
+    void setContent(gchar const *value);
 
-    void mergeFrom(Node const *src, char const *key);
+    void mergeFrom(Node const *src, gchar const *key);
 
     Inkscape::Util::List<AttributeRecord const> attributeList() const {
         return _attributes;
@@ -101,7 +100,7 @@ public:
     void synthesizeEvents(NodeObserver &observer);
 
     void addListener(NodeEventVector const *vector, void *data) {
-        assert(vector != NULL);
+        g_assert(vector != NULL);
         _observers.addListener(*vector, data);
     }
     void addObserver(NodeObserver &observer) {
@@ -120,8 +119,6 @@ public:
     void removeSubtreeObserver(NodeObserver &observer) {
         _subtree_observers.remove(observer);
     }
-
-    void recursivePrintTree(unsigned level = 0);
 
 protected:
     SimpleNode(int code, Document *document);
@@ -169,4 +166,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

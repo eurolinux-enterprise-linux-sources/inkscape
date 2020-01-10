@@ -1,11 +1,9 @@
 #ifndef SEEN_KNOT_ENUMS_H
 #define SEEN_KNOT_ENUMS_H
 
-/**
- * @file
+/** \file 
  * Some enums used by SPKnot and by related types \& functions. 
- */
-/*
+ *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *
@@ -19,7 +17,6 @@ typedef enum {
     SP_KNOT_SHAPE_SQUARE,
     SP_KNOT_SHAPE_DIAMOND,
     SP_KNOT_SHAPE_CIRCLE,
-    SP_KNOT_SHAPE_TRIANGLE,
     SP_KNOT_SHAPE_CROSS,
     SP_KNOT_SHAPE_BITMAP,
     SP_KNOT_SHAPE_IMAGE
@@ -58,4 +55,4 @@ enum {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

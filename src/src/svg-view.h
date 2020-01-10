@@ -1,6 +1,9 @@
-#ifndef SEEN_SP_SVG_VIEW_H
-#define SEEN_SP_SVG_VIEW_H
-/*
+#ifndef __SP_SVG_VIEW_H__
+#define __SP_SVG_VIEW_H__
+
+/** \file
+ * SPSVGView, SPSVGSPViewWidget: Generic SVG view and widget
+ *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Ralf Stephan <ralf@ark.in-berlin.de>
@@ -13,8 +16,9 @@
 
 #include "ui/view/view.h"
 
-struct SPCanvasGroup;
-struct SPCanvasItem;
+class SPCanvasGroup;
+class SPCanvasItem;
+
 
 /**
  * Generic SVG view.
@@ -24,61 +28,40 @@ public:
     unsigned int    _dkey;
     SPCanvasGroup  *_parent;
     SPCanvasItem   *_drawing;
-    double          _hscale;     ///< horizontal scale
-    double          _vscale;     ///< vertical scale
+    gdouble         _hscale;     ///< horizontal scale
+    gdouble         _vscale;     ///< vertical scale
     bool            _rescale;    ///< whether to rescale automatically
     bool            _keepaspect;
-    double          _width;
-    double          _height;
+    gdouble         _width;
+    gdouble         _height;
 
 
-    /**
-     * Constructs new SPSVGView object and returns pointer to it.
-     */
-    SPSVGView(SPCanvasGroup* parent);
-
+    SPSVGView (SPCanvasGroup* parent);
     virtual ~SPSVGView();
         
-    /**
-     * Rescales SPSVGView to given proportions.
-     */
-    void setScale(double hscale, double vscale);
+    /// Rescales SPSVGView to given proportions.
+    void setScale (gdouble hscale, gdouble vscale);
     
-    /**
-     * Rescales SPSVGView and keeps aspect ratio.
-     */
-    void setRescale(bool rescale, bool keepaspect, double width, double height);
+    /// Rescales SPSVGView and keeps aspect ratio.
+    void setRescale (bool rescale, bool keepaspect, gdouble width, gdouble height);
 
-    /**
-     * Helper function that sets rescale ratio and emits resize event.
-     */
-    void doRescale(bool event);
+    void doRescale (bool event);
 
-    /**
-     * Callback connected with set_document signal.
-     */
-    virtual void setDocument(SPDocument *document);
-
+    virtual void setDocument (SPDocument*);
     virtual void mouseover();
-
     virtual void mouseout();
-
     virtual bool shutdown() { return true; }
 
 private:
-    virtual void onPositionSet(double, double) {}
-    virtual void onResized(double, double) {}
+    virtual void onPositionSet (double, double) {}
+    virtual void onResized (double, double) {}
     virtual void onRedrawRequested() {}
-    virtual void onStatusMessage(Inkscape::MessageType /*type*/, gchar const */*message*/) {}
-    virtual void onDocumentURISet(gchar const* /*uri*/) {}
-
-    /**
-     * Callback connected with document_resized signal.
-     */
-    virtual void onDocumentResized(double, double);
+    virtual void onStatusMessage (Inkscape::MessageType /*type*/, gchar const */*message*/) {}
+    virtual void onDocumentURISet (gchar const* /*uri*/) {}
+    virtual void onDocumentResized (double, double);
 };
 
-#endif // SEEN_SP_SVG_VIEW_H
+#endif
 
 /*
   Local Variables:

@@ -13,20 +13,14 @@
 #include <2geom/forward.h>
 #include <2geom/pathvector.h>
 
-// In gtk2, this wasn't an issue; we could toss around
-// G_MAXDOUBLE and not worry about size allocations. But
-// in gtk3, it is an issue: it allocates widget size for the maxmium
-// value you pass to it, leading to some insane lengths.
-// If you need this to be more, please be conservative about it.
-const double SCALARPARAM_G_MAXDOUBLE = 10000000000.0; // TODO fixme: using an arbitrary large number as a magic value seems fragile.
-
 class KnotHolder;
 class SPLPEItem;
-class SPDesktop;
-class SPItem;
+struct SPDesktop;
+struct SPItem;
 
 namespace Gtk {
     class Widget;
+    class Tooltips;
 }
 
 namespace Inkscape {
@@ -56,24 +50,24 @@ public:
 
     virtual bool param_readSVGValue(const gchar * strvalue) = 0;   // returns true if new value is valid / accepted.
     virtual gchar * param_getSVGValue() const = 0;
-    void write_to_SVG();
+    void write_to_SVG() { param_write_to_repr(param_getSVGValue()); }
  
     virtual void param_set_default() = 0;
 
     // This creates a new widget (newed with Gtk::manage(new ...);)
-    virtual Gtk::Widget * param_newWidget() = 0;
+    virtual Gtk::Widget * param_newWidget(Gtk::Tooltips * tooltips) = 0;
 
     virtual Glib::ustring * param_getTooltip() { return &param_tooltip; };
 
     // overload these for your particular parameter to make it provide knotholder handles or canvas helperpaths
-    virtual bool providesKnotHolderEntities() const { return false; }
+    virtual bool providesKnotHolderEntities() { return false; }
     virtual void addKnotHolderEntities(KnotHolder */*knotholder*/, SPDesktop */*desktop*/, SPItem */*item*/) {};
-    virtual void addCanvasIndicators(SPLPEItem const*/*lpeitem*/, std::vector<Geom::PathVector> &/*hp_vec*/) {};
+    virtual void addCanvasIndicators(SPLPEItem */*lpeitem*/, std::vector<Geom::PathVector> &/*hp_vec*/) {};
 
     virtual void param_editOncanvas(SPItem * /*item*/, SPDesktop * /*dt*/) {};
     virtual void param_setup_nodepath(Inkscape::NodePath::Path */*np*/) {};
 
-    virtual void param_transform_multiply(Geom::Affine const& /*postmul*/, bool /*set*/) {};
+    virtual void param_transform_multiply(Geom::Matrix const& /*postmul*/, bool /*set*/) {};
 
     Glib::ustring param_key;
     Inkscape::UI::Widget::Registry * param_wr;
@@ -102,8 +96,7 @@ public:
                 const Glib::ustring& key,
                 Inkscape::UI::Widget::Registry* wr,
                 Effect* effect,
-                gdouble default_value = 1.0,
-                bool no_widget = false);
+                gdouble default_value = 1.0);
     virtual ~ScalarParam();
 
     virtual bool param_readSVGValue(const gchar * strvalue);
@@ -116,12 +109,10 @@ public:
     void param_set_digits(unsigned digits);
     void param_set_increments(double step, double page);
 
-    void addSlider(bool add_slider_widget) { add_slider = add_slider_widget; };
+    virtual Gtk::Widget * param_newWidget(Gtk::Tooltips * tooltips);
 
-    void param_overwrite_widget(bool overwrite_widget);
-    virtual Gtk::Widget * param_newWidget();
-
-    inline operator gdouble() const { return value; };
+    inline operator gdouble()
+        { return value; };
 
 protected:
     gdouble value;
@@ -132,9 +123,6 @@ protected:
     unsigned digits;
     double inc_step;
     double inc_page;
-    bool add_slider;
-    bool overwrite_widget;
-    bool hide_widget;
 
 private:
     ScalarParam(const ScalarParam&);
@@ -156,4 +144,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

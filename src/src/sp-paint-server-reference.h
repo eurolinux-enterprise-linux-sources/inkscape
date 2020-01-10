@@ -15,11 +15,10 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "sp-object.h"
 #include "uri-references.h"
 
-class SPDocument;
-class SPObject;
-class SPPaintServer;
+struct SPPaintServer;
 
 class SPPaintServerReference : public Inkscape::URIReference {
 public:
@@ -41,4 +40,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

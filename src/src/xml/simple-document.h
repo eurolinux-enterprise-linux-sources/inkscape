@@ -31,7 +31,7 @@ class SimpleDocument : public SimpleNode,
 public:
     explicit SimpleDocument()
     : SimpleNode(g_quark_from_static_string("xml"), this),
-      _in_transaction(false), _is_CData(false) {}
+      _in_transaction(false) {}
 
     NodeType type() const { return Inkscape::XML::DOCUMENT_NODE; }
 
@@ -44,7 +44,6 @@ public:
 
     Node *createElement(char const *name);
     Node *createTextNode(char const *content);
-    Node *createTextNode(char const *content, bool const is_CData);
     Node *createComment(char const *content);
     Node *createPI(char const *target, char const *content);
 
@@ -66,8 +65,7 @@ public:
 protected:
     SimpleDocument(SimpleDocument const &doc)
     : Node(), SimpleNode(doc), Document(), NodeObserver(),
-      _in_transaction(false),
-      _is_CData(false){}
+      _in_transaction(false) {}
 
     SimpleNode *_duplicate(Document* /*doc*/) const
     {
@@ -78,7 +76,6 @@ protected:
 private:
     bool _in_transaction;
     LogBuilder _log_builder;
-    bool _is_CData;
 };
 
 }
@@ -95,4 +92,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

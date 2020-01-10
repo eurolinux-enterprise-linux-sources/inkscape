@@ -1,12 +1,11 @@
 /**
  * \file
  * \brief  Contains forward declarations of 2geom types
- *//*
+ *
  * Authors:
  *  Johan Engelen <goejendaagh@zonnet.nl>
- *  Krzysztof Kosiński <tweenk.pl@gmail.com>
  *
- * Copyright (C) 2008-2010 Authors
+ * Copyright 2008  authors
  *
  * This library is free software; you can redistribute it and/or
  * modify it either under the terms of the GNU Lesser General Public
@@ -32,60 +31,28 @@
  * the specific language governing rights and limitations.
  */
 
-#ifndef LIB2GEOM_SEEN_FORWARD_H
-#define LIB2GEOM_SEEN_FORWARD_H
+#ifndef SEEN_GEOM_FORWARD_H
+#define SEEN_GEOM_FORWARD_H
+
+#include <vector>   // include this dependency so PathVector can be defined more explicitly
 
 namespace Geom {
 
-// primitives
-typedef double Coord;
-typedef int IntCoord;
-class Point;
-class IntPoint;
-class Line;
-class Ray;
-template <typename> class GenericInterval;
-template <typename> class GenericOptInterval;
-class Interval;
-class OptInterval;
-typedef GenericInterval<IntCoord> IntInterval;
-typedef GenericOptInterval<IntCoord> OptIntInterval;
-template <typename> class GenericRect;
-template <typename> class GenericOptRect;
-class Rect;
-class OptRect;
-typedef GenericRect<IntCoord> IntRect;
-typedef GenericOptRect<IntCoord> OptIntRect;
-
-// fragments
-class Linear;
 class Bezier;
-class SBasis;
-class Poly;
-
-// shapes
-class Circle;
-class Ellipse;
-class ConvexHull;
-
-// curves
-class Curve;
-class SBasisCurve;
-class BezierCurve;
-template <unsigned degree> class BezierCurveN;
-typedef BezierCurveN<1> LineSegment;
-typedef BezierCurveN<2> QuadraticBezier;
-typedef BezierCurveN<3> CubicBezier;
+template <unsigned> class BezierCurve;
+template<> class BezierCurve<0>;
+typedef BezierCurve<2> QuadraticBezier;
+typedef BezierCurve<1> LineSegment;
+typedef BezierCurve<3> CubicBezier;
 class EllipticalArc;
+class SVGEllipticalArc;
 
-// paths and path sequences
-class Path;
-class PathVector;
-struct PathTime;
-class PathInterval;
-struct PathVectorTime;
+class HLineSegment;
+class VLineSegment;
 
-// errors
+typedef double Coord;
+class Point;
+
 class Exception;
 class LogicalError;
 class RangeError;
@@ -94,20 +61,32 @@ class InvariantsViolation;
 class NotInvertible;
 class ContinuityError;
 
-// transforms
-class Affine;
+class Interval;
+class OptInterval;
+class Linear;
+class Hat;
+class Tri;
+
+class Matrix;
 class Translate;
 class Rotate;
 class Scale;
-class HShear;
-class VShear;
-class Zoom;
 
-// templates
-template <typename> class D2;
+class Curve;
+class Path;
+typedef std::vector<Path> PathVector;
+
+template <class> class D2;
 template <typename> class Piecewise;
+class SBasis;
+class SBasisCurve;
 
-// misc
+typedef D2<Interval> Rect;
+class OptRect;
+
+class Shape;
+class Region;
+
 class SVGPathSink;
 template <typename> class SVGPathGenerator;
 
@@ -124,4 +103,4 @@ template <typename> class SVGPathGenerator;
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

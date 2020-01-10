@@ -12,11 +12,12 @@
 #include "config.h"
 #endif
 
-#include "ui/dialog/extensions.h"
-
 #include <glibmm/i18n.h>
+
+
 #include "inkscape.h"
 #include "preferences.h"
+#include "ui/dialog/extensions.h"
 #include "extension/extension.h"
 
 #include "error-file.h"
@@ -39,7 +40,7 @@ namespace Extension {
     probably good to check anyway).
 */
 ErrorFileNotice::ErrorFileNotice (void) :
-    Gtk::MessageDialog(
+    Gtk::MessageDialog::MessageDialog(
             "",                    /* message */
             false,                 /* use markup */
             Gtk::MESSAGE_WARNING,  /* dialog type */
@@ -48,19 +49,14 @@ ErrorFileNotice::ErrorFileNotice (void) :
         )
 
 {
-    // \FIXME change this
     /* This is some filler text, needs to change before relase */
     Glib::ustring dialog_text(_("<span weight=\"bold\" size=\"larger\">One or more extensions failed to load</span>\n\nThe failed extensions have been skipped.  Inkscape will continue to run normally but those extensions will be unavailable.  For details to troubleshoot this problem, please refer to the error log located at: "));
-    gchar * ext_error_file = Inkscape::Application::profile_path(EXTENSION_ERROR_LOG_FILENAME);
+    gchar * ext_error_file = profile_path(EXTENSION_ERROR_LOG_FILENAME);
     dialog_text += ext_error_file;
     g_free(ext_error_file);
     set_message(dialog_text, true);
 
-#if WITH_GTKMM_3_0
-    Gtk::Box * vbox = get_content_area();
-#else
-    Gtk::Box * vbox = get_vbox();
-#endif
+    Gtk::VBox * vbox = get_vbox();
 
     /* This is some filler text, needs to change before relase */
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();

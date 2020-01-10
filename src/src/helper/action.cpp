@@ -1,5 +1,7 @@
-/*
- * SPAction implementation.
+#define __SP_ACTION_C__
+
+/** \file
+ * SPAction implementation
  *
  * Author:
  *   Lauris Kaplinski <lauris@kaplinski.com>
@@ -16,13 +18,32 @@
 #include "debug/simple-event.h"
 #include "debug/event-tracker.h"
 #include "ui/view/view.h"
-#include "desktop.h"
 #include "document.h"
 #include "helper/action.h"
 
-static void sp_action_finalize (GObject *object);
+static void sp_action_class_init (SPActionClass *klass);
+static void sp_action_init (SPAction *action);
+static void sp_action_finalize (NRObject *object);
 
-G_DEFINE_TYPE(SPAction, sp_action, G_TYPE_OBJECT);
+static NRActiveObjectClass *parent_class;
+
+/**
+ * Register SPAction class and return its type.
+ */
+NRType
+sp_action_get_type (void)
+{
+	static unsigned int type = 0;
+	if (!type) {
+		type = nr_object_register_type (NR_TYPE_ACTIVE_OBJECT,
+						"SPAction",
+						sizeof (SPActionClass),
+						sizeof (SPAction),
+						(void (*) (NRObjectClass *)) sp_action_class_init,
+						(void (*) (NRObject *)) sp_action_init);
+	}
+	return type;
+}
 
 /**
  * SPAction vtable initialization.
@@ -30,8 +51,14 @@ G_DEFINE_TYPE(SPAction, sp_action, G_TYPE_OBJECT);
 static void
 sp_action_class_init (SPActionClass *klass)
 {
-    GObjectClass *object_class = (GObjectClass *) klass;
-    object_class->finalize = sp_action_finalize;
+	NRObjectClass * object_class;
+
+	object_class = (NRObjectClass *) klass;
+
+	parent_class = (NRActiveObjectClass *) (((NRObjectClass *) klass)->parent);
+
+	object_class->finalize = sp_action_finalize;
+	object_class->cpp_ctor = NRObject::invoke_ctor<SPAction>;
 }
 
 /**
@@ -40,61 +67,53 @@ sp_action_class_init (SPActionClass *klass)
 static void
 sp_action_init (SPAction *action)
 {
-    action->sensitive = 0;
-    action->active = 0;
-    action->context = Inkscape::ActionContext();
-    action->id = action->name = action->tip = NULL;
-    action->image = NULL;
-    
-    new (&action->signal_perform) sigc::signal<void>();
-    new (&action->signal_set_sensitive) sigc::signal<void, bool>();
-    new (&action->signal_set_active) sigc::signal<void, bool>();
-    new (&action->signal_set_name) sigc::signal<void, Glib::ustring const &>();
+	action->sensitive = 0;
+	action->active = 0;
+	action->view = NULL;
+	action->id = action->name = action->tip = NULL;
+	action->image = NULL;
 }
 
 /**
  * Called before SPAction object destruction.
  */
 static void
-sp_action_finalize (GObject *object)
+sp_action_finalize (NRObject *object)
 {
-    SPAction *action = SP_ACTION(object);
+	SPAction *action;
 
-    g_free (action->image);
-    g_free (action->tip);
-    g_free (action->name);
-    g_free (action->id);
+	action = (SPAction *) object;
 
-    action->signal_perform.~signal();
-    action->signal_set_sensitive.~signal();
-    action->signal_set_active.~signal();
-    action->signal_set_name.~signal();
+	if (action->image) free (action->image);
+	if (action->tip) free (action->tip);
+	if (action->name) free (action->name);
+	if (action->id) free (action->id);
 
-    G_OBJECT_CLASS(sp_action_parent_class)->finalize (object);
+	((NRObjectClass *) (parent_class))->finalize (object);
 }
 
 /**
  * Create new SPAction object and set its properties.
  */
 SPAction *
-sp_action_new(Inkscape::ActionContext const &context,
+sp_action_new(Inkscape::UI::View::View *view,
               const gchar *id,
               const gchar *name,
               const gchar *tip,
               const gchar *image,
               Inkscape::Verb * verb)
 {
-    SPAction *action = (SPAction *)g_object_new(SP_TYPE_ACTION, NULL);
+	SPAction *action = (SPAction *)nr_object_new(SP_TYPE_ACTION);
 
-    action->context = context;
-    action->sensitive = TRUE;
-    action->id = g_strdup (id);
-    action->name = g_strdup (name);
-    action->tip = g_strdup (tip);
-    action->image = g_strdup (image);
-    action->verb = verb;
+	action->view = view;
+	action->sensitive = TRUE;
+	if (id) action->id = strdup (id);
+	if (name) action->name = strdup (name);
+	if (tip) action->tip = strdup (tip);
+	if (image) action->image = strdup (image);
+	action->verb = verb;
 
-    return action;
+	return action;
 }
 
 namespace {
@@ -112,9 +131,11 @@ public:
     : ActionEventBase(share_static_string("action"))
     {
         _addProperty(share_static_string("timestamp"), timestamp());
-        SPDocument *document = action->context.getDocument();
-        if (document) {
-            _addProperty(share_static_string("document"), document->serial());
+        if (action->view) {
+            SPDocument *document = action->view->doc();
+            if (document) {
+                _addProperty(share_static_string("document"), document->serial());
+            }
         }
         _addProperty(share_static_string("verb"), action->id);
     }
@@ -123,17 +144,44 @@ public:
 }
 
 /**
- * Executes an action.
- * @param action   The action to be executed.
- * @param data     ignored.
- */
-void sp_action_perform(SPAction *action, void * /*data*/)
-{
-    g_return_if_fail (action != NULL);
-    g_return_if_fail (SP_IS_ACTION (action));
+	\return   None
+	\brief    Executes an action
+	\param    action   The action to be executed
+	\param    data     Data that is passed into the action.  This depends
+	                   on the situation that the action is used in.
 
-    Inkscape::Debug::EventTracker<ActionEvent> tracker(action);
-    action->signal_perform.emit();
+	This function implements the 'action' in SPActions.  It first validates
+	its parameters, making sure it got an action passed in.  Then it
+	turns that action into its parent class of NRActiveObject.  The
+	NRActiveObject allows for listeners to be attached to it.  This
+	function goes through those listeners and calls them with the
+	vector that was attached to the listener.
+*/
+void
+sp_action_perform (SPAction *action, void * data)
+{
+	NRActiveObject *aobject;
+
+	nr_return_if_fail (action != NULL);
+	nr_return_if_fail (SP_IS_ACTION (action));
+
+        Inkscape::Debug::EventTracker<ActionEvent> tracker(action);
+
+	aobject = NR_ACTIVE_OBJECT(action);
+	if (aobject->callbacks) {
+		unsigned int i;
+		for (i = 0; i < aobject->callbacks->length; i++) {
+			NRObjectListener *listener;
+			SPActionEventVector *avector;
+
+			listener = &aobject->callbacks->listeners[i];
+			avector = (SPActionEventVector *) listener->vector;
+
+			if ((listener->size >= sizeof (SPActionEventVector)) && avector != NULL && avector->perform != NULL) {
+				avector->perform (action, listener->data, data);
+			}
+		}
+	}
 }
 
 /**
@@ -142,10 +190,26 @@ void sp_action_perform(SPAction *action, void * /*data*/)
 void
 sp_action_set_active (SPAction *action, unsigned int active)
 {
-    g_return_if_fail (action != NULL);
-    g_return_if_fail (SP_IS_ACTION (action));
+	nr_return_if_fail (action != NULL);
+	nr_return_if_fail (SP_IS_ACTION (action));
 
-    action->signal_set_active.emit(active);
+	if (active != action->active) {
+		NRActiveObject *aobject;
+		action->active = active;
+		aobject = (NRActiveObject *) action;
+		if (aobject->callbacks) {
+			unsigned int i;
+			for (i = 0; i < aobject->callbacks->length; i++) {
+				NRObjectListener *listener;
+				SPActionEventVector *avector;
+				listener = aobject->callbacks->listeners + i;
+				avector = (SPActionEventVector *) listener->vector;
+				if ((listener->size >= sizeof (SPActionEventVector)) && avector->set_active) {
+					avector->set_active (action, active, listener->data);
+				}
+			}
+		}
+	}
 }
 
 /**
@@ -154,65 +218,67 @@ sp_action_set_active (SPAction *action, unsigned int active)
 void
 sp_action_set_sensitive (SPAction *action, unsigned int sensitive)
 {
-    g_return_if_fail (action != NULL);
-    g_return_if_fail (SP_IS_ACTION (action));
+	nr_return_if_fail (action != NULL);
+	nr_return_if_fail (SP_IS_ACTION (action));
 
-    action->signal_set_sensitive.emit(sensitive);
+	if (sensitive != action->sensitive) {
+		NRActiveObject *aobject;
+		action->sensitive = sensitive;
+		aobject = (NRActiveObject *) action;
+		if (aobject->callbacks) {
+			unsigned int i;
+			for (i = 0; i < aobject->callbacks->length; i++) {
+				NRObjectListener *listener;
+				SPActionEventVector *avector;
+				listener = aobject->callbacks->listeners + i;
+				avector = (SPActionEventVector *) listener->vector;
+				if ((listener->size >= sizeof (SPActionEventVector)) && avector->set_sensitive) {
+					avector->set_sensitive (action, sensitive, listener->data);
+				}
+			}
+		}
+	}
 }
 
+
+/**
+ * Change name for all actions that can be taken with the action.
+ */
 void
-sp_action_set_name (SPAction *action, Glib::ustring const &name)
+sp_action_set_name (SPAction *action, Glib::ustring name)
 {
-    g_return_if_fail (action != NULL);
-    g_return_if_fail (SP_IS_ACTION (action));
+	nr_return_if_fail (action != NULL);
+	nr_return_if_fail (SP_IS_ACTION (action));
 
-    g_free(action->name);
-    action->name = g_strdup(name.data());
-    action->signal_set_name.emit(name);
+        NRActiveObject *aobject;
+        g_free(action->name);
+        action->name = g_strdup(name.c_str());
+        aobject = (NRActiveObject *) action;
+        if (aobject->callbacks) {
+            unsigned int i;
+            for (i = 0; i < aobject->callbacks->length; i++) {
+                NRObjectListener *listener;
+                SPActionEventVector *avector;
+                listener = aobject->callbacks->listeners + i;
+                avector = (SPActionEventVector *) listener->vector;
+                if ((listener->size >= sizeof (SPActionEventVector)) && avector->set_name) {
+                    avector->set_name (action, name, listener->data);
+                }
+            }
+        }
 }
 
-/**
- * Return Document associated with the action.
- */
-SPDocument *
-sp_action_get_document (SPAction *action)
-{
-    g_return_val_if_fail (SP_IS_ACTION (action), NULL);
-    return action->context.getDocument();
-}
+
+
 
 /**
- * Return Selection associated with the action
- */
-Inkscape::Selection *
-sp_action_get_selection (SPAction *action)
-{
-    g_return_val_if_fail (SP_IS_ACTION (action), NULL);
-    return action->context.getSelection();
-}
-
-/**
- * Return View associated with the action, if any.
+ * Return View associated with the action.
  */
 Inkscape::UI::View::View *
 sp_action_get_view (SPAction *action)
 {
-    g_return_val_if_fail (SP_IS_ACTION (action), NULL);
-    return action->context.getView();
-}
-
-/**
- * Return Desktop associated with the action, if any.
- */
-SPDesktop *
-sp_action_get_desktop (SPAction *action)
-{
-    // TODO: this slightly horrible storage of a UI::View::View*, and 
-    // casting to an SPDesktop*, is only done because that's what was
-    // already the norm in the Inkscape codebase. This seems wrong. Surely
-    // we should store an SPDesktop* in the first place? Is there a case
-    // of actions being carried out on a View that is not an SPDesktop?
-      return static_cast<SPDesktop *>(sp_action_get_view(action));
+	g_return_val_if_fail (SP_IS_ACTION (action), NULL);
+	return action->view;
 }
 
 /*

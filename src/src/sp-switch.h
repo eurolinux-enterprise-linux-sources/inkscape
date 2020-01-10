@@ -1,5 +1,5 @@
-#ifndef SEEN_SP_SWITCH_H
-#define SEEN_SP_SWITCH_H
+#ifndef __SP_SWITCH_H__
+#define __SP_SWITCH_H__
 
 /*
  * SVG <switch> implementation
@@ -12,38 +12,53 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <cstddef>
-#include <sigc++/connection.h>
-
 #include "sp-item-group.h"
 
+#include <stddef.h>
+#include <sigc++/connection.h>
 
-#define SP_SWITCH(obj) (dynamic_cast<SPSwitch*>((SPObject*)obj))
-#define SP_IS_SWITCH(obj) (dynamic_cast<const SPSwitch*>((SPObject*)obj) != NULL)
+#define SP_TYPE_SWITCH            (CSwitch::getType())
+#define SP_SWITCH(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_SWITCH, SPSwitch))
+#define SP_SWITCH_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_SWITCH, SPSwitchClass))
+#define SP_IS_SWITCH(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_SWITCH))
+#define SP_IS_SWITCH_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_SWITCH))
 
-class SPSwitch : public SPGroup {
+/*
+ * Virtual methods of SPSwitch
+ */
+class CSwitch : public CGroup {
 public:
-	SPSwitch();
-	virtual ~SPSwitch();
+    CSwitch(SPGroup *group);
+    virtual ~CSwitch();
 
-    void resetChildEvaluated() { _reevaluate(); }
+    friend class SPSwitch;
 
-    std::vector<SPObject*> _childList(bool add_ref, SPObject::Action action);
-    virtual void _showChildren (Inkscape::Drawing &drawing, Inkscape::DrawingItem *ai, unsigned int key, unsigned int flags);
+    static GType getType();
+    
+    virtual void onChildAdded(Inkscape::XML::Node *child);
+    virtual void onChildRemoved(Inkscape::XML::Node *child);
+    virtual void onOrderChanged(Inkscape::XML::Node *child, Inkscape::XML::Node *old_ref, Inkscape::XML::Node *new_ref);
+    virtual gchar *getDescription();
 
+protected:
+    virtual GSList *_childList(bool add_ref, SPObject::Action action);
+    virtual void _showChildren (NRArena *arena, NRArenaItem *ai, unsigned int key, unsigned int flags);
+    
     SPObject *_evaluateFirst();
     void _reevaluate(bool add_to_arena = false);
-    static void _releaseItem(SPObject *obj, SPSwitch *selection);
+    static void _releaseItem(SPObject *obj, CSwitch *selection);
     void _releaseLastItem(SPObject *obj);
 
+private:
     SPObject *_cached_item;
     sigc::connection _release_connection;
+};
 
-    virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
-    virtual void remove_child(Inkscape::XML::Node *child);
-    virtual void order_changed(Inkscape::XML::Node *child, Inkscape::XML::Node *old_ref, Inkscape::XML::Node *new_ref);
-    virtual const char* displayName() const;
-    virtual gchar *description() const;
+struct SPSwitch : public SPGroup {
+    void resetChildEvaluated() { ((CSwitch *)group)->_reevaluate(); }
+};
+
+struct SPSwitchClass : public SPGroupClass {
 };
 
 #endif

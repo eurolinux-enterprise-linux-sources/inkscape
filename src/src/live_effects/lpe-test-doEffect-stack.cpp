@@ -1,10 +1,10 @@
+#define INKSCAPE_LPE_DOEFFECT_STACK_CPP
+
 /*
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
-
-#include <glibmm/i18n.h>
 
 #include "live_effects/lpe-test-doEffect-stack.h"
 
@@ -19,16 +19,15 @@ namespace LivePathEffect {
 
 LPEdoEffectStackTest::LPEdoEffectStackTest(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    step(_("Stack step:"), ("How deep we should go into the stack"), "step", &wr, this),
-    point(_("Point param:"), "tooltip of point parameter", "point_param", &wr, this),
-    path(_("Path param:"), "tooltip of path parameter", "path_param", &wr, this,"M 0,100 100,0")
+    step(_("Stack step"), ("How deep we should go into the stack"), "step", &wr, this),
+    point(_("point param"), "tooltip of point parameter", "point_param", &wr, this),
+    path(_("path param"), "tooltip of path parameter", "path_param", &wr, this,"M 0,100 100,0")
 {
     registerParameter( dynamic_cast<Parameter *>(&step) );
     registerParameter( dynamic_cast<Parameter *>(&point) );
     registerParameter( dynamic_cast<Parameter *>(&path) );
 
     point.set_oncanvas_looks(SP_KNOT_SHAPE_SQUARE, SP_KNOT_MODE_XOR, 0x00ff0000);
-    point.param_setValue(point,true);
 }
 
 LPEdoEffectStackTest::~LPEdoEffectStackTest()
@@ -47,14 +46,14 @@ LPEdoEffectStackTest::doEffect (SPCurve * curve)
     }
 }
 
-Geom::PathVector
-LPEdoEffectStackTest::doEffect_path (Geom::PathVector const &path_in)
+std::vector<Geom::Path>
+LPEdoEffectStackTest::doEffect_path (std::vector<Geom::Path> const & path_in)
 {
     if (step >= 2) {
         return Effect::doEffect_path(path_in);
     } else {
         // return here
-        Geom::PathVector path_out = path_in;
+        std::vector<Geom::Path> path_out = path_in;
         return path_out;
     }
 }

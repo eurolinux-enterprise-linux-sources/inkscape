@@ -1,11 +1,9 @@
 #!/usr/bin/env python 
 '''
 This extension module can measure arbitrary path and object length
-It adds text to the selected path containing the length in a given unit.
-Area and Center of Mass calculated using Green's Theorem:
-http://mathworld.wolfram.com/GreensTheorem.html
+It adds a text to the selected path containing the length in a
+given unit.
 
-Copyright (C) 2015 ~suv <suv-sf@users.sf.net>
 Copyright (C) 2010 Alvin Penner
 Copyright (C) 2006 Georg Wiora
 Copyright (C) 2006 Nathan Hurst
@@ -23,7 +21,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 TODO:
  * should use the standard attributes for text
@@ -32,40 +30,9 @@ TODO:
     2. check direction >90 or <-90 Degrees
     3. rotate by 180 degrees around text center
 '''
-# standard library
-import locale
-import re
-# local library
-import inkex
-import simplestyle
-import simpletransform
-import cubicsuperpath
-import bezmisc
-
-
-# On darwin, fall back to C in cases of 
-# - incorrect locale IDs (see comments in bug #406662)
-# - https://bugs.python.org/issue18378
-try:
-    locale.setlocale(locale.LC_ALL, '')
-except locale.Error:
-    locale.setlocale(locale.LC_ALL, 'C')
-
-# Initialize gettext for messages outside an inkex derived class
-inkex.localize() 
-
-# third party
-try:
-    import numpy
-except:
-    inkex.errormsg(_("Failed to import the numpy modules. These modules are required by this extension. Please install them and try again.  On a Debian-like system this can be done with the command, sudo apt-get install python-numpy."))
-    exit()
-
-mat_area   = numpy.matrix([[  0,  2,  1, -3],[ -2,  0,  1,  1],[ -1, -1,  0,  2],[  3, -1, -2,  0]])
-mat_cofm_0 = numpy.matrix([[  0, 35, 10,-45],[-35,  0, 12, 23],[-10,-12,  0, 22],[ 45,-23,-22,  0]])
-mat_cofm_1 = numpy.matrix([[  0, 15,  3,-18],[-15,  0,  9,  6],[ -3, -9,  0, 12],[ 18, -6,-12,  0]])
-mat_cofm_2 = numpy.matrix([[  0, 12,  6,-18],[-12,  0,  9,  3],[ -6, -9,  0, 15],[ 18, -3,-15,  0]])
-mat_cofm_3 = numpy.matrix([[  0, 22, 23,-45],[-22,  0, 12, 10],[-23,-12,  0, 35],[ 45,-10,-35,  0]])
+import inkex, simplestyle, simplepath, sys, cubicsuperpath, bezmisc, locale
+# Set current system locale
+locale.setlocale(locale.LC_ALL, '')
 
 def numsegs(csp):
     return sum([len(p)-1 for p in csp])
@@ -102,76 +69,35 @@ def csplength(csp):
         for i in xrange(1,len(sp)):
             l = cspseglength(sp[i-1],sp[i])
             lengths[-1].append(l)
-            total += l
+            total += l            
     return lengths, total
 def csparea(csp):
     area = 0.0
+    n0 = 0.0
+    x0 = 0.0
+    y0 = 0.0
     for sp in csp:
-        if len(sp) < 2: continue
         for i in range(len(sp)):            # calculate polygon area
             area += 0.5*sp[i-1][1][0]*(sp[i][1][1] - sp[i-2][1][1])
+            if abs(sp[i-1][1][0]-sp[i][1][0]) > 0.001 or abs(sp[i-1][1][1]-sp[i][1][1]) > 0.001:
+                n0 += 1.0
+                x0 += sp[i][1][0]
+                y0 += sp[i][1][1]
         for i in range(1, len(sp)):         # add contribution from cubic Bezier
-            vec_x = numpy.matrix([sp[i-1][1][0], sp[i-1][2][0], sp[i][0][0], sp[i][1][0]])
-            vec_y = numpy.matrix([sp[i-1][1][1], sp[i-1][2][1], sp[i][0][1], sp[i][1][1]])
-            area += 0.15*(vec_x*mat_area*vec_y.T)[0,0]
-    return -area                            # require positive area for CCW
-def cspcofm(csp):
-    area = csparea(csp)
-    xc = 0.0
-    yc = 0.0
-    if abs(area) < 1.e-8:
-        inkex.errormsg(_("Area is zero, cannot calculate Center of Mass"))
-        return 0, 0
-    for sp in csp:
-        for i in range(len(sp)):            # calculate polygon moment
-            xc += sp[i-1][1][1]*(sp[i-2][1][0] - sp[i][1][0])*(sp[i-2][1][0] + sp[i-1][1][0] + sp[i][1][0])/6
-            yc += sp[i-1][1][0]*(sp[i][1][1] - sp[i-2][1][1])*(sp[i-2][1][1] + sp[i-1][1][1] + sp[i][1][1])/6
-        for i in range(1, len(sp)):         # add contribution from cubic Bezier
-            vec_x = numpy.matrix([sp[i-1][1][0], sp[i-1][2][0], sp[i][0][0], sp[i][1][0]])
-            vec_y = numpy.matrix([sp[i-1][1][1], sp[i-1][2][1], sp[i][0][1], sp[i][1][1]])
-            vec_t = numpy.matrix([(vec_x*mat_cofm_0*vec_y.T)[0,0], (vec_x*mat_cofm_1*vec_y.T)[0,0], (vec_x*mat_cofm_2*vec_y.T)[0,0], (vec_x*mat_cofm_3*vec_y.T)[0,0]])
-            xc += (vec_x*vec_t.T)[0,0]/280
-            yc += (vec_y*vec_t.T)[0,0]/280
-    return -xc/area, -yc/area
-def appendSuperScript(node, text):
-    super = inkex.etree.SubElement(node, inkex.addNS('tspan', 'svg'), {'style': 'font-size:65%;baseline-shift:super'})
-    super.text = text
-    
+            bezarea  = ( 0.0*sp[i-1][1][1] + 2.0*sp[i-1][2][1] + 1.0*sp[i][0][1] - 3.0*sp[i][1][1])*sp[i-1][1][0]
+            bezarea += (-2.0*sp[i-1][1][1] + 0.0*sp[i-1][2][1] + 1.0*sp[i][0][1] + 1.0*sp[i][1][1])*sp[i-1][2][0]
+            bezarea += (-1.0*sp[i-1][1][1] - 1.0*sp[i-1][2][1] + 0.0*sp[i][0][1] + 2.0*sp[i][1][1])*sp[i][0][0]
+            bezarea += ( 3.0*sp[i-1][1][1] - 1.0*sp[i-1][2][1] - 2.0*sp[i][0][1] + 0.0*sp[i][1][1])*sp[i][1][0]
+            area += 0.15*bezarea
+    return abs(area), x0/n0, y0/n0
+
 class Length(inkex.Effect):
     def __init__(self):
         inkex.Effect.__init__(self)
         self.OptionParser.add_option("--type",
-                        action="store", type="string",
-                        dest="mtype", default="length",
+                        action="store", type="string", 
+                        dest="type", default="length",
                         help="Type of measurement")
-        self.OptionParser.add_option("--format",
-                        action="store", type="string",
-                        dest="mformat", default="textonpath",
-                        help="Text Orientation")
-        self.OptionParser.add_option("--presetFormat",
-                        action="store", type="string",
-                        dest="presetFormat", default="TaP_start",
-                        help="Preset text layout")
-        self.OptionParser.add_option("--startOffset",
-                        action="store", type="string",
-                        dest="startOffset", default="custom",
-                        help="Text Offset along Path")
-        self.OptionParser.add_option("--startOffsetCustom",
-                        action="store", type="int",
-                        dest="startOffsetCustom", default=50,
-                        help="Text Offset along Path")
-        self.OptionParser.add_option("--anchor",
-                        action="store", type="string",
-                        dest="anchor", default="start",
-                        help="Text Anchor")
-        self.OptionParser.add_option("--position",
-                        action="store", type="string",
-                        dest="position", default="start",
-                        help="Text Position")
-        self.OptionParser.add_option("--angle",
-                        action="store", type="float",
-                        dest="angle", default=0,
-                        help="Angle")
         self.OptionParser.add_option("-f", "--fontsize",
                         action="store", type="int", 
                         dest="fontsize", default=20,
@@ -191,7 +117,7 @@ class Length(inkex.Effect):
         self.OptionParser.add_option("-s", "--scale",
                         action="store", type="float", 
                         dest="scale", default=1,
-                        help="Scale Factor (Drawing:Real Length)")
+                        help="The distance above the curve")
         self.OptionParser.add_option("-r", "--orient",
                         action="store", type="inkbool", 
                         dest="orient", default=True,
@@ -203,142 +129,73 @@ class Length(inkex.Effect):
         self.OptionParser.add_option("--measurehelp",
                         action="store", type="string", 
                         dest="measurehelp", default="",
-                        help="dummy")
-
+                        help="dummy") 
+                        
     def effect(self):
-        if self.options.mformat == '"presets"':
-            self.setPreset()
         # get number of digits
         prec = int(self.options.precision)
-        scale = self.unittouu('1px')    # convert to document units
-        self.options.offset *= scale
-        factor = 1.0
-        doc = self.document.getroot()
-        if doc.get('viewBox'):
-            (viewx, viewy, vieww, viewh) = re.sub(' +|, +|,',' ',doc.get('viewBox')).strip().split(' ', 4)
-            factor = self.unittouu(doc.get('width'))/float(vieww)
-            if self.unittouu(doc.get('height'))/float(viewh) < factor:
-                factor = self.unittouu(doc.get('height'))/float(viewh)
-            factor /= self.unittouu('1px')
-            self.options.fontsize /= factor
-        factor *= scale/self.unittouu('1'+self.options.unit)
         # loop over all selected paths
         for id, node in self.selected.iteritems():
             if node.tag == inkex.addNS('path','svg'):
-                mat = simpletransform.composeParents(node, [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+                self.group = inkex.etree.SubElement(node.getparent(),inkex.addNS('text','svg'))
+                
+                t = node.get('transform')
+                # Removed to fix LP #308183 
+                # (Measure Path text shifted when used with a copied object)
+                #if t:
+                #    self.group.set('transform', t)
+
+
+                a =[]
                 p = cubicsuperpath.parsePath(node.get('d'))
-                simpletransform.applyTransformToPath(mat, p)
-                if self.options.mtype == "length":
+                num = 1
+                factor = 1.0/inkex.unittouu('1'+self.options.unit)
+                if self.options.type == "length":
                     slengths, stotal = csplength(p)
-                    self.group = inkex.etree.SubElement(node.getparent(),inkex.addNS('text','svg'))
-                elif self.options.mtype == "area":
-                    stotal = abs(csparea(p)*factor*self.options.scale)
-                    self.group = inkex.etree.SubElement(node.getparent(),inkex.addNS('text','svg'))
                 else:
-                    xc, yc = cspcofm(p)
-                    self.group = inkex.etree.SubElement(node.getparent(),inkex.addNS('path','svg'))
-                    self.group.set('id', 'MassCenter_' + node.get('id'))
-                    self.addCross(self.group, xc, yc, scale)
-                    continue
+                    stotal,x0,y0 = csparea(p)
+                    stotal *= factor*self.options.scale
                 # Format the length as string
                 lenstr = locale.format("%(len)25."+str(prec)+"f",{'len':round(stotal*factor*self.options.scale,prec)}).strip()
-                if self.options.mformat == '"textonpath"':
-                    startOffset = self.options.startOffset
-                    if startOffset == "custom":
-                        startOffset = str(self.options.startOffsetCustom) + '%'
-                    if self.options.mtype == "length":
-                        self.addTextOnPath(self.group, 0, 0, lenstr+' '+self.options.unit, id, self.options.anchor, startOffset, self.options.offset)
-                    else:
-                        self.addTextOnPath(self.group, 0, 0, lenstr+' '+self.options.unit+'^2', id, self.options.anchor, startOffset, self.options.offset)
-                elif self.options.mformat == '"fixedtext"':
-                    if self.options.position == "mass":
-                        tx, ty = cspcofm(p)
-                        anchor = 'middle'
-                    elif self.options.position == "center":
-                        bbox = simpletransform.computeBBox([node])
-                        tx = bbox[0] + (bbox[1] - bbox[0])/2.0
-                        ty = bbox[2] + (bbox[3] - bbox[2])/2.0
-                        anchor = 'middle'
-                    else:  # default
-                        tx = p[0][0][1][0]
-                        ty = p[0][0][1][1]
-                        anchor = 'start'
-                    if self.options.mtype == "length":
-                        self.addTextWithTspan(self.group, tx, ty, lenstr+' '+self.options.unit, id, anchor, -int(self.options.angle), self.options.offset + self.options.fontsize/2)
-                    else:
-                        self.addTextWithTspan(self.group, tx, ty, lenstr+' '+self.options.unit+'^2', id, anchor, -int(self.options.angle), -self.options.offset + self.options.fontsize/2)
+                if self.options.type == "length":
+                    self.addTextOnPath(self.group,0, 0,lenstr+' '+self.options.unit, id, self.options.offset)
                 else:
-                    # center of mass, no text
-                    pass
+                    self.addTextWithTspan(self.group,x0,y0,lenstr+' '+self.options.unit+'^2', id, self.options.offset)
 
-    def setPreset(self):
-        # keep dict in sync with enum in INX file:
-        preset_dict = {
-            'default_length': ['"textonpath"', "50%", "start", None, None],
-            'default_area': ['"fixedtext"', None, None, "start", 0.0],
-            'default_cofm': [None, None, None, None, None],
-            'TaP_start': ['"textonpath"', "0%", "start", None, None],
-            'TaP_middle': ['"textonpath"', "50%", "middle", None, None],
-            'TaP_end': ['"textonpath"', "100%", "end", None, None],
-            'FT_start': ['"fixedtext"', None, None, "start", 0.0],
-            'FT_bbox': ['"fixedtext"', None, None, "center", 0.0],
-            'FT_mass': ['"fixedtext"', None, None, "mass", 0.0],
-        }
-        if self.options.presetFormat == "default":
-            current_preset = 'default_' + self.options.mtype
-        else:
-            current_preset = self.options.presetFormat
-        self.options.mformat = preset_dict[current_preset][0]
-        self.options.startOffset = preset_dict[current_preset][1]
-        self.options.anchor = preset_dict[current_preset][2]
-        self.options.position = preset_dict[current_preset][3]
-        self.options.angle = preset_dict[current_preset][4]
 
-    def addCross(self, node, x, y, scale):
-        l = 3*scale         # 3 pixels in document units
-        node.set('d', 'm %s,%s %s,0 %s,0 m %s,%s 0,%s 0,%s' % (str(x-l), str(y), str(l), str(l), str(-l), str(-l), str(l), str(l)))
-        node.set('style', 'stroke:#000000;fill:none;stroke-width:%s' % str(0.5*scale))
-
-    def addTextOnPath(self, node, x, y, text, id, anchor, startOffset, dy = 0):
+    def addTextOnPath(self,node,x,y,text, id,dy=0):
                 new = inkex.etree.SubElement(node,inkex.addNS('textPath','svg'))
                 s = {'text-align': 'center', 'vertical-align': 'bottom',
-                    'text-anchor': anchor, 'font-size': str(self.options.fontsize),
+                    'text-anchor': 'middle', 'font-size': str(self.options.fontsize),
                     'fill-opacity': '1.0', 'stroke': 'none',
                     'font-weight': 'normal', 'font-style': 'normal', 'fill': '#000000'}
                 new.set('style', simplestyle.formatStyle(s))
                 new.set(inkex.addNS('href','xlink'), '#'+id)
-                new.set('startOffset', startOffset)
+                new.set('startOffset', "50%")
                 new.set('dy', str(dy)) # dubious merit
                 #new.append(tp)
-                if text[-2:] == "^2":
-                    appendSuperScript(new, "2")
-                    new.text = str(text)[:-2]
-                else:
-                    new.text = str(text)
+                new.text = str(text)
                 #node.set('transform','rotate(180,'+str(-x)+','+str(-y)+')')
                 node.set('x', str(x))
                 node.set('y', str(y))
 
-    def addTextWithTspan(self, node, x, y, text, id, anchor, angle, dy = 0):
+    def addTextWithTspan(self,node,x,y,text,id,dy=0):
                 new = inkex.etree.SubElement(node,inkex.addNS('tspan','svg'), {inkex.addNS('role','sodipodi'): 'line'})
                 s = {'text-align': 'center', 'vertical-align': 'bottom',
-                    'text-anchor': anchor, 'font-size': str(self.options.fontsize),
+                    'text-anchor': 'middle', 'font-size': str(self.options.fontsize),
                     'fill-opacity': '1.0', 'stroke': 'none',
                     'font-weight': 'normal', 'font-style': 'normal', 'fill': '#000000'}
                 new.set('style', simplestyle.formatStyle(s))
+                new.set(inkex.addNS('href','xlink'), '#'+id)
+                new.set('startOffset', "50%")
                 new.set('dy', str(dy))
-                if text[-2:] == "^2":
-                    appendSuperScript(new, "2")
-                    new.text = str(text)[:-2]
-                else:
-                    new.text = str(text)
+                new.text = str(text)
                 node.set('x', str(x))
                 node.set('y', str(y))
-                node.set('transform', 'rotate(%s, %s, %s)' % (angle, x, y))
 
 if __name__ == '__main__':
     e = Length()
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

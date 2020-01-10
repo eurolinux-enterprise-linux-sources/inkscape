@@ -1,5 +1,5 @@
-#ifndef SEEN_SP_FILE_H
-#define SEEN_SP_FILE_H
+#ifndef __SP_FILE_H__
+#define __SP_FILE_H__
 
 /*
  * File/Print operations
@@ -15,26 +15,22 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glibmm/ustring.h>
-#include <string>
+#include <gtkmm.h>
+#include <glib.h>
+#include <gtk/gtk.h>
+
+#include "extension/extension-forward.h"
 #include "extension/system.h"
 
-class SPDesktop;
-class SPDocument;
-class SPObject;
+struct SPDesktop;
+struct SPDocument;
 
 namespace Inkscape {
     namespace Extension {
-        class Extension;
+        struct Extension;
     }
 }
 
-namespace Gtk {
-class Window;
-}
-
-// Get the name of the default template uri
-Glib::ustring sp_file_default_template_uri();
 
 /*######################
 ## N E W
@@ -44,7 +40,7 @@ Glib::ustring sp_file_default_template_uri();
  * Creates a new Inkscape document and window.
  * Return value is a pointer to the newly created desktop.
  */
-SPDesktop* sp_file_new (const std::string &templ);
+SPDesktop* sp_file_new (const Glib::ustring &templ);
 SPDesktop* sp_file_new_default (void);
 
 /*######################
@@ -63,7 +59,6 @@ void sp_file_exit (void);
 /**
  * Opens a new file and window from the given URI
  */
-
 bool sp_file_open(
     const Glib::ustring &uri,
     Inkscape::Extension::Extension *key,
@@ -75,7 +70,7 @@ bool sp_file_open(
  * Displays a file open dialog. Calls sp_file_open on
  * an OK.
  */
-void sp_file_open_dialog (Gtk::Window &parentWindow, void* object, void* data);
+void sp_file_open_dialog (Gtk::Window &parentWindow, gpointer object, gpointer data);
 
 /**
  * Reverts file to disk-copy on "YES"
@@ -96,19 +91,19 @@ bool file_save_remote(SPDocument *doc, const Glib::ustring &uri,
 /**
  *
  */
-bool sp_file_save (Gtk::Window &parentWindow, void* object, void* data);
+bool sp_file_save (Gtk::Window &parentWindow, gpointer object, gpointer data);
 
 /**
  *  Saves the given document.  Displays a file select dialog
  *  to choose the new name.
  */
-bool sp_file_save_as (Gtk::Window &parentWindow, void* object, void* data);
+bool sp_file_save_as (Gtk::Window &parentWindow, gpointer object, gpointer data);
 
 /**
  *  Saves a copy of the given document.  Displays a file select dialog
  *  to choose a name for the copy.
  */
-bool sp_file_save_a_copy (Gtk::Window &parentWindow, void* object, void* data);
+bool sp_file_save_a_copy (Gtk::Window &parentWindow, gpointer object, gpointer data);
 
 
 /**
@@ -125,8 +120,6 @@ bool sp_file_save_dialog (Gtk::Window &parentWindow, SPDocument *doc, Inkscape::
 ## I M P O R T
 ######################*/
 
-void sp_import_document(SPDesktop *desktop, SPDocument *clipdoc, bool in_place);
-
 /**
  * Displays a file selector dialog, to allow the
  * user to import data into the current document.
@@ -136,7 +129,7 @@ void sp_file_import (Gtk::Window &parentWindow);
 /**
  * Imports a resource
  */
-SPObject* file_import(SPDocument *in_doc, const Glib::ustring &uri,
+void file_import(SPDocument *in_doc, const Glib::ustring &uri,
                  Inkscape::Extension::Extension *key);
 
 /*######################
@@ -148,7 +141,7 @@ SPObject* file_import(SPDocument *in_doc, const Glib::ustring &uri,
  * additional type selection, to allow the user to export
  * the a document as a given type.
  */
-//bool sp_file_export_dialog (Gtk::Window &parentWindow);
+bool sp_file_export_dialog (Gtk::Window &parentWindow);
 
 
 /*######################
@@ -174,11 +167,6 @@ SPObject* file_import(SPDocument *in_doc, const Glib::ustring &uri,
 /**
  * Import a document from OCAL
  */
-void on_import_from_ocal_response(Glib::ustring filename);
-
-/**
- * Import a document from OCAL
- */
 void sp_file_import_from_ocal (Gtk::Window &parentWindow );
 
 
@@ -195,6 +183,11 @@ would be useful as instance methods
  */
 void sp_file_print (Gtk::Window& parentWindow);
 
+/**
+ *
+ */
+void sp_file_print_preview (gpointer object, gpointer data);
+
 /*#####################
 ## U T I L I T Y
 #####################*/
@@ -202,14 +195,10 @@ void sp_file_print (Gtk::Window& parentWindow);
 /**
  * clean unused defs out of file
  */
-void sp_file_vacuum (SPDocument *doc);
-void sp_file_convert_text_baseline_spacing(SPDocument *doc);
-void sp_file_convert_font_name(SPDocument *doc);
-void sp_file_convert_dpi(SPDocument *doc);
-enum File_DPI_Fix { FILE_DPI_UNCHANGED = 0, FILE_DPI_VIEWBOX_SCALED, FILE_DPI_DOCUMENT_SCALED };
-extern int sp_file_convert_dpi_method_commandline;
+void sp_file_vacuum ();
 
-#endif // SEEN_SP_FILE_H
+
+#endif
 
 
 /*

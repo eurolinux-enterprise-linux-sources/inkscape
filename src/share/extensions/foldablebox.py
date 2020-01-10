@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
 
 __version__ = "0.2"
@@ -22,7 +22,6 @@ __version__ = "0.2"
 import inkex, simplestyle
 from math import *
 from simplepath import formatPath
-import simpletransform
 
 class FoldableBox(inkex.Effect):
 
@@ -59,19 +58,19 @@ class FoldableBox(inkex.Effect):
 
     def effect(self):
 
-        docW = self.unittouu(self.document.getroot().get('width'))
-        docH = self.unittouu(self.document.getroot().get('height'))
+        docW = inkex.unittouu(self.document.getroot().get('width'))
+        docH = inkex.unittouu(self.document.getroot().get('height'))
 
-        boxW = self.unittouu( str(self.options.width)  + self.options.unit )
-        boxH = self.unittouu( str(self.options.height) + self.options.unit )
-        boxD = self.unittouu( str(self.options.depth)  + self.options.unit )
+        boxW = inkex.unittouu( str(self.options.width)  + self.options.unit )
+        boxH = inkex.unittouu( str(self.options.height) + self.options.unit )
+        boxD = inkex.unittouu( str(self.options.depth)  + self.options.unit )
         tabProp = self.options.tabProportion
         tabH = boxD * tabProp
 
         box_id = self.uniqueId('box')
         self.box = g = inkex.etree.SubElement(self.current_layer, 'g', {'id':box_id})
 
-        line_style = simplestyle.formatStyle({ 'stroke': '#000000', 'fill': 'none', 'stroke-width': str(self.unittouu('1px')) })
+        line_style = simplestyle.formatStyle({ 'stroke': '#000000', 'fill': 'none' })
 
         #self.createGuide( 0, docH, 0 );
 
@@ -259,14 +258,8 @@ class FoldableBox(inkex.Effect):
 
         g.set( 'transform', 'translate(%f,%f)' % ( (docW-left_pos)/2, (docH-lower_pos)/2 ) )
 
-        # compensate preserved transforms of parent layer
-        if self.current_layer.getparent() is not None:
-            mat = simpletransform.composeParents(self.current_layer, [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-            simpletransform.applyTransformToNode(simpletransform.invertTransform(mat), g)
-
-
 if __name__ == '__main__':   #pragma: no cover
     e = FoldableBox()
     e.affect()
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

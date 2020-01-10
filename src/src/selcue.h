@@ -1,5 +1,5 @@
-#ifndef SEEN_SP_SELCUE_H
-#define SEEN_SP_SELCUE_H
+#ifndef __SP_SELCUE_H__
+#define __SP_SELCUE_H__
 
 /*
  * Helper object for showing selected items
@@ -13,12 +13,12 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <cstddef>
 #include <list>
+#include <stddef.h>
 #include <sigc++/sigc++.h>
 
-class  SPDesktop;
-struct SPCanvasItem;
+class SPDesktop;
+class SPCanvasItem;
 
 namespace Inkscape {
 
@@ -37,25 +37,10 @@ public:
     };
 
 private:
-    class BoundingBoxPrefsObserver: public Preferences::Observer
-    {
-    public:
-        BoundingBoxPrefsObserver(SelCue &sel_cue);
-
-        void notify(Preferences::Entry const &val);
-
-    private:
-        SelCue &_sel_cue;
-    };
-
-    friend class Inkscape::SelCue::BoundingBoxPrefsObserver;
 
     void _updateItemBboxes();
-    void _updateItemBboxes(Inkscape::Preferences *prefs);
-    void _updateItemBboxes(int mode, int prefs_bbox);
     void _newItemBboxes();
     void _newTextBaselines();
-    void _boundingBoxPrefsChanged(int prefs_bbox);
 
     SPDesktop *_desktop;
     Selection *_selection;
@@ -63,8 +48,6 @@ private:
     sigc::connection _sel_modified_connection;
     std::vector<SPCanvasItem*> _item_bboxes;
     std::vector<SPCanvasItem*> _text_baselines;
-
-    BoundingBoxPrefsObserver _bounding_box_prefs_observer;
 };
 
 }

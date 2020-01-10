@@ -32,14 +32,13 @@ public:
     LPEParallel(LivePathEffectObject *lpeobject);
     virtual ~LPEParallel();
 
-    virtual void doOnApply (SPLPEItem const* lpeitem);
+    virtual void doOnApply (SPLPEItem *lpeitem);
 
     virtual Geom::Piecewise<Geom::D2<Geom::SBasis> > doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in);
 
     /* the knotholder entity classes must be declared friends */
     friend class Pl::KnotHolderEntityLeftEnd;
     friend class Pl::KnotHolderEntityRightEnd;
-    void addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item);
 
 private:
     PointParam offset_pt;

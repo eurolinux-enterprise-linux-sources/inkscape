@@ -1,4 +1,7 @@
-/*
+/**
+ * \brief A constraint determines a minimum or exact spacing required between
+ * two variables.
+ *
  * Authors:
  *   Tim Dwyer <tgdwyer@gmail.com>
  *
@@ -14,11 +17,6 @@
 #include "variable.h"
 namespace vpsc {
 
-/**
- * A constraint determines a minimum or exact spacing required between
- * two variables.
- *
- */
 class Constraint
 {
 	friend std::ostream& operator <<(std::ostream &os,const Constraint &c);

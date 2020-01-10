@@ -9,8 +9,6 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <gdk/gdk.h>
-
 #include "debug/gdk-event-latency-tracker.h"
 #include "preferences.h"
 
@@ -77,4 +75,4 @@ GdkEventLatencyTracker &GdkEventLatencyTracker::default_tracker() {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

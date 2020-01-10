@@ -1,3 +1,4 @@
+#define INKSCAPE_LPE_CONSTRUCTGRID_CPP
 /** \file
  * LPE Construct Grid implementation
  */
@@ -9,8 +10,6 @@
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
-
-#include <glibmm/i18n.h>
 
 #include "live_effects/lpe-constructgrid.h"
 
@@ -24,8 +23,8 @@ using namespace Geom;
 
 LPEConstructGrid::LPEConstructGrid(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    nr_x(_("Size _X:"), _("The size of the grid in X direction."), "nr_x", &wr, this, 5),
-    nr_y(_("Size _Y:"), _("The size of the grid in Y direction."), "nr_y", &wr, this, 5)
+    nr_x(_("Size X"), _("The size of the grid in X direction."), "nr_x", &wr, this, 5),
+    nr_y(_("Size Y"), _("The size of the grid in Y direction."), "nr_y", &wr, this, 5)
 {
     registerParameter( dynamic_cast<Parameter *>(&nr_x) );
     registerParameter( dynamic_cast<Parameter *>(&nr_y) );
@@ -41,8 +40,8 @@ LPEConstructGrid::~LPEConstructGrid()
 
 }
 
-Geom::PathVector
-LPEConstructGrid::doEffect_path (Geom::PathVector const & path_in)
+std::vector<Geom::Path>
+LPEConstructGrid::doEffect_path (std::vector<Geom::Path> const & path_in)
 {
   // Check that the path has at least 3 nodes (i.e. 2 segments), more nodes are ignored
     if (path_in[0].size() >= 2) {
@@ -64,7 +63,7 @@ LPEConstructGrid::doEffect_path (Geom::PathVector const & path_in)
         second_path.appendNew<LineSegment>( origin + second_p*nr_x );
 
         // use the gridpaths and set them in the correct grid
-        Geom::PathVector path_out;
+        std::vector<Geom::Path> path_out;
         path_out.push_back(first_path);
         for (int ix = 0; ix < nr_x; ix++) {
             path_out.push_back(path_out.back() * second_translation );

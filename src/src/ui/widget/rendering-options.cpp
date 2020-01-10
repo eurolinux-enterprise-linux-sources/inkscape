@@ -1,4 +1,6 @@
-/*
+/**
+ * \brief Rendering options widget
+ *
  * Author:
  *   Kees Cook <kees@outflux.net>
  *
@@ -12,21 +14,25 @@
 # include <config.h>
 #endif
 
-#include <gtkmm.h>
-
-#include "preferences.h"
-#include "rendering-options.h"
-#include "util/units.h"
 #include <glibmm/i18n.h>
+
+#include "unit-constants.h"
+#include "rendering-options.h"
 
 namespace Inkscape {
 namespace UI {
 namespace Widget {
 
-void RenderingOptions::_toggled()
+void
+RenderingOptions::_toggled()
 {
     _frame_bitmap.set_sensitive(as_bitmap());
 }
+
+/**
+ *    Construct a Rendering Options widget
+ *
+ */
 
 RenderingOptions::RenderingOptions () :
       Gtk::VBox (),
@@ -41,36 +47,29 @@ RenderingOptions::RenderingOptions () :
             Glib::ustring(""), Glib::ustring(""),
             false)
 {
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     // set up tooltips
-    _radio_vector.set_tooltip_text(
+    _tt.set_tip (_radio_vector, Glib::ustring(
                         _("Render using Cairo vector operations.  "
                         "The resulting image is usually smaller in file "
                         "size and can be arbitrarily scaled, but some "
-                        "filter effects will not be correctly rendered."));
-    _radio_bitmap.set_tooltip_text(
+                        "filter effects will not be correctly rendered.")));
+    _tt.set_tip (_radio_bitmap, Glib::ustring(
                         _("Render everything as bitmap.  The resulting image "
                         "is usually larger in file size and cannot be "
                         "arbitrarily scaled without quality loss, but all "
-                        "objects will be rendered exactly as displayed."));
+                        "objects will be rendered exactly as displayed.")));
 
     set_border_width(2);
 
+    // default to vector operations
+    _radio_vector.set_active (true);
     Gtk::RadioButtonGroup group = _radio_vector.get_group ();
     _radio_bitmap.set_group (group);
     _radio_bitmap.signal_toggled().connect(sigc::mem_fun(*this, &RenderingOptions::_toggled));
-    
-    // default to vector operations
-    if (prefs->getBool("/dialogs/printing/asbitmap", false)) {
-        _radio_bitmap.set_active();
-    } else {
-        _radio_vector.set_active();
-    }
-    
+
     // configure default DPI
-    _dpi.setRange(Inkscape::Util::Quantity::convert(1, "in", "pt"),2400.0);
-    _dpi.setValue(prefs->getDouble("/dialogs/printing/dpi", 
-                                   Inkscape::Util::Quantity::convert(1, "in", "pt")));
+    _dpi.setRange(PT_PER_IN,2400.0);
+    _dpi.setValue(PT_PER_IN);
     _dpi.setIncrements(1.0,10.0);
     _dpi.setDigits(0);
     _dpi.update();
@@ -122,4 +121,4 @@ RenderingOptions::bitmap_dpi ()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

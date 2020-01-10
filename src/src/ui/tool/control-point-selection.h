@@ -12,7 +12,6 @@
 #ifndef SEEN_UI_TOOL_CONTROL_POINT_SELECTION_H
 #define SEEN_UI_TOOL_CONTROL_POINT_SELECTION_H
 
-#include <list>
 #include <memory>
 #include <boost/optional.hpp>
 #include <stddef.h>
@@ -20,14 +19,13 @@
 #include <2geom/forward.h>
 #include <2geom/point.h>
 #include <2geom/rect.h>
+#include "display/display-forward.h"
 #include "util/accumulators.h"
 #include "util/unordered-containers.h"
 #include "ui/tool/commit-events.h"
 #include "ui/tool/manipulator.h"
-#include "snap-candidate.h"
 
 class SPDesktop;
-struct SPCanvasGroup;
 
 namespace Inkscape {
 namespace UI {
@@ -63,19 +61,18 @@ public:
     const_iterator end() const { return _points.end(); }
 
     // insert
-    std::pair<iterator, bool> insert(const value_type& x, bool notify = true);
+    std::pair<iterator, bool> insert(const value_type& x);
     template <class InputIterator>
     void insert(InputIterator first, InputIterator last) {
         for (; first != last; ++first) {
-            insert(*first, false);
+            insert(*first);
         }
-        signal_selection_changed.emit(std::vector<key_type>(first, last), true);
     }
 
     // erase
     void clear();
     void erase(iterator pos);
-    size_type erase(const key_type& k, bool notify = true);
+    size_type erase(const key_type& k);
     void erase(iterator first, iterator last);
 
     // find
@@ -92,9 +89,9 @@ public:
     void invertSelection();
     void spatialGrow(SelectableControlPoint *origin, int dir);
 
-    virtual bool event(Inkscape::UI::Tools::ToolBase *, GdkEvent *);
+    virtual bool event(SPEventContext *, GdkEvent *);
 
-    void transform(Geom::Affine const &m);
+    void transform(Geom::Matrix const &m);
     void align(Geom::Dim2 d);
     void distribute(Geom::Dim2 d);
 
@@ -110,15 +107,8 @@ public:
     void toggleTransformHandlesMode();
 
     sigc::signal<void> signal_update;
-    // It turns out that emitting a signal after every point is selected or deselected is not too efficient,
-    // so this can be done in a massive group once the selection is finally changed.
-    sigc::signal<void, std::vector<SelectableControlPoint *>, bool> signal_selection_changed;
+    sigc::signal<void, SelectableControlPoint *, bool> signal_point_changed;
     sigc::signal<void, CommitEvent> signal_commit;
-
-    void getOriginalPoints(std::vector<Inkscape::SnapCandidatePoint> &pts);
-    void getUnselectedPoints(std::vector<Inkscape::SnapCandidatePoint> &pts);
-    void setOriginalPoints();
-
 private:
     // The functions below are invoked from SelectableControlPoint.
     // Previously they were connected to handlers when selecting, but this
@@ -136,16 +126,14 @@ private:
     bool _keyboardRotate(GdkEventKey const &, int);
     bool _keyboardScale(GdkEventKey const &, int);
     bool _keyboardFlip(Geom::Dim2);
-    void _keyboardTransform(Geom::Affine const &);
+    void _keyboardTransform(Geom::Matrix const &);
     void _commitHandlesTransform(CommitEvent ce);
     double _rotationRadius(Geom::Point const &);
 
     set_type _points;
-    //the purpose of this list is to keep track of first and last selected
-    std::list<SelectableControlPoint *> _points_list;
     set_type _all_points;
     INK_UNORDERED_MAP<SelectableControlPoint *, Geom::Point> _original_positions;
-    INK_UNORDERED_MAP<SelectableControlPoint *, Geom::Affine> _last_trans;
+    INK_UNORDERED_MAP<SelectableControlPoint *, Geom::Matrix> _last_trans;
     boost::optional<double> _rot_radius;
     boost::optional<double> _mouseover_rot_radius;
     Geom::OptRect _bounds;
@@ -172,4 +160,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

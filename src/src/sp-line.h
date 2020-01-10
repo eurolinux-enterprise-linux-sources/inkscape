@@ -1,13 +1,11 @@
-#ifndef SEEN_SP_LINE_H
-#define SEEN_SP_LINE_H
+#ifndef __SP_LINE_H__
+#define __SP_LINE_H__
 
 /*
  * SVG <line> implementation
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
- *   Abhishek Sharma
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 1999-2002 Lauris Kaplinski
  *
@@ -17,39 +15,30 @@
 #include "svg/svg-length.h"
 #include "sp-shape.h"
 
-#define SP_LINE(obj) (dynamic_cast<SPLine*>((SPObject*)obj))
-#define SP_IS_LINE(obj) (dynamic_cast<const SPLine*>((SPObject*)obj) != NULL)
 
-class SPLine : public SPShape {
-public:
-	SPLine();
-	virtual ~SPLine();
 
-    SVGLength x1;
-    SVGLength y1;
-    SVGLength x2;
-    SVGLength y2;
+#define SP_TYPE_LINE            (sp_line_get_type ())
+#define SP_LINE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_LINE, SPLine))
+#define SP_LINE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_LINE, SPLineClass))
+#define SP_IS_LINE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_LINE))
+#define SP_IS_LINE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_LINE))
 
-	virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
-	virtual void set(unsigned int key, char const* value);
+class SPLine;
+class SPLineClass;
 
-	virtual const char* displayName() const;
-	virtual Geom::Affine set_transform(Geom::Affine const &transform);
-	virtual void convert_to_guides() const;
-	virtual void update(SPCtx* ctx, unsigned int flags);
-
-	virtual void set_shape();
+struct SPLine : public SPShape {
+	SVGLength x1;
+	SVGLength y1;
+	SVGLength x2;
+	SVGLength y2;
 };
 
-#endif // SEEN_SP_LINE_H
-/*
-  Local Variables:
-  mode:c++
-  c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
-  indent-tabs-mode:nil
-  fill-column:99
-  End:
-*/
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+struct SPLineClass {
+	SPShapeClass parent_class;
+};
+
+GType sp_line_get_type (void);
+
+
+
+#endif

@@ -34,7 +34,7 @@
 #include <cmath>
 
 #include <2geom/sbasis.h>
-#include <2geom/math-utils.h>
+#include <2geom/isnan.h>
 
 namespace Geom{
 
@@ -225,9 +225,10 @@ SBasis multiply(SBasis const &a, SBasis const &b) {
     // c = {a0*b0 - shift(1, a.Tri*b.Tri), a1*b1 - shift(1, a.Tri*b.Tri)}
 
     // shift(1, a.Tri*b.Tri)
-    SBasis c(a.size() + b.size(), Linear(0,0));
+    SBasis c;
     if(a.isZero() || b.isZero())
         return c;
+    c.resize(a.size() + b.size(), Linear(0,0));
     for(unsigned j = 0; j < b.size(); j++) {
         for(unsigned i = j; i < a.size()+j; i++) {
             double tri = b[j].tri()*a[i-j].tri();
@@ -279,11 +280,9 @@ SBasis multiply_add(SBasis const &a, SBasis const &b, SBasis c) {
 
 */
 SBasis multiply(SBasis const &a, SBasis const &b) {
-    if(a.isZero() || b.isZero()) {
-        SBasis c(1, Linear(0,0));
+    SBasis c;
+    if(a.isZero() || b.isZero())
         return c;
-    }
-    SBasis c(a.size() + b.size(), Linear(0,0));
     return multiply_add(a, b, c);
 }
 #endif 
@@ -330,9 +329,9 @@ SBasis derivative(SBasis const &a) {
     }
     int k = a.size()-1;
     double d = (2*k+1)*(a[k][1] - a[k][0]);
-    if (d == 0 && k > 0) {
+    if(d == 0)
         c.pop_back();
-    } else {
+    else {
         c[k][0] = d;
         c[k][1] = d;
     }
@@ -353,9 +352,9 @@ void SBasis::derive() { // in place version
     }
     int k = size()-1;
     double d = (2*k+1)*((*this)[k][1] - (*this)[k][0]);
-    if (d == 0 && k > 0) {
+    if(d == 0)
         pop_back();
-    } else {
+    else {
         (*this)[k][0] = d;
         (*this)[k][1] = d;
     }
@@ -466,15 +465,6 @@ SBasis compose(SBasis const &a, SBasis const &b, unsigned k) {
     }
     r.truncate(k);
     return r;
-}
-
-SBasis portion(const SBasis &t, double from, double to) {
-    double fv = t.valueAt(from);
-    double tv = t.valueAt(to);
-    SBasis ret = compose(t, Linear(from, to));
-    ret.at0() = fv;
-    ret.at1() = tv;
-    return ret;
 }
 
 /*
@@ -617,7 +607,7 @@ TODO: compute order according to tol?
 TODO: requires g(0)=0 & g(1)=1 atm... adaptation to other cases should be obvious!
 */
 SBasis compose_inverse(SBasis const &f, SBasis const &g, unsigned order, double zero){
-    SBasis result(order, Linear(0.)); //result
+    SBasis result(order, Linear()); //result
     SBasis r=f; //remainder
     SBasis Pk=Linear(1)-g,Qk=g,sg=Pk*Qk;
     Pk.truncate(order);
@@ -626,10 +616,7 @@ SBasis compose_inverse(SBasis const &f, SBasis const &g, unsigned order, double 
     Qk.resize(order,Linear(0.));
     r.resize(order,Linear(0.));
 
-    int vs = valuation(sg,zero);
-    if (vs == 0) { // to prevent infinite loop
-        return result;
-    }
+    int vs= valuation(sg,zero);
 
     for (unsigned k=0; k<order; k+=vs){
         double p10 = Pk.at(k)[0];// we have to solve the linear system:
@@ -643,6 +630,7 @@ SBasis compose_inverse(SBasis const &f, SBasis const &g, unsigned order, double 
 
         //TODO: handle det~0!!
         if (fabs(det)<zero){
+            det = zero;
             a=b=0;
         }else{
             a=( q01*r10-q10*r01)/det;
@@ -653,11 +641,9 @@ SBasis compose_inverse(SBasis const &f, SBasis const &g, unsigned order, double 
 
         Pk=Pk*sg;
         Qk=Qk*sg;
-
-        Pk.resize(order,Linear(0.)); // truncates if too high order, expands with zeros if too low
-        Qk.resize(order,Linear(0.));
-        r.resize(order,Linear(0.));
-
+        Pk.truncate(order);
+        Qk.truncate(order);
+        r.truncate(order);
     }
     result.normalize();
     return result;
@@ -674,4 +660,4 @@ SBasis compose_inverse(SBasis const &f, SBasis const &g, unsigned order, double 
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

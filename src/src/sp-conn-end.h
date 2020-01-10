@@ -1,20 +1,30 @@
 #ifndef SEEN_SP_CONN_END
 #define SEEN_SP_CONN_END
 
-#include <cstddef>
+#include <glib.h>
+#include <stddef.h>
 #include <sigc++/connection.h>
 
 #include "sp-use-reference.h"
+#include "connection-points.h"
 #include "conn-avoid-ref.h"
 
-class SPPath;
 
 class SPConnEnd {
 public:
     SPConnEnd(SPObject *owner);
 
     SPUseReference ref;
-    char *href;
+    gchar *href;
+
+    /* In the following, type refers to connection point type,
+       i.e. default (one of the 9 combinations of right, centre,
+       left, top, bottom) or user-defined. The id serves to identify
+       the connection point in a list of connection points.
+    */
+
+    ConnPointType type;
+    int id;
 
     /** Change of href string (not a modification of the attributes of the referrent). */
     sigc::connection _changed_connection;
@@ -25,16 +35,13 @@ public:
     /** A sigc connection for transformed signal, used to do move compensation. */
     sigc::connection _transformed_connection;
 
-    /** A sigc connection for owning group transformed, used to do move compensation. */
-    sigc::connection _group_connection;
-
-    void setAttacherHref(char const * value, SPPath * unused);
-    //void setAttacherEndpoint(char const *, SPPath *); // not defined
+    void setAttacherHref(gchar const *, SPPath *);
+    void setAttacherEndpoint(gchar const *, SPPath *);
 
 
 private:
-    SPConnEnd(SPConnEnd const &); // no copy
-    SPConnEnd &operator=(SPConnEnd const &); // no assign
+    SPConnEnd(SPConnEnd const &);
+    SPConnEnd &operator=(SPConnEnd const &);
 };
 
 void sp_conn_end_href_changed(SPObject *old_ref, SPObject *ref,

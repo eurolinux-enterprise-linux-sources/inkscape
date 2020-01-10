@@ -1,4 +1,6 @@
-/*
+/** \file
+ * Inkscape::ObjectHierarchy - tracks a hierarchy of active SPObjects
+ *
  * Authors:
  *   MenTaLguY <mental@rydia.net>
  *
@@ -10,11 +12,12 @@
 #ifndef SEEN_INKSCAPE_OBJECT_HIERARCHY_H
 #define SEEN_INKSCAPE_OBJECT_HIERARCHY_H
 
-#include <cstddef>
 #include <exception>
 #include <list>
+#include <stddef.h>
 #include <sigc++/connection.h>
 #include <sigc++/signal.h>
+#include <glib.h>
 
 class SPObject;
 
@@ -33,15 +36,10 @@ namespace Inkscape {
  *
  * @see SPObject
  */
+
 class ObjectHierarchy {
 public:
-
-    /**
-     * Create new object hierarchy.
-     * @param top The first entry if non-NULL.
-     */
     ObjectHierarchy(SPObject *top=NULL);
-
     ~ObjectHierarchy();
 
     bool contains(SPObject *object);
@@ -57,27 +55,16 @@ public:
         return _changed_signal.connect(slot);
     }
 
-    /**
-     * Remove all entries.
-     */
     void clear();
 
     SPObject *top() {
         return !_hierarchy.empty() ? _hierarchy.back().object : NULL;
     }
-
-    /**
-     * Trim or expand hierarchy on top such that object becomes top entry.
-     */
     void setTop(SPObject *object);
 
     SPObject *bottom() {
         return !_hierarchy.empty() ? _hierarchy.front().object : NULL;
     }
-
-    /**
-     * Trim or expand hierarchy at bottom such that object becomes bottom entry.
-     */
     void setBottom(SPObject *object);
 
 private:
@@ -90,45 +77,23 @@ private:
     };
 
     ObjectHierarchy(ObjectHierarchy const &); // no copy
-
     void operator=(ObjectHierarchy const &); // no assign
 
-    /**
-     * Add hierarchy from junior's parent to senior to this
-     * hierarchy's top.
-     */
+    /// @brief adds objects in range [senior, junior) to the top
     void _addTop(SPObject *senior, SPObject *junior);
-
-    /**
-     * Add object to top of hierarchy.
-     * \pre object!=NULL.
-     */
+    /// @brief adds one object to the top
     void _addTop(SPObject *object);
-
-    /**
-     * Remove all objects above limit from hierarchy.
-     */
+    /// @brief removes all objects above the limit object
     void _trimAbove(SPObject *limit);
 
-    /**
-     * Add hierarchy from senior to junior, in range (senior, junior], to this hierarchy's bottom.
-     */
+    /// @brief adds objects in range (senior, junior] to the bottom
     void _addBottom(SPObject *senior, SPObject *junior);
-
-    /**
-     * Add object at bottom of hierarchy.
-     * \pre object!=NULL
-     */
+    /// @brief adds one object to the bottom
     void _addBottom(SPObject *object);
-
-    /**
-     * Remove all objects under given object.
-     * @param limit If NULL, remove all.
-     */
+    /// @brief removes all objects below the limit object
     void _trimBelow(SPObject *limit);
 
     Record _attach(SPObject *object);
-
     void _detach(Record &record);
 
     void _clear() { _trimBelow(NULL); }
@@ -153,4 +118,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

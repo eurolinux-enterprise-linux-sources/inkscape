@@ -1,5 +1,5 @@
-#ifndef SEEN_SELTRANS_H
-#define SEEN_SELTRANS_H
+#ifndef __SELTRANS_H__
+#define __SELTRANS_H__
 
 /*
  * Helper object for transforming selected items
@@ -15,32 +15,31 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <2geom/point.h>
-#include <2geom/affine.h>
-#include <2geom/rect.h>
-#include <cstddef>
+#include <stddef.h>
 #include <sigc++/sigc++.h>
-#include <vector>
-
+#include <2geom/point.h>
+#include <2geom/matrix.h>
+#include <2geom/rect.h>
 #include "knot.h"
-#include "message-context.h"
-#include "seltrans-handles.h"
+#include "forward.h"
 #include "selcue.h"
+#include "message-context.h"
+#include <vector>
 #include "sp-item.h"
 
+struct SPKnot;
+class SPDesktop;
+class SPCanvasItem;
+class SPSelTransHandle;
 
-class  SPKnot;
-class  SPDesktop;
-struct SPCanvasItem;
-struct SPCtrlLine;
-struct SPSelTransHandle;
-
-namespace Inkscape {
+namespace Inkscape
+{
 
 Geom::Scale calcScaleFactors(Geom::Point const &initial_point, Geom::Point const &new_point, Geom::Point const &origin, bool const skew = false);
 
-namespace XML {
-    class Node;
+namespace XML
+{
+  class Node;
 }
 
 class SelTrans
@@ -56,26 +55,25 @@ public:
     void increaseState();
     void resetState();
     void setCenter(Geom::Point const &p);
-    void grab(Geom::Point const &p, double x, double y, bool show_handles, bool translating);
-    void transform(Geom::Affine const &rel_affine, Geom::Point const &norm);
+    void grab(Geom::Point const &p, gdouble x, gdouble y, bool show_handles, bool translating);
+    void transform(Geom::Matrix const &rel_affine, Geom::Point const &norm);
     void ungrab();
     void stamp();
-    void moveTo(Geom::Point const &xy, unsigned int state);
-    void stretch(SPSelTransHandle const &handle, Geom::Point &pt, unsigned int state);
-    void scale(Geom::Point &pt, unsigned int state);
-    void skew(SPSelTransHandle const &handle, Geom::Point &pt, unsigned int state);
-    void rotate(Geom::Point &pt, unsigned int state);
-    int request(SPSelTransHandle const &handle, Geom::Point &pt, unsigned int state);
-    int scaleRequest(Geom::Point &pt, unsigned int state);
-    int stretchRequest(SPSelTransHandle const &handle, Geom::Point &pt, unsigned int state);
-    int skewRequest(SPSelTransHandle const &handle, Geom::Point &pt, unsigned int state);
-    int rotateRequest(Geom::Point &pt, unsigned int state);
-    int centerRequest(Geom::Point &pt, unsigned int state);
+    void moveTo(Geom::Point const &xy, guint state);
+    void stretch(SPSelTransHandle const &handle, Geom::Point &pt, guint state);
+    void scale(Geom::Point &pt, guint state);
+    void skew(SPSelTransHandle const &handle, Geom::Point &pt, guint state);
+    void rotate(Geom::Point &pt, guint state);
+    gboolean scaleRequest(Geom::Point &pt, guint state);
+    gboolean stretchRequest(SPSelTransHandle const &handle, Geom::Point &pt, guint state);
+    gboolean skewRequest(SPSelTransHandle const &handle, Geom::Point &pt, guint state);
+    gboolean rotateRequest(Geom::Point &pt, guint state);
+    gboolean centerRequest(Geom::Point &pt, guint state);
 
-    int handleRequest(SPKnot *knot, Geom::Point *position, unsigned int state, SPSelTransHandle const &handle);
-    void handleGrab(SPKnot *knot, unsigned int state, SPSelTransHandle const &handle);
-    void handleClick(SPKnot *knot, unsigned int state, SPSelTransHandle const &handle);
-    void handleNewEvent(SPKnot *knot, Geom::Point *position, unsigned int state, SPSelTransHandle const &handle);
+    gboolean handleRequest(SPKnot *knot, Geom::Point *position, guint state, SPSelTransHandle const &handle);
+    void handleGrab(SPKnot *knot, guint state, SPSelTransHandle const &handle);
+    void handleClick(SPKnot *knot, guint state, SPSelTransHandle const &handle);
+    void handleNewEvent(SPKnot *knot, Geom::Point *position, guint state, SPSelTransHandle const &handle);
 
     enum Show
     {
@@ -92,37 +90,22 @@ public:
     bool isGrabbed() {
         return _grabbed;
     }
-    bool centerIsVisible() {
-        return ( SP_KNOT_IS_VISIBLE (knots[0]) );
-    }
-
-    void getNextClosestPoint(bool reverse);
+	bool centerIsVisible() {
+		return ( _chandle && SP_KNOT_IS_VISIBLE (_chandle) );
+	}
 
 private:
-    class BoundingBoxPrefsObserver: public Preferences::Observer
-    {
-    public:
-        BoundingBoxPrefsObserver(SelTrans &sel_trans);
-
-        void notify(Preferences::Entry const &val);
-
-    private:
-        SelTrans &_sel_trans;
-    };
-
-    friend class Inkscape::SelTrans::BoundingBoxPrefsObserver;
-
     void _updateHandles();
     void _updateVolatileState();
     void _selChanged(Inkscape::Selection *selection);
-    void _selModified(Inkscape::Selection *selection, unsigned int flags);
-    void _boundingBoxPrefsChanged(int prefs_bbox);
-    void _makeHandles();
-    void _showHandles(SPSelTransType type);
+    void _selModified(Inkscape::Selection *selection, guint flags);
+    void _showHandles(SPKnot *knot[], SPSelTransHandle const handle[], gint num,
+                      gchar const *even_tip, gchar const *odd_tip);
     Geom::Point _getGeomHandlePos(Geom::Point const &visual_handle_pos);
     Geom::Point _calcAbsAffineDefault(Geom::Scale const default_scale);
     Geom::Point _calcAbsAffineGeom(Geom::Scale const geom_scale);
-    void _keepClosestPointOnly(Geom::Point const &p);
+    void _keepClosestPointOnly(std::vector<Inkscape::SnapCandidatePoint> &points, const Geom::Point &reference);
+    void _display_snapsource();
 
     enum State {
         STATE_SCALE, //scale or stretch
@@ -133,13 +116,13 @@ private:
 
     std::vector<SPItem *> _items;
     std::vector<SPItem const *> _items_const;
-    std::vector<Geom::Affine> _items_affines;
+    std::vector<Geom::Matrix> _items_affines;
     std::vector<Geom::Point> _items_centers;
 
     std::vector<Inkscape::SnapCandidatePoint> _snap_points;
-    std::vector<Inkscape::SnapCandidatePoint> _bbox_points;
-    std::vector<Inkscape::SnapCandidatePoint> _all_snap_sources_sorted;
-    std::vector<Inkscape::SnapCandidatePoint>::iterator _all_snap_sources_iter;
+    std::vector<Inkscape::SnapCandidatePoint> _bbox_points; // the bbox point of the selection as a whole, i.e. max. 4 corners plus optionally some midpoints
+    std::vector<Inkscape::SnapCandidatePoint> _bbox_points_for_translating; // the bbox points of each selected item, only to be used for translating
+
     Inkscape::SelCue _selcue;
 
     Inkscape::Selection *_selection;
@@ -154,13 +137,13 @@ private:
     SPItem::BBoxType _snap_bbox_type;
 
     Geom::OptRect _bbox;
-    Geom::OptRect _visual_bbox;
+    Geom::OptRect _approximate_bbox;
     Geom::OptRect _geometric_bbox;
-    double _strokewidth;
+    gdouble _strokewidth;
 
-    Geom::Affine _current_relative_affine;
-    Geom::Affine _absolute_affine;
-    Geom::Affine _relative_affine;
+    Geom::Matrix _current_relative_affine;
+    Geom::Matrix _absolute_affine;
+    Geom::Matrix _relative_affine;
     /* According to Merriam - Webster's online dictionary
      * Affine: a transformation (as a translation, a rotation, or a uniform stretching) that carries straight
      * lines into straight lines and parallel lines into parallel lines but may alter distance between points
@@ -173,20 +156,21 @@ private:
     Geom::Point _origin_for_specpoints;
     Geom::Point _origin_for_bboxpoints;
 
-    double _handle_x;
-    double _handle_y;
+    gdouble _handle_x;
+    gdouble _handle_y;
 
     boost::optional<Geom::Point> _center;
     bool _center_is_set; ///< we've already set _center, no need to reread it from items
-    int  _center_handle;
 
-    SPKnot *knots[NUMHANDS];
+    SPKnot *_shandle[8];
+    SPKnot *_rhandle[8];
+    SPKnot *_chandle;
     SPCanvasItem *_norm;
     SPCanvasItem *_grip;
-    SPCtrlLine *_l[4];
-    unsigned int _sel_changed_id;
-    unsigned int _sel_modified_id;
-    std::vector<SPItem*> _stamp_cache;
+    SPCanvasItem *_l[4];
+    guint _sel_changed_id;
+    guint _sel_modified_id;
+    GSList *_stamp_cache;
 
     Geom::Point _origin; ///< position of origin for transforms
     Geom::Point _point; ///< original position of the knot being used for the current transform
@@ -194,12 +178,11 @@ private:
     Inkscape::MessageContext _message_context;
     sigc::connection _sel_changed_connection;
     sigc::connection _sel_modified_connection;
-    BoundingBoxPrefsObserver _bounding_box_prefs_observer;
 };
 
 }
 
-#endif // SEEN_SELTRANS_H
+#endif
 
 
 /*

@@ -27,9 +27,9 @@ public:
     LPEInterpolate(LivePathEffectObject *lpeobject);
     virtual ~LPEInterpolate();
 
-    virtual Geom::PathVector doEffect_path (Geom::PathVector const & path_in);
+    virtual std::vector<Geom::Path> doEffect_path (std::vector<Geom::Path> const & path_in);
 
-    virtual void resetDefaults(SPItem const* item);
+    virtual void resetDefaults(SPItem * item);
 private:
     PathParam   trajectory_path;
     ScalarParam number_of_steps;

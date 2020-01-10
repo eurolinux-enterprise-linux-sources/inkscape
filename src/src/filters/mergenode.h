@@ -17,26 +17,23 @@
 
 #include "sp-object.h"
 
-#define SP_FEMERGENODE(obj) (dynamic_cast<SPFeMergeNode*>((SPObject*)obj))
-#define SP_IS_FEMERGENODE(obj) (dynamic_cast<const SPFeMergeNode*>((SPObject*)obj) != NULL)
+#define SP_TYPE_FEMERGENODE (sp_feMergeNode_get_type())
+#define SP_FEMERGENODE(o) (G_TYPE_CHECK_INSTANCE_CAST((o), SP_TYPE_FEMERGENODE, SPFeMergeNode))
+#define SP_IS_FEMERGENODE(o) (G_TYPE_CHECK_INSTANCE_TYPE((o), SP_TYPE_FEMERGENODE))
 
-class SPFeMergeNode : public SPObject {
-public:
-	SPFeMergeNode();
-	virtual ~SPFeMergeNode();
+class SPFeMergeNode;
+class SPFeMergeNodeClass;
 
+struct SPFeMergeNode : public SPObject {
     int input;
-
-protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-
-	virtual void set(unsigned int key, const gchar* value);
-
-	virtual void update(SPCtx* ctx, unsigned int flags);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
 };
+
+struct SPFeMergeNodeClass {
+    SPObjectClass parent_class;
+};
+
+GType sp_feMergeNode_get_type();
+
 
 #endif /* !SP_FEMERGENODE_H_SEEN */
 
@@ -49,4 +46,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

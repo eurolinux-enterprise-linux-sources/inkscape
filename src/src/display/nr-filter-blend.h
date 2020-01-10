@@ -1,5 +1,5 @@
-#ifndef SEEN_NR_FILTER_BLEND_H
-#define SEEN_NR_FILTER_BLEND_H
+#ifndef __NR_FILTER_BLEND_H__
+#define __NR_FILTER_BLEND_H__
 
 /*
  * SVG feBlend renderer
@@ -18,6 +18,8 @@
  */
 
 #include "display/nr-filter-primitive.h"
+#include "display/nr-filter-slot.h"
+#include "display/nr-filter-units.h"
 
 namespace Inkscape {
 namespace Filters {
@@ -28,19 +30,7 @@ enum FilterBlendMode {
     BLEND_SCREEN,
     BLEND_DARKEN,
     BLEND_LIGHTEN,
-    // New in CSS Compositing and Blending Level 1
-    BLEND_OVERLAY,   
-    BLEND_COLORDODGE,
-    BLEND_COLORBURN,
-    BLEND_HARDLIGHT,
-    BLEND_SOFTLIGHT,
-    BLEND_DIFFERENCE,
-    BLEND_EXCLUSION,
-    BLEND_HUE,       
-    BLEND_SATURATION,
-    BLEND_COLOR,
-    BLEND_LUMINOSITY,
-    BLEND_ENDMODE,
+    BLEND_ENDMODE
 };
 
 class FilterBlend : public FilterPrimitive {
@@ -49,10 +39,7 @@ public:
     static FilterPrimitive *create();
     virtual ~FilterBlend();
 
-    virtual void render_cairo(FilterSlot &slot);
-    virtual bool can_handle_affine(Geom::Affine const &);
-    virtual double complexity(Geom::Affine const &ctm);
-    virtual bool uses_background();
+    virtual int render(FilterSlot &slot, FilterUnits const &units);
 
     virtual void set_input(int slot);
     virtual void set_input(int input, int slot);
@@ -80,4 +67,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

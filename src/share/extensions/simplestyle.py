@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 simplestyle.py
 Two simple functions for working with inline css
@@ -17,7 +18,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 """
 
 svgcolors={
@@ -140,7 +141,6 @@ svgcolors={
     'plum':'#dda0dd',
     'powderblue':'#b0e0e6',
     'purple':'#800080',
-    'rebeccapurple':'#663399',
     'red':'#ff0000',
     'rosybrown':'#bc8f8f',
     'royalblue':'#4169e1',
@@ -176,7 +176,7 @@ def parseStyle(s):
     if s is None:
       return {}
     else:
-      return dict([[x.strip() for x in i.split(":")] for i in s.split(";") if len(i.strip())])
+      return dict([[x.strip() for x in i.split(":")] for i in s.split(";") if len(i)])
 
 def formatStyle(a):
     """Format an inline style attribute from a dictionary"""
@@ -241,4 +241,4 @@ def formatColor3f(r,g,b):
     return '#%02x%02x%02x' % (int(round(r*255)),int(round(g*255)),int(round(b*255)))
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

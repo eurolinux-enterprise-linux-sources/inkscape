@@ -14,8 +14,9 @@
 #include <exception>
 #include <glib.h>
 #include "extension.h"
-
-class SPDocument;
+#include "xml/repr.h"
+#include "document.h"
+#include <gtk/gtk.h>
 
 namespace Inkscape {
 namespace Extension {
@@ -37,10 +38,6 @@ public:
     struct no_extension_found : public std::exception {
         virtual ~no_extension_found() throw() {}
         const char *what() const throw() { return "No suitable input extension found"; }
-    };
-    struct open_cancelled : public std::exception {
-        virtual ~open_cancelled() throw() {}
-        const char *what() const throw() { return "Open was cancelled"; }
     };
 
                   Input                (Inkscape::XML::Node * in_repr,

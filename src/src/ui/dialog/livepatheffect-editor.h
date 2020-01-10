@@ -12,18 +12,20 @@
 #define INKSCAPE_UI_DIALOG_LIVE_PATH_EFFECT_H
 
 #include "ui/widget/panel.h"
+#include "ui/widget/button.h"
 
 #include <gtkmm/label.h>
+#include <gtkmm/comboboxtext.h>
 #include <gtkmm/frame.h>
+#include <gtkmm/tooltips.h>
 #include "ui/widget/combo-enums.h"
-#include "ui/widget/frame.h"
 #include "live_effects/effect-enum.h"
 #include <gtkmm/liststore.h>
 #include <gtkmm/treeview.h>
 #include <gtkmm/scrolledwindow.h>
-#include <gtkmm/toolbar.h>
 #include <gtkmm/buttonbox.h>
-#include "ui/dialog/desktop-tracker.h"
+#include <gtkmm/toolbar.h>
+
 
 class SPDesktop;
 class SPLPEItem;
@@ -50,16 +52,6 @@ public:
     void setDesktop(SPDesktop *desktop);
 
 private:
-
-    /**
-     * Auxiliary widget to keep track of desktop changes for the floating dialog.
-     */
-    DesktopTracker deskTrack;
-
-    /**
-     * Link to callback function for a change in desktop (window).
-     */
-    sigc::connection desktopChangeConn;
     sigc::connection selection_changed_connection;
     sigc::connection selection_modified_connection;
 
@@ -69,12 +61,13 @@ private:
     void showText(Glib::ustring const &str);
     void selectInList(LivePathEffect::Effect* effect);
 
-    // void add_entry(const char* name );
+   // void add_entry(const char* name );
     void effect_list_reload(SPLPEItem *lpeitem);
 
     // callback methods for buttons on grids page.
-    void onAdd();
+    void onApply();
     void onRemove();
+
     void onUp();
     void onDown();
 
@@ -96,14 +89,17 @@ private:
 
     bool lpe_list_locked;
 
-    //Inkscape::UI::Widget::ComboBoxEnum<LivePathEffect::EffectType> combo_effecttype;
+    Inkscape::UI::Widget::ComboBoxEnum<LivePathEffect::EffectType> combo_effecttype;
     
     Gtk::Widget * effectwidget;
-    Gtk::Label status_label;
-    UI::Widget::Frame effectcontrol_frame;
+    Gtk::Label explain_label;
+    Gtk::Frame effectapplication_frame;
+    Gtk::Frame effectcontrol_frame;
+    Gtk::Frame effectlist_frame;
     Gtk::HBox effectapplication_hbox;
     Gtk::VBox effectcontrol_vbox;
     Gtk::VBox effectlist_vbox;
+    Gtk::Tooltips tooltips;
     ModelColumns columns;
     Gtk::ScrolledWindow scrolled_window;
     Gtk::TreeView effectlist_view;
@@ -112,15 +108,16 @@ private:
 
     void on_visibility_toggled( Glib::ustring const& str );
 
-#if WITH_GTKMM_3_0
-    Gtk::ButtonBox toolbar_hbox;
-#else
-    Gtk::HButtonBox toolbar_hbox;
-#endif
-    Gtk::Button button_add;
-    Gtk::Button button_remove;
-    Gtk::Button button_up;
-    Gtk::Button button_down;
+    Gtk::Toolbar toolbar;
+    Gtk::ToolButton button_up;
+    Gtk::ToolButton button_down;
+    Gtk::Button button_apply;
+    Gtk::ToolButton button_remove;
+    /*Gtk::HButtonBox button_hbox;
+    Gtk::Button	button_up;
+    Gtk::Button	button_down;
+    Gtk::Button button_apply;
+    Gtk::Button button_remove;*/
 
     SPDesktop * current_desktop;
     
@@ -147,4 +144,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

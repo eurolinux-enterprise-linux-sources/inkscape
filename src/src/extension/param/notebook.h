@@ -8,33 +8,30 @@
 /*
  * Author:
  *   Johan Engelen <johan@shouraizou.nl>
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2006 Author
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "parameter.h"
+#include <gtkmm/widget.h>
 
-namespace Gtk {
-class Widget;
-}
+#include "xml/document.h"
+#include <extension/extension-forward.h>
+
+#include "parameter.h"
 
 namespace Inkscape {
 namespace Extension {
 
-class Extension;
 
 
-/** A class to represent a notebookparameter of an extension. */
+// \brief  A class to represent a notebookparameter of an extension
 class ParamNotebook : public Parameter {
 private:
-    /**
-     * Internal value.  This should point to a string that has
-     * been allocated in memory.  And should be free'd.
-     * It is the name of the current page.
-     */
+    /** \brief  Internal value.  This should point to a string that has
+                been allocated in memory.  And should be free'd.
+                It is the name of the current page. */
     gchar * _value;
 
     GSList * pages; /**< A table to store the pages with parameters for this notebook.
@@ -44,18 +41,7 @@ public:
     ParamNotebook(const gchar * name, const gchar * guitext, const gchar * desc, const Parameter::_scope_t scope, bool gui_hidden, const gchar * gui_tip, Inkscape::Extension::Extension * ext, Inkscape::XML::Node * xml);
     virtual ~ParamNotebook(void);
     Gtk::Widget * get_widget(SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal);
-
-    /**
-     * A function to get the currentpage and the parameters in a string form.
-     * @return A string with the 'value' and all the parameters on all pages as command line arguments.
-     */
-    virtual void string (std::list <std::string> &list) const;
-
-    // Explicitly call superclass version to avoid method being hidden.
-    virtual void string(std::string &string) const {return Parameter::string(string);}
-
-
-    Parameter * get_param (const gchar * name);
+    void string (std::list <std::string> &list);
 
     const gchar * get (const SPDocument * /*doc*/, const Inkscape::XML::Node * /*node*/) { return _value; }
     const gchar * set (const int in, SPDocument * doc, Inkscape::XML::Node * node);
@@ -65,8 +51,8 @@ public:
 
 
 
-}  // namespace Extension
-}  // namespace Inkscape
+}  /* namespace Extension */
+}  /* namespace Inkscape */
 
 #endif /* INK_EXTENSION_PARAMNOTEBOOK_H_SEEN */
 

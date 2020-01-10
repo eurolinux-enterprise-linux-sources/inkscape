@@ -1,6 +1,9 @@
-#ifndef SEEN_SP_SPIRAL_H
-#define SEEN_SP_SPIRAL_H
-/*
+#ifndef __SP_SPIRAL_H__
+#define __SP_SPIRAL_H__
+
+/** \file
+ * SPSpiral: <sodipodi:spiral> implementation
+ *
  * Authors:
  *   Mitsuru Oka <oka326@parkcity.ne.jp>
  *   Lauris Kaplinski <lauris@kaplinski.com>
@@ -20,12 +23,17 @@
 #define SP_HUGE          1e5
 
 #define SPIRAL_TOLERANCE 3.0
-#define SAMPLE_STEP      (1.0/4.0) ///< step per 2PI
-#define SAMPLE_SIZE      8         ///< sample size per one bezier
+#define SAMPLE_STEP      (1.0/4.0) ///< step per 2PI 
+#define SAMPLE_SIZE      8         ///< sample size per one bezier 
 
+#define SP_TYPE_SPIRAL            (sp_spiral_get_type ())
+#define SP_SPIRAL(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_SPIRAL, SPSpiral))
+#define SP_SPIRAL_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_SPIRAL, SPSpiralClass))
+#define SP_IS_SPIRAL(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_SPIRAL))
+#define SP_IS_SPIRAL_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_SPIRAL))
 
-#define SP_SPIRAL(obj) (dynamic_cast<SPSpiral*>((SPObject*)obj))
-#define SP_IS_SPIRAL(obj) (dynamic_cast<const SPSpiral*>((SPObject*)obj) != NULL)
+class SPSpiral;
+class SPSpiralClass;
 
 /**
  * A spiral Shape.
@@ -39,43 +47,45 @@
  *
  * \todo Should I remove these attributes?
  */
-class SPSpiral : public SPShape {
-public:
-	SPSpiral();
-	virtual ~SPSpiral();
-
+struct SPSpiral : public SPShape {
 	float cx, cy;
 	float exp;  ///< Spiral expansion factor
 	float revo; ///< Spiral revolution factor
 	float rad;  ///< Spiral radius
 	float arg;  ///< Spiral argument
 	float t0;
-
-	/* Lowlevel interface */
-	void setPosition(double cx, double cy, double exp, double revo, double rad, double arg, double t0);
-	virtual Geom::Affine set_transform(Geom::Affine const& xform);
-
-	Geom::Point getXY(double t) const;
-
-	void getPolar(double t, double* rad, double* arg) const;
-
-	bool isInvalid() const;
-
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
-	virtual void update(SPCtx *ctx, unsigned int flags);
-	virtual void set(unsigned int key, char const* value);
-
-	virtual void snappoints(std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs) const;
-    virtual const char* displayName() const;
-	virtual char* description() const;
-
-	virtual void set_shape();
-	virtual void update_patheffect(bool write);
-
-private:
-	Geom::Point getTangent(double t) const;
-	void fitAndDraw(SPCurve* c, double dstep, Geom::Point darray[], Geom::Point const& hat1, Geom::Point& hat2, double* t) const;
 };
 
-#endif // SEEN_SP_SPIRAL_H
+/// The SPSpiral vtable.
+struct SPSpiralClass {
+	SPShapeClass parent_class;
+};
+
+
+/* Standard Gtk function */
+GType sp_spiral_get_type  (void);
+
+/* Lowlevel interface */
+void    sp_spiral_position_set		(SPSpiral      *spiral,
+				 gdouble	cx,
+				 gdouble	cy,
+				 gdouble	exp,
+				 gdouble	revo,
+				 gdouble	rad,
+				 gdouble	arg,
+				 gdouble	t0);
+
+Geom::Point    sp_spiral_get_xy	(SPSpiral const *spiral,
+				 gdouble	t);
+
+void    sp_spiral_get_polar	(SPSpiral const *spiral,
+				 gdouble	t,
+				 gdouble       *rad,
+				 gdouble       *arg);
+
+bool sp_spiral_is_invalid   (SPSpiral const *spiral);
+
+
+
+
+#endif

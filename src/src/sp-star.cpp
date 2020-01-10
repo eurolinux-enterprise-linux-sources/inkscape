@@ -1,3 +1,5 @@
+#define __SP_STAR_C__
+
 /*
  * <sodipodi:star> implementation
  *
@@ -5,7 +7,6 @@
  *   Mitsuru Oka <oka326@parkcity.ne.jp>
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   bulia byak <buliabyak@users.sf.net>
- *   Abhishek Sharma
  *
  * Copyright (C) 1999-2002 Lauris Kaplinski
  * Copyright (C) 2000-2001 Ximian, Inc.
@@ -19,7 +20,6 @@
 
 #include <cstring>
 #include <string>
-#include <glib.h>
 #include <glibmm/i18n.h>
 
 #include "svg/svg.h"
@@ -32,206 +32,261 @@
 
 #include "sp-star.h"
 
-SPStar::SPStar() : SPPolygon() ,
-	sides(5),
-	center(0, 0),
-	flatsided(0),
-	rounded(0.0),
-	randomized(0.0)
+static void sp_star_class_init (SPStarClass *klass);
+static void sp_star_init (SPStar *star);
+
+static void sp_star_build (SPObject * object, SPDocument * document, Inkscape::XML::Node * repr);
+static Inkscape::XML::Node *sp_star_write (SPObject *object, Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags);
+static void sp_star_set (SPObject *object, unsigned int key, const gchar *value);
+static void sp_star_update (SPObject *object, SPCtx *ctx, guint flags);
+
+static gchar * sp_star_description (SPItem * item);
+static void sp_star_snappoints(SPItem const *item, std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs);
+
+static void sp_star_set_shape (SPShape *shape);
+static void sp_star_update_patheffect (SPLPEItem *lpeitem, bool write);
+
+static SPShapeClass *parent_class;
+
+GType
+sp_star_get_type (void)
 {
-	this->r[0] = 1.0;
-	this->r[1] = 0.001;
-	this->arg[0] = this->arg[1] = 0.0;
+    static GType type = 0;
+
+    if (!type) {
+        GTypeInfo info = {
+            sizeof (SPStarClass),
+            NULL, NULL,
+            (GClassInitFunc) sp_star_class_init,
+            NULL, NULL,
+            sizeof (SPStar),
+            16,
+            (GInstanceInitFunc) sp_star_init,
+            NULL,    /* value_table */
+        };
+        type = g_type_register_static (SP_TYPE_SHAPE, "SPStar", &info, (GTypeFlags)0);
+    }
+    return type;
 }
 
-SPStar::~SPStar() {
+static void
+sp_star_class_init (SPStarClass *klass)
+{
+    GObjectClass * gobject_class;
+    SPObjectClass * sp_object_class;
+    SPItemClass * item_class;
+    SPLPEItemClass * lpe_item_class;
+    SPShapeClass * shape_class;
+
+    gobject_class = (GObjectClass *) klass;
+    sp_object_class = (SPObjectClass *) klass;
+    item_class = (SPItemClass *) klass;
+    lpe_item_class = (SPLPEItemClass *) klass;
+    shape_class = (SPShapeClass *) klass;
+
+    parent_class = (SPShapeClass *)g_type_class_ref (SP_TYPE_SHAPE);
+
+    sp_object_class->build = sp_star_build;
+    sp_object_class->write = sp_star_write;
+    sp_object_class->set = sp_star_set;
+    sp_object_class->update = sp_star_update;
+
+    item_class->description = sp_star_description;
+    item_class->snappoints = sp_star_snappoints;
+
+    lpe_item_class->update_patheffect = sp_star_update_patheffect;
+
+    shape_class->set_shape = sp_star_set_shape;
 }
 
-void SPStar::build(SPDocument * document, Inkscape::XML::Node * repr) {
-	// CPPIFY: see header file
-    SPShape::build(document, repr);
-
-    this->readAttr( "sodipodi:cx" );
-    this->readAttr( "sodipodi:cy" );
-    this->readAttr( "sodipodi:sides" );
-    this->readAttr( "sodipodi:r1" );
-    this->readAttr( "sodipodi:r2" );
-    this->readAttr( "sodipodi:arg1" );
-    this->readAttr( "sodipodi:arg2" );
-    this->readAttr( "inkscape:flatsided" );
-    this->readAttr( "inkscape:rounded" );
-    this->readAttr( "inkscape:randomized" );
+static void
+sp_star_init (SPStar * star)
+{
+    star->sides = 5;
+    star->center = Geom::Point(0, 0);
+    star->r[0] = 1.0;
+    star->r[1] = 0.001;
+    star->arg[0] = star->arg[1] = 0.0;
+    star->flatsided = 0;
+    star->rounded = 0.0;
+    star->randomized = 0.0;
 }
 
-Inkscape::XML::Node* SPStar::write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags) {
+static void
+sp_star_build (SPObject * object, SPDocument * document, Inkscape::XML::Node * repr)
+{
+    if (((SPObjectClass *) parent_class)->build)
+        ((SPObjectClass *) parent_class)->build (object, document, repr);
+
+    sp_object_read_attr (object, "sodipodi:cx");
+    sp_object_read_attr (object, "sodipodi:cy");
+    sp_object_read_attr (object, "sodipodi:sides");
+    sp_object_read_attr (object, "sodipodi:r1");
+    sp_object_read_attr (object, "sodipodi:r2");
+    sp_object_read_attr (object, "sodipodi:arg1");
+    sp_object_read_attr (object, "sodipodi:arg2");
+    sp_object_read_attr (object, "inkscape:flatsided");
+    sp_object_read_attr (object, "inkscape:rounded");
+    sp_object_read_attr (object, "inkscape:randomized");
+}
+
+static Inkscape::XML::Node *
+sp_star_write (SPObject *object, Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags)
+{
+    SPStar *star = SP_STAR (object);
+
     if ((flags & SP_OBJECT_WRITE_BUILD) && !repr) {
         repr = xml_doc->createElement("svg:path");
     }
 
     if (flags & SP_OBJECT_WRITE_EXT) {
         repr->setAttribute("sodipodi:type", "star");
-        sp_repr_set_int (repr, "sodipodi:sides", this->sides);
-        sp_repr_set_svg_double(repr, "sodipodi:cx", this->center[Geom::X]);
-        sp_repr_set_svg_double(repr, "sodipodi:cy", this->center[Geom::Y]);
-        sp_repr_set_svg_double(repr, "sodipodi:r1", this->r[0]);
-        sp_repr_set_svg_double(repr, "sodipodi:r2", this->r[1]);
-        sp_repr_set_svg_double(repr, "sodipodi:arg1", this->arg[0]);
-        sp_repr_set_svg_double(repr, "sodipodi:arg2", this->arg[1]);
-        sp_repr_set_boolean (repr, "inkscape:flatsided", this->flatsided);
-        sp_repr_set_svg_double(repr, "inkscape:rounded", this->rounded);
-        sp_repr_set_svg_double(repr, "inkscape:randomized", this->randomized);
+        sp_repr_set_int (repr, "sodipodi:sides", star->sides);
+        sp_repr_set_svg_double(repr, "sodipodi:cx", star->center[Geom::X]);
+        sp_repr_set_svg_double(repr, "sodipodi:cy", star->center[Geom::Y]);
+        sp_repr_set_svg_double(repr, "sodipodi:r1", star->r[0]);
+        sp_repr_set_svg_double(repr, "sodipodi:r2", star->r[1]);
+        sp_repr_set_svg_double(repr, "sodipodi:arg1", star->arg[0]);
+        sp_repr_set_svg_double(repr, "sodipodi:arg2", star->arg[1]);
+        sp_repr_set_boolean (repr, "inkscape:flatsided", star->flatsided);
+        sp_repr_set_svg_double(repr, "inkscape:rounded", star->rounded);
+        sp_repr_set_svg_double(repr, "inkscape:randomized", star->randomized);
     }
 
-    this->set_shape();
-
-    char *d = sp_svg_write_path (this->_curve->get_pathvector());
+    sp_star_set_shape ((SPShape *) star);
+    char *d = sp_svg_write_path (((SPShape *) star)->curve->get_pathvector());
     repr->setAttribute("d", d);
-    g_free(d);
+    g_free (d);
 
-    // CPPIFY: see header file
-    SPShape::write(xml_doc, repr, flags);
+    if (((SPObjectClass *) (parent_class))->write)
+        ((SPObjectClass *) (parent_class))->write (object, xml_doc, repr, flags);
 
     return repr;
 }
 
-void SPStar::set(unsigned int key, const gchar* value) {
+static void
+sp_star_set (SPObject *object, unsigned int key, const gchar *value)
+{
     SVGLength::Unit unit;
+
+    SPStar *star = SP_STAR (object);
 
     /* fixme: we should really collect updates */
     switch (key) {
     case SP_ATTR_SODIPODI_SIDES:
         if (value) {
-            this->sides = atoi (value);
-            this->sides = CLAMP(this->sides, 3, 1024);
+            star->sides = atoi (value);
+            star->sides = NR_CLAMP(star->sides, 3, 1024);
         } else {
-            this->sides = 5;
+            star->sides = 5;
         }
-
-        this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         break;
-
     case SP_ATTR_SODIPODI_CX:
-        if (!sp_svg_length_read_ldd (value, &unit, NULL, &this->center[Geom::X]) ||
+        if (!sp_svg_length_read_ldd (value, &unit, NULL, &star->center[Geom::X]) ||
             (unit == SVGLength::EM) ||
             (unit == SVGLength::EX) ||
             (unit == SVGLength::PERCENT)) {
-            this->center[Geom::X] = 0.0;
+            star->center[Geom::X] = 0.0;
         }
-
-        this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         break;
-
     case SP_ATTR_SODIPODI_CY:
-        if (!sp_svg_length_read_ldd (value, &unit, NULL, &this->center[Geom::Y]) ||
+        if (!sp_svg_length_read_ldd (value, &unit, NULL, &star->center[Geom::Y]) ||
             (unit == SVGLength::EM) ||
             (unit == SVGLength::EX) ||
             (unit == SVGLength::PERCENT)) {
-            this->center[Geom::Y] = 0.0;
+            star->center[Geom::Y] = 0.0;
         }
-
-        this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         break;
-
     case SP_ATTR_SODIPODI_R1:
-        if (!sp_svg_length_read_ldd (value, &unit, NULL, &this->r[0]) ||
+        if (!sp_svg_length_read_ldd (value, &unit, NULL, &star->r[0]) ||
             (unit == SVGLength::EM) ||
             (unit == SVGLength::EX) ||
             (unit == SVGLength::PERCENT)) {
-            this->r[0] = 1.0;
+            star->r[0] = 1.0;
         }
-
         /* fixme: Need CLAMP (Lauris) */
-        this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         break;
-
     case SP_ATTR_SODIPODI_R2:
-        if (!sp_svg_length_read_ldd (value, &unit, NULL, &this->r[1]) ||
+        if (!sp_svg_length_read_ldd (value, &unit, NULL, &star->r[1]) ||
             (unit == SVGLength::EM) ||
             (unit == SVGLength::EX) ||
             (unit == SVGLength::PERCENT)) {
-            this->r[1] = 0.0;
+            star->r[1] = 0.0;
         }
-
-        this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         return;
-
     case SP_ATTR_SODIPODI_ARG1:
         if (value) {
-            this->arg[0] = g_ascii_strtod (value, NULL);
+            star->arg[0] = g_ascii_strtod (value, NULL);
         } else {
-            this->arg[0] = 0.0;
+            star->arg[0] = 0.0;
         }
-
-        this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         break;
-
     case SP_ATTR_SODIPODI_ARG2:
         if (value) {
-            this->arg[1] = g_ascii_strtod (value, NULL);
+            star->arg[1] = g_ascii_strtod (value, NULL);
         } else {
-            this->arg[1] = 0.0;
+            star->arg[1] = 0.0;
         }
-
-        this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         break;
-
     case SP_ATTR_INKSCAPE_FLATSIDED:
-        if (value && !strcmp(value, "true")) {
-            this->flatsided = true;
-        } else {
-        	this->flatsided = false;
-        }
-
-        this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        if (value && !strcmp (value, "true"))
+            star->flatsided = true;
+        else star->flatsided = false;
+        object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         break;
-
     case SP_ATTR_INKSCAPE_ROUNDED:
         if (value) {
-            this->rounded = g_ascii_strtod (value, NULL);
+            star->rounded = g_ascii_strtod (value, NULL);
         } else {
-            this->rounded = 0.0;
+            star->rounded = 0.0;
         }
-
-        this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         break;
-
     case SP_ATTR_INKSCAPE_RANDOMIZED:
         if (value) {
-            this->randomized = g_ascii_strtod (value, NULL);
+            star->randomized = g_ascii_strtod (value, NULL);
         } else {
-            this->randomized = 0.0;
+            star->randomized = 0.0;
         }
-
-        this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         break;
-
     default:
-    	// CPPIFY: see header file
-        SPShape::set(key, value);
+        if (((SPObjectClass *) parent_class)->set)
+            ((SPObjectClass *) parent_class)->set (object, key, value);
         break;
     }
 }
 
-void SPStar::update(SPCtx *ctx, guint flags) {
+static void
+sp_star_update (SPObject *object, SPCtx *ctx, guint flags)
+{
     if (flags & (SP_OBJECT_MODIFIED_FLAG |
              SP_OBJECT_STYLE_MODIFIED_FLAG |
              SP_OBJECT_VIEWPORT_MODIFIED_FLAG)) {
-
-        this->set_shape();
+        sp_shape_set_shape ((SPShape *) object);
     }
 
-    // CPPIFY: see header file
-    SPShape::update(ctx, flags);
+    if (((SPObjectClass *) parent_class)->update)
+        ((SPObjectClass *) parent_class)->update (object, ctx, flags);
 }
 
-void SPStar::update_patheffect(bool write) {
-    this->set_shape();
+static void
+sp_star_update_patheffect(SPLPEItem *lpeitem, bool write)
+{
+    SPShape *shape = (SPShape *) lpeitem;
+    sp_star_set_shape(shape);
 
     if (write) {
-        Inkscape::XML::Node *repr = this->getRepr();
-
-        if ( this->_curve != NULL ) {
-            gchar *str = sp_svg_write_path(this->_curve->get_pathvector());
+        Inkscape::XML::Node *repr = SP_OBJECT_REPR(shape);
+        if ( shape->curve != NULL ) {
+            gchar *str = sp_svg_write_path(shape->curve->get_pathvector());
             repr->setAttribute("d", str);
             g_free(str);
         } else {
@@ -239,21 +294,25 @@ void SPStar::update_patheffect(bool write) {
         }
     }
 
-    this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+    ((SPObject *)shape)->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 }
 
-const char* SPStar::displayName() const {
-    if (this->flatsided == false)
-        return _("Star");
-    return _("Polygon");
-}
+static gchar *
+sp_star_description (SPItem *item)
+{
+    SPStar *star = SP_STAR (item);
 
-gchar* SPStar::description() const {
     // while there will never be less than 3 vertices, we still need to
     // make calls to ngettext because the pluralization may be different
     // for various numbers >=3.  The singular form is used as the index.
-    return g_strdup_printf (ngettext(_("with %d vertex"), _("with %d vertices"),
-                this->sides), this->sides);
+    if (star->flatsided == false )
+    return g_strdup_printf (ngettext("<b>Star</b> with %d vertex",
+                         "<b>Star</b> with %d vertices",
+                     star->sides), star->sides);
+    else
+        return g_strdup_printf (ngettext("<b>Polygon</b> with %d vertex",
+                         "<b>Polygon</b> with %d vertices",
+                     star->sides), star->sides);
 }
 
 /**
@@ -352,7 +411,7 @@ sp_star_get_curvepoint (SPStar *star, SPStarPoint point, gint index, bool previ)
         guint32 seed = point_unique_int (o);
 
         // randomly rotate (by step 3 from the seed) and scale (by step 4) the vector
-        ret = ret * Geom::Affine (Geom::Rotate (star->randomized * M_PI * rnd (seed, 3)));
+        ret = ret * Geom::Matrix (Geom::Rotate (star->randomized * M_PI * rnd (seed, 3)));
         ret *= ( 1 + star->randomized * rnd (seed, 4));
 
         // the randomized corner point
@@ -362,106 +421,103 @@ sp_star_get_curvepoint (SPStar *star, SPStarPoint point, gint index, bool previ)
     }
 }
 
+
 #define NEXT false
 #define PREV true
 
-void SPStar::set_shape() {
+static void
+sp_star_set_shape (SPShape *shape)
+{
+    SPStar *star = SP_STAR (shape);
+
     // perhaps we should convert all our shapes into LPEs without source path
     // and with knotholders for parameters, then this situation will be handled automatically
     // by disabling the entire stack (including the shape LPE)
-    if (hasBrokenPathEffect()) {
+    if (sp_lpe_item_has_broken_path_effect(SP_LPE_ITEM(shape))) {
         g_warning ("The star shape has unknown LPE on it! Convert to path to make it editable preserving the appearance; editing it as star will remove the bad LPE");
-
-        if (this->getRepr()->attribute("d")) {
+        if (SP_OBJECT_REPR(shape)->attribute("d")) {
             // unconditionally read the curve from d, if any, to preserve appearance
-            Geom::PathVector pv = sp_svg_read_pathv(this->getRepr()->attribute("d"));
+            Geom::PathVector pv = sp_svg_read_pathv(SP_OBJECT_REPR(shape)->attribute("d"));
             SPCurve *cold = new SPCurve(pv);
-            this->setCurveInsync( cold, TRUE);
-            this->setCurveBeforeLPE(cold);
+            sp_shape_set_curve_insync (shape, cold, TRUE);
             cold->unref();
         }
-
         return;
     }
 
     SPCurve *c = new SPCurve ();
 
-    bool not_rounded = (fabs (this->rounded) < 1e-4);
+    gint sides = star->sides;
+    bool not_rounded = (fabs (star->rounded) < 1e-4);
 
     // note that we pass randomized=true to sp_star_get_xy, because the curve must be randomized;
     // other places that call that function (e.g. the knotholder) need the exact point
 
     // draw 1st segment
-    c->moveto(sp_star_get_xy (this, SP_STAR_POINT_KNOT1, 0, true));
-
-    if (this->flatsided == false) {
+    c->moveto(sp_star_get_xy (star, SP_STAR_POINT_KNOT1, 0, true));
+    if (star->flatsided == false) {
         if (not_rounded) {
-            c->lineto(sp_star_get_xy (this, SP_STAR_POINT_KNOT2, 0, true));
+            c->lineto(sp_star_get_xy (star, SP_STAR_POINT_KNOT2, 0, true));
         } else {
-            c->curveto(sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT1, 0, NEXT),
-                sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT2, 0, PREV),
-                sp_star_get_xy (this, SP_STAR_POINT_KNOT2, 0, true));
+            c->curveto(sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT1, 0, NEXT),
+                sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT2, 0, PREV),
+                sp_star_get_xy (star, SP_STAR_POINT_KNOT2, 0, true));
         }
     }
 
     // draw all middle segments
     for (gint i = 1; i < sides; i++) {
         if (not_rounded) {
-            c->lineto(sp_star_get_xy (this, SP_STAR_POINT_KNOT1, i, true));
+            c->lineto(sp_star_get_xy (star, SP_STAR_POINT_KNOT1, i, true));
         } else {
-            if (this->flatsided == false) {
-                c->curveto(sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT2, i - 1, NEXT),
-                        sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT1, i, PREV),
-                        sp_star_get_xy (this, SP_STAR_POINT_KNOT1, i, true));
+            if (star->flatsided == false) {
+                c->curveto(sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT2, i - 1, NEXT),
+                        sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT1, i, PREV),
+                        sp_star_get_xy (star, SP_STAR_POINT_KNOT1, i, true));
             } else {
-                c->curveto(sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT1, i - 1, NEXT),
-                        sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT1, i, PREV),
-                        sp_star_get_xy (this, SP_STAR_POINT_KNOT1, i, true));
+                c->curveto(sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT1, i - 1, NEXT),
+                        sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT1, i, PREV),
+                        sp_star_get_xy (star, SP_STAR_POINT_KNOT1, i, true));
             }
         }
+        if (star->flatsided == false) {
 
-        if (this->flatsided == false) {
             if (not_rounded) {
-                       c->lineto(sp_star_get_xy (this, SP_STAR_POINT_KNOT2, i, true));
+                       c->lineto(sp_star_get_xy (star, SP_STAR_POINT_KNOT2, i, true));
             } else {
-                c->curveto(sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT1, i, NEXT),
-                    sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT2, i, PREV),
-                    sp_star_get_xy (this, SP_STAR_POINT_KNOT2, i, true));
+                c->curveto(sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT1, i, NEXT),
+                    sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT2, i, PREV),
+                    sp_star_get_xy (star, SP_STAR_POINT_KNOT2, i, true));
             }
         }
     }
 
     // draw last segment
-	if (!not_rounded) {
-		if (this->flatsided == false) {
-			c->curveto(sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT2, sides - 1, NEXT),
-				sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT1, 0, PREV),
-				sp_star_get_xy (this, SP_STAR_POINT_KNOT1, 0, true));
-		} else {
-			c->curveto(sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT1, sides - 1, NEXT),
-				sp_star_get_curvepoint (this, SP_STAR_POINT_KNOT1, 0, PREV),
-				sp_star_get_xy (this, SP_STAR_POINT_KNOT1, 0, true));
-		}
-	}
+        if (!not_rounded) {
+            if (star->flatsided == false) {
+            c->curveto(sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT2, sides - 1, NEXT),
+                sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT1, 0, PREV),
+                sp_star_get_xy (star, SP_STAR_POINT_KNOT1, 0, true));
+            } else {
+            c->curveto(sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT1, sides - 1, NEXT),
+                sp_star_get_curvepoint (star, SP_STAR_POINT_KNOT1, 0, PREV),
+                sp_star_get_xy (star, SP_STAR_POINT_KNOT1, 0, true));
+            }
+        }
 
     c->closepath();
 
     /* Reset the shape'scurve to the "original_curve"
      * This is very important for LPEs to work properly! (the bbox might be recalculated depending on the curve in shape)*/
-    this->setCurveInsync( c, TRUE);
-    this->setCurveBeforeLPE( c );
-
-    if (hasPathEffect() && pathEffectsEnabled()) {
+    sp_shape_set_curve_insync (shape, c, TRUE);
+    if (sp_lpe_item_has_path_effect(SP_LPE_ITEM(shape)) && sp_lpe_item_path_effects_enabled(SP_LPE_ITEM(shape))) {
         SPCurve *c_lpe = c->copy();
-        bool success = this->performPathEffect(c_lpe);
-
+        bool success = sp_lpe_item_perform_path_effect(SP_LPE_ITEM (shape), c_lpe);
         if (success) {
-            this->setCurveInsync( c_lpe, TRUE);
+            sp_shape_set_curve_insync (shape, c_lpe, TRUE);
         } 
-
         c_lpe->unref();
     }
-
     c->unref();
 }
 
@@ -471,92 +527,42 @@ sp_star_position_set (SPStar *star, gint sides, Geom::Point center, gdouble r1, 
     g_return_if_fail (star != NULL);
     g_return_if_fail (SP_IS_STAR (star));
 
-    star->sides = CLAMP(sides, 3, 1024);
+    star->sides = NR_CLAMP(sides, 3, 1024);
     star->center = center;
     star->r[0] = MAX (r1, 0.001);
-
     if (isflat == false) {
-        star->r[1] = CLAMP(r2, 0.0, star->r[0]);
+        star->r[1] = NR_CLAMP(r2, 0.0, star->r[0]);
     } else {
-        star->r[1] = CLAMP( r1*cos(M_PI/sides) ,0.0, star->r[0] );
+        star->r[1] = NR_CLAMP( r1*cos(M_PI/sides) ,0.0, star->r[0] );
     }
-
     star->arg[0] = arg1;
     star->arg[1] = arg2;
     star->flatsided = isflat;
     star->rounded = rounded;
     star->randomized = randomized;
-    star->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+    SP_OBJECT(star)->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 }
 
-void SPStar::snappoints(std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs) const {
-    // We will determine the star's midpoint ourselves, instead of trusting on the base class
-    // Therefore snapping to object midpoints is temporarily disabled
-    Inkscape::SnapPreferences local_snapprefs = *snapprefs;
-    local_snapprefs.setTargetSnappable(Inkscape::SNAPTARGET_OBJECT_MIDPOINT, false);
-
-    // CPPIFY: see header file
-    SPShape::snappoints(p, &local_snapprefs);
-
-    if (snapprefs->isTargetSnappable(Inkscape::SNAPTARGET_OBJECT_MIDPOINT)) {
-        Geom::Affine const i2dt (this->i2dt_affine ());
-        p.push_back(Inkscape::SnapCandidatePoint(this->center * i2dt,Inkscape::SNAPSOURCE_OBJECT_MIDPOINT, Inkscape::SNAPTARGET_OBJECT_MIDPOINT));
-    }
-}
-
-Geom::Affine SPStar::set_transform(Geom::Affine const &xform)
+static void sp_star_snappoints(SPItem const *item, std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs)
 {
-    bool opt_trans = (randomized == 0);
-    // Only set transform with proportional scaling
-    if (!xform.withoutTranslation().isUniformScale()) {
-        return xform;
+    // We will determine the star's midpoint ourselves, instead of trusting on the base class
+    // Therefore setSnapObjectMidpoints() is set to false temporarily
+    Inkscape::SnapPreferences local_snapprefs = *snapprefs;
+    local_snapprefs.setSnapObjectMidpoints(false);
+
+    if (((SPItemClass *) parent_class)->snappoints) {
+        ((SPItemClass *) parent_class)->snappoints (item, p, &local_snapprefs);
     }
 
-    // Allow live effects
-    if (hasPathEffect() && pathEffectsEnabled()) {
-        return xform;
+    // Help enforcing strict snapping, i.e. only return nodes when we're snapping nodes to nodes or a guide to nodes
+    if (!(snapprefs->getSnapModeNode() || snapprefs->getSnapModeGuide())) {
+        return;
     }
 
-    /* Calculate star start in parent coords. */
-    Geom::Point pos( this->center * xform );
-
-    /* This function takes care of translation and scaling, we return whatever parts we can't
-       handle. */
-    Geom::Affine ret(opt_trans ? xform.withoutTranslation() : xform);
-    gdouble const s = hypot(ret[0], ret[1]);
-    if (s > 1e-9) {
-        ret[0] /= s;
-        ret[1] /= s;
-        ret[2] /= s;
-        ret[3] /= s;
-    } else {
-        ret[0] = 1.0;
-        ret[1] = 0.0;
-        ret[2] = 0.0;
-        ret[3] = 1.0;
+    if (snapprefs->getSnapObjectMidpoints()) {
+        Geom::Matrix const i2d (sp_item_i2d_affine (item));
+        p.push_back(Inkscape::SnapCandidatePoint(SP_STAR(item)->center * i2d,Inkscape::SNAPSOURCE_OBJECT_MIDPOINT, Inkscape::SNAPTARGET_OBJECT_MIDPOINT));
     }
-
-    this->r[0] *= s;
-    this->r[1] *= s;
-
-    /* Find start in item coords */
-    pos = pos * ret.inverse();
-    this->center = pos;
-
-    this->set_shape();
-
-    // Adjust stroke width
-    this->adjust_stroke(s);
-
-    // Adjust pattern fill
-    this->adjust_pattern(xform * ret.inverse());
-
-    // Adjust gradient fill
-    this->adjust_gradient(xform * ret.inverse());
-
-    this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_STYLE_MODIFIED_FLAG);
-
-    return ret;
 }
 
 /**
@@ -569,8 +575,9 @@ Geom::Affine SPStar::set_transform(Geom::Affine const &xform)
  *
  * Initial item coordinate system is same as document coordinate system.
  */
+
 Geom::Point
-sp_star_get_xy (SPStar const *star, SPStarPoint point, gint index, bool randomized)
+sp_star_get_xy (SPStar *star, SPStarPoint point, gint index, bool randomized)
 {
     gdouble darg = 2.0 * M_PI / (double) star->sides;
 
@@ -603,4 +610,4 @@ sp_star_get_xy (SPStar const *star, SPStarPoint point, gint index, bool randomiz
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

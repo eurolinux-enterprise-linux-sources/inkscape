@@ -1,4 +1,7 @@
-/*
+/** \file
+ *
+ * \brief Helperclass for Gtk::Entry widgets
+ *
  * Authors:
  *   Johan Engelen <goejendaagh@zonnet.nl>
  *
@@ -13,8 +16,6 @@
 
 #include "entry.h"
 
-#include <gtkmm/entry.h>
-
 namespace Inkscape {
 namespace UI {
 namespace Widget {
@@ -26,6 +27,7 @@ Entry::Entry(  Glib::ustring const &label, Glib::ustring const &tooltip,
     : Labelled(label, tooltip, new Gtk::Entry(), suffix, icon, mnemonic)
 {    
 }
+    
 
 } // namespace Widget
 } // namespace UI

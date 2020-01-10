@@ -1,74 +1,55 @@
+#define __VERSION_C__
+
 /*
  * Versions
  *
  * Authors:
  *   MenTaLguY <mental@rydia.net>
- *   Jon A. Cruz <jon@joncruz.org>
- *   Kris De Gussem <Kris.DeGussem@gmail.com>
  *
  * Copyright (C) 2003 MenTaLguY
- * Copyright (C) 2012 Kris De Gussem
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include <stdio.h>
 #include <glib.h>
-#include <sstream>
 #include "version.h"
 
-bool sp_version_from_string(const char *string, Inkscape::Version *version)
+gboolean sp_version_from_string(const gchar *string, Inkscape::Version *version)
 {
     if (!string) {
-        return false;
+        return FALSE;
     }
 
-    try
-    {
-        std::stringstream ss;
+    version->major = 0;
+    version->minor = 0;
 
-        // Throw exception if error.
-        ss.exceptions(std::ios::failbit | std::ios::badbit);
-        ss << string;
-        ss >> version->_major;
-        char tmp=0;
-        ss >> tmp;
-        ss >>version->_minor;
-
-        // Don't throw exception if failbit gets set (empty string OK).
-        ss.exceptions(std::ios::goodbit);
-        getline(ss, version->_tail);
-        return true;
-    }
-    catch(...)
-    {
-        version->_major = 0;
-        version->_minor = 0;
-        version->_tail.clear();
-        return false;
-    }
+    return sscanf((const char *)string, "%u.%u",
+                  &version->major, &version->minor) ||
+        sscanf((const char *)string, "%u", &version->major);
 }
 
-char *sp_version_to_string(Inkscape::Version version)
+gchar *sp_version_to_string(Inkscape::Version version)
 {
-    return g_strdup_printf("%u.%u%s", version._major, version._minor, version._tail.c_str());
+    return g_strdup_printf("%u.%u", version.major, version.minor);
 }
 
-bool sp_version_inside_range(Inkscape::Version version,
-                             unsigned major_min, unsigned minor_min,
-                             unsigned major_max, unsigned minor_max)
+gboolean sp_version_inside_range(Inkscape::Version version,
+                                 unsigned major_min, unsigned minor_min,
+                                 unsigned major_max, unsigned minor_max)
 {
-    if ( version._major < major_min || version._major > major_max ) {
-        return false;
-    } else if ( version._major == major_min &&
-                version._minor <= minor_min )
+    if ( version.major < major_min || version.major > major_max ) {
+        return FALSE;
+    } else if ( version.major == major_min &&
+                version.minor <= minor_min )
     {
-        return false;
-    } else if ( version._major == major_max &&
-                version._minor >= minor_max )
+        return FALSE;
+    } else if ( version.major == major_max &&
+                version.minor >= minor_max )
     {
-        return false;
+        return FALSE;
     } else {
-        return true;
+        return TRUE;
     }
 }
 

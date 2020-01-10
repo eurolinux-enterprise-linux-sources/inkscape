@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
 '''
 Example filltext sentences generated over at http://lipsum.com/
@@ -189,11 +189,6 @@ class MyEffect(inkex.Effect):
       action="store", type="int", 
       dest="fluctuation", default=4,
       help="+/-")
-    self.OptionParser.add_option("--tab",
-      action="store", type="string",
-      dest="tab",
-      help="The selected UI-tab when OK was pressed")
-
     self.first_sentence = 1
 
   def makePara(self):

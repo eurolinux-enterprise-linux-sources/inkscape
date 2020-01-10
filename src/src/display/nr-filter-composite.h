@@ -1,5 +1,5 @@
-#ifndef SEEN_NR_FILTER_COMPOSITE_H
-#define SEEN_NR_FILTER_COMPOSITE_H
+#ifndef __NR_FILTER_COMPOSITE_H__
+#define __NR_FILTER_COMPOSITE_H__
 
 /*
  * feComposite filter effect renderer
@@ -26,9 +26,7 @@ public:
     static FilterPrimitive *create();
     virtual ~FilterComposite();
 
-    virtual void render_cairo(FilterSlot &);
-    virtual bool can_handle_affine(Geom::Affine const &);
-    virtual double complexity(Geom::Affine const &ctm);
+    virtual int render(FilterSlot &slot, FilterUnits const &units);
 
     virtual void set_input(int input);
     virtual void set_input(int input, int slot);
@@ -55,4 +53,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

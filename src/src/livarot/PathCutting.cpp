@@ -20,11 +20,14 @@
 #include "Path.h"
 #include "style.h"
 #include "livarot/path-description.h"
+#include "libnr/nr-point-matrix-ops.h"
+#include "libnr/nr-convert2geom.h"
 #include <2geom/pathvector.h>
 #include <2geom/point.h>
-#include <2geom/affine.h>
+#include <2geom/matrix.h>
 #include <2geom/sbasis-to-bezier.h>
 #include <2geom/curves.h>
+#include "../display/canvas-bpath.h"
 #include "helper/geom-curves.h"
 #include "helper/geom.h"
 
@@ -58,36 +61,31 @@ void  Path::DashPolyline(float head,float tail,float body,int nbD,float *dashs,b
 
 void  Path::DashPolylineFromStyle(SPStyle *style, float scale, float min_len)
 {
-    if (!style->stroke_dasharray.values.empty()) {
+    if (style->stroke_dash.n_dash) {
 
         double dlen = 0.0;
-        // Find total length
-        for (unsigned i = 0; i < style->stroke_dasharray.values.size(); i++) {
-            dlen += style->stroke_dasharray.values[i] * scale;
+        for (int i = 0; i < style->stroke_dash.n_dash; i++) {
+            dlen += style->stroke_dash.dash[i] * scale;
         }
         if (dlen >= min_len) {
-            // Extract out dash pattern (relative positions)
-            double dash_offset = style->stroke_dashoffset.value * scale;
-            size_t n_dash = style->stroke_dasharray.values.size();
-            double *dash = g_new(double, n_dash);
-            for (unsigned i = 0; i < n_dash; i++) {
-                dash[i] = style->stroke_dasharray.values[i] * scale;
+            NRVpathDash dash;
+            dash.offset = style->stroke_dash.offset * scale;
+            dash.n_dash = style->stroke_dash.n_dash;
+            dash.dash = g_new(double, dash.n_dash);
+            for (int i = 0; i < dash.n_dash; i++) {
+                dash.dash[i] = style->stroke_dash.dash[i] * scale;
             }
-
-            // Convert relative positions to absolute postions
-            int    nbD = n_dash;
+            int    nbD=dash.n_dash;
             float  *dashs=(float*)malloc((nbD+1)*sizeof(float));
-            while ( dash_offset >= dlen ) dash_offset-=dlen;
-            dashs[0]=dash[0];
+            while ( dash.offset >= dlen ) dash.offset-=dlen;
+            dashs[0]=dash.dash[0];
             for (int i=1; i<nbD; i++) {
-                dashs[i]=dashs[i-1]+dash[i];
+                dashs[i]=dashs[i-1]+dash.dash[i];
             }
-
             // modulo dlen
-            this->DashPolyline(0.0, 0.0, dlen, nbD, dashs, true, dash_offset);
-
+            this->DashPolyline(0.0, 0.0, dlen, nbD, dashs, true, dash.offset);
             free(dashs);
-            g_free(dash);
+            g_free(dash.dash);
         }
     }
 }
@@ -308,7 +306,7 @@ Path::MakePathVector()
             {
                 /* TODO: add testcase for this descr_arcto case */
                 PathDescrArcTo *nData = dynamic_cast<PathDescrArcTo *>(descr_cmd[i]);
-                currentpath->appendNew<Geom::EllipticalArc>( nData->rx, nData->ry, nData->angle*M_PI/180.0, nData->large, !nData->clockwise, nData->p );
+                currentpath->appendNew<Geom::SVGEllipticalArc>( nData->rx, nData->ry, nData->angle, nData->large, !nData->clockwise, nData->p );
                 lastP = nData->p;
             }
             break;
@@ -400,11 +398,11 @@ void  Path::AddCurve(Geom::Curve const &c)
         Geom::Point tme = 3 * ((*cubic_bezier)[3] - (*cubic_bezier)[2]);
         CubicTo (tmp, tms, tme);
     }
-    else if(Geom::EllipticalArc const *elliptical_arc = dynamic_cast<Geom::EllipticalArc const *>(&c)) {
-        ArcTo( elliptical_arc->finalPoint(),
-               elliptical_arc->ray(Geom::X), elliptical_arc->ray(Geom::Y),
-               elliptical_arc->rotationAngle()*180.0/M_PI,  // convert from radians to degrees
-               elliptical_arc->largeArc(), !elliptical_arc->sweep() );
+    else if(Geom::SVGEllipticalArc const *svg_elliptical_arc = dynamic_cast<Geom::SVGEllipticalArc const *>(&c)) {
+        ArcTo( svg_elliptical_arc->finalPoint(),
+               svg_elliptical_arc->ray(0), svg_elliptical_arc->ray(1),
+               svg_elliptical_arc->rotation_angle(),  /// \todo check that this parameter is in radians (rotation_angle returns the angle in radians!)
+               svg_elliptical_arc->large_arc_flag(), !svg_elliptical_arc->sweep_flag() );
     } else { 
         //this case handles sbasis as well as all other curve types
         Geom::Path sbasis_path = Geom::cubicbezierpath_from_sbasis(c.toSBasis(), 0.1);
@@ -418,7 +416,7 @@ void  Path::AddCurve(Geom::Curve const &c)
 
 /**  append is false by default: it means that the path should be resetted. If it is true, the path is not resetted and Geom::Path will be appended as a new path
  */
-void  Path::LoadPath(Geom::Path const &path, Geom::Affine const &tr, bool doTransformation, bool append)
+void  Path::LoadPath(Geom::Path const &path, Geom::Matrix const &tr, bool doTransformation, bool append)
 {
     if (!append) {
         SetBackData (false);
@@ -434,21 +432,27 @@ void  Path::LoadPath(Geom::Path const &path, Geom::Affine const &tr, bool doTran
 
     MoveTo( pathtr.initialPoint() );
 
-    for(Geom::Path::const_iterator cit = pathtr.begin(); cit != pathtr.end(); ++cit) {
+    for(Geom::Path::const_iterator cit = pathtr.begin(); cit != pathtr.end_open(); ++cit) {
         AddCurve(*cit);
     }
 
     if (pathtr.closed()) {
+        // check if closing segment is empty before adding it
+        Geom::Curve const &crv = pathtr.back_closed();
+        if ( !crv.isDegenerate() ) {
+            AddCurve(crv);
+        }
+
         Close();
     }
 }
 
 void  Path::LoadPathVector(Geom::PathVector const &pv)
 {
-    LoadPathVector(pv, Geom::Affine(), false);
+    LoadPathVector(pv, Geom::Matrix(), false);
 }
 
-void  Path::LoadPathVector(Geom::PathVector const &pv, Geom::Affine const &tr, bool doTransformation)
+void  Path::LoadPathVector(Geom::PathVector const &pv, Geom::Matrix const &tr, bool doTransformation)
 {
     SetBackData (false);
     Reset();
@@ -481,7 +485,7 @@ double Path::Length()
     Geom::Point lastP = pts[0].p;
 
     double len = 0;
-    for (std::vector<path_lineto>::const_iterator i = pts.begin(); i != pts.end(); ++i) {
+    for (std::vector<path_lineto>::const_iterator i = pts.begin(); i != pts.end(); i++) {
 
         if ( i->isMoveTo != polyline_moveto ) {
             len += Geom::L2(i->p - lastP);
@@ -504,13 +508,13 @@ double Path::Surface()
     Geom::Point lastP = lastM;
 
     double surf = 0;
-    for (std::vector<path_lineto>::const_iterator i = pts.begin(); i != pts.end(); ++i) {
+    for (std::vector<path_lineto>::const_iterator i = pts.begin(); i != pts.end(); i++) {
 
         if ( i->isMoveTo == polyline_moveto ) {
-            surf += Geom::cross(lastM, lastM - lastP);
+            surf += NR::cross(lastM - lastP, lastM);
             lastP = lastM = i->p;
         } else {
-            surf += Geom::cross(i->p, i->p - lastP);
+            surf += NR::cross(i->p - lastP, i->p);
             lastP = i->p;
         }
         
@@ -640,21 +644,21 @@ Path**      Path::SubPathsWithNesting(int &outNb,bool killNoSurf,int nbNest,int*
           }
           curAdd=NULL;
         }
-        Path*  hasParent=NULL;
+        Path*  hasDad=NULL;
         for (int j=0;j<nbNest;j++) {
           if ( conts[j] == i && nesting[j] >= 0 ) {
-            int  parentMvt=conts[nesting[j]];
+            int  dadMvt=conts[nesting[j]];
             for (int k=0;k<nbRes;k++) {
-              if ( res[k] && res[k]->descr_cmd.empty() == false && res[k]->descr_cmd[0]->associated == parentMvt ) {
-                hasParent=res[k];
+              if ( res[k] && res[k]->descr_cmd.empty() == false && res[k]->descr_cmd[0]->associated == dadMvt ) {
+                hasDad=res[k];
                 break;
               }
             }
           }
           if ( conts[j] > i  ) break;
         }
-        if ( hasParent ) {
-          curAdd=hasParent;
+        if ( hasDad ) {
+          curAdd=hasDad;
           increment=true;
         } else {
           curAdd=new Path;
@@ -899,7 +903,7 @@ Path::cut_position* Path::CurvilignToPosition(int nbCv, double *cvAbs, int &nbCu
     Geom::Point lastM = pts[0].p;
     Geom::Point lastP = lastM;
 
-    for (std::vector<path_lineto>::const_iterator i = pts.begin(); i != pts.end(); ++i) {
+    for (std::vector<path_lineto>::const_iterator i = pts.begin(); i != pts.end(); i++) {
 
         if ( i->isMoveTo == polyline_moveto ) {
 
@@ -1125,8 +1129,6 @@ void Path::ConvertPositionsToForced(int nbPos, cut_position *poss)
       }
     }
   }
-  if (descr_cmd[0]->getType() == descr_moveto)
-    descr_flags |= descr_doing_subpath;         // see LP Bug 166302
 
   qsort(poss, nbPos, sizeof(cut_position), CmpPosition);
 
@@ -1216,7 +1218,7 @@ void Path::ConvertPositionsToForced(int nbPos, cut_position *poss)
         }
         {
           double      sang,eang;
-          ArcAngles(startP,endP,rx,ry,angle*M_PI/180.0,large,clockw,sang,eang);
+          ArcAngles(startP,endP,rx,ry,angle,large,clockw,sang,eang);
           
           if (clockw) {
             if ( sang < eang ) sang += 2*M_PI;
@@ -1530,4 +1532,4 @@ void        Path::ConvertPositionsToMoveTo(int nbPos,cut_position* poss)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

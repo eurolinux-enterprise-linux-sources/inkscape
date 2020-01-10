@@ -1,12 +1,11 @@
-#ifndef SEEN_SP_URI_REFERENCES_H
-#define SEEN_SP_URI_REFERENCES_H
+#ifndef __SP_URI_REFERENCES_H__
+#define __SP_URI_REFERENCES_H__
 
 /*
  * Helper methods for resolving URI References
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
- *   Abhishek Sharma
  *
  * Copyright (C) 2001-2002 Lauris Kaplinski
  * Copyright (C) 2001 Ximian, Inc.
@@ -14,20 +13,14 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <cstddef>
-#include <vector>
-#include <set>
+#include <stddef.h>
 #include <sigc++/connection.h>
 #include <sigc++/trackable.h>
 
 #include "bad-uri-exception.h"
-#include "sp-object.h"
-#include "sp-item.h"
-#include "sp-use.h"
+#include "forward.h"
 
 namespace Inkscape {
-
-class URI;
 
 /**
  * A class encapsulating a reference to a particular URI; observers can
@@ -66,7 +59,7 @@ public:
      * @param rel_document document for relative URIs
      * @param uri the URI to watch
      */
-    void attach(URI const& uri);
+    void attach(const URI &uri) throw(BadURIException);
 
     /**
      * Detaches from the currently attached URI target, if any;
@@ -109,7 +102,7 @@ public:
      *
      * @returns the currently attached URI, or NULL
      */
-    URI const* getURI() const {
+    const URI *getURI() const {
         return _uri;
     }
 
@@ -126,7 +119,11 @@ public:
     SPObject   *getOwnerObject()   { return _owner; }
 
 protected:
-    virtual bool _acceptObject(SPObject *obj) const;
+    virtual bool _acceptObject(SPObject *obj) const {
+        (void)obj;
+        return true;
+    }
+
 private:
     SPObject *_owner;
     SPDocument *_owner_document;
@@ -140,7 +137,7 @@ private:
     void _setObject(SPObject *object);
     void _release(SPObject *object);
 
-    void operator=(URIReference const& ref);
+    void operator=(const URIReference &ref);
     /* Private and definition-less to prevent accidental use. */
 };
 
@@ -149,19 +146,8 @@ private:
 /**
  * Resolves an item referenced by a URI in CSS form contained in "url(...)"
  */
-SPObject* sp_css_uri_reference_resolve( SPDocument *document, const char *uri );
+SPObject* sp_css_uri_reference_resolve( SPDocument *document, const gchar *uri );
 
-SPObject *sp_uri_reference_resolve (SPDocument *document, const char *uri);
+SPObject *sp_uri_reference_resolve (SPDocument *document, const gchar *uri);
 
-#endif // SEEN_SP_URI_REFERENCES_H
-
-/*
-  Local Variables:
-  mode:c++
-  c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
-  indent-tabs-mode:nil
-  fill-column:99
-  End:
-*/
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :
+#endif

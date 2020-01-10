@@ -12,15 +12,15 @@
 #ifndef SEEN_VANISHING_POINT_H
 #define SEEN_VANISHING_POINT_H
 
-#include <2geom/point.h>
-#include <list>
 #include <set>
-
+#include <2geom/point.h>
 #include "knot.h"
 #include "selection.h"
+#include "axis-manip.h"
+#include "inkscape.h"
 #include "persp3d.h"
 #include "box3d.h"
-#include "ui/control-manager.h" // TODO break enums out separately
+#include "persp3d-reference.h"
 
 class SPBox3D;
 
@@ -46,7 +46,6 @@ public:
     inline VanishingPoint &operator=(VanishingPoint const &rhs) {
         _persp = rhs._persp;
         _axis = rhs._axis;
-        my_counter = rhs.my_counter;
         return *this;
     }
     inline bool operator==(VanishingPoint const &rhs) const {
@@ -68,7 +67,7 @@ public:
         return persp3d_get_VP (_persp, _axis).is_finite();
     }
     inline Geom::Point get_pos() const {
-        g_return_val_if_fail (_persp, Geom::Point (Geom::infinity(), Geom::infinity()));
+        g_return_val_if_fail (_persp, Geom::Point (NR_HUGE, NR_HUGE));
         return persp3d_get_VP (_persp,_axis).affine();
     }
     inline Persp3D * get_perspective() const {
@@ -104,7 +103,7 @@ public:
         g_return_if_fail (_persp);
         persp3d_get_VP (_persp, _axis).print("");
     }
-    inline char const *axisString () { return Proj::string_from_axis(_axis); }
+    inline gchar const *axisString () { return Proj::string_from_axis(_axis); }
 
     unsigned int my_counter;
     static unsigned int global_counter; // FIXME: Only to implement operator< so that we can merge lists. Do this in a better way!!
@@ -113,7 +112,7 @@ private:
     Proj::Axis _axis;
 };
 
-struct VPDrag;
+class VPDrag;
 
 struct less_ptr : public std::binary_function<VanishingPoint *, VanishingPoint *, bool> {
     bool operator()(VanishingPoint *vp1, VanishingPoint *vp2) {
@@ -143,7 +142,7 @@ public:
 
     void updateTip();
 
-    unsigned int numberOfBoxes(); // the number of boxes linked to all VPs of the dragger
+    guint numberOfBoxes(); // the number of boxes linked to all VPs of the dragger
     VanishingPoint *findVPWithBox(SPBox3D *box);
     std::set<VanishingPoint*, less_ptr> VPsOfSelectedBoxes();
 
@@ -155,11 +154,6 @@ public:
     void updateZOrders();
 
     void printVPs();
-
-private:
-    sigc::connection _moved_connection;
-    sigc::connection _grabbed_connection;
-    sigc::connection _ungrabbed_connection;
 };
 
 struct VPDrag {
@@ -172,8 +166,8 @@ public:
     bool dragging;
 
     SPDocument *document;
-    std::vector<VPDragger *> draggers;
-    std::vector<SPCtrlLine *> lines;
+    GList *draggers;
+    GSList *lines;
 
     void printDraggers(); // convenience for debugging
     /* 
@@ -188,12 +182,13 @@ public:
     void updateBoxDisplays ();
     void drawLinesForFace (const SPBox3D *box, Proj::Axis axis); //, guint corner1, guint corner2, guint corner3, guint corner4);
     bool show_lines; /* whether perspective lines are drawn at all */
-    unsigned int front_or_rear_lines; /* whether we draw perspective lines from all corners or only the
+    guint front_or_rear_lines; /* whether we draw perspective lines from all corners or only the
                                   front/rear corners (indicated by the first/second bit, respectively  */
 
 
     inline bool hasEmptySelection() { return this->selection->isEmpty(); }
     bool allBoxesAreSelected (VPDragger *dragger);
+    GSList * selectedBoxesWithVPinDragger (VPDragger *dragger);
 
     // FIXME: Should this be private? (It's the case with the corresponding function in gradient-drag.h)
     //        But vp_knot_grabbed_handler
@@ -204,10 +199,7 @@ public:
 private:
     //void deselect_all();
 
-    /**
-     * Create a line from p1 to p2 and add it to the lines list.
-     */
-    void addLine(Geom::Point const &p1, Geom::Point const &p2, Inkscape::CtrlLineType type);
+    void addLine (Geom::Point p1, Geom::Point p2, guint32 rgba);
 
     Inkscape::Selection *selection;
     sigc::connection sel_changed_connection;

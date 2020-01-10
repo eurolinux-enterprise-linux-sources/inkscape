@@ -3,7 +3,6 @@
  *                            of nodes
  *
  * Copyright 2006  MenTaLguY  <mental@rydia.net>
- *   Abhishek Sharma
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -79,7 +78,7 @@ struct DocumentSubset::Relations : public GC::Managed<GC::ATOMIC>,
                     // compare to the single possiblity left
                     int pos = sp_object_compare_position(*last, obj);
                     if ( pos < 0 ) {
-                        ++last;
+                        last++;
                     }
                 }
 
@@ -99,7 +98,7 @@ struct DocumentSubset::Relations : public GC::Managed<GC::ATOMIC>,
             Siblings new_children;
             bool found_one=false;
             for ( Siblings::iterator iter=children.begin()
-                ; iter != children.end() ; ++iter )
+                ; iter != children.end() ; iter++ )
             {
                 if (obj->isAncestorOf(*iter)) {
                     if (!found_one) {
@@ -292,7 +291,7 @@ void DocumentSubset::Relations::remove(SPObject *obj, bool subtree) {
                         children.begin(), children.end());
 
         for ( Siblings::iterator iter=children.begin()
-            ; iter != children.end() ; ++iter)
+            ; iter != children.end() ; iter++ )
         {
             Record *child_record=get(*iter);
             g_assert( child_record != NULL );
@@ -409,4 +408,4 @@ DocumentSubset::connectRemoved(sigc::slot<void, SPObject *> slot) const {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -1,6 +1,9 @@
-#ifndef SEEN_SP_DASH_SELECTOR_NEW_H
-#define SEEN_SP_DASH_SELECTOR_NEW_H
+#ifndef __SP_DASH_SELECTOR_NEW_H__
+#define __SP_DASH_SELECTOR_NEW_H__
 
+/** @file
+ * @brief Option menu for selecting dash patterns
+ */
 /* Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Maximilian Albert <maximilian.albert> (gtkmm-ification)
@@ -10,96 +13,41 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
+#include <glibmm/ustring.h>
 #include <gtkmm/box.h>
-#include <gtkmm/combobox.h>
-#include <gtkmm/liststore.h>
-
 #include <sigc++/signal.h>
 
+namespace Gtk {
+class Container;
+class OptionMenu;
+class MenuItem;
+class Adjustment;
+}
 
-/**
- * Class that wraps a combobox and spinbutton for selecting dash patterns.
- */
+// TODO: should we rather derive this from OptionMenu and add the spinbutton somehow else?
 class SPDashSelector : public Gtk::HBox {
 public:
     SPDashSelector();
     ~SPDashSelector();
 
-    /**
-     * Get and set methods for dashes
-     */
     void set_dash(int ndash, double *dash, double offset);
     void get_dash(int *ndash, double **dash, double *offset);
 
     sigc::signal<void> changed_signal;
 
 private:
-
-    /**
-     * Initialize dashes list from preferences
-     */
     static void init_dashes();
-
-    /**
-     * Fill a pixbuf with the dash pattern using standard cairo drawing
-     */
-    GdkPixbuf* sp_dash_to_pixbuf(double *pattern);
-
-    /**
-     * Fill a pixbuf with text standard cairo drawing
-     */
-    GdkPixbuf* sp_text_to_pixbuf(char *text);
-
-    /**
-     * Callback for combobox image renderer
-     */
-    void prepareImageRenderer( Gtk::TreeModel::const_iterator const &row );
-
-    /**
-     * Callback for offset adjustment changing
-     */
+    void dash_activate(Gtk::MenuItem *mi);
     void offset_value_changed();
+    Gtk::MenuItem *menu_item_new(double *pattern);
 
-    /**
-     * Callback for combobox selection changing
-     */
-    void on_selection();
-
-    /**
-     * Combobox columns
-     */
-    class DashColumns : public Gtk::TreeModel::ColumnRecord {
-    public:
-        Gtk::TreeModelColumn<double *> dash;
-        Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf> > pixbuf;
-
-        DashColumns() {
-            add(dash); add(pixbuf);
-        }
-    };
-    DashColumns dash_columns;
-    Glib::RefPtr<Gtk::ListStore> dash_store;
-    Gtk::ComboBox       dash_combo;
-    Gtk::CellRendererPixbuf image_renderer;
-
-#if WITH_GTKMM_3_0
-    Glib::RefPtr<Gtk::Adjustment> offset;
-#else
-    Gtk::Adjustment     *offset;
-#endif
-
+    Gtk::OptionMenu *dash;
+    Gtk::Adjustment *offset;
+    
     static gchar const *const _prefs_path;
-    int preview_width;
-    int preview_height;
-    int preview_lineheight;
-
 };
 
-#endif // SEEN_SP_DASH_SELECTOR_NEW_H
+#endif
 
 /*
   Local Variables:
@@ -110,4 +58,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -1,5 +1,5 @@
 /** @file
- * Cartesian grid item for the Inkscape canvas.
+ * @brief Cartesian grid item for the Inkscape canvas
  */
 /* Copyright (C) Johan Engelen 2006-2007 <johan@shouraizou.nl>
  * Copyright (C) Lauris Kaplinski 2000
@@ -8,29 +8,28 @@
 #ifndef INKSCAPE_CANVAS_GRID_H
 #define INKSCAPE_CANVAS_GRID_H
 
-#include "sp-canvas-item.h"
+#include <cstring>
+#include <string>
+
+#include <gtkmm/box.h>
+#include <gtkmm.h>
+
+#include "display/sp-canvas.h"
+#include "xml/repr.h"
+#include "ui/widget/color-picker.h"
+#include "ui/widget/scalar-unit.h"
+#include "ui/widget/registered-widget.h"
 #include "ui/widget/registry.h"
+#include "xml/node-event-vector.h"
+#include "snapper.h"
 #include "line-snapper.h"
 
-class  SPDesktop;
-class SPNamedView;
-struct SPCanvasBuf;
-class  SPDocument;
-
-namespace Gtk {
-	class Widget;
-}
+struct SPDesktop;
+struct SPNamedView;
+class SPDocument;
 
 namespace Inkscape {
-class Snapper;
 
-namespace XML {
-class Node;
-}
-
-namespace Util {
-class Unit;
-}
 
 enum GridType {
     GRID_RECTANGULAR = 0,
@@ -39,14 +38,15 @@ enum GridType {
 #define GRID_MAXTYPENR 1
 
 #define INKSCAPE_TYPE_GRID_CANVASITEM            (Inkscape::grid_canvasitem_get_type ())
-#define INKSCAPE_GRID_CANVASITEM(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), INKSCAPE_TYPE_GRID_CANVASITEM, GridCanvasItem))
-#define INKSCAPE_GRID_CANVASITEM_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), INKSCAPE_TYPE_GRID_CANVASITEM, GridCanvasItem))
-#define INKSCAPE_IS_GRID_CANVASITEM(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), INKSCAPE_TYPE_GRID_CANVASITEM))
-#define INKSCAPE_IS_GRID_CANVASITEM_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), INKSCAPE_TYPE_GRID_CANVASITEM))
+#define INKSCAPE_GRID_CANVASITEM(obj)            (GTK_CHECK_CAST ((obj), INKSCAPE_TYPE_GRID_CANVASITEM, GridCanvasItem))
+#define INKSCAPE_GRID_CANVASITEM_CLASS(klass)    (GTK_CHECK_CLASS_CAST ((klass), INKSCAPE_TYPE_GRID_CANVASITEM, GridCanvasItem))
+#define INKSCAPE_IS_GRID_CANVASITEM(obj)         (GTK_CHECK_TYPE ((obj), INKSCAPE_TYPE_GRID_CANVASITEM))
+#define INKSCAPE_IS_GRID_CANVASITEM_CLASS(klass) (GTK_CHECK_CLASS_TYPE ((klass), INKSCAPE_TYPE_GRID_CANVASITEM))
 
 class CanvasGrid;
 
-/** All the variables that are tracked for a grid specific canvas item. */
+/** \brief  All the variables that are tracked for a grid specific
+            canvas item. */
 struct GridCanvasItem : public SPCanvasItem{
     CanvasGrid *grid; // the owning grid object
 };
@@ -56,7 +56,7 @@ struct GridCanvasItemClass {
 };
 
 /* Standard Gtk function */
-GType grid_canvasitem_get_type (void);
+GtkType grid_canvasitem_get_type (void);
 
 
 
@@ -65,9 +65,9 @@ public:
     virtual ~CanvasGrid();
 
     // TODO: see effect.h and effect.cpp from live_effects how to link enums to SVGname to typename properly. (johan)
-    const char * getName() const;
-    const char * getSVGName() const;
-    GridType     getGridType() const;
+    const char * getName();
+    const char * getSVGName();
+    GridType     getGridType();
     static const char * getName(GridType type);
     static const char * getSVGName(GridType type);
     static GridType     getGridTypeFromSVGName(const char * typestr);
@@ -78,11 +78,11 @@ public:
 
     GridCanvasItem * createCanvasItem(SPDesktop * desktop);
 
-    virtual void Update (Geom::Affine const &affine, unsigned int flags) = 0;
+    virtual void Update (Geom::Matrix const &affine, unsigned int flags) = 0;
     virtual void Render (SPCanvasBuf *buf) = 0;
 
     virtual void readRepr() = 0;
-    virtual void onReprAttrChanged (Inkscape::XML::Node * /*repr*/, char const */*key*/, char const */*oldval*/, char const */*newval*/, bool /*is_interactive*/) = 0;
+    virtual void onReprAttrChanged (Inkscape::XML::Node * /*repr*/, const gchar */*key*/, const gchar */*oldval*/, const gchar */*newval*/, bool /*is_interactive*/) = 0;
 
     Gtk::Widget * newWidget();
 
@@ -92,7 +92,7 @@ public:
     guint32 empcolor;     /**< Color for emphasis lines */
     gint empspacing;      /**< Spacing between emphasis lines */
 
-    Inkscape::Util::Unit const* gridunit;  /**< points to Unit object in UnitTable (so don't delete it) */
+    SPUnit const* gridunit;
 
     Inkscape::XML::Node * repr;
     SPDocument *doc;
@@ -101,11 +101,8 @@ public:
 
     static void on_repr_attr_changed (Inkscape::XML::Node * repr, const gchar *key, const gchar *oldval, const gchar *newval, bool is_interactive, void * data);
 
-    bool isLegacy() const { return legacy; }
-    bool isPixel() const { return pixel; }
-
-    bool isVisible() const { return (isEnabled() &&visible); };
-    bool isEnabled() const;
+    bool isVisible() { return (isEnabled() &&visible); };
+    bool isEnabled();
 
 protected:
     CanvasGrid(SPNamedView * nv, Inkscape::XML::Node * in_repr, SPDocument *in_doc, GridType type);
@@ -121,11 +118,7 @@ protected:
 
     GridType gridtype;
 
-    // For dealing with old Inkscape SVG files (pre 0.92)
-    bool legacy;
-    bool pixel;
-    
- private:
+private:
     CanvasGrid(const CanvasGrid&);
     CanvasGrid& operator=(const CanvasGrid&);
 };
@@ -136,12 +129,11 @@ public:
     CanvasXYGrid(SPNamedView * nv, Inkscape::XML::Node * in_repr, SPDocument * in_doc);
     virtual ~CanvasXYGrid();
 
-    virtual void Scale  (Geom::Scale const &scale);
-    virtual void Update (Geom::Affine const &affine, unsigned int flags);
-    virtual void Render (SPCanvasBuf *buf);
+    void Update (Geom::Matrix const &affine, unsigned int flags);
+    void Render (SPCanvasBuf *buf);
 
-    virtual void readRepr();
-    virtual void onReprAttrChanged (Inkscape::XML::Node * repr, char const *key, char const *oldval, char const *newval, bool is_interactive);
+    void readRepr();
+    void onReprAttrChanged (Inkscape::XML::Node * repr, const gchar *key, const gchar *oldval, const gchar *newval, bool is_interactive);
 
     Geom::Point spacing; /**< Spacing between elements of the grid */
     bool scaled[2];    /**< Whether the grid is in scaled mode, which can
@@ -175,9 +167,8 @@ public:
 
 private:
     LineList _getSnapLines(Geom::Point const &p) const;
-    void _addSnappedLine(IntermSnapResults &isr, Geom::Point const &snapped_point, Geom::Coord const &snapped_distance,  SnapSourceType const &source, long source_num, Geom::Point const &normal_to_line, const Geom::Point &point_on_line) const;
-    void _addSnappedPoint(IntermSnapResults &isr, Geom::Point const &snapped_point, Geom::Coord const &snapped_distance, SnapSourceType const &source, long source_num, bool constrained_snap) const;
-    void _addSnappedLinePerpendicularly(IntermSnapResults &isr, Geom::Point const &snapped_point, Geom::Coord const &snapped_distance, SnapSourceType const &source, long source_num, bool constrained_snap) const;
+    void _addSnappedLine(SnappedConstraints &sc, Geom::Point const snapped_point, Geom::Coord const snapped_distance,  SnapSourceType const &source, long source_num, Geom::Point const normal_to_line, const Geom::Point point_on_line) const;
+    void _addSnappedPoint(SnappedConstraints &sc, Geom::Point const snapped_point, Geom::Coord const snapped_distance, SnapSourceType const &source, long source_num, bool constrained_snap) const;
     CanvasXYGrid *grid;
 };
 

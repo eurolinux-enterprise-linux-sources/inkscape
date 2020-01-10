@@ -1,6 +1,15 @@
+#ifndef _SBASIS_GEOMETRIC
+#define _SBASIS_GEOMETRIC
+#include <2geom/d2.h>
+#include <2geom/piecewise.h>
+#include <vector>
+
 /**
  * \file
  * \brief two-dimensional geometric operators.  
+ *
+ * Copyright 2007, JFBarraud
+ * Copyright 2007, njh
  * 
  * These operators are built on a more 'polynomially robust'
  * transformation to map a function that takes a [0,1] parameter to a
@@ -12,42 +21,9 @@
  * from the various tangent directions at each end (angular jet).  As
  * a result, the final path has a convergence behaviour derived from
  * that of the sin and cos series. -- njh
- *//*
- * Copyright 2007, JFBarraud
- * Copyright 2007, njh
- *
- * This library is free software; you can redistribute it and/or
- * modify it either under the terms of the GNU Lesser General Public
- * License version 2.1 as published by the Free Software Foundation
- * (the "LGPL") or, at your option, under the terms of the Mozilla
- * Public License Version 1.1 (the "MPL"). If you do not alter this
- * notice, a recipient may use your version of this file under either
- * the MPL or the LGPL.
- *
- * You should have received a copy of the LGPL along with this library
- * in the file COPYING-LGPL-2.1; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- * You should have received a copy of the MPL along with this library
- * in the file COPYING-MPL-1.1
- *
- * The contents of this file are subject to the Mozilla Public License
- * Version 1.1 (the "License"); you may not use this file except in
- * compliance with the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
- * OF ANY KIND, either express or implied. See the LGPL or the MPL for
- * the specific language governing rights and limitations.
  */
 
-#ifndef LIB2GEOM_SEEN_SBASIS_GEOMETRIC_H
-#define LIB2GEOM_SEEN_SBASIS_GEOMETRIC_H
-
-#include <2geom/d2.h>
-#include <2geom/piecewise.h>
-#include <vector>
-
-namespace Geom {
+namespace Geom{
 
 Piecewise<D2<SBasis> > 
 cutAtRoots(Piecewise<D2<SBasis> > const &M, double tol=1e-4);
@@ -125,9 +101,6 @@ cubics_with_prescribed_curvature(Point const &M0,   Point const &M1,
 
 
 std::vector<double> find_tangents(Point P, D2<SBasis> const &A);
-std::vector<double> find_tangents_by_vector(Point V, D2<SBasis> const &A);
-std::vector<double> find_normals(Point P, D2<SBasis> const &A);
-std::vector<double> find_normals_by_vector(Point V, D2<SBasis> const &A);
 
 };
 
@@ -142,5 +115,5 @@ std::vector<double> find_normals_by_vector(Point V, D2<SBasis> const &A);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
 

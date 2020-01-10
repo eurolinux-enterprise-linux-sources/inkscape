@@ -1,4 +1,6 @@
-/*
+/**
+ * \brief Selected style indicator (fill, stroke, opacity)
+ *
  * Authors:
  *   buliabyak@gmail.com
  *   scislac@users.sf.net
@@ -11,41 +13,29 @@
 #ifndef INKSCAPE_UI_CURRENT_STYLE_H
 #define INKSCAPE_UI_CURRENT_STYLE_H
 
-#if HAVE_CONFIG_H
-# include "config.h"
-#endif
-
-#include <gtkmm/box.h>
-
-#if WITH_GTKMM_3_0
-# include <gtkmm/grid.h>
-#else
-# include <gtkmm/table.h>
-#endif
-
+#include <gtkmm/table.h>
 #include <gtkmm/label.h>
+#include <gtkmm/box.h>
 #include <gtkmm/eventbox.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/menu.h>
 #include <gtkmm/menuitem.h>
 #include <gtkmm/adjustment.h>
-#include <gtkmm/radiobuttongroup.h>
-#include <gtkmm/radiomenuitem.h>
-#include "ui/widget/spinbutton.h"
+#include <gtkmm/spinbutton.h>
 
 #include <stddef.h>
 #include <sigc++/sigc++.h>
 
+#include <glibmm/i18n.h>
+
+#include <desktop.h>
+
+#include "button.h"
 #include "rotateable.h"
 
-class SPDesktop;
+class SPUnit;
 
 namespace Inkscape {
-
-namespace Util {
-    class Unit;
-}
-
 namespace UI {
 namespace Widget {
 
@@ -56,9 +46,6 @@ enum {
     SS_PATTERN,
     SS_LGRADIENT,
     SS_RGRADIENT,
-#ifdef WITH_MESH
-    SS_MGRADIENT,
-#endif
     SS_MANY,
     SS_COLOR
 };
@@ -77,10 +64,8 @@ public:
     ~RotateableSwatch();
 
     double color_adjust (float *hsl, double by, guint32 cc, guint state);
-
     virtual void do_motion (double by, guint state);
     virtual void do_release (double by, guint state);
-    virtual void do_scroll (double by, guint state);
 
 private:
     guint fillstroke;
@@ -105,7 +90,6 @@ public:
     double value_adjust(double current, double by, guint modifier, bool final);
     virtual void do_motion (double by, guint state);
     virtual void do_release (double by, guint state);
-    virtual void do_scroll (double by, guint state);
 
 private:
     SelectedStyle *parent;
@@ -114,11 +98,11 @@ private:
     bool startvalue_set;
 
     gchar const *undokey;
+
+    GdkCursor *cr;
+    bool cr_set;
 };
 
-/**
- * Selected style indicator (fill, stroke, opacity).
- */
 class SelectedStyle : public Gtk::HBox
 {
 public:
@@ -140,11 +124,7 @@ public:
 protected:
     SPDesktop *_desktop;
 
-#if WITH_GTKMM_3_0
-    Gtk::Grid _table;
-#else
     Gtk::Table _table;
-#endif
 
     Gtk::Label _fill_label;
     Gtk::Label _stroke_label;
@@ -157,12 +137,8 @@ protected:
     Gtk::EventBox _stroke_flag_place;
 
     Gtk::EventBox _opacity_place;
-#if WITH_GTKMM_3_0
-    Glib::RefPtr<Gtk::Adjustment> _opacity_adjustment;
-#else
     Gtk::Adjustment _opacity_adjustment;
-#endif
-    Inkscape::UI::Widget::SpinButton _opacity_sb;
+    Gtk::SpinButton _opacity_sb;
 
     Gtk::Label _na[2];
     Glib::ustring __na[2];
@@ -184,14 +160,6 @@ protected:
 
     GtkWidget *_gradient_preview_r[2];
     Gtk::HBox _gradient_box_r[2];
-
-#ifdef WITH_MESH
-    Gtk::Label _mgradient[2];
-    Glib::ustring __mgradient[2];
-
-    GtkWidget *_gradient_preview_m[2];
-    Gtk::HBox _gradient_box_m[2];
-#endif
 
     Gtk::Label _many[2];
     Glib::ustring __many[2];
@@ -279,12 +247,18 @@ protected:
 
     Gtk::Menu _popup_sw; 
     Gtk::RadioButtonGroup _sw_group;
-    GSList *_unit_mis;
-    void on_popup_units(Inkscape::Util::Unit const *u);
+    Gtk::RadioMenuItem _popup_px; 
+    void on_popup_px();
+    Gtk::RadioMenuItem _popup_pt; 
+    void on_popup_pt();
+    Gtk::RadioMenuItem _popup_mm;
+    void on_popup_mm();
     void on_popup_preset(int i);
     Gtk::MenuItem _popup_sw_remove;
 
-    Inkscape::Util::Unit const *_sw_unit;  /// points to object in UnitTable, do not delete
+    SPUnit *_sw_unit;
+
+    Gtk::Tooltips _tooltips;
 
     void *_drop[2];
     bool _dropEnabled[2];
@@ -297,13 +271,13 @@ protected:
 
 #endif // INKSCAPE_UI_WIDGET_BUTTON_H
 
-/*
+/* 
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  c-file-offsets:((innamespace . 0)(inline-open . 0))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

@@ -1,5 +1,5 @@
-#ifndef SEEN_SP_DESC_H
-#define SEEN_SP_DESC_H
+#ifndef __SP_DESC_H__
+#define __SP_DESC_H__
 
 /*
  * SVG <desc> implementation
@@ -14,16 +14,19 @@
 
 #include "sp-object.h"
 
-#define SP_DESC(obj) (dynamic_cast<SPDesc*>((SPObject*)obj))
-#define SP_IS_DESC(obj) (dynamic_cast<const SPDesc*>((SPObject*)obj) != NULL)
+#define SP_TYPE_DESC            (sp_desc_get_type ())
+#define SP_IS_DESC(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_DESC))
 
-class SPDesc : public SPObject {
-public:
-	SPDesc();
-	virtual ~SPDesc();
+class SPDesc;
+class SPDescClass;
 
-protected:
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
+struct SPDesc : public SPObject {
 };
+
+struct SPDescClass {
+	SPObjectClass parent_class;
+};
+
+GType sp_desc_get_type (void);
 
 #endif

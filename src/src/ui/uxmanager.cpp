@@ -1,5 +1,5 @@
 /** \file
- * Desktop widget implementation.
+ * Desktop widget implementation
  */
 /* Authors:
  *   Jon A. Cruz <jon@joncruz.org>
@@ -13,13 +13,13 @@
 # include "config.h"
 #endif
 
-#include "widgets/desktop-widget.h"
 #include <algorithm>
 
 #include "uxmanager.h"
 #include "desktop.h"
 #include "util/ege-tags.h"
 #include "widgets/toolbox.h"
+#include "widgets/desktop-widget.h"
 #include "preferences.h"
 #include "gdkmm/screen.h"
 
@@ -27,6 +27,7 @@
 #include <gdk/gdkx.h>
 #endif // GDK_WINDOWING_X11
 
+using std::map;
 using std::vector;
 
 
@@ -34,35 +35,12 @@ gchar const* KDE_WINDOW_MANAGER_NAME = "KWin";
 gchar const* UNKOWN_WINDOW_MANAGER_NAME = "unknown";
 
 
-class TrackItem
-{
-public:
-    TrackItem() : 
-        destroyConn(),
-        boxes()
-    {}
-
-    sigc::connection destroyConn;
-    std::vector<GtkWidget*> boxes;
-};
-
 static vector<SPDesktop*> desktops;
 static vector<SPDesktopWidget*> dtws;
-static std::map<SPDesktop*, TrackItem> trackedBoxes;
+static map<SPDesktop*, vector<GtkWidget*> > trackedBoxes;
 
 
 namespace {
-
-void desktopDestructHandler(SPDesktop *desktop)
-{
-    std::map<SPDesktop*, TrackItem>::iterator it = trackedBoxes.find(desktop);
-    if (it != trackedBoxes.end())
-    {
-        trackedBoxes.erase(it);
-    }
-}
-
-
 // TODO unify this later:
 static Glib::ustring getLayoutPrefPath( Inkscape::UI::View::View *view )
 {
@@ -189,7 +167,7 @@ void UXManagerImpl::setTask(SPDesktop* dt, gint val)
     for (vector<SPDesktopWidget*>::iterator it = dtws.begin(); it != dtws.end(); ++it) {
         SPDesktopWidget* dtw = *it;
 
-        // This is disabled in the 0.92 stable version as it breaks the GUI.
+        // This is disabled in the 0.48 stable version as it breaks the GUI.
         // In case someone set this when it was enabled, we ignore this setting.
         //gboolean notDone = Inkscape::Preferences::get()->getBool("/options/workarounds/dynamicnotdone", false);
         gboolean notDone = false;
@@ -247,18 +225,13 @@ void UXManagerImpl::delTrack( SPDesktopWidget* dtw )
 
 void UXManagerImpl::connectToDesktop( vector<GtkWidget *> const & toolboxes, SPDesktop *desktop )
 {
-    if (!desktop)
-    {
-        return;
-    }
-    TrackItem &tracker = trackedBoxes[desktop];
-    vector<GtkWidget*>& tracked = tracker.boxes;
-    tracker.destroyConn = desktop->connectDestroy(&desktopDestructHandler);
+    //static map<SPDesktop*, vector<GtkWidget*> > trackedBoxes;
 
     for (vector<GtkWidget*>::const_iterator it = toolboxes.begin(); it != toolboxes.end(); ++it ) {
         GtkWidget* toolbox = *it;
 
         ToolboxFactory::setToolboxDesktop( toolbox, desktop );
+        vector<GtkWidget*>& tracked = trackedBoxes[desktop];
         if (find(tracked.begin(), tracked.end(), toolbox) == tracked.end()) {
             tracked.push_back(toolbox);
         }

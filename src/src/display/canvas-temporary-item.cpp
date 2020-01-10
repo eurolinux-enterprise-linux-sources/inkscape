@@ -1,4 +1,4 @@
-/*
+/** \file
  * Provides a class that can contain active TemporaryItem's on a desktop
  * When the object is deleted, it also deletes the canvasitem it contains!
  * This object should be created/managed by a TemporaryItemList.
@@ -16,8 +16,7 @@
 
 #include "display/canvas-temporary-item.h"
 
-#include <glib.h>
-#include "display/sp-canvas-item.h"
+#include <gtk/gtk.h>
 
 namespace Inkscape {
 namespace Display {
@@ -49,14 +48,14 @@ TemporaryItem::~TemporaryItem()
 
     if (canvasitem) {
         // destroying the item automatically hides it
-        sp_canvas_item_destroy(canvasitem);
+        gtk_object_destroy (GTK_OBJECT (canvasitem));
         canvasitem = NULL;
     }
 }
 
-/* static method */
-int TemporaryItem::_timeout(void* data) {
-    TemporaryItem *tempitem = static_cast<TemporaryItem *>(data);
+/* static method*/
+gboolean TemporaryItem::_timeout(gpointer data) {
+    TemporaryItem *tempitem = reinterpret_cast<TemporaryItem *>(data);
     tempitem->timeout_id = 0;
     tempitem->signal_timeout.emit(tempitem);
     delete tempitem;

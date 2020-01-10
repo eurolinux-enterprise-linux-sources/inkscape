@@ -26,7 +26,7 @@
 #include "ui/widget/panel.h"
 #include "desktop-tracker.h"
 
-class SPObject;
+struct SPObject;
 namespace Glib {
 class Timer;
 }
@@ -65,13 +65,10 @@ private:
     bool pending;
     gdouble minDelay;
 
-    Gtk::VBox       iconBox;
+    Gtk::Tooltips   tips;
 
-#if WITH_GTKMM_3_0
-    Gtk::Paned      splitter;
-#else
+    Gtk::VBox       iconBox;
     Gtk::HPaned     splitter;
-#endif
 
     Glib::ustring targetId;
     int hot;
@@ -118,4 +115,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

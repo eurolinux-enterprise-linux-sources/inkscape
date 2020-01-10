@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 """
 import simplepath 
@@ -46,8 +46,8 @@ def ArcToPath(p1,params):
     rx,ry,teta,longflag,sweepflag,x2,y2=params[:]
     teta = teta*pi/180.0
     B=[x2,y2]
-    if rx==0 or ry==0 or A==B:
-        return([[A[:],A[:],A[:]],[B[:],B[:],B[:]]])
+    if rx==0 or ry==0:
+        return([[A,A,A],[B,B,B]])
     mat=matprod((rotmat(teta),[[1/rx,0],[0,1/ry]],rotmat(-teta)))
     applymat(mat, A)
     applymat(mat, B)
@@ -166,4 +166,4 @@ def formatPath(p):
     return simplepath.formatPath(unCubicSuperPath(p))
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

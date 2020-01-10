@@ -4,7 +4,7 @@
 namespace Inkscape {
 namespace XML {
 
-struct Document;
+class Document;
 class Event;
 class NodeObserver;
 

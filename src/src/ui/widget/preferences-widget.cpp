@@ -1,5 +1,5 @@
-/*
- * Inkscape Preferences dialog.
+/**
+ * \brief Inkscape Preferences dialog
  *
  * Authors:
  *   Marco Scholten
@@ -14,36 +14,23 @@
 # include <config.h>
 #endif
 
-#include <gtkmm/box.h>
 #include <gtkmm/frame.h>
 #include <gtkmm/alignment.h>
-#include <gtkmm/scale.h>
-#include <gtkmm/stock.h>
-#include <gtkmm/table.h>
+#include <gtkmm/box.h>
 
 #include "preferences.h"
 #include "ui/widget/preferences-widget.h"
 #include "verbs.h"
 #include "selcue.h"
-#include "io/sys.h"
 #include <iostream>
-#include "desktop.h"
 #include "enums.h"
 #include "inkscape.h"
-
+#include "desktop-handles.h"
 #include "message-stack.h"
 #include "style.h"
 #include "selection.h"
 #include "selection-chemistry.h"
-#include "ui/dialog/filedialog.h"
 #include "xml/repr.h"
-
-#include <glibmm/convert.h>
-#include <glibmm/i18n.h>
-
-#ifdef WIN32
-#include <windows.h>
-#endif
 
 using namespace Inkscape::UI::Widget;
 
@@ -53,145 +40,91 @@ namespace Widget {
 
 DialogPage::DialogPage()
 {
-    set_border_width(12);
-
-#if WITH_GTKMM_3_0
-    set_orientation(Gtk::ORIENTATION_VERTICAL);
-    set_column_spacing(12);
-    set_row_spacing(6);
-#else
-    set_col_spacings(12);
-    set_row_spacings(6);
-#endif
+    this->set_border_width(12);
+    this->set_col_spacings(12);
+    this->set_row_spacings(6);
 }
 
-/**
- * Add a widget to the bottom row of the dialog page
- *
- * \param[in] indent         Whether the widget should be indented by one column
- * \param[in] label          The label text for the widget
- * \param[in] widget         The widget to add to the page
- * \param[in] suffix         Text for an optional label at the right of the widget
- * \param[in] tip            Tooltip text for the widget
- * \param[in] expand_widget  Whether to expand the widget horizontally
- * \param[in] other_widget   An optional additional widget to display at the right of the first one
- */
-void DialogPage::add_line(bool                 indent,
-                          Glib::ustring const &label,
-                          Gtk::Widget         &widget,
-                          Glib::ustring const &suffix,
-                          const Glib::ustring &tip,
-                          bool                 expand_widget,
-                          Gtk::Widget         *other_widget)
+void DialogPage::add_line(bool indent, Glib::ustring const &label, Gtk::Widget &widget, Glib::ustring const &suffix, const Glib::ustring &tip, bool expand_widget)
 {
-    if (tip != "")
-        widget.set_tooltip_text (tip);
-    
-    Gtk::Alignment* label_alignment = Gtk::manage(new Gtk::Alignment());
-    
-    Gtk::HBox* hb = Gtk::manage(new Gtk::HBox());
-    hb->set_spacing(12);
-    hb->pack_start(widget, expand_widget, expand_widget);
-        
-    // Pack an additional widget into a box with the widget if desired 
-    if (other_widget)
-        hb->pack_start(*other_widget, expand_widget, expand_widget);
-    
-    // Pack the widget into an alignment container so that it can
-    // be indented if desired
-    Gtk::Alignment* w_alignment = Gtk::manage(new Gtk::Alignment());
-    w_alignment->add(*hb);
-
-#if WITH_GTKMM_3_0
-    w_alignment->set_valign(Gtk::ALIGN_CENTER);
-#else
-    guint row = property_n_rows();
-#endif
-    
-    // Add a label in the first column if provided
+    int start_col;
+    int row = this->property_n_rows();
+    Gtk::Widget* w;
+    if (expand_widget)
+    {
+        w = &widget;
+    }
+    else
+    {
+        Gtk::HBox* hb = Gtk::manage(new Gtk::HBox());
+        hb->set_spacing(12);
+        hb->pack_start(widget,false,false);
+        w = (Gtk::Widget*) hb;
+    }
     if (label != "")
     {
-        Gtk::Label* label_widget = Gtk::manage(new Gtk::Label(label, Gtk::ALIGN_START,
-                                                              Gtk::ALIGN_CENTER, true));
+        Gtk::Label* label_widget;
+        label_widget = Gtk::manage(new Gtk::Label(label , Gtk::ALIGN_LEFT , Gtk::ALIGN_CENTER, true));
         label_widget->set_mnemonic_widget(widget);
-        
-        // Pack the label into an alignment container so that we can indent it
-        // if necessary
-        label_alignment->add(*label_widget);
- 
         if (indent)
-            label_alignment->set_padding(0, 0, 12, 0);
-
-#if WITH_GTKMM_3_0
-        label_alignment->set_valign(Gtk::ALIGN_CENTER);
-        add(*label_alignment);
-        attach_next_to(*w_alignment, *label_alignment, Gtk::POS_RIGHT, 1, 1);
-#else
-        attach(*label_alignment, 0, 1, row, row + 1, Gtk::FILL, Gtk::AttachOptions(), 0, 0);
-#endif
+        {
+            Gtk::Alignment* alignment = Gtk::manage(new Gtk::Alignment());
+            alignment->set_padding(0, 0, 12, 0);
+            alignment->add(*label_widget);
+            this->attach(*alignment , 0, 1, row, row + 1, Gtk::FILL, Gtk::AttachOptions(), 0, 0);
+        }
+        else
+            this->attach(*label_widget , 0, 1, row, row + 1, Gtk::FILL, Gtk::AttachOptions(), 0, 0);
+        start_col = 1;
     }
+    else
+        start_col = 0;
 
-    // Now add the widget to the bottom of the dialog
-#if WITH_GTKMM_3_0
-    if (label == "")
+    if (start_col == 0 && indent) //indent this widget
     {
-        if (indent)
-            w_alignment->set_padding(0, 0, 12, 0);
-
-        add(*w_alignment);
-        
-        GValue width = G_VALUE_INIT;
-        g_value_init(&width, G_TYPE_INT);
-        g_value_set_int(&width, 2);
-        gtk_container_child_set_property(GTK_CONTAINER(gobj()), GTK_WIDGET(w_alignment->gobj()), "width", &width);
+        Gtk::Alignment* alignment = Gtk::manage(new Gtk::Alignment());
+        alignment->set_padding(0, 0, 12, 0);
+        alignment->add(*w);
+        this->attach(*alignment, start_col, 2, row, row + 1, Gtk::FILL | Gtk::EXPAND, Gtk::AttachOptions(),  0, 0);
     }
-#else
-    // The widget should span two columns if there is no label
-    int w_col_span = 1;
-    if (label == "")
-        w_col_span = 2;
-    
-    attach(*w_alignment, 2 - w_col_span, 2, row, row + 1,
-            Gtk::FILL | Gtk::EXPAND,
-            Gtk::AttachOptions(),
-            0, 0);
-#endif
+    else
+    {
+        this->attach(*w, start_col, 2, row, row + 1, Gtk::FILL | Gtk::EXPAND, Gtk::AttachOptions(),  0, 0);
+    }
 
-    // Add a label on the right of the widget if desired
     if (suffix != "")
     {
-        Gtk::Label* suffix_widget = Gtk::manage(new Gtk::Label(suffix , Gtk::ALIGN_START , Gtk::ALIGN_CENTER, true));
-        hb->pack_start(*suffix_widget,false,false);
+        Gtk::Label* suffix_widget = Gtk::manage(new Gtk::Label(suffix , Gtk::ALIGN_LEFT , Gtk::ALIGN_CENTER, true));
+        if (expand_widget)
+            this->attach(*suffix_widget, 2, 3, row, row + 1, Gtk::FILL,  Gtk::AttachOptions(), 0, 0);
+        else
+            ((Gtk::HBox*)w)->pack_start(*suffix_widget,false,false);
+    }
+
+    if (tip != "")
+    {
+        _tooltips.set_tip (widget, tip);
     }
 
 }
 
 void DialogPage::add_group_header(Glib::ustring name)
 {
+    int row = this->property_n_rows();
     if (name != "")
     {
         Gtk::Label* label_widget = Gtk::manage(new Gtk::Label(Glib::ustring(/*"<span size='large'>*/"<b>") + name +
-                                               Glib::ustring("</b>"/*</span>"*/) , Gtk::ALIGN_START , Gtk::ALIGN_CENTER, true));
-        
+                                               Glib::ustring("</b>"/*</span>"*/) , Gtk::ALIGN_LEFT , Gtk::ALIGN_CENTER, true));
         label_widget->set_use_markup(true);
-        
-#if WITH_GTKMM_3_0
-        label_widget->set_valign(Gtk::ALIGN_CENTER);
-        add(*label_widget);
-//        if (row != 1)
-  //          set_row_spacing(row - 1, 18);
-#else
-        int row = property_n_rows();
-        attach(*label_widget , 0, 4, row, row + 1, Gtk::FILL, Gtk::AttachOptions(), 0, 0);
+        this->attach(*label_widget , 0, 4, row, row + 1, Gtk::FILL, Gtk::AttachOptions(), 0, 0);
         if (row != 1)
-            set_row_spacing(row - 1, 18);
-#endif
+            this->set_row_spacing(row - 1, 18);
     }
 }
 
 void DialogPage::set_tip(Gtk::Widget& widget, Glib::ustring const &tip)
 {
-    widget.set_tooltip_text (tip);
+    _tooltips.set_tip (widget, tip);
 }
 
 void PrefCheckButton::init(Glib::ustring const &label, Glib::ustring const &prefs_path,
@@ -205,8 +138,7 @@ void PrefCheckButton::init(Glib::ustring const &label, Glib::ustring const &pref
 
 void PrefCheckButton::on_toggled()
 {
-    this->changed_signal.emit(this->get_active());
-    if (this->get_visible()) //only take action if the user toggled it
+    if (this->is_visible()) //only take action if the user toggled it
     {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setBool(_prefs_path, this->get_active());
@@ -258,7 +190,7 @@ void PrefRadioButton::on_toggled()
     this->changed_signal.emit(this->get_active());
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
 
-    if (this->get_visible() && this->get_active() ) //only take action if toggled by user (to active)
+    if (this->is_visible() && this->get_active() ) //only take action if toggled by user (to active)
     {
         if ( _value_type == VAL_STRING )
             prefs->setString(_prefs_path, _string_value);
@@ -288,6 +220,7 @@ void PrefSpinButton::init(Glib::ustring const &prefs_path,
 
     this->set_range (lower, upper);
     this->set_increments (step_increment, 0);
+    this->set_numeric();
     this->set_value (value);
     this->set_width_chars(6);
     if (is_int)
@@ -302,7 +235,7 @@ void PrefSpinButton::init(Glib::ustring const &prefs_path,
 void PrefSpinButton::on_value_changed()
 {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    if (this->get_visible()) //only take action if user changed value
+    if (this->is_visible()) //only take action if user changed value
     {
         if (_is_int) {
             if (_is_percent) {
@@ -313,45 +246,6 @@ void PrefSpinButton::on_value_changed()
         } else {
             prefs->setDouble(_prefs_path, this->get_value());
         }
-    }
-}
-
-void PrefSpinUnit::init(Glib::ustring const &prefs_path,
-              double lower, double upper, double step_increment,
-              double default_value, UnitType unit_type, Glib::ustring const &default_unit)
-{
-    _prefs_path = prefs_path;
-    _is_percent = (unit_type == UNIT_TYPE_DIMENSIONLESS);
-
-    resetUnitType(unit_type);
-    setUnit(default_unit);
-    setRange (lower, upper); /// @fixme  this disregards changes of units
-    setIncrements (step_increment, 0);
-    if (step_increment < 0.1) {
-        setDigits(4);
-    } else {
-        setDigits(2);
-    }
-
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    double value = prefs->getDoubleLimited(prefs_path, default_value, lower, upper);
-    Glib::ustring unitstr = prefs->getUnit(prefs_path);
-    if (unitstr.length() == 0) {
-        unitstr = default_unit;
-        // write the assumed unit to preferences:
-        prefs->setDoubleUnit(_prefs_path, value, unitstr);
-    }
-    setValue(value, unitstr);
-
-    signal_value_changed().connect_notify(sigc::mem_fun(*this, &PrefSpinUnit::on_my_value_changed));
-}
-
-void PrefSpinUnit::on_my_value_changed()
-{
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    if (getWidget()->get_visible()) //only take action if user changed value
-    {
-        prefs->setDoubleUnit(_prefs_path, getValue(getUnit()->abbr), getUnit()->abbr);
     }
 }
 
@@ -427,29 +321,13 @@ ZoomCorrRuler::draw_marks(Cairo::RefPtr<Cairo::Context> cr, double dist, int maj
     }
 }
 
-#if !WITH_GTKMM_3_0
-bool
-ZoomCorrRuler::on_expose_event(GdkEventExpose *event) {
-    bool result = false;
-
-    if(get_is_drawable())
-    {
-        Cairo::RefPtr<Cairo::Context> cr = get_window()->create_cairo_context();
-        cr->rectangle(event->area.x, event->area.y,
-                      event->area.width, event->area.height);
-        cr->clip();
-        result = on_draw(cr);
-    }
-
-    return result;
-}
-#endif
-
-bool
-ZoomCorrRuler::on_draw(const Cairo::RefPtr<Cairo::Context>& cr) {
+void
+ZoomCorrRuler::redraw() {
     Glib::RefPtr<Gdk::Window> window = get_window();
+    Cairo::RefPtr<Cairo::Context> cr = window->create_cairo_context();
 
-    int w = window->get_width();
+    int w, h;
+    window->get_size(w, h);
     _drawing_width = w - _border * 2;
 
     cr->set_source_rgb(1.0, 1.0, 1.0);
@@ -468,8 +346,12 @@ ZoomCorrRuler::on_draw(const Cairo::RefPtr<Cairo::Context>& cr) {
     Glib::ustring abbr = prefs->getString("/options/zoomcorrection/unit");
     if (abbr == "cm") {
         draw_marks(cr, 0.1, 10);
+    } else if (abbr == "ft") {
+        draw_marks(cr, 1/12.0, 12);
     } else if (abbr == "in") {
         draw_marks(cr, 0.25, 4);
+    } else if (abbr == "m") {
+        draw_marks(cr, 1/10.0, 10);
     } else if (abbr == "mm") {
         draw_marks(cr, 10, 10);
     } else if (abbr == "pc") {
@@ -482,21 +364,24 @@ ZoomCorrRuler::on_draw(const Cairo::RefPtr<Cairo::Context>& cr) {
         draw_marks(cr, 1, 1);
     }
     cr->stroke();
-
-    return true;
 }
 
+bool
+ZoomCorrRuler::on_expose_event(GdkEventExpose */*event*/) {
+    this->redraw();
+    return true;
+}
 
 void
 ZoomCorrRulerSlider::on_slider_value_changed()
 {
-    if (this->get_visible() || freeze) //only take action if user changed value
+    if (this->is_visible() || freeze) //only take action if user changed value
     {
         freeze = true;
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-        prefs->setDouble("/options/zoomcorrection/value", _slider->get_value() / 100.0);
-        _sb.set_value(_slider->get_value());
-        _ruler.queue_draw();
+        prefs->setDouble("/options/zoomcorrection/value", _slider.get_value() / 100.0);
+        _sb.set_value(_slider.get_value());
+        _ruler.redraw();
         freeze = false;
     }
 }
@@ -504,13 +389,13 @@ ZoomCorrRulerSlider::on_slider_value_changed()
 void
 ZoomCorrRulerSlider::on_spinbutton_value_changed()
 {
-    if (this->get_visible() || freeze) //only take action if user changed value
+    if (this->is_visible() || freeze) //only take action if user changed value
     {
         freeze = true;
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setDouble("/options/zoomcorrection/value", _sb.get_value() / 100.0);
-        _slider->set_value(_sb.get_value());
-        _ruler.queue_draw();
+        _slider.set_value(_sb.get_value());
+        _ruler.redraw();
         freeze = false;
     }
 }
@@ -526,16 +411,10 @@ ZoomCorrRulerSlider::on_unit_changed() {
     prefs->setString("/options/zoomcorrection/unit", _unit.getUnitAbbr());
     double conv = _unit.getConversion(_unit.getUnitAbbr(), "px");
     _ruler.set_unit_conversion(conv);
-    if (_ruler.get_visible()) {
-        _ruler.queue_draw();
+    if (_ruler.is_visible()) {
+        _ruler.redraw();
     }
 }
-
-bool ZoomCorrRulerSlider::on_mnemonic_activate ( bool group_cycling )
-{
-    return _sb.mnemonic_activate ( group_cycling );
-}
-
 
 void
 ZoomCorrRulerSlider::init(int ruler_width, int ruler_height, double lower, double upper,
@@ -548,19 +427,13 @@ ZoomCorrRulerSlider::init(int ruler_width, int ruler_height, double lower, doubl
 
     _ruler.set_size(ruler_width, ruler_height);
 
-#if WITH_GTKMM_3_0
-    _slider = Gtk::manage(new Gtk::Scale(Gtk::ORIENTATION_HORIZONTAL));
-#else
-    _slider = Gtk::manage(new Gtk::HScale());
-#endif
+    _slider.set_size_request(_ruler.width(), -1);
+    _slider.set_range (lower, upper);
+    _slider.set_increments (step_increment, page_increment);
+    _slider.set_value (value);
+    _slider.set_digits(2);
 
-    _slider->set_size_request(_ruler.width(), -1);
-    _slider->set_range (lower, upper);
-    _slider->set_increments (step_increment, page_increment);
-    _slider->set_value (value);
-    _slider->set_digits(2);
-
-    _slider->signal_value_changed().connect(sigc::mem_fun(*this, &ZoomCorrRulerSlider::on_slider_value_changed));
+    _slider.signal_value_changed().connect(sigc::mem_fun(*this, &ZoomCorrRulerSlider::on_slider_value_changed));
     _sb.signal_value_changed().connect(sigc::mem_fun(*this, &ZoomCorrRulerSlider::on_spinbutton_value_changed));
     _unit.signal_changed().connect(sigc::mem_fun(*this, &ZoomCorrRulerSlider::on_unit_changed));
 
@@ -574,39 +447,29 @@ ZoomCorrRulerSlider::init(int ruler_width, int ruler_height, double lower, doubl
     _unit.set_data("sensitive", GINT_TO_POINTER(1));
     _unit.setUnit(prefs->getString("/options/zoomcorrection/unit"));
 
+    Gtk::Table *table = Gtk::manage(new Gtk::Table());
     Gtk::Alignment *alignment1 = Gtk::manage(new Gtk::Alignment(0.5,1,0,0));
     Gtk::Alignment *alignment2 = Gtk::manage(new Gtk::Alignment(0.5,1,0,0));
     alignment1->add(_sb);
     alignment2->add(_unit);
 
-#if WITH_GTKMM_3_0
-    Gtk::Grid *table = Gtk::manage(new Gtk::Grid());
-    table->attach(*_slider,    0, 0, 1, 1);
-    alignment1->set_halign(Gtk::ALIGN_CENTER);
-    table->attach(*alignment1, 1, 0, 1, 1);
-    table->attach(_ruler,      0, 1, 1, 1);
-    alignment2->set_halign(Gtk::ALIGN_CENTER);
-    table->attach(*alignment2, 1, 1, 1, 1);
-#else
-    Gtk::Table *table = Gtk::manage(new Gtk::Table());
-    table->attach(*_slider,    0, 1, 0, 1);
+    table->attach(_slider,     0, 1, 0, 1);
     table->attach(*alignment1, 1, 2, 0, 1, static_cast<Gtk::AttachOptions>(0));
     table->attach(_ruler,      0, 1, 1, 2);
     table->attach(*alignment2, 1, 2, 1, 2, static_cast<Gtk::AttachOptions>(0));
-#endif
 
-    pack_start(*table, Gtk::PACK_SHRINK);
+    this->pack_start(*table, Gtk::PACK_EXPAND_WIDGET);
 }
 
 void
 PrefSlider::on_slider_value_changed()
 {
-    if (this->get_visible() || freeze) //only take action if user changed value
+    if (this->is_visible() || freeze) //only take action if user changed value
     {
         freeze = true;
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-        prefs->setDouble(_prefs_path, _slider->get_value());
-        _sb.set_value(_slider->get_value());
+        prefs->setDouble(_prefs_path, _slider.get_value());
+        _sb.set_value(_slider.get_value());
         freeze = false;
     }
 }
@@ -614,19 +477,14 @@ PrefSlider::on_slider_value_changed()
 void
 PrefSlider::on_spinbutton_value_changed()
 {
-    if (this->get_visible() || freeze) //only take action if user changed value
+    if (this->is_visible() || freeze) //only take action if user changed value
     {
         freeze = true;
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setDouble(_prefs_path, _sb.get_value());
-        _slider->set_value(_sb.get_value());
+        _slider.set_value(_sb.get_value());
         freeze = false;
     }
-}
-
-bool PrefSlider::on_mnemonic_activate ( bool group_cycling )
-{
-    return _sb.mnemonic_activate ( group_cycling );
 }
 
 void
@@ -640,17 +498,11 @@ PrefSlider::init(Glib::ustring const &prefs_path,
 
     freeze = false;
 
-#if WITH_GTKMM_3_0
-    _slider = Gtk::manage(new Gtk::Scale(Gtk::ORIENTATION_HORIZONTAL));
-#else
-    _slider = Gtk::manage(new Gtk::HScale());
-#endif
-
-    _slider->set_range (lower, upper);
-    _slider->set_increments (step_increment, page_increment);
-    _slider->set_value (value);
-    _slider->set_digits(digits);
-    _slider->signal_value_changed().connect(sigc::mem_fun(*this, &PrefSlider::on_slider_value_changed));
+    _slider.set_range (lower, upper);
+    _slider.set_increments (step_increment, page_increment);
+    _slider.set_value (value);
+    _slider.set_digits(digits);
+    _slider.signal_value_changed().connect(sigc::mem_fun(*this, &PrefSlider::on_slider_value_changed));
 
     _sb.signal_value_changed().connect(sigc::mem_fun(*this, &PrefSlider::on_spinbutton_value_changed));
     _sb.set_range (lower, upper);
@@ -658,20 +510,12 @@ PrefSlider::init(Glib::ustring const &prefs_path,
     _sb.set_value (value);
     _sb.set_digits(digits);
 
+    Gtk::Table *table = Gtk::manage(new Gtk::Table());
     Gtk::Alignment *alignment1 = Gtk::manage(new Gtk::Alignment(0.5,1,0,0));
     alignment1->add(_sb);
 
-#if WITH_GTKMM_3_0
-    Gtk::Grid *table = Gtk::manage(new Gtk::Grid());
-    _slider->set_hexpand();
-    table->attach(*_slider,    0, 0, 1, 1);
-    alignment1->set_halign(Gtk::ALIGN_CENTER);
-    table->attach(*alignment1, 1, 0, 1, 1);
-#else
-    Gtk::Table *table = Gtk::manage(new Gtk::Table());
-    table->attach(*_slider,    0, 1, 0, 1);
+    table->attach(_slider,     0, 1, 0, 1);
     table->attach(*alignment1, 1, 2, 0, 1, static_cast<Gtk::AttachOptions>(0));
-#endif
 
     this->pack_start(*table, Gtk::PACK_EXPAND_WIDGET);
 }
@@ -686,7 +530,7 @@ void PrefCombo::init(Glib::ustring const &prefs_path,
 
     for (int i = 0 ; i < num_items; ++i)
     {
-        this->append(labels[i]);
+        this->append_text(labels[i]);
         _values.push_back(values[i]);
         if (value == values[i])
             row = i;
@@ -694,6 +538,10 @@ void PrefCombo::init(Glib::ustring const &prefs_path,
     this->set_active(row);
 }
 
+/**
+    initialize a combo box
+    second form uses strings as key values
+*/
 void PrefCombo::init(Glib::ustring const &prefs_path,
                      Glib::ustring labels[], Glib::ustring values[], int num_items, Glib::ustring default_value)
 {
@@ -708,7 +556,7 @@ void PrefCombo::init(Glib::ustring const &prefs_path,
 
     for (int i = 0 ; i < num_items; ++i)
     {
-        this->append(labels[i]);
+        this->append_text(labels[i]);
         _ustr_values.push_back(values[i]);
         if (value == values[i])
             row = i;
@@ -718,10 +566,10 @@ void PrefCombo::init(Glib::ustring const &prefs_path,
 
 void PrefCombo::on_changed()
 {
-    if (this->get_visible()) //only take action if user changed value
+    if (this->is_visible()) //only take action if user changed value
     {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-        if(!_values.empty())
+        if(_values.size() > 0)
         {
             prefs->setInt(_prefs_path, _values[this->get_active_row_number()]);
         }
@@ -753,7 +601,7 @@ void PrefEntryButtonHBox::init(Glib::ustring const &prefs_path,
 
 void PrefEntryButtonHBox::onRelatedEntryChangedCallback()
 {
-    if (this->get_visible()) //only take action if user changed value
+    if (this->is_visible()) //only take action if user changed value
     {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setString(_prefs_path, relatedEntry->get_text());
@@ -762,7 +610,7 @@ void PrefEntryButtonHBox::onRelatedEntryChangedCallback()
 
 void PrefEntryButtonHBox::onRelatedButtonClickedCallback()
 {
-    if (this->get_visible()) //only take action if user changed value
+    if (this->is_visible()) //only take action if user changed value
     {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setString(_prefs_path, _default_string);
@@ -770,147 +618,6 @@ void PrefEntryButtonHBox::onRelatedButtonClickedCallback()
     }
 }
 
-bool PrefEntryButtonHBox::on_mnemonic_activate ( bool group_cycling )
-{
-    return relatedEntry->mnemonic_activate ( group_cycling );
-}
-
-void PrefEntryFileButtonHBox::init(Glib::ustring const &prefs_path,
-            bool visibility)
-{
-    _prefs_path = prefs_path;
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    
-    relatedEntry = new Gtk::Entry();
-    relatedEntry->set_invisible_char('*');
-    relatedEntry->set_visibility(visibility);
-    relatedEntry->set_text(prefs->getString(_prefs_path));
-    
-    relatedButton = new Gtk::Button();
-    Gtk::HBox* pixlabel = new Gtk::HBox(false, 3);
-    Gtk::Image *im = new Gtk::Image(Gtk::StockID(Gtk::Stock::INDEX),
-            Gtk::ICON_SIZE_BUTTON);
-    pixlabel->pack_start(*im);
-    Gtk::Label *l = new Gtk::Label();
-    l->set_markup_with_mnemonic(_("_Browse..."));
-    pixlabel->pack_start(*l);
-    relatedButton->add(*pixlabel); 
-
-    this->pack_end(*relatedButton, false, false, 4);
-    this->pack_start(*relatedEntry, true, true, 0);
-
-    relatedButton->signal_clicked().connect(
-            sigc::mem_fun(*this, &PrefEntryFileButtonHBox::onRelatedButtonClickedCallback));
-    relatedEntry->signal_changed().connect(
-            sigc::mem_fun(*this, &PrefEntryFileButtonHBox::onRelatedEntryChangedCallback));
-}
-
-void PrefEntryFileButtonHBox::onRelatedEntryChangedCallback()
-{
-    if (this->get_visible()) //only take action if user changed value
-    {
-        Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-        prefs->setString(_prefs_path, relatedEntry->get_text());
-    }
-}
-
-static Inkscape::UI::Dialog::FileOpenDialog * selectPrefsFileInstance = NULL;
-
-void PrefEntryFileButtonHBox::onRelatedButtonClickedCallback()
-{
-    if (this->get_visible()) //only take action if user changed value
-    {
-        //# Get the current directory for finding files
-        static Glib::ustring open_path;
-        Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-
-
-        Glib::ustring attr = prefs->getString(_prefs_path);
-        if (!attr.empty()) open_path = attr;
-        
-        //# Test if the open_path directory exists
-        if (!Inkscape::IO::file_test(open_path.c_str(),
-                  (GFileTest)(G_FILE_TEST_EXISTS | G_FILE_TEST_IS_DIR)))
-            open_path = "";
-
-#ifdef WIN32
-        //# If no open path, default to our win32 documents folder
-        if (open_path.empty())
-        {
-            // The path to the My Documents folder is read from the
-            // value "HKEY_CURRENT_USER\Software\Windows\CurrentVersion\Explorer\Shell Folders\Personal"
-            HKEY key = NULL;
-            if(RegOpenKeyExA(HKEY_CURRENT_USER,
-                "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
-                0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS)
-            {
-                WCHAR utf16path[_MAX_PATH];
-                DWORD value_type;
-                DWORD data_size = sizeof(utf16path);
-                if(RegQueryValueExW(key, L"Personal", NULL, &value_type,
-                    (BYTE*)utf16path, &data_size) == ERROR_SUCCESS)
-                {
-                    g_assert(value_type == REG_SZ);
-                    gchar *utf8path = g_utf16_to_utf8(
-                        (const gunichar2*)utf16path, -1, NULL, NULL, NULL);
-                    if(utf8path)
-                    {
-                        open_path = Glib::ustring(utf8path);
-                        g_free(utf8path);
-                    }
-                }
-            }
-        }
-#endif
-
-        //# If no open path, default to our home directory
-        if (open_path.empty())
-        {
-            open_path = g_get_home_dir();
-            open_path.append(G_DIR_SEPARATOR_S);
-        }
-
-        //# Create a dialog
-        SPDesktop *desktop = SP_ACTIVE_DESKTOP;
-        if (!selectPrefsFileInstance) {
-        selectPrefsFileInstance =
-              Inkscape::UI::Dialog::FileOpenDialog::create(
-                 *desktop->getToplevel(),
-                 open_path,
-                 Inkscape::UI::Dialog::EXE_TYPES,
-                 _("Select a bitmap editor"));
-        }
-        
-        //# Show the dialog
-        bool const success = selectPrefsFileInstance->show();
-        
-        if (!success) {
-            return;
-        }
-        
-        //# User selected something.  Get name and type
-        Glib::ustring fileName = selectPrefsFileInstance->getFilename();
-
-        if (!fileName.empty())
-        {
-            Glib::ustring newFileName = Glib::filename_to_utf8(fileName);
-
-            if ( newFileName.size() > 0)
-                open_path = newFileName;
-            else
-                g_warning( "ERROR CONVERTING OPEN FILENAME TO UTF-8" );
-
-            prefs->setString(_prefs_path, open_path);
-        }
-        
-        relatedEntry->set_text(fileName);
-    }
-}
-
-bool PrefEntryFileButtonHBox::on_mnemonic_activate ( bool group_cycling )
-{
-    return relatedEntry->mnemonic_activate ( group_cycling );
-}
 
 void PrefFileButton::init(Glib::ustring const &prefs_path)
 {
@@ -938,7 +645,7 @@ void PrefEntry::init(Glib::ustring const &prefs_path, bool visibility)
 
 void PrefEntry::on_changed()
 {
-    if (this->get_visible()) //only take action if user changed value
+    if (this->is_visible()) //only take action if user changed value
     {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setString(_prefs_path, this->get_text());
@@ -956,7 +663,7 @@ void PrefColorPicker::init(Glib::ustring const &label, Glib::ustring const &pref
 
 void PrefColorPicker::on_changed (guint32 rgba)
 {
-    if (this->get_visible()) //only take action if the user toggled it
+    if (this->is_visible()) //only take action if the user toggled it
     {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setInt(_prefs_path, (int) rgba);
@@ -973,7 +680,7 @@ void PrefUnit::init(Glib::ustring const &prefs_path)
 
 void PrefUnit::on_changed()
 {
-    if (this->get_visible()) //only take action if user changed value
+    if (this->is_visible()) //only take action if user changed value
     {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setString(_prefs_path, getUnitAbbr());
@@ -993,4 +700,4 @@ void PrefUnit::on_changed()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

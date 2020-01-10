@@ -1,7 +1,9 @@
 #ifndef INKSCAPE_CANVAS_TEMPORARY_ITEM_H
 #define INKSCAPE_CANVAS_TEMPORARY_ITEM_H
 
-/*
+/** \file
+ * Provides a class to put a canvasitem temporarily on-canvas.
+ *
  * Authors:
  *   Johan Engelen
  *
@@ -10,21 +12,18 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "display/display-forward.h"
 
-#include <cstddef>
-#include <sigc++/signal.h>
-
-struct SPCanvasItem;
+#include <stddef.h>
+#include <sigc++/sigc++.h>
+#include <glib.h>
 
 namespace Inkscape {
 namespace Display {
 
-/**
- * Provides a class to put a canvasitem temporarily on-canvas.
- */
 class TemporaryItem  {
 public:
-    TemporaryItem(SPCanvasItem *item, unsigned int lifetime, bool destroy_on_deselect = false);
+    TemporaryItem(SPCanvasItem *item, guint lifetime, bool destroy_on_deselect = false);
     virtual ~TemporaryItem();
 
     sigc::signal<void, TemporaryItem *> signal_timeout;
@@ -33,10 +32,10 @@ protected:
     friend class TemporaryItemList;
 
     SPCanvasItem * canvasitem;   /** The item we are holding on to */
-    unsigned int timeout_id;     /** ID by which glib knows the timeout event */
+    guint timeout_id;     /** ID by which glib knows the timeout event */
     bool destroy_on_deselect; // only destroy when parent item is deselected, not when mouse leaves
 
-    static int _timeout(void* data); ///< callback for when lifetime expired
+    static gboolean _timeout(gpointer data); ///< callback for when lifetime expired
 
 private:
     TemporaryItem(const TemporaryItem&);

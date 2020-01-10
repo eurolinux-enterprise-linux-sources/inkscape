@@ -1,41 +1,34 @@
-#ifndef SEEN_SP_MASK_H
-#define SEEN_SP_MASK_H
+#ifndef __SP_MASK_H__
+#define __SP_MASK_H__
 
 /*
  * SVG <mask> implementation
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
- *   Abhishek Sharma
  *
  * Copyright (C) 2003 authors
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <2geom/rect.h>
+#define SP_TYPE_MASK (sp_mask_get_type ())
+#define SP_MASK(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_MASK, SPMask))
+#define SP_MASK_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_MASK, SPMaskClass))
+#define SP_IS_MASK(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_MASK))
+#define SP_IS_MASK_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_MASK))
+
+class SPMask;
+class SPMaskClass;
+class SPMaskView;
+
+#include "display/nr-arena-forward.h"
+#include "libnr/nr-forward.h"
 #include "sp-object-group.h"
 #include "uri-references.h"
 #include "xml/node.h"
 
-#define SP_MASK(obj) (dynamic_cast<SPMask*>((SPObject*)obj))
-#define SP_IS_MASK(obj) (dynamic_cast<const SPMask*>((SPObject*)obj) != NULL)
-
-struct SPMaskView;
-
-namespace Inkscape {
-
-class Drawing;
-class DrawingItem;
-
-} // namespace Inkscape
-
-
-class SPMask : public SPObjectGroup {
-public:
-	SPMask();
-	virtual ~SPMask();
-
+struct SPMask : public SPObjectGroup {
 	unsigned int maskUnits_set : 1;
 	unsigned int maskUnits : 1;
 
@@ -43,31 +36,19 @@ public:
 	unsigned int maskContentUnits : 1;
 
 	SPMaskView *display;
-
-	Inkscape::DrawingItem *sp_mask_show(Inkscape::Drawing &drawing, unsigned int key);
-	void sp_mask_hide(unsigned int key);
-
-	void sp_mask_set_bbox(unsigned int key, Geom::OptRect const &bbox);
-
-protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-
-	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
-
-	virtual void set(unsigned int key, const char* value);
-
-	virtual void update(SPCtx* ctx, unsigned int flags);
-	virtual void modified(unsigned int flags);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
 };
+
+struct SPMaskClass {
+	SPObjectGroupClass parent_class;
+};
+
+GType sp_mask_get_type (void);
 
 class SPMaskReference : public Inkscape::URIReference {
 public:
 	SPMaskReference(SPObject *obj) : URIReference(obj) {}
 	SPMask *getObject() const {
-		return static_cast<SPMask *>(URIReference::getObject());
+		return (SPMask *)URIReference::getObject();
 	}
 protected:
     /**
@@ -81,15 +62,13 @@ protected:
 		    return false;
 	    }
 	    SPObject * const owner = this->getOwner();
-        if (!URIReference::_acceptObject(obj)) {
-	  //XML Tree being used directly here while it shouldn't be...
-	  Inkscape::XML::Node * const owner_repr = owner->getRepr();
-	  //XML Tree being used directly here while it shouldn't be...
-	  Inkscape::XML::Node * const obj_repr = obj->getRepr();
-            char const * owner_name = "";
-            char const * owner_mask = "";
-            char const * obj_name = "";
-            char const * obj_id = "";
+        if (obj->isAncestorOf(owner)) {
+            Inkscape::XML::Node * const owner_repr = owner->repr;
+            Inkscape::XML::Node * const obj_repr = obj->repr;
+            gchar const * owner_name = NULL;
+            gchar const * owner_mask = NULL;
+            gchar const * obj_name = NULL;
+            gchar const * obj_id = NULL;
             if (owner_repr != NULL) {
                 owner_name = owner_repr->name();
                 owner_mask = owner_repr->attribute("mask");
@@ -98,7 +77,7 @@ protected:
                 obj_name = obj_repr->name();
                 obj_id = obj_repr->attribute("id");
             }
-            printf("WARNING: Ignoring recursive mask reference "
+            g_warning("Ignoring recursive mask reference "
                       "<%s mask=\"%s\"> in <%s id=\"%s\">",
                       owner_name, owner_mask,
                       obj_name, obj_id);
@@ -108,6 +87,11 @@ protected:
 	}
 };
 
-const char *sp_mask_create (std::vector<Inkscape::XML::Node*> &reprs, SPDocument *document, Geom::Affine const* applyTransform);
+NRArenaItem *sp_mask_show (SPMask *mask, NRArena *arena, unsigned int key);
+void sp_mask_hide (SPMask *mask, unsigned int key);
 
-#endif // SEEN_SP_MASK_H
+void sp_mask_set_bbox (SPMask *mask, unsigned int key, NRRect *bbox);
+
+const gchar *sp_mask_create (GSList *reprs, SPDocument *document, Geom::Matrix const* applyTransform);
+
+#endif

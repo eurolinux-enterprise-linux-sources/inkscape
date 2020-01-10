@@ -26,8 +26,7 @@
 #include "cr-node-iface.h"
 
 /**
- *@CRSelEng:
- *
+ *@file:
  *The definition of the  #CRSelEng class.
  *The #CRSelEng is actually the "Selection Engine"
  *class. This is highly experimental for at the moment and
@@ -37,7 +36,7 @@
 #define PRIVATE(a_this) (a_this)->priv
 
 struct CRPseudoClassSelHandlerEntry {
-        guchar *name;
+        char *name;
         enum CRPseudoType type;
         CRPseudoClassSelectorHandler handler;
 };
@@ -115,10 +114,6 @@ cr_sel_eng_set_node_iface (CRSelEng *const a_this, CRNodeIface const *const a_no
         PRIVATE(a_this)->node_iface = a_node_iface;
 }
 
-/* Quick strcmp.  Test only for == 0 or != 0, not < 0 or > 0.  */
-#define strqcmp(str,lit,lit_len) \
-  (strlen (str) != (lit_len) || memcmp (str, lit, lit_len))
-
 static gboolean
 lang_pseudo_class_handler (CRSelEng *const a_this,
                            CRAdditionalSel * a_sel, CRXMLNodePtr a_node)
@@ -136,10 +131,9 @@ lang_pseudo_class_handler (CRSelEng *const a_this,
 
         node_iface = PRIVATE(a_this)->node_iface;
 
-        /* "xml:lang" needed for SVG */
-        if ( (strqcmp (a_sel->content.pseudo->name->stryng->str, "lang", 4 ) &&
-              (strqcmp (a_sel->content.pseudo->name->stryng->str, "xml:lang", 8 ) ) )
-            || a_sel->content.pseudo->type != FUNCTION_PSEUDO) {
+        if (strncmp (a_sel->content.pseudo->name->stryng->str, 
+                     "lang", 4)
+            || !a_sel->content.pseudo->type == FUNCTION_PSEUDO) {
                 cr_utils_trace_info ("This handler is for :lang only");
                 return FALSE;
         }
@@ -149,10 +143,11 @@ lang_pseudo_class_handler (CRSelEng *const a_this,
             || a_sel->content.pseudo->extra->stryng->len < 2)
                 return FALSE;
         for (; node; node = get_next_parent_element_node (node_iface, node)) {
-                char *val = node_iface->getProp (node, (const xmlChar *) "lang");
-                if (!val) val = node_iface->getProp (node, (const xmlChar *) "xml:lang");
+                char *val = node_iface->getProp (node, "lang");
                 if (val) {
-                        if (!strcasecmp(val, a_sel->content.pseudo->extra->stryng->str)) {
+                        if (!strncmp (val,
+                                      a_sel->content.pseudo->extra->stryng->str,
+                                      a_sel->content.pseudo->extra->stryng->len)) {
                                 result = TRUE;
                                 break;
                         }
@@ -180,7 +175,7 @@ first_child_pseudo_class_handler (CRSelEng *const a_this,
 
         if (strcmp (a_sel->content.pseudo->name->stryng->str,
                     "first-child")
-            || a_sel->content.pseudo->type != IDENT_PSEUDO) {
+            || !a_sel->content.pseudo->type == IDENT_PSEUDO) {
                 cr_utils_trace_info ("This handler is for :first-child only");
                 return FALSE;
         }
@@ -209,7 +204,7 @@ pseudo_class_add_sel_matches_node (CRSelEng * a_this,
                               && a_node, FALSE);
 
         status = cr_sel_eng_get_pseudo_class_selector_handler
-                (a_this, (guchar *) a_add_sel->content.pseudo->name->stryng->str,
+                (a_this, a_add_sel->content.pseudo->name->stryng->str,
                  a_add_sel->content.pseudo->type, &handler);
         if (status != CR_OK || !handler)
                 return FALSE;
@@ -237,7 +232,7 @@ class_add_sel_matches_node (CRAdditionalSel * a_add_sel,
                               && a_add_sel->content.class_name->stryng->str
                               && a_node, FALSE);
 
-        klass = a_node_iface->getProp (a_node, (const xmlChar *) "class");
+        klass = a_node_iface->getProp (a_node, "class");
         if (klass) {
                 char const *cur;
                 for (cur = klass; cur && *cur; cur++) {
@@ -246,17 +241,13 @@ class_add_sel_matches_node (CRAdditionalSel * a_add_sel,
                                == TRUE)
                                 cur++;
 
-                        if (!strncmp ((const char *) cur, 
+                        if (!strncmp (cur, 
                                       a_add_sel->content.class_name->stryng->str,
                                       a_add_sel->content.class_name->stryng->len)) {
                                 cur += a_add_sel->content.class_name->stryng->len;
                                 if ((cur && !*cur)
                                     || cr_utils_is_white_space (*cur) == TRUE)
                                         result = TRUE;
-                        } else {  /* if it doesn't match,  */
-                                /*   then skip to next whitespace character to try again */
-                                while (cur && *cur && !(cr_utils_is_white_space(*cur) == TRUE)) 
-                                        cur++;
                         }
                         if (cur && !*cur)
                                 break ;
@@ -291,9 +282,9 @@ id_add_sel_matches_node (CRAdditionalSel * a_add_sel,
                               && a_add_sel->type == ID_ADD_SELECTOR
                               && a_node, FALSE);
 
-        id = a_node_iface->getProp (a_node, (const xmlChar *) "id");
+        id = a_node_iface->getProp (a_node, "id");
         if (id) {
-                if (!strqcmp ((const char *) id, a_add_sel->content.id_name->stryng->str,
+                if (!strncmp (id, a_add_sel->content.id_name->stryng->str,
                               a_add_sel->content.id_name->stryng->len)) {
                         result = TRUE;
                 }
@@ -324,7 +315,7 @@ attr_add_sel_matches_node (CRAdditionalSel * a_add_sel,
 
         for (cur_sel = a_add_sel->content.attr_sel;
              cur_sel; cur_sel = cur_sel->next) {
-                if (!cur_sel->name
+                if (!cur_sel->name 
                     || !cur_sel->name->stryng
                     || !cur_sel->name->stryng->str)
                         return FALSE;
@@ -384,7 +375,7 @@ attr_add_sel_matches_node (CRAdditionalSel * a_add_sel,
                                         ptr2 = cur;
 
                                         if (!strncmp
-                                            ((const char *) ptr1, 
+                                            (ptr1, 
                                              cur_sel->value->stryng->str,
                                              ptr2 - ptr1 + 1)) {
                                                 found = TRUE;
@@ -422,7 +413,7 @@ attr_add_sel_matches_node (CRAdditionalSel * a_add_sel,
                                         ptr2 = cur;
 
                                         if (g_strstr_len
-                                            ((const gchar *) ptr1, ptr2 - ptr1 + 1,
+                                            (ptr1, ptr2 - ptr1 + 1,
                                              cur_sel->value->stryng->str)
                                             == ptr1) {
                                                 found = TRUE;
@@ -514,11 +505,11 @@ additional_selector_matches_node (CRSelEng * a_this,
                         continue ;
                 } else if (cur_add_sel->type == PSEUDO_CLASS_ADD_SELECTOR
                            && cur_add_sel->content.pseudo) {
-                        if (!pseudo_class_add_sel_matches_node
+                        if (pseudo_class_add_sel_matches_node
                             (a_this, cur_add_sel, a_node)) {
-                                return FALSE;
+                                return TRUE;
                         }
-                        continue ;
+                        return FALSE;
                 }
         }
         if (evaluated == TRUE)
@@ -635,7 +626,7 @@ sel_matches_node_real (CRSelEng * a_this, CRSimpleSel * a_sel,
                          && cur_sel->name->stryng
                          && cur_sel->name->stryng->str)
                      && (!strcmp (cur_sel->name->stryng->str,
-                                  (const char *) node_iface->getLocalName(cur_node))))
+                                  node_iface->getLocalName(cur_node))))
                     || (cur_sel->type_mask & UNIVERSAL_SELECTOR)) {
                         /*
                          *this simple selector
@@ -848,7 +839,7 @@ cr_sel_eng_get_matched_rulesets_real (CRSelEng * a_this,
                 sel_list = NULL;
 
                 /*
-                 *get the damn selector list in 
+                 *get the the damn selector list in 
                  *which we have to look
                  */
                 switch (cur_stmt->type) {
@@ -1095,10 +1086,8 @@ set_style_from_props (CRStyle * a_style, CRPropList * a_props)
  ****************************************/
 
 /**
- * cr_sel_eng_new:
  *Creates a new instance of #CRSelEng.
- *
- *Returns the newly built instance of #CRSelEng of
+ *@return the newly built instance of #CRSelEng of
  *NULL if an error occurs.
  */
 CRSelEng *
@@ -1121,11 +1110,11 @@ cr_sel_eng_new (void)
         }
         memset (PRIVATE (result), 0, sizeof (CRSelEngPriv));
         cr_sel_eng_register_pseudo_class_sel_handler
-                (result, (guchar *) "first-child",
+                (result, "first-child",
                  IDENT_PSEUDO, /*(CRPseudoClassSelectorHandler)*/
                  first_child_pseudo_class_handler);
         cr_sel_eng_register_pseudo_class_sel_handler
-                (result, (guchar *) "lang",
+                (result, "lang",
                  FUNCTION_PSEUDO, /*(CRPseudoClassSelectorHandler)*/
                  lang_pseudo_class_handler);
 
@@ -1133,20 +1122,17 @@ cr_sel_eng_new (void)
 }
 
 /**
- * cr_sel_eng_register_pseudo_class_sel_handler:
- *@a_this: the current instance of #CRSelEng
- *@a_pseudo_class_sel_name: the name of the pseudo class selector.
- *@a_pseudo_class_type: the type of the pseudo class selector.
- *@a_handler: the actual handler or callback to be called during
- *the selector evaluation process.
- *
  *Adds a new handler entry in the handlers entry table.
- *
- *Returns CR_OK, upon successful completion, an error code otherwise.
+ *@param a_this the current instance of #CRSelEng
+ *@param a_pseudo_class_sel_name the name of the pseudo class selector.
+ *@param a_pseudo_class_type the type of the pseudo class selector.
+ *@param a_handler the actual handler or callback to be called during
+ *the selector evaluation process.
+ *@return CR_OK, upon successful completion, an error code otherwise.
  */
 enum CRStatus
 cr_sel_eng_register_pseudo_class_sel_handler (CRSelEng * a_this,
-                                              guchar * a_name,
+                                              char * a_name,
                                               enum CRPseudoType a_type,
                                               CRPseudoClassSelectorHandler
                                               a_handler)
@@ -1164,7 +1150,7 @@ cr_sel_eng_register_pseudo_class_sel_handler (CRSelEng * a_this,
         }
         memset (handler_entry, 0,
                 sizeof (struct CRPseudoClassSelHandlerEntry));
-        handler_entry->name = (guchar *) g_strdup ((const gchar *) a_name);
+        handler_entry->name = g_strdup (a_name);
         handler_entry->type = a_type;
         handler_entry->handler = a_handler;
         list = g_list_append (PRIVATE (a_this)->pcs_handlers, handler_entry);
@@ -1177,7 +1163,7 @@ cr_sel_eng_register_pseudo_class_sel_handler (CRSelEng * a_this,
 
 enum CRStatus
 cr_sel_eng_unregister_pseudo_class_sel_handler (CRSelEng * a_this,
-                                                guchar * a_name,
+                                                char * a_name,
                                                 enum CRPseudoType a_type)
 {
         GList *elem = NULL,
@@ -1190,7 +1176,7 @@ cr_sel_eng_unregister_pseudo_class_sel_handler (CRSelEng * a_this,
         for (elem = PRIVATE (a_this)->pcs_handlers;
              elem; elem = g_list_next (elem)) {
                 entry = (struct CRPseudoClassSelHandlerEntry *) elem->data;
-                if (!strcmp ((const char *) entry->name, (const char *) a_name)
+                if (!strcmp (entry->name, a_name)
                     && entry->type == a_type) {
                         found = TRUE;
                         break;
@@ -1212,13 +1198,10 @@ cr_sel_eng_unregister_pseudo_class_sel_handler (CRSelEng * a_this,
 }
 
 /**
- * cr_sel_eng_unregister_all_pseudo_class_sel_handlers:
- *@a_this: the current instance of #CRSelEng .
- *
  *Unregisters all the pseudo class sel handlers
  *and frees all the associated allocated datastructures.
- *
- *Returns CR_OK upon succesful completion, an error code
+ *@param a_this the current instance of #CRSelEng .
+ *@return CR_OK upon succesful completion, an error code
  *otherwise.
  */
 enum CRStatus
@@ -1250,7 +1233,7 @@ cr_sel_eng_unregister_all_pseudo_class_sel_handlers (CRSelEng * a_this)
 
 enum CRStatus
 cr_sel_eng_get_pseudo_class_selector_handler (CRSelEng * a_this,
-                                              guchar * a_name,
+                                              char * a_name,
                                               enum CRPseudoType a_type,
                                               CRPseudoClassSelectorHandler *
                                               a_handler)
@@ -1265,7 +1248,7 @@ cr_sel_eng_get_pseudo_class_selector_handler (CRSelEng * a_this,
         for (elem = PRIVATE (a_this)->pcs_handlers;
              elem; elem = g_list_next (elem)) {
                 entry = (struct CRPseudoClassSelHandlerEntry *) elem->data;
-                if (!strcmp ((const char *) a_name, (const char *) entry->name)
+                if (!strcmp (a_name, entry->name)
                     && entry->type == a_type) {
                         found = TRUE;
                         break;
@@ -1279,20 +1262,17 @@ cr_sel_eng_get_pseudo_class_selector_handler (CRSelEng * a_this,
 }
 
 /**
- * cr_sel_eng_matches_node:
- *@a_this: the selection engine.
- *@a_sel: the simple selector against which the xml node 
- *is going to be matched.
- *@a_node: the node against which the selector is going to be matched.
- *@a_result: out parameter. The result of the match. Is set to
- *TRUE if the selector matches the node, FALSE otherwise. This value
- *is considered if and only if this functions returns CR_OK.
- *
  *Evaluates a chained list of simple selectors (known as a css2 selector).
  *Says wheter if this selector matches the xml node given in parameter or
  *not.
- *
- *Returns the CR_OK if the selection ran correctly, an error code otherwise.
+ *@param a_this the selection engine.
+ *@param a_sel the simple selector against which the xml node 
+ *is going to be matched.
+ *@param a_node the node against which the selector is going to be matched.
+ *@param a_result out parameter. The result of the match. Is set to
+ *TRUE if the selector matches the node, FALSE otherwise. This value
+ *is considered if and only if this functions returns CR_OK.
+ *@return the CR_OK if the selection ran correctly, an error code otherwise.
  */
 enum CRStatus
 cr_sel_eng_matches_node (CRSelEng * a_this, CRSimpleSel * a_sel,
@@ -1313,22 +1293,20 @@ cr_sel_eng_matches_node (CRSelEng * a_this, CRSimpleSel * a_sel,
 }
 
 /**
- * cr_sel_eng_get_matched_rulesets:
- *@a_this: the current instance of the selection engine.
- *@a_sheet: the stylesheet that holds the selectors.
- *@a_node: the xml node to consider during the walk thru
+ *Returns an array of pointers to selectors that matches
+ *the xml node given in parameter.
+ *
+ *@param a_this the current instance of the selection engine.
+ *@param a_sheet the stylesheet that holds the selectors.
+ *@param a_node the xml node to consider during the walk thru
  *the stylesheet.
- *@a_rulesets: out parameter. A pointer to an array of
+ *@param a_rulesets out parameter. A pointer to an array of
  *rulesets statement pointers. *a_rulesets is allocated by
  *this function and must be freed by the caller. However, the caller
  *must not alter the rulesets statements pointer because they
  *point to statements that are still in the css stylesheet.
- *@a_len: the length of *a_ruleset.
- *
- *Returns an array of pointers to selectors that matches
- *the xml node given in parameter.
- *
- *Returns CR_OK upon sucessfull completion, an error code otherwise.
+ *@param a_len the length of *a_ruleset.
+ *@return CR_OK upon sucessfull completion, an error code otherwise.
  */
 enum CRStatus
 cr_sel_eng_get_matched_rulesets (CRSelEng * a_this,
@@ -1539,10 +1517,8 @@ cr_sel_eng_get_matched_style (CRSelEng * a_this,
 }
 
 /**
- * cr_sel_eng_destroy:
- *@a_this: the current instance of the selection engine.
- *
  *The destructor of #CRSelEng
+ *@param a_this the current instance of the selection engine.
  */
 void
 cr_sel_eng_destroy (CRSelEng * a_this)

@@ -20,7 +20,7 @@
  */
 
 // until i find something better
-static Geom::Point StrokeNormalize(const Geom::Point value) {
+Geom::Point StrokeNormalize(const Geom::Point value) {
     double length = L2(value); 
     if ( length < 0.0000001 ) { 
         return Geom::Point(0, 0);
@@ -30,7 +30,7 @@ static Geom::Point StrokeNormalize(const Geom::Point value) {
 }
 
 // faster version if length is known
-static Geom::Point StrokeNormalize(const Geom::Point value, double length) {
+Geom::Point StrokeNormalize(const Geom::Point value, double length) {
     if ( length < 0.0000001 ) { 
         return Geom::Point(0, 0);
     } else { 
@@ -292,7 +292,7 @@ void Path::DoJoin (Shape *dest, double width, JoinType join, Geom::Point pos, Ge
 {
     Geom::Point pnor = prev.ccw();
     Geom::Point nnor = next.ccw();
-    double angSi = cross(prev, next);
+    double angSi = cross(next, prev);
 
     /* FIXED: this special case caused bug 1028953 */
     if (angSi > -0.0001 && angSi < 0.0001) {
@@ -416,7 +416,7 @@ Path::DoLeftJoin (Shape * dest, double width, JoinType join, Geom::Point pos,
 {
     Geom::Point pnor=prev.ccw();
     Geom::Point nnor=next.ccw();
-    double angSi = cross(prev, next);
+    double angSi = cross (next, prev);
     if (angSi > -0.0001 && angSi < 0.0001)
     {
         double angCo = dot (prev, next);
@@ -444,7 +444,7 @@ Path::DoLeftJoin (Shape * dest, double width, JoinType join, Geom::Point pos,
         /*		Geom::Point     biss;
                         biss.x=next.x-prev.x;
                         biss.y=next.y-prev.y;
-                        double   c2=cross(next, biss);
+                        double   c2=cross(biss,next);
                         double   l=width/c2;
                         double		projn=l*(dot(biss,next));
                         double		projp=-l*(dot(biss,prev));
@@ -456,20 +456,19 @@ Path::DoLeftJoin (Shape * dest, double width, JoinType join, Geom::Point pos,
                         } else {*/
         leftStNo = dest->AddPoint (pos + width * pnor);
         leftEnNo = dest->AddPoint (pos + width * nnor);
-//        int midNo = dest->AddPoint (pos);
-//        int nEdge=dest->AddEdge (leftEnNo, midNo);
-        int nEdge=dest->AddEdge (leftEnNo, leftStNo);
+        int midNo = dest->AddPoint (pos);
+        int nEdge=dest->AddEdge (leftEnNo, midNo);
         if ( dest->hasBackData() ) {
             dest->ebData[nEdge].pathID=pathID;
             dest->ebData[nEdge].pieceID=pieceID;
             dest->ebData[nEdge].tSt=dest->ebData[nEdge].tEn=tID;
         }
-//        nEdge=dest->AddEdge (midNo, leftStNo);
-//        if ( dest->hasBackData() ) {
-//            dest->ebData[nEdge].pathID=pathID;
-//            dest->ebData[nEdge].pieceID=pieceID;
-//            dest->ebData[nEdge].tSt=dest->ebData[nEdge].tEn=tID;
-//        }
+        nEdge=dest->AddEdge (midNo, leftStNo);
+        if ( dest->hasBackData() ) {
+            dest->ebData[nEdge].pathID=pathID;
+            dest->ebData[nEdge].pieceID=pieceID;
+            dest->ebData[nEdge].tSt=dest->ebData[nEdge].tEn=tID;
+        }
         //              }
     }
     else
@@ -503,7 +502,7 @@ Path::DoLeftJoin (Shape * dest, double width, JoinType join, Geom::Point pos,
             }
             else
             {
-                double s2 = cross(nnor, biss);
+                double s2 = cross (biss, nnor);
                 double dec = (l - emiter) * c2 / s2;
                 const Geom::Point tbiss=biss.ccw();
 
@@ -560,7 +559,7 @@ Path::DoRightJoin (Shape * dest, double width, JoinType join, Geom::Point pos,
 {
     const Geom::Point pnor=prev.ccw();
     const Geom::Point nnor=next.ccw();
-    double angSi = cross(prev, next);
+    double angSi = cross (next,prev);
     if (angSi > -0.0001 && angSi < 0.0001)
     {
         double angCo = dot (prev, next);
@@ -614,7 +613,7 @@ Path::DoRightJoin (Shape * dest, double width, JoinType join, Geom::Point pos,
             }
             else
             {
-                double s2 = cross(nnor, biss);
+                double s2 = cross (biss, nnor);
                 double dec = (l - emiter) * c2 / s2;
                 const Geom::Point tbiss=biss.ccw();
 
@@ -667,7 +666,7 @@ Path::DoRightJoin (Shape * dest, double width, JoinType join, Geom::Point pos,
         /*		Geom::Point     biss;
                         biss=next.x-prev.x;
                         biss.y=next.y-prev.y;
-                        double   c2=cross(biss, next);
+                        double   c2=cross(next,biss);
                         double   l=width/c2;
                         double		projn=l*(dot(biss,next));
                         double		projp=-l*(dot(biss,prev));
@@ -679,20 +678,19 @@ Path::DoRightJoin (Shape * dest, double width, JoinType join, Geom::Point pos,
                         } else {*/
         rightStNo = dest->AddPoint (pos - width*pnor);
         rightEnNo = dest->AddPoint (pos - width*nnor);
-//        int midNo = dest->AddPoint (pos);
-//        int nEdge=dest->AddEdge (rightStNo, midNo);
-        int nEdge=dest->AddEdge (rightStNo, rightEnNo);
+        int midNo = dest->AddPoint (pos);
+        int nEdge=dest->AddEdge (rightStNo, midNo);
         if ( dest->hasBackData() ) {
             dest->ebData[nEdge].pathID=pathID;                                  
             dest->ebData[nEdge].pieceID=pieceID;
             dest->ebData[nEdge].tSt=dest->ebData[nEdge].tEn=tID;
         }
-//        nEdge=dest->AddEdge (midNo, rightEnNo);
-//        if ( dest->hasBackData() ) {
-//            dest->ebData[nEdge].pathID=pathID;
-//            dest->ebData[nEdge].pieceID=pieceID;
-//            dest->ebData[nEdge].tSt=dest->ebData[nEdge].tEn=tID;
-//        }
+        nEdge=dest->AddEdge (midNo, rightEnNo);
+        if ( dest->hasBackData() ) {
+            dest->ebData[nEdge].pathID=pathID;
+            dest->ebData[nEdge].pieceID=pieceID;
+            dest->ebData[nEdge].tSt=dest->ebData[nEdge].tEn=tID;
+        }
         //              }
     }
 }
@@ -719,7 +717,7 @@ void Path::RecRound(Shape *dest, int sNo, int eNo, // start and end index
         sia = 1;
     } else {
         double coa = dot(nS, nE);
-        sia = cross(nE, nS);
+        sia = cross(nS, nE);
         ang = acos(coa);
         if ( coa >= 1 ) {
             ang = 0;
@@ -748,12 +746,12 @@ void Path::RecRound(Shape *dest, int sNo, int eNo, // start and end index
 }
 
 /*
-  Local Variables:
-  mode:c++
-  c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
-  indent-tabs-mode:nil
-  fill-column:99
-  End:
-*/
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+   Local Variables:
+mode:c++
+c-file-style:"stroustrup"
+c-file-offsets:((innamespace . 0)(inline-open . 0))
+indent-tabs-mode:nil
+fill-column:99
+End:
+ */
+// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

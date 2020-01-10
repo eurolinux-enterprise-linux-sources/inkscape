@@ -1,6 +1,5 @@
-/**
- * @file
- * Print Colors Preview dialog - implementation.
+/** @file
+ * @brief Print Colors Preview dialog - implementation
  */
 /* Authors:
  *   Felipe C. da S. Sanches <juca@members.fsf.org>

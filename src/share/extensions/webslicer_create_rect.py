@@ -14,11 +14,14 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
-# local library
+
 from webslicer_effect import *
 import inkex
+import gettext
+
+_ = gettext.gettext
 
 class WebSlicer_CreateRect(WebSlicer_Effect):
 
@@ -98,7 +101,6 @@ class WebSlicer_CreateRect(WebSlicer_Effect):
             self.options.dimension
 
     def effect(self):
-        scale = self.unittouu('1px')    # convert to document units
         self.validate_options()
         layer = self.get_slicer_layer(True)
         #TODO: get selected elements to define location and size
@@ -109,10 +111,10 @@ class WebSlicer_CreateRect(WebSlicer_Effect):
         rect.set('id', self.options.name)
         rect.set('fill', 'red')
         rect.set('opacity', '0.5')
-        rect.set('x', str(-scale*100))
-        rect.set('y', str(-scale*100))
-        rect.set('width', str(scale*200))
-        rect.set('height', str(scale*200))
+        rect.set('x', '-100')
+        rect.set('y', '-100')
+        rect.set('width', '200')
+        rect.set('height', '200')
         desc = inkex.etree.SubElement(rect, 'desc')
         conf_txt = "format:"+ self.options.format +"\n"
         if not is_empty(self.options.dpi):

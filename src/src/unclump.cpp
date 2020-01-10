@@ -1,11 +1,8 @@
-/**
- * @file
- * Unclumping objects.
+/** @file
+ * @brief Unclumping objects
  */
 /* Authors:
  *   bulia byak
- *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 2005 Authors
  * Released under GNU GPL, read the file 'COPYING' for more information
@@ -13,11 +10,8 @@
 
 #include <algorithm>
 #include <map>
-#include <2geom/transforms.h>
 #include "sp-item.h"
-#include "unclump.h"
 
-#include <glib.h>
 
 // Taking bbox of an item is an expensive operation, and we need to do it many times, so here we
 // cache the centers, widths, and heights of items
@@ -29,7 +23,7 @@ std::map<const gchar *, Geom::Point> wh_cache;
 /**
 Center of bbox of item
 */
-static Geom::Point
+Geom::Point
 unclump_center (SPItem *item)
 {
     std::map<const gchar *, Geom::Point>::iterator i = c_cache.find(item->getId());
@@ -37,7 +31,7 @@ unclump_center (SPItem *item)
         return i->second;
     }
 
-    Geom::OptRect r = item->desktopVisualBounds();
+    Geom::OptRect r = item->getBounds(sp_item_i2d_affine(item));
     if (r) {
         Geom::Point const c = r->midpoint();
         c_cache[item->getId()] = c;
@@ -48,7 +42,7 @@ unclump_center (SPItem *item)
     }
 }
 
-static Geom::Point
+Geom::Point
 unclump_wh (SPItem *item)
 {
     Geom::Point wh;
@@ -56,7 +50,7 @@ unclump_wh (SPItem *item)
     if ( i != wh_cache.end() ) {
         wh = i->second;
     } else {
-        Geom::OptRect r = item->desktopVisualBounds();
+        Geom::OptRect r = item->getBounds(sp_item_i2d_affine(item));
         if (r) {
             wh = r->dimensions();
             wh_cache[item->getId()] = wh;
@@ -73,7 +67,7 @@ Distance between "edges" of item1 and item2. An item is considered to be an elli
 so its radius (distance from center to edge) depends on the w/h and the angle towards the other item.
 May be negative if the edge of item1 is between the center and the edge of item2.
 */
-static double
+double
 unclump_dist (SPItem *item1, SPItem *item2)
 {
 	Geom::Point c1 = unclump_center (item1);
@@ -168,12 +162,13 @@ unclump_dist (SPItem *item1, SPItem *item2)
 /**
 Average unclump_dist from item to others
 */
-static double unclump_average (SPItem *item, std::list<SPItem*> &others)
+double unclump_average (SPItem *item, GSList *others)
 {
     int n = 0;
     double sum = 0;
-    for (std::list<SPItem*>::const_iterator i = others.begin(); i != others.end();++i) {
-        SPItem *other = *i;
+
+    for (GSList *i = others; i != NULL; i = i->next) {
+        SPItem *other = SP_ITEM (i->data);
 
         if (other == item)
             continue;
@@ -191,13 +186,13 @@ static double unclump_average (SPItem *item, std::list<SPItem*> &others)
 /**
 Closest to item among others
  */
-static SPItem *unclump_closest (SPItem *item, std::list<SPItem*> &others)
+SPItem *unclump_closest (SPItem *item, GSList *others)
 {
     double min = HUGE_VAL;
     SPItem *closest = NULL;
 
-    for (std::list<SPItem*>::const_iterator i = others.begin(); i != others.end();++i) {
-    	SPItem *other = *i;
+    for (GSList *i = others; i != NULL; i = i->next) {
+        SPItem *other = SP_ITEM (i->data);
 
         if (other == item)
             continue;
@@ -215,12 +210,13 @@ static SPItem *unclump_closest (SPItem *item, std::list<SPItem*> &others)
 /**
 Most distant from item among others
  */
-static SPItem *unclump_farest (SPItem *item, std::list<SPItem*> &others)
+SPItem *unclump_farest (SPItem *item, GSList *others)
 {
     double max = -HUGE_VAL;
     SPItem *farest = NULL;
-    for (std::list<SPItem*>::const_iterator i = others.begin(); i != others.end();++i) {
-        SPItem *other = *i;
+
+    for (GSList *i = others; i != NULL; i = i->next) {
+        SPItem *other = SP_ITEM (i->data);
 
         if (other == item)
             continue;
@@ -240,8 +236,8 @@ Removes from the \a rest list those items that are "behind" \a closest as seen f
 i.e. those on the other side of the line through \a closest perpendicular to the direction from \a
 item to \a closest. Returns a newly created list which must be freed.
  */
-static std::vector<SPItem*>
-unclump_remove_behind (SPItem *item, SPItem *closest, std::list<SPItem*> &rest)
+GSList *
+unclump_remove_behind (SPItem *item, SPItem *closest, GSList *rest)
 {
     Geom::Point it = unclump_center (item);
     Geom::Point p1 = unclump_center (closest);
@@ -258,9 +254,10 @@ unclump_remove_behind (SPItem *item, SPItem *closest, std::list<SPItem*> &rest)
     // substitute the item into it:
     double val_item = A * it[Geom::X] + B * it[Geom::Y] + C;
 
-    std::vector<SPItem*> out;
-    for (std::list<SPItem*>::const_reverse_iterator i = rest.rbegin(); i != rest.rend();++i) {
-        SPItem *other = *i;
+    GSList *out = NULL;
+
+    for (GSList *i = rest; i != NULL; i = i->next) {
+        SPItem *other = SP_ITEM (i->data);
 
         if (other == item)
             continue;
@@ -271,7 +268,7 @@ unclump_remove_behind (SPItem *item, SPItem *closest, std::list<SPItem*> &rest)
         if (val_item * val_other <= 1e-6) {
             // different signs, which means item and other are on the different sides of p1-p2 line; skip
         } else {
-            out.push_back(other);
+            out = g_slist_prepend (out, other);
         }
     }
 
@@ -281,47 +278,47 @@ unclump_remove_behind (SPItem *item, SPItem *closest, std::list<SPItem*> &rest)
 /**
 Moves \a what away from \a from by \a dist
  */
-static void
+void
 unclump_push (SPItem *from, SPItem *what, double dist)
 {
     Geom::Point it = unclump_center (what);
     Geom::Point p = unclump_center (from);
     Geom::Point by = dist * Geom::unit_vector (- (p - it));
 
-    Geom::Affine move = Geom::Translate (by);
+    Geom::Matrix move = Geom::Translate (by);
 
     std::map<const gchar *, Geom::Point>::iterator i = c_cache.find(what->getId());
     if ( i != c_cache.end() ) {
         i->second *= move;
     }
 
-    //g_print ("push %s at %g,%g from %g,%g by %g,%g, dist %g\n", what->getId(), it[Geom::X],it[Geom::Y], p[Geom::X],p[Geom::Y], by[Geom::X],by[Geom::Y], dist);
+    //g_print ("push %s at %g,%g from %g,%g by %g,%g, dist %g\n", SP_OBJECT_ID(what), it[Geom::X],it[Geom::Y], p[Geom::X],p[Geom::Y], by[Geom::X],by[Geom::Y], dist);
 
-    what->set_i2d_affine(what->i2dt_affine() * move);
-    what->doWriteTransform(what->getRepr(), what->transform, NULL);
+    sp_item_set_i2d_affine(what, sp_item_i2d_affine(what) * move);
+    sp_item_write_transform(what, SP_OBJECT_REPR(what), what->transform, NULL);
 }
 
 /**
 Moves \a what towards \a to by \a dist
  */
-static void
+void
 unclump_pull (SPItem *to, SPItem *what, double dist)
 {
     Geom::Point it = unclump_center (what);
     Geom::Point p = unclump_center (to);
     Geom::Point by = dist * Geom::unit_vector (p - it);
 
-    Geom::Affine move = Geom::Translate (by);
+    Geom::Matrix move = Geom::Translate (by);
 
     std::map<const gchar *, Geom::Point>::iterator i = c_cache.find(what->getId());
     if ( i != c_cache.end() ) {
         i->second *= move;
     }
 
-    //g_print ("pull %s at %g,%g to %g,%g by %g,%g, dist %g\n", what->getId(), it[Geom::X],it[Geom::Y], p[Geom::X],p[Geom::Y], by[Geom::X],by[Geom::Y], dist);
+    //g_print ("pull %s at %g,%g to %g,%g by %g,%g, dist %g\n", SP_OBJECT_ID(what), it[Geom::X],it[Geom::Y], p[Geom::X],p[Geom::Y], by[Geom::X],by[Geom::Y], dist);
 
-    what->set_i2d_affine(what->i2dt_affine() * move);
-    what->doWriteTransform(what->getRepr(), what->transform, NULL);
+    sp_item_set_i2d_affine(what, sp_item_i2d_affine(what) * move);
+    sp_item_write_transform(what, SP_OBJECT_REPR(what), what->transform, NULL);
 }
 
 
@@ -331,38 +328,34 @@ similar to "engraver dots". The only distribution which is unchanged by unclumpi
 grid. May be called repeatedly for stronger effect.
  */
 void
-unclump (std::vector<SPItem*> &items)
+unclump (GSList *items)
 {
     c_cache.clear();
     wh_cache.clear();
 
-    for (std::vector<SPItem*>::const_iterator i = items.begin(); i != items.end();++i) { //  for each original/clone x:
-        SPItem *item = *i;
+    for (GSList *i = items; i != NULL; i = i->next) { //  for each original/clone x:
+        SPItem *item = SP_ITEM (i->data);
 
-        std::list<SPItem*> nei;
+        GSList *nei = NULL;
 
-        std::list<SPItem*> rest;
-        for (int i=0; i < static_cast<int>(items.size()); i++) {
-            rest.push_front(items[items.size() - i - 1]);
-        }
-        rest.remove(item);
+        GSList *rest = g_slist_copy (items);
+        rest = g_slist_remove (rest, item);
 
-        while (!rest.empty()) {
+        while (rest != NULL) {
             SPItem *closest = unclump_closest (item, rest);
             if (closest) {
-                nei.push_front(closest);
-                rest.remove(closest);
-                std::vector<SPItem*> new_rest = unclump_remove_behind (item, closest, rest);
-                rest.clear();
-                for (int i=0; i < static_cast<int>(new_rest.size()); i++) {
-                    rest.push_front(new_rest[new_rest.size() - i - 1]);
-                }
+                nei = g_slist_prepend (nei, closest);
+                rest = g_slist_remove (rest, closest);
+                GSList *new_rest = unclump_remove_behind (item, closest, rest);
+                g_slist_free (rest);
+                rest = new_rest;
             } else {
+                g_slist_free (rest);
                 break;
             }
         }
 
-        if ( (nei.size()) >= 2) {
+        if (g_slist_length (nei) >= 2) {
             double ave = unclump_average (item, nei);
 
             SPItem *closest = unclump_closest (item, nei);
@@ -371,7 +364,7 @@ unclump (std::vector<SPItem*> &items)
             double dist_closest = unclump_dist (closest, item);
             double dist_farest = unclump_dist (farest, item);
 
-            //g_print ("NEI %d for item %s    closest %s at %g  farest %s at %g  ave %g\n", g_slist_length(nei), item->getId(), closest->getId(), dist_closest, farest->getId(), dist_farest, ave);
+            //g_print ("NEI %d for item %s    closest %s at %g  farest %s at %g  ave %g\n", g_slist_length(nei), SP_OBJECT_ID(item), SP_OBJECT_ID(closest), dist_closest, SP_OBJECT_ID(farest), dist_farest, ave);
 
             if (fabs (ave) < 1e6 && fabs (dist_closest) < 1e6 && fabs (dist_farest) < 1e6) { // otherwise the items are bogus
                 // increase these coefficients to make unclumping more aggressive and less stable
@@ -392,4 +385,4 @@ unclump (std::vector<SPItem*> &items)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

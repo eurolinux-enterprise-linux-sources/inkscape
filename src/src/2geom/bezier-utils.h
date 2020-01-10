@@ -1,7 +1,10 @@
+#ifndef SEEN_GEOM_BEZIER_UTILS_H
+#define SEEN_GEOM_BEZIER_UTILS_H
+
 /**
  * \file
- * \brief Bezier fitting algorithms
- *//*
+ * \brief  \todo brief description
+ *
  * An Algorithm for Automatically Fitting Digitized Curves
  * by Philip J. Schneider
  * from "Graphics Gems", Academic Press, 1990
@@ -38,13 +41,11 @@
  *
  */
 
-#ifndef LIB2GEOM_SEEN_BEZIER_UTILS_H
-#define LIB2GEOM_SEEN_BEZIER_UTILS_H
-
 #include <2geom/point.h>
 
-namespace Geom {
+namespace Geom{
 
+/* Bezier approximation utils */
 Point bezier_pt(unsigned degree, Point const V[], double t);
 
 int bezier_fit_cubic(Point bezier[], Point const data[], int len, double error);
@@ -83,9 +84,8 @@ cubic_bezier_poly_coeff(iterator b, Point *pc) {
 	}
 }
 
-} // end namespace Geom
-
-#endif // LIB2GEOM_SEEN_BEZIER_UTILS_H
+}
+#endif /* !SEEN_GEOM_BEZIER_UTILS_H */
 
 /*
   Local Variables:
@@ -96,4 +96,4 @@ cubic_bezier_poly_coeff(iterator b, Point *pc) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

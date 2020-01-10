@@ -1,3 +1,5 @@
+#define __SP_FILTER_PRIMITIVE_CPP__
+
 /** \file
  * Superclass for all the filter primitives
  *
@@ -6,7 +8,6 @@
  * Authors:
  *   Kees Cook <kees@outflux.net>
  *   Niko Kiirala <niko@kiirala.com>
- *   Abhishek Sharma
  *
  * Copyright (C) 2004-2007 Authors
  *
@@ -19,38 +20,71 @@
 
 #include <string.h>
 
-#include "display/nr-filter-primitive.h"
-#include "display/nr-filter-types.h"
-
 #include "attributes.h"
-#include "style.h"
 #include "sp-filter-primitive.h"
 #include "xml/repr.h"
 #include "sp-filter.h"
-#include "sp-item.h"
+#include "display/nr-filter-primitive.h"
+#include "display/nr-filter-types.h"
 
+/* FilterPrimitive base class */
 
-// CPPIFY: Make pure virtual.
-//void SPFilterPrimitive::build_renderer(Inkscape::Filters::Filter* filter) {
-// throw;
-//}
+static void sp_filter_primitive_class_init(SPFilterPrimitiveClass *klass);
+static void sp_filter_primitive_init(SPFilterPrimitive *filter_primitive);
 
-SPFilterPrimitive::SPFilterPrimitive() : SPObject() {
-    this->image_in = Inkscape::Filters::NR_FILTER_SLOT_NOT_SET;
-    this->image_out = Inkscape::Filters::NR_FILTER_SLOT_NOT_SET;
+static void sp_filter_primitive_build(SPObject *object, SPDocument *document, Inkscape::XML::Node *repr);
+static void sp_filter_primitive_release(SPObject *object);
+static void sp_filter_primitive_set(SPObject *object, unsigned int key, gchar const *value);
+static void sp_filter_primitive_update(SPObject *object, SPCtx *ctx, guint flags);
+static Inkscape::XML::Node *sp_filter_primitive_write(SPObject *object, Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags);
 
-    // We must keep track if a value is set or not, if not set then the region defaults to 0%, 0%,
-    // 100%, 100% ("x", "y", "width", "height") of the -> filter <- region.  If set then
-    // percentages are in terms of bounding box or viewbox, depending on value of "primitiveUnits"
+static SPObjectClass *filter_primitive_parent_class;
 
-    // NB: SVGLength.set takes prescaled percent values: 1 means 100%
-    this->x.unset(SVGLength::PERCENT, 0, 0);
-    this->y.unset(SVGLength::PERCENT, 0, 0);
-    this->width.unset(SVGLength::PERCENT, 1, 0);
-    this->height.unset(SVGLength::PERCENT, 1, 0);
+GType
+sp_filter_primitive_get_type()
+{
+    static GType filter_primitive_type = 0;
+
+    if (!filter_primitive_type) {
+        GTypeInfo filter_primitive_info = {
+            sizeof(SPFilterPrimitiveClass),
+            NULL, NULL,
+            (GClassInitFunc) sp_filter_primitive_class_init,
+            NULL, NULL,
+            sizeof(SPFilterPrimitive),
+            16,
+            (GInstanceInitFunc) sp_filter_primitive_init,
+            NULL,    /* value_table */
+        };
+        filter_primitive_type = g_type_register_static(SP_TYPE_OBJECT, "SPFilterPrimitive", &filter_primitive_info, (GTypeFlags)0);
+    }
+    return filter_primitive_type;
 }
 
-SPFilterPrimitive::~SPFilterPrimitive() {
+static void
+sp_filter_primitive_class_init(SPFilterPrimitiveClass *klass)
+{
+    //GObjectClass *gobject_class = (GObjectClass *)klass;
+    SPObjectClass *sp_object_class = (SPObjectClass *)klass;
+
+    filter_primitive_parent_class = (SPObjectClass*)g_type_class_peek_parent(klass);
+
+    sp_object_class->build = sp_filter_primitive_build;
+    sp_object_class->release = sp_filter_primitive_release;
+    sp_object_class->write = sp_filter_primitive_write;
+    sp_object_class->set = sp_filter_primitive_set;
+    sp_object_class->update = sp_filter_primitive_update;
+    
+    /* This should never be called on this base class, but only on derived
+     * classes. */
+    klass->build_renderer = NULL;
+}
+
+static void
+sp_filter_primitive_init(SPFilterPrimitive *filter_primitive)
+{
+    filter_primitive->image_in = Inkscape::Filters::NR_FILTER_SLOT_NOT_SET;
+    filter_primitive->image_out = Inkscape::Filters::NR_FILTER_SLOT_NOT_SET;
 }
 
 /**
@@ -58,126 +92,98 @@ SPFilterPrimitive::~SPFilterPrimitive() {
  * our name must be associated with a repr via "sp_object_type_register".  Best done through
  * sp-object-repr.cpp's repr_name_entries array.
  */
-void SPFilterPrimitive::build(SPDocument *document, Inkscape::XML::Node *repr) {
-    SPFilterPrimitive* object = this;
+static void
+sp_filter_primitive_build(SPObject *object, SPDocument *document, Inkscape::XML::Node *repr)
+{
+    if (((SPObjectClass *) filter_primitive_parent_class)->build) {
+        ((SPObjectClass *) filter_primitive_parent_class)->build(object, document, repr);
+    }
 
-    object->readAttr( "style" ); // struct not derived from SPItem, we need to do this ourselves.
-    object->readAttr( "in" );
-    object->readAttr( "result" );
-    object->readAttr( "x" );
-    object->readAttr( "y" );
-    object->readAttr( "width" );
-    object->readAttr( "height" );
-
-    SPObject::build(document, repr);
+    sp_object_read_attr(object, "in");
+    sp_object_read_attr(object, "result");
 }
 
 /**
  * Drops any allocated memory.
  */
-void SPFilterPrimitive::release() {
-    SPObject::release();
+static void
+sp_filter_primitive_release(SPObject *object)
+{
+    /* deal with our children and our selves here */
+    if (((SPObjectClass *) filter_primitive_parent_class)->release)
+        ((SPObjectClass *) filter_primitive_parent_class)->release(object);
 }
 
 /**
  * Sets a specific value in the SPFilterPrimitive.
  */
-void SPFilterPrimitive::set(unsigned int key, gchar const *value) {
+static void
+sp_filter_primitive_set(SPObject *object, unsigned int key, gchar const *value)
+{
+    SPFilterPrimitive *filter_primitive = SP_FILTER_PRIMITIVE(object);
+    (void)filter_primitive;
 
     int image_nr;
     switch (key) {
         case SP_ATTR_IN:
             if (value) {
-                image_nr = sp_filter_primitive_read_in(this, value);
+                image_nr = sp_filter_primitive_read_in(filter_primitive, value);
             } else {
                 image_nr = Inkscape::Filters::NR_FILTER_SLOT_NOT_SET;
             }
-            if (image_nr != this->image_in) {
-                this->image_in = image_nr;
-                this->parent->requestModified(SP_OBJECT_MODIFIED_FLAG);
+            if (image_nr != filter_primitive->image_in) {
+                filter_primitive->image_in = image_nr;
+                object->parent->requestModified(SP_OBJECT_MODIFIED_FLAG);
             }
             break;
         case SP_ATTR_RESULT:
             if (value) {
-                image_nr = sp_filter_primitive_read_result(this, value);
+                image_nr = sp_filter_primitive_read_result(filter_primitive, value);
             } else {
                 image_nr = Inkscape::Filters::NR_FILTER_SLOT_NOT_SET;
             }
-            if (image_nr != this->image_out) {
-                this->image_out = image_nr;
-                this->parent->requestModified(SP_OBJECT_MODIFIED_FLAG);
+            if (image_nr != filter_primitive->image_out) {
+                filter_primitive->image_out = image_nr;
+                object->parent->requestModified(SP_OBJECT_MODIFIED_FLAG);
             }
-            break;
-
-        /* Filter primitive sub-region */
-        case SP_ATTR_X:
-            this->x.readOrUnset(value);
-            this->requestModified(SP_OBJECT_MODIFIED_FLAG);
-            break;
-        case SP_ATTR_Y:
-            this->y.readOrUnset(value);
-            this->requestModified(SP_OBJECT_MODIFIED_FLAG);
-            break;
-        case SP_ATTR_WIDTH:
-            this->width.readOrUnset(value);
-            this->requestModified(SP_OBJECT_MODIFIED_FLAG);
-            break;
-        case SP_ATTR_HEIGHT:
-            this->height.readOrUnset(value);
-            this->requestModified(SP_OBJECT_MODIFIED_FLAG);
             break;
     }
 
     /* See if any parents need this value. */
-    SPObject::set(key, value);
+    if (((SPObjectClass *) filter_primitive_parent_class)->set) {
+        ((SPObjectClass *) filter_primitive_parent_class)->set(object, key, value);
+    }
 }
 
 /**
  * Receives update notifications.
  */
-void SPFilterPrimitive::update(SPCtx *ctx, guint flags) {
+static void
+sp_filter_primitive_update(SPObject *object, SPCtx *ctx, guint flags)
+{
+    //SPFilterPrimitive *filter_primitive = SP_FILTER_PRIMITIVE(object);
 
-    SPItemCtx *ictx = (SPItemCtx *) ctx;
-
-    // Do here since we know viewport (Bounding box case handled during rendering)
-    SPFilter *parent = SP_FILTER(this->parent);
-
-    if( parent->primitiveUnits == SP_FILTER_UNITS_USERSPACEONUSE ) {
-        if (this->x.unit == SVGLength::PERCENT) {
-            this->x._set = true;
-            this->x.computed = this->x.value * ictx->viewport.width();
-        }
-
-        if (this->y.unit == SVGLength::PERCENT) {
-            this->y._set = true;
-            this->y.computed = this->y.value * ictx->viewport.height();
-        }
-
-        if (this->width.unit == SVGLength::PERCENT) {
-            this->width._set = true;
-            this->width.computed = this->width.value * ictx->viewport.width();
-        }
-
-        if (this->height.unit == SVGLength::PERCENT) {
-            this->height._set = true;
-            this->height.computed = this->height.value * ictx->viewport.height();
-        }
+    if (flags & SP_OBJECT_MODIFIED_FLAG) {
+        sp_object_read_attr(object, "in");
+        sp_object_read_attr(object, "result");
     }
 
-    SPObject::update(ctx, flags);
+    if (((SPObjectClass *) filter_primitive_parent_class)->update) {
+        ((SPObjectClass *) filter_primitive_parent_class)->update(object, ctx, flags);
+    }
 }
 
 /**
  * Writes its settings to an incoming repr object, if any.
  */
-Inkscape::XML::Node* SPFilterPrimitive::write(Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags) {
-    SPFilterPrimitive* object = this;
-
+static Inkscape::XML::Node *
+sp_filter_primitive_write(SPObject *object, Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags)
+{
     SPFilterPrimitive *prim = SP_FILTER_PRIMITIVE(object);
     SPFilter *parent = SP_FILTER(object->parent);
 
     if (!repr) {
-        repr = object->getRepr()->duplicate(doc);
+        repr = SP_OBJECT_REPR(object)->duplicate(doc);
     }
 
     gchar const *in_name = sp_filter_name_for_image(parent, prim->image_in);
@@ -186,17 +192,16 @@ Inkscape::XML::Node* SPFilterPrimitive::write(Inkscape::XML::Document *doc, Inks
     gchar const *out_name = sp_filter_name_for_image(parent, prim->image_out);
     repr->setAttribute("result", out_name);
 
-    /* Do we need to add x,y,width,height? */
-    SPObject::write(doc, repr, flags);
+    if (((SPObjectClass *) filter_primitive_parent_class)->write) {
+        ((SPObjectClass *) filter_primitive_parent_class)->write(object, doc, repr, flags);
+    }
 
     return repr;
 }
 
 int sp_filter_primitive_read_in(SPFilterPrimitive *prim, gchar const *name)
 {
-    if (!name || !prim){
-        return Inkscape::Filters::NR_FILTER_SLOT_NOT_SET;
-    }
+    if (!name) return Inkscape::Filters::NR_FILTER_SLOT_NOT_SET;
     // TODO: are these case sensitive or not? (assumed yes)
     switch (name[0]) {
         case 'S':
@@ -254,8 +259,7 @@ int sp_filter_primitive_name_previous_out(SPFilterPrimitive *prim) {
             Glib::ustring name = sp_filter_get_new_result_name(parent);
             int slot = sp_filter_set_image_name(parent, name.c_str());
             i_prim->image_out = slot;
-            //XML Tree is being directly used while it shouldn't be.
-            i_prim->getRepr()->setAttribute("result", name.c_str());
+            i_prim->repr->setAttribute("result", name.c_str());
             return slot;
         } else {
             return i_prim->image_out;
@@ -275,11 +279,6 @@ void sp_filter_primitive_renderer_common(SPFilterPrimitive *sp_prim, Inkscape::F
     nr_prim->set_output(sp_prim->image_out);
 
     /* TODO: place here code to handle input images, filter area etc. */
-    // We don't know current viewport or bounding box, this is wrong approach.
-    nr_prim->set_subregion( sp_prim->x, sp_prim->y, sp_prim->width, sp_prim->height );
-
-    // Give renderer access to filter properties
-    nr_prim->setStyle( sp_prim->style );
 }
 
 
@@ -293,4 +292,4 @@ void sp_filter_primitive_renderer_common(SPFilterPrimitive *sp_prim, Inkscape::F
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

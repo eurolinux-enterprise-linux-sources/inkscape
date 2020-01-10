@@ -1,6 +1,5 @@
-/**
- * @file
- * Memory statistics dialog.
+/** @file
+ * @brief Memory statistics dialog
  */
 /* Authors:
  *   MenTaLguY <mental@rydia.net>
@@ -14,13 +13,12 @@
 # include <config.h>
 #endif
 
-#include "ui/dialog/memory.h"
-#include <glibmm/main.h>
 #include <glibmm/i18n.h>
 #include <gtkmm/liststore.h>
 #include <gtkmm/treeview.h>
 
-#include "inkgc/gc-core.h"
+#include "gc-core.h"
+#include "ui/dialog/memory.h"
 #include "debug/heap.h"
 #include "verbs.h"
 
@@ -243,4 +241,4 @@ void Memory::_apply() {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -29,12 +29,11 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
 
 import inkex
 import simplestyle, sys
-from simpletransform import computePointInNode
 from math import *
 
 def draw_SVG_tri( (x1, y1), (x2, y2), (x3, y3), (ox,oy), width, name, parent):
@@ -70,7 +69,7 @@ def is_valid_tri_from_sides(a,b,c):#check whether triangle with sides a,b,c is v
     return (a+b)>c and (a+c)>b and (b+c)>a and a > 0 and b> 0 and c>0#two sides must always be greater than the third
                 #no zero-length sides, no degenerate case
 
-def draw_tri_from_3_sides(s_a, s_b, s_c, offset, width, parent): #draw a triangle from three sides (with a given offset
+def draw_tri_from_3_sides(s_a, s_b, s_c, offset, parent): #draw a triangle from three sides (with a given offset
     if is_valid_tri_from_sides(s_a,s_b,s_c):
         a_b = angle_from_3_sides(s_a, s_c, s_b)
                 
@@ -83,7 +82,7 @@ def draw_tri_from_3_sides(s_a, s_b, s_c, offset, width, parent): #draw a triangl
         offy = c[1]/2 #c is the highest point
         offset = ( offset[0]-offx , offset[1]-offy ) #add the centre of the triangle to the offset
                
-        draw_SVG_tri(a, b, c , offset, width, 'Triangle', parent)
+        draw_SVG_tri(a, b, c , offset, 2, 'Triangle', parent)
     else:
         sys.stderr.write('Error:Invalid Triangle Specifications.\n')
 
@@ -122,17 +121,13 @@ class Grid_Polar(inkex.Effect):
     def effect(self):
         
         tri = self.current_layer
-        offset = computePointInNode(list(self.view_center), self.current_layer) #the offset require to centre the triangle
-        self.options.s_a = self.unittouu(str(self.options.s_a) + 'px')
-        self.options.s_b = self.unittouu(str(self.options.s_b) + 'px')
-        self.options.s_c = self.unittouu(str(self.options.s_c) + 'px')
-        stroke_width = self.unittouu('2px')
+        offset = (self.view_center[0],self.view_center[1]) #the offset require to centre the triangle
         
         if self.options.mode == '3_sides':
             s_a = self.options.s_a
             s_b = self.options.s_b
             s_c = self.options.s_c
-            draw_tri_from_3_sides(s_a, s_b, s_c, offset, stroke_width, tri)
+            draw_tri_from_3_sides(s_a, s_b, s_c, offset, tri)
         
         elif self.options.mode == 's_ab_a_c':
             s_a = self.options.s_a
@@ -140,7 +135,7 @@ class Grid_Polar(inkex.Effect):
             a_c = self.options.a_c*pi/180 #in rad
             
             s_c = third_side_from_enclosed_angle(s_a,s_b,a_c)
-            draw_tri_from_3_sides(s_a, s_b, s_c, offset, stroke_width, tri)
+            draw_tri_from_3_sides(s_a, s_b, s_c, offset, tri)
         
         elif self.options.mode == 's_ab_a_a':
             s_a = self.options.s_a
@@ -164,13 +159,13 @@ class Grid_Polar(inkex.Effect):
             
             if not(error) and (a_b < pi) and (a_c < pi): #check that the solution is valid, if so draw acute solution
                 s_c = third_side_from_enclosed_angle(s_a,s_b,a_c)
-                draw_tri_from_3_sides(s_a, s_b, s_c, offset, stroke_width, tri)
+                draw_tri_from_3_sides(s_a, s_b, s_c, offset, tri)
             
             if not(error) and ((a_b > pi) or (a_c > pi) or ambiguous):#we want the obtuse solution
                 a_b = pi - a_b
                 a_c = pi - a_a - a_b
                 s_c = third_side_from_enclosed_angle(s_a,s_b,a_c)
-                draw_tri_from_3_sides(s_a, s_b, s_c, offset, stroke_width, tri)
+                draw_tri_from_3_sides(s_a, s_b, s_c, offset, tri)
         
         elif self.options.mode == 's_a_a_ab':
             s_a = self.options.s_a
@@ -181,7 +176,7 @@ class Grid_Polar(inkex.Effect):
             s_b = s_a*sin(a_b)/sin(a_a)
             s_c = s_a*sin(a_c)/sin(a_a)
             
-            draw_tri_from_3_sides(s_a, s_b, s_c, offset, stroke_width, tri)
+            draw_tri_from_3_sides(s_a, s_b, s_c, offset, tri)
         
         elif self.options.mode == 's_c_a_ab':
             s_c = self.options.s_c
@@ -192,11 +187,11 @@ class Grid_Polar(inkex.Effect):
             s_a = s_c*sin(a_a)/sin(a_c)
             s_b = s_c*sin(a_b)/sin(a_c)
             
-            draw_tri_from_3_sides(s_a, s_b, s_c, offset, stroke_width, tri)
+            draw_tri_from_3_sides(s_a, s_b, s_c, offset, tri)
 
 if __name__ == '__main__':
     e = Grid_Polar()
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

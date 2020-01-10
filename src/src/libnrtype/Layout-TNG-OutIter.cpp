@@ -13,7 +13,6 @@
 #include "font-instance.h"
 #include "svg/svg-length.h"
 #include <2geom/transforms.h>
-#include <2geom/line.h>
 #include "style.h"
 
 namespace Inkscape {
@@ -120,8 +119,7 @@ Layout::iterator Layout::getNearestCursorPositionTo(double x, double y) const
     double best_y_range = DBL_MAX;
     double best_x_range = DBL_MAX;
     for (chunk_index = 0 ; chunk_index < _chunks.size() ; chunk_index++) {
-        FontMetrics line_height;
-        line_height *= 0.0; // Set all metrics to zero.
+        LineHeight line_height = {0.0, 0.0, 0.0};
         double chunk_width = 0.0;
         for ( ; span_index < _spans.size() && _spans[span_index].in_chunk == chunk_index ; span_index++) {
             line_height.max(_spans[span_index].line_height);
@@ -169,7 +167,7 @@ Layout::iterator Layout::getLetterAt(double x, double y) const
     return end();
 }
 
-Layout::iterator Layout::sourceToIterator(void *source_cookie /*, Glib::ustring::const_iterator text_iterator*/) const
+Layout::iterator Layout::sourceToIterator(void *source_cookie, Glib::ustring::const_iterator text_iterator) const
 {
     unsigned source_index;
     if (_characters.empty()) return end();
@@ -182,10 +180,7 @@ Layout::iterator Layout::sourceToIterator(void *source_cookie /*, Glib::ustring:
     if (_input_stream[source_index]->Type() != TEXT_SOURCE)
         return iterator(this, char_index);
 
-    return iterator(this, char_index);
-    /* This code was never used, the text_iterator argument was "NULL" in all calling code
     InputStreamTextSource const *text_source = static_cast<InputStreamTextSource const *>(_input_stream[source_index]);
-
     if (text_iterator <= text_source->text_begin) return iterator(this, char_index);
     if (text_iterator >= text_source->text_end) {
         if (source_index == _input_stream.size() - 1) return end();
@@ -198,7 +193,11 @@ Layout::iterator Layout::sourceToIterator(void *source_cookie /*, Glib::ustring:
         iter_text++;
     }
     return end(); // never happens
-    */
+}
+
+Layout::iterator Layout::sourceToIterator(void *source_cookie) const
+{
+    return sourceToIterator(source_cookie, Glib::ustring::const_iterator(std::string::const_iterator(NULL)));
 }
 
 Geom::OptRect Layout::glyphBoundingBox(iterator const &it, double *rotation) const
@@ -250,26 +249,6 @@ boost::optional<Geom::Point> Layout::baselineAnchorPoint() const
             break;
     }
 }
-
-Geom::Path Layout::baseline() const
-{
-    iterator pos = this->begin();
-    Geom::Point left_pt = this->characterAnchorPoint(pos);
-    pos.thisEndOfLine();
-    Geom::Point right_pt = this->characterAnchorPoint(pos);
-
-    if (this->_blockProgression() == LEFT_TO_RIGHT || this->_blockProgression() == RIGHT_TO_LEFT) {
-        left_pt = Geom::Point(left_pt[Geom::Y], left_pt[Geom::X]);
-        right_pt = Geom::Point(right_pt[Geom::Y], right_pt[Geom::X]);
-    }
-
-    Geom::Path baseline;
-    baseline.start(left_pt);
-    baseline.appendNew<Geom::LineSegment>(right_pt);
-
-    return baseline;
-}
-
 
 Geom::Point Layout::chunkAnchorPoint(iterator const &it) const
 {
@@ -341,8 +320,8 @@ Geom::Rect Layout::characterBoundingBox(iterator const &it, double *rotation) co
 
         double baseline_y = _characters[char_index].line(this).baseline_y + _characters[char_index].span(this).baseline_shift;
         if (_directions_are_orthogonal(_blockProgression(), TOP_TO_BOTTOM)) {
-	    double span_height = _spans[_characters[char_index].in_span].line_height.emSize();
-	    top_left[Geom::Y] = top_left[Geom::X];
+            double span_height = _spans[_characters[char_index].in_span].line_height.ascent + _spans[_characters[char_index].in_span].line_height.descent;
+            top_left[Geom::Y] = top_left[Geom::X];
             top_left[Geom::X] = baseline_y - span_height * 0.5;
             bottom_right[Geom::Y] = bottom_right[Geom::X];
             bottom_right[Geom::X] = baseline_y + span_height * 0.5;
@@ -364,7 +343,7 @@ Geom::Rect Layout::characterBoundingBox(iterator const &it, double *rotation) co
     return Geom::Rect(top_left, bottom_right);
 }
 
-std::vector<Geom::Point> Layout::createSelectionShape(iterator const &it_start, iterator const &it_end, Geom::Affine const &transform) const
+std::vector<Geom::Point> Layout::createSelectionShape(iterator const &it_start, iterator const &it_end, Geom::Matrix const &transform) const
 {
     std::vector<Geom::Point> quads;
     unsigned char_index;
@@ -402,17 +381,15 @@ std::vector<Geom::Point> Layout::createSelectionShape(iterator const &it_start, 
                 bottom_right[Geom::X] = span_x + _characters[char_index].x;
 
             double baseline_y = _spans[span_index].line(this).baseline_y + _spans[span_index].baseline_shift;
-            double vertical_scale = _glyphs.back().vertical_scale;
-
             if (_directions_are_orthogonal(_blockProgression(), TOP_TO_BOTTOM)) {
-	        double span_height = vertical_scale * _spans[span_index].line_height.emSize();
+                double span_height = _spans[span_index].line_height.ascent + _spans[span_index].line_height.descent;
                 top_left[Geom::Y] = top_left[Geom::X];
                 top_left[Geom::X] = baseline_y - span_height * 0.5;
                 bottom_right[Geom::Y] = bottom_right[Geom::X];
                 bottom_right[Geom::X] = baseline_y + span_height * 0.5;
             } else {
-                top_left[Geom::Y] =  baseline_y - vertical_scale * _spans[span_index].line_height.ascent;
-                bottom_right[Geom::Y] = baseline_y + vertical_scale * _spans[span_index].line_height.descent;
+                top_left[Geom::Y] = baseline_y - _spans[span_index].line_height.ascent;
+                bottom_right[Geom::Y] = baseline_y + _spans[span_index].line_height.descent;
             }
         }
 
@@ -421,7 +398,7 @@ std::vector<Geom::Point> Layout::createSelectionShape(iterator const &it_start, 
             continue;
         Geom::Point center_of_rotation((top_left[Geom::X] + bottom_right[Geom::X]) * 0.5,
                                      top_left[Geom::Y] + _spans[span_index].line_height.ascent);
-        Geom::Affine total_transform = Geom::Translate(-center_of_rotation) * Geom::Rotate(char_rotation) * Geom::Translate(center_of_rotation) * transform;
+        Geom::Matrix total_transform = Geom::Translate(-center_of_rotation) * Geom::Rotate(char_rotation) * Geom::Translate(center_of_rotation) * transform;
         for(int i = 0; i < 4; i ++)
             quads.push_back(char_box.corner(i) * total_transform);
     }
@@ -448,8 +425,6 @@ void Layout::queryCursorShape(iterator const &it, Geom::Point &position, double 
             } else {
                 span = &_spans[_characters[it._char_index].in_span];
                 x = _chunks[span->in_chunk].left_x + span->x_start + _characters[it._char_index].x - _chunks[0].left_x;
-                if (_directions_are_orthogonal(_blockProgression(), TOP_TO_BOTTOM))
-                	x -= span->line_height.descent;
                 if (it._char_index != 0)
                     span = &_spans[_characters[it._char_index - 1].in_span];
             }
@@ -458,7 +433,7 @@ void Layout::queryCursorShape(iterator const &it, Geom::Point &position, double 
             if (x_on_path < 0.0) x_on_path = 0.0;
 
             int unused = 0;
-            // as far as I know these functions are const, they're just not marked as such
+                // as far as I know these functions are const, they're just not marked as such
             Path::cut_position *path_parameter_list = const_cast<Path*>(_path_fitted)->CurvilignToPosition(1, &x_on_path, unused);
             Path::cut_position path_parameter;
             if (path_parameter_list != NULL && path_parameter_list[0].piece >= 0)
@@ -476,15 +451,9 @@ void Layout::queryCursorShape(iterator const &it, Geom::Point &position, double 
                 point += x * tangent;
             if (x > path_length )
                 point += (x - path_length) * tangent;
-            if (_directions_are_orthogonal(_blockProgression(), TOP_TO_BOTTOM)) {
-                rotation = atan2(-tangent[Geom::X], tangent[Geom::Y]);
-                position[Geom::X] = point[Geom::Y] - tangent[Geom::X] * span->baseline_shift;
-                position[Geom::Y] = point[Geom::X] + tangent[Geom::Y] * span->baseline_shift;
-            } else {
-                rotation = atan2(tangent);
-                position[Geom::X] = point[Geom::X] - tangent[Geom::Y] * span->baseline_shift;
-                position[Geom::Y] = point[Geom::Y] + tangent[Geom::X] * span->baseline_shift;
-            }
+            rotation = atan2(tangent);
+            position[Geom::X] = point[Geom::X] - tangent[Geom::Y] * span->baseline_shift;
+            position[Geom::Y] = point[Geom::Y] + tangent[Geom::X] * span->baseline_shift;
         } else {
             // text is not on a path
             if (it._char_index >= _characters.size()) {
@@ -508,25 +477,21 @@ void Layout::queryCursorShape(iterator const &it, Geom::Point &position, double 
             position[Geom::Y] = span->line(this).baseline_y + span->baseline_shift;
         }
         // up to now *position is the baseline point, not the final point which will be the bottom of the descent
-        double vertical_scale = _glyphs.empty() ? 1.0 : _glyphs.back().vertical_scale;
-
         if (_directions_are_orthogonal(_blockProgression(), TOP_TO_BOTTOM)) {
-	    // Vertical text
-	    height = vertical_scale * span->line_height.emSize();
+            height = span->line_height.ascent + span->line_height.descent;
             rotation += M_PI / 2;
             std::swap(position[Geom::X], position[Geom::Y]);
-            position[Geom::X] -= vertical_scale * sin(rotation) * height * 0.5;
-            position[Geom::Y] += vertical_scale * cos(rotation) * height * 0.5;
+            position[Geom::X] -= sin(rotation) * height * 0.5;
+            position[Geom::Y] += cos(rotation) * height * 0.5;
         } else {
-	    // Horizontal text
             double caret_slope_run = 0.0, caret_slope_rise = 1.0;
             if (span->font)
                 const_cast<font_instance*>(span->font)->FontSlope(caret_slope_run, caret_slope_rise);
             double caret_slope = atan2(caret_slope_run, caret_slope_rise);
-            height = vertical_scale * (span->line_height.emSize()) / cos(caret_slope);
+            height = (span->line_height.ascent + span->line_height.descent) / cos(caret_slope);
             rotation += caret_slope;
-            position[Geom::X] -= sin(rotation) * vertical_scale * span->line_height.descent;
-            position[Geom::Y] += cos(rotation) * vertical_scale * span->line_height.descent;
+            position[Geom::X] -= sin(rotation) * span->line_height.descent;
+            position[Geom::Y] += cos(rotation) * span->line_height.descent;
         }
     }
 }
@@ -540,24 +505,19 @@ void Layout::getSourceOfCharacter(iterator const &it, void **source_cookie, Glib
     InputStreamItem *stream_item = _input_stream[_spans[_characters[it._char_index].in_span].in_input_stream_item];
     *source_cookie = stream_item->source_cookie;
     if (text_iterator && stream_item->Type() == TEXT_SOURCE) {
-        InputStreamTextSource *text_source = dynamic_cast<InputStreamTextSource *>(stream_item);
-
-        // In order to return a non-const iterator in text_iterator, do the const_cast here.
-        // Note that, although ugly, it is safe because we do not write to *iterator anywhere.
-        Glib::ustring::iterator text_iter = const_cast<Glib::ustring *>(text_source->text)->begin();
-
+        InputStreamTextSource const *text_source = static_cast<InputStreamTextSource const *>(stream_item);
+        Glib::ustring::const_iterator text_iter_const = text_source->text_begin;
         unsigned char_index = it._char_index;
         unsigned original_input_source_index = _spans[_characters[char_index].in_span].in_input_stream_item;
         // confusing algorithm because the iterator goes forwards while the index goes backwards.
         // It's just that it's faster doing it that way
         while (char_index && _spans[_characters[char_index - 1].in_span].in_input_stream_item == original_input_source_index) {
-            ++text_iter;
+            ++text_iter_const;
             char_index--;
         }
-        
-        if (text_iterator) {
-            *text_iterator = text_iter;
-        }
+        text_source->text->begin().base() + (text_iter_const.base() - text_source->text->begin().base());
+        *text_iterator = Glib::ustring::iterator(std::string::iterator(const_cast<char*>(&*text_source->text->begin().base() + (text_iter_const.base() - text_source->text->begin().base()))));
+             // the caller owns the string, so they're going to want a non-const iterator
     }
 }
 
@@ -608,10 +568,9 @@ void Layout::simulateLayoutUsingKerning(iterator const &from, iterator const &to
             if (input_item->Type() == TEXT_SOURCE) {
                 SPStyle const *style = static_cast<InputStreamTextSource*>(input_item)->style;
                 if (_characters[char_index].char_attributes.is_white)
-                    dx -= style->word_spacing.computed * getTextLengthMultiplierDue();
+                    dx -= style->word_spacing.computed;
                 if (_characters[char_index].char_attributes.is_cursor_position)
-                    dx -= style->letter_spacing.computed * getTextLengthMultiplierDue();
-                    dx -= getTextLengthIncrementDue();
+                    dx -= style->letter_spacing.computed;
             }
 
             if (fabs(dx) > 0.0001) {
@@ -791,12 +750,12 @@ bool Layout::iterator::prevLineCursor(int n)
 {
     if (!_cursor_moving_vertically)
         beginCursorUpDown();
-    int line_index;
+    unsigned line_index;
     if (_char_index == _parent_layout->_characters.size())
         line_index = _parent_layout->_lines.size() - 1;
     else
         line_index = _parent_layout->_characters[_char_index].chunk(_parent_layout).in_line;
-    if (line_index <= 0)
+    if (line_index == 0) 
         return false; // nowhere to go
     else
         n = MIN (n, static_cast<int>(line_index));

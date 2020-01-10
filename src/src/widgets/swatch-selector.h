@@ -1,13 +1,14 @@
 #ifndef SEEN_SP_SWATCH_SELECTOR_H
 #define SEEN_SP_SWATCH_SELECTOR_H
 
+
+
 #include <gtkmm/box.h>
-#include "ui/selected-color.h"
 
 class SPDocument;
 class SPGradient;
-struct SPColorSelector;
-struct SPGradientSelector;
+class SPColorSelector;
+class SPGradientSelector;
 
 namespace Inkscape
 {
@@ -30,14 +31,13 @@ public:
     SPGradientSelector *getGradientSelector();
 
 private:
-    void _grabbedCb();
-    void _draggedCb();
-    void _releasedCb();
-    void _changedCb();
+    static void _grabbedCb(SPColorSelector *csel, void *data);
+    static void _draggedCb(SPColorSelector *csel, void *data);
+    static void _releasedCb(SPColorSelector *csel, void *data);
+    static void _changedCb(SPColorSelector *csel, void *data);
 
     SPGradientSelector *_gsel;
-    Inkscape::UI::SelectedColor _selected_color;
-    bool _updating_color;
+    SPColorSelector *_csel;
 };
 
 
@@ -55,5 +55,5 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
 

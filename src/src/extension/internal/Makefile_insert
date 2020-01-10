@@ -4,18 +4,7 @@ if WITH_LIBWPG
 ink_common_sources += \
 	extension/internal/wpg-input.cpp	\
 	extension/internal/wpg-input.h
-endif
 
-if WITH_LIBVISIO
-ink_common_sources += \
-	extension/internal/vsd-input.cpp	\
-	extension/internal/vsd-input.h
-endif
-
-if WITH_LIBCDR
-ink_common_sources += \
-	extension/internal/cdr-input.cpp	\
-	extension/internal/cdr-input.h
 endif
 
 if USE_IMAGE_MAGICK
@@ -36,8 +25,6 @@ ink_common_sources +=			\
 	extension/internal/bitmap/colorize.h			\
 	extension/internal/bitmap/contrast.cpp			\
 	extension/internal/bitmap/contrast.h			\
-	extension/internal/bitmap/crop.cpp			\
-	extension/internal/bitmap/crop.h			\
 	extension/internal/bitmap/cycleColormap.cpp		\
 	extension/internal/bitmap/cycleColormap.h		\
 	extension/internal/bitmap/despeckle.cpp			\
@@ -106,6 +93,8 @@ ink_common_sources +=	\
 	extension/internal/svg.cpp	\
 	extension/internal/svgz.h	\
 	extension/internal/svgz.cpp	\
+	extension/internal/pdf-input-cairo.cpp \
+	extension/internal/pdf-input-cairo.h \
 	extension/internal/cairo-ps-out.h	\
 	extension/internal/cairo-ps-out.cpp	\
 	extension/internal/cairo-render-context.h	\
@@ -136,38 +125,15 @@ ink_common_sources +=	\
 	extension/internal/latex-pstricks.h	\
 	extension/internal/latex-pstricks-out.cpp	\
 	extension/internal/latex-pstricks-out.h	\
-	extension/internal/filter/bevels.h	\
-	extension/internal/filter/blurs.h \
-	extension/internal/filter/bumps.h \
-	extension/internal/filter/color.h \
-	extension/internal/filter/distort.h \
-	extension/internal/filter/filter.h \
-	extension/internal/filter/image.h \
-	extension/internal/filter/morphology.h \
-	extension/internal/filter/overlays.h \
-	extension/internal/filter/paint.h \
-	extension/internal/filter/protrusions.h \
-	extension/internal/filter/shadows.h \
-	extension/internal/filter/textures.h \
-	extension/internal/filter/transparency.h \
 	extension/internal/filter/filter-all.cpp \
 	extension/internal/filter/filter-file.cpp \
 	extension/internal/filter/filter.cpp \
 	extension/internal/filter/filter.h \
-	extension/internal/text_reassemble.c \
-	extension/internal/text_reassemble.h \
-	extension/internal/emf-print.h \
-	extension/internal/emf-print.cpp \
-	extension/internal/emf-inout.h \
-	extension/internal/emf-inout.cpp \
-	extension/internal/metafile-inout.h \
-	extension/internal/metafile-inout.cpp \
-	extension/internal/metafile-print.h \
-	extension/internal/metafile-print.cpp \
-	extension/internal/wmf-print.h \
-	extension/internal/wmf-print.cpp \
-	extension/internal/wmf-inout.h \
-	extension/internal/wmf-inout.cpp \
-	extension/internal/image-resolution.h \
-	extension/internal/image-resolution.cpp
-	
+	extension/internal/filter/drop-shadow.h \
+	extension/internal/filter/snow.h \
+	extension/internal/win32.h \
+	extension/internal/win32.cpp \
+	extension/internal/emf-win32-print.h \
+	extension/internal/emf-win32-print.cpp \
+	extension/internal/emf-win32-inout.h \
+	extension/internal/emf-win32-inout.cpp 

@@ -1,7 +1,7 @@
 /**
  * \file
- * \brief Template concepts used by 2Geom
- *//*
+ * \brief Declares various mathematical concepts, for restriction of template parameters
+ *
  * Copyright 2007 Michael Sloan <mgsloan@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -26,20 +26,18 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
  * OF ANY KIND, either express or implied. See the LGPL or the MPL for
  * the specific language governing rights and limitations.
+ *
  */
 
-#ifndef LIB2GEOM_SEEN_CONCEPTS_H
-#define LIB2GEOM_SEEN_CONCEPTS_H
+#ifndef SEEN_CONCEPTS_H
+#define SEEN_CONCEPTS_H
 
 #include <2geom/sbasis.h>
 #include <2geom/interval.h>
 #include <2geom/point.h>
-#include <2geom/rect.h>
-#include <2geom/intersection.h>
 #include <vector>
-#include <boost/concept/assert.hpp>
+#include <boost/concept_check.hpp>
 #include <2geom/forward.h>
-#include <2geom/transforms.h>
 
 namespace Geom {
 
@@ -51,7 +49,7 @@ template <> struct ResultTraits<double> {
   typedef SBasis sb_type;
 };
 
-template <> struct ResultTraits<Point> {
+template <> struct ResultTraits<Point > {
   typedef OptRect bounds_type;
   typedef D2<SBasis> sb_type;
 };
@@ -73,18 +71,16 @@ struct FragmentConcept {
     SbType sb;
     void constraints() {
         t = T(o);
-        b = t.isZero(d);
-        b = t.isConstant(d);
+        b = t.isZero();
+        b = t.isConstant();
         b = t.isFinite();
         o = t.at0();
         o = t.at1();
-        t.at0() = o;
-        t.at1() = o;
         o = t.valueAt(d);
         o = t(d);
         v = t.valueAndDerivatives(d, u-1);
-        //Is a pure derivative (ignoring others) accessor ever much faster?
-        //u = number of values returned. first val is value.
+		//Is a pure derivative (ignoring others) accessor ever much faster?
+		//u = number of values returned. first val is value.
         sb = t.toSBasis();
         t = reverse(t);
         i = bounds_fast(t);
@@ -101,49 +97,7 @@ struct FragmentConcept {
 };
 
 template <typename T>
-struct ShapeConcept {
-    typedef typename ShapeTraits<T>::TimeType Time;
-    typedef typename ShapeTraits<T>::IntervalType Interval;
-    typedef typename ShapeTraits<T>::AffineClosureType AffineClosure;
-    typedef typename ShapeTraits<T>::IntersectionType Isect;
-
-    T shape, other;
-    Time t;
-    Point p;
-    AffineClosure ac;
-    Affine m;
-    Translate tr;
-    Coord c;
-    bool bool_;
-    std::vector<Isect> ivec;
-
-    void constraints() {
-        p = shape.pointAt(t);
-        c = shape.valueAt(t, X);
-        ivec = shape.intersect(other);
-        t = shape.nearestTime(p);
-        shape *= tr;
-        ac = shape;
-        ac *= m;
-        bool_ = (shape == shape);
-        bool_ = (shape != other);
-        bool_ = shape.isDegenerate();
-        //bool_ = are_near(shape, other, c);
-    }
-};
-
-template <typename T>
 inline T portion(const T& t, const Interval& i) { return portion(t, i.min(), i.max()); }
-
-template <typename T>
-struct EqualityComparableConcept {
-    T a, b;
-    bool bool_;
-    void constaints() {
-        bool_ = (a == b);
-        bool_ = (a != b);
-    }
-};
 
 template <typename T>
 struct NearConcept {
@@ -176,7 +130,7 @@ struct ScalableConcept {
     }
 };
 
-template <typename T>
+template <class T>
 struct AddableConcept {
     T i, j;
     void constraints() {
@@ -185,7 +139,7 @@ struct AddableConcept {
     }
 };
 
-template <typename T>
+template <class T>
 struct MultiplicableConcept {
     T i, j;
     void constraints() {
@@ -193,9 +147,9 @@ struct MultiplicableConcept {
     }
 };
 
-} // end namespace Geom
+};
 
-#endif // LIB2GEOM_SEEN_CONCEPTS_H
+#endif //SEEN_CONCEPTS_H
 
 /*
   Local Variables:
@@ -206,4 +160,4 @@ struct MultiplicableConcept {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

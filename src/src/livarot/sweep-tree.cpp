@@ -1,3 +1,4 @@
+#include "libnr/nr-point-fns.h"
 #include "livarot/sweep-event-queue.h"
 #include "livarot/sweep-tree-list.h"
 #include "livarot/sweep-tree.h"
@@ -117,9 +118,9 @@ SweepTree::Find(Geom::Point const &px, SweepTree *newOne, SweepTree *&insertL,
         nNorm=nNorm.ccw();
 
         if (sweepSens) {
-            y = cross(bNorm, nNorm);
-        } else {
             y = cross(nNorm, bNorm);
+        } else {
+            y = cross(bNorm, nNorm);
         }
         if (y == 0) {
             y = dot(bNorm, nNorm);
@@ -131,8 +132,8 @@ SweepTree::Find(Geom::Point const &px, SweepTree *newOne, SweepTree *&insertL,
         }
     }
     if (y < 0) {
-        if (child[LEFT]) {
-            return (static_cast<SweepTree *>(child[LEFT]))->Find(px, newOne,
+        if (son[LEFT]) {
+            return (static_cast<SweepTree *>(son[LEFT]))->Find(px, newOne,
                                                                insertL, insertR,
                                                                sweepSens);
 	} else {
@@ -145,8 +146,8 @@ SweepTree::Find(Geom::Point const &px, SweepTree *newOne, SweepTree *&insertL,
 	    }
 	}
     } else {
-        if (child[RIGHT]) {
-            return (static_cast<SweepTree *>(child[RIGHT]))->Find(px, newOne,
+        if (son[RIGHT]) {
+            return (static_cast<SweepTree *>(son[RIGHT]))->Find(px, newOne,
                                                                 insertL, insertR,
                                                                 sweepSens);
 	} else {
@@ -189,9 +190,9 @@ SweepTree::Find(Geom::Point const &px, SweepTree * &insertL,
     }
   if (y < 0)
     {
-      if (child[LEFT])
+      if (son[LEFT])
 	{
-	  return (static_cast<SweepTree *>(child[LEFT]))->Find(px, insertL,
+	  return (static_cast<SweepTree *>(son[LEFT]))->Find(px, insertL,
 							    insertR);
 	}
       else
@@ -210,9 +211,9 @@ SweepTree::Find(Geom::Point const &px, SweepTree * &insertL,
     }
   else
     {
-      if (child[RIGHT])
+      if (son[RIGHT])
 	{
-	  return (static_cast<SweepTree *>(child[RIGHT]))->Find(px, insertL,
+	  return (static_cast<SweepTree *>(son[RIGHT]))->Find(px, insertL,
 							    insertR);
 	}
       else
@@ -345,7 +346,7 @@ SweepTree::InsertAt(SweepTreeList &list, SweepEventQueue &queue,
 
   SweepTree *insertL = NULL;
   SweepTree *insertR = NULL;
-  double ang = cross(bNorm, nNorm);
+  double ang = cross(nNorm, bNorm);
   if (ang == 0)
     {
       insertL = insNode;
@@ -384,7 +385,7 @@ SweepTree::InsertAt(SweepTreeList &list, SweepEventQueue &queue,
 	    {
 	      bNorm = -bNorm;
 	    }
-	  ang = cross(bNorm, nNorm);
+	  ang = cross(nNorm, bNorm);
 	  if (ang <= 0)
 	    {
 	      break;
@@ -426,7 +427,7 @@ SweepTree::InsertAt(SweepTreeList &list, SweepEventQueue &queue,
 	    {
 	      bNorm = -bNorm;
 	    }
-	  ang = cross(bNorm, nNorm);
+	  ang = cross(nNorm, bNorm);
 	  if (ang > 0)
 	    {
 	      break;
@@ -555,4 +556,4 @@ SweepTree::Avance(Shape */*dstPts*/, int /*curPoint*/, Shape */*a*/, Shape */*b*
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

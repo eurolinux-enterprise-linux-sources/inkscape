@@ -1,5 +1,5 @@
-#ifndef INKSCAPE_EXTENSION_INTERNAL_BITMAP_IMAGEMAGICK_H
-#define INKSCAPE_EXTENSION_INTERNAL_BITMAP_IMAGEMAGICK_H
+#ifndef __INKSCAPE_EXTENSION_INTERNAL_BITMAP_IMAGEMAGICK_H__
+#define __INKSCAPE_EXTENSION_INTERNAL_BITMAP_IMAGEMAGICK_H__
 
 /*
  * Copyright (C) 2007 Authors:
@@ -10,19 +10,11 @@
  */
 
 #include "extension/implementation/implementation.h"
-
-class SPItem;
-
-namespace Magick {
-class Image;
-}
+#include "extension/extension-forward.h"
+#include <Magick++.h>
 
 namespace Inkscape {
 namespace Extension {
-
-class Effect;
-class Extension;
-
 namespace Internal {
 namespace Bitmap {
 
@@ -31,7 +23,6 @@ public:
     /* Functions to be implemented by subclasses */
     virtual void applyEffect(Magick::Image */*image*/) { };
     virtual void refreshParameters(Inkscape::Extension::Effect */*module*/) { };
-    virtual void postEffect(Magick::Image */*image*/, SPItem */*item*/) { };
 
     /* Functions implemented from ::Implementation */
     bool load(Inkscape::Extension::Extension *module);
@@ -45,4 +36,4 @@ public:
 }; /* namespace Extension */
 }; /* namespace Inkscape */
 
-#endif // INKSCAPE_EXTENSION_INTERNAL_BITMAP_IMAGEMAGICK_H
+#endif /* __INKSCAPE_EXTENSION_INTERNAL_BITMAP_IMAGEMAGICK_H__ */

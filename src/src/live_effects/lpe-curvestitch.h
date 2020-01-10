@@ -28,11 +28,11 @@ public:
     LPECurveStitch(LivePathEffectObject *lpeobject);
     virtual ~LPECurveStitch();
 
-    virtual Geom::PathVector doEffect_path (Geom::PathVector const & path_in);
+    virtual std::vector<Geom::Path> doEffect_path (std::vector<Geom::Path> const & path_in);
 
-    virtual void resetDefaults(SPItem const* item);
+    virtual void resetDefaults(SPItem * item);
 
-    virtual void transform_multiply(Geom::Affine const& postmul, bool set);
+    virtual void transform_multiply(Geom::Matrix const& postmul, bool set);
 
 private:
     PathParam strokepath;

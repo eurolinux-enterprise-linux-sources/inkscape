@@ -4,7 +4,6 @@
  * Authors:
  *   Bob Jamison
  *   Other dudes from The Inkscape Organization
- *   Abhishek Sharma
  *
  * Copyright (C) 2004 The Inkscape Organization
  *
@@ -19,8 +18,6 @@
 #include "svg-view-widget.h"
 #include "document.h"
 #include "inkscape.h"
-#include <glibmm/convert.h>
-#include <glibmm/fileutils.h>
 
 
 namespace Inkscape
@@ -79,7 +76,7 @@ ImageIcon::ImageIcon(const ImageIcon &other)
 ImageIcon::~ImageIcon()
 {
     if (document)
-        document->doUnref();
+        sp_document_unref(document);
 }
 
 
@@ -88,9 +85,8 @@ ImageIcon::~ImageIcon()
  */
 void ImageIcon::init()
 {
-    //  \FIXME Why?
-    if (!Inkscape::Application::exists())
-        Inkscape::Application::create("", false);
+    if (!INKSCAPE)
+        inkscape_application_init("",false);
     document = NULL;
     viewerGtkmm = NULL;
     //set_size_request(150,150);
@@ -100,12 +96,13 @@ void ImageIcon::init()
 
 bool ImageIcon::showSvgDocument(const SPDocument *docArg)
 {
+
     if (document)
-        document->doUnref();
+        sp_document_unref(document);
 
-    SPDocument *doc = const_cast<SPDocument *>(docArg);
+    SPDocument *doc = (SPDocument *)docArg;
 
-    doc->doRef();
+    sp_document_ref(doc);
     document = doc;
 
     //This should remove it from the box, and free resources
@@ -118,7 +115,7 @@ bool ImageIcon::showSvgDocument(const SPDocument *docArg)
     viewerGtkmm->show();
     pack_start(*viewerGtkmm, TRUE, TRUE, 0);
 
-    //GtkWidget *vbox = GTK_WIDGET(gobj());
+    //GtkWidget *vbox = (GtkWidget *)gobj();
     //gtk_box_pack_start(GTK_BOX(vbox), viewerGtk, TRUE, TRUE, 0);
 
     return true;
@@ -130,7 +127,7 @@ bool ImageIcon::showSvgFile(const Glib::ustring &theFileName)
 
     fileName = Glib::filename_to_utf8(fileName);
 
-    SPDocument *doc = SPDocument::createNewDoc (fileName.c_str(), 0);
+    SPDocument *doc = sp_document_new (fileName.c_str(), 0);
     if (!doc) {
         g_warning("SVGView: error loading document '%s'\n", fileName.c_str());
         return false;
@@ -138,7 +135,7 @@ bool ImageIcon::showSvgFile(const Glib::ustring &theFileName)
 
     showSvgDocument(doc);
 
-    doc->doUnref();
+    sp_document_unref(doc);
 
     return true;
 }
@@ -151,7 +148,7 @@ bool ImageIcon::showSvgFromMemory(const char *xmlBuffer)
         return false;
 
     gint len = (gint)strlen(xmlBuffer);
-    SPDocument *doc = SPDocument::createNewDocFromMem(xmlBuffer, len, 0);
+    SPDocument *doc = sp_document_new_from_mem(xmlBuffer, len, 0);
     if (!doc) {
         g_warning("SVGView: error loading buffer '%s'\n",xmlBuffer);
         return false;
@@ -159,7 +156,7 @@ bool ImageIcon::showSvgFromMemory(const char *xmlBuffer)
 
     showSvgDocument(doc);
 
-    doc->doUnref();
+    sp_document_unref(doc);
 
     return true;
 }
@@ -307,7 +304,7 @@ void ImageIcon::showBrokenImage(const Glib::ustring &errorMessage)
         "</svg>";
 
     //Fill in the template
-    char *cErrorMessage = const_cast<char *>(errorMessage.c_str());
+    char *cErrorMessage = (char *)errorMessage.c_str();
     gchar *xmlBuffer = g_strdup_printf(xformat, cErrorMessage);
 
     //g_message("%s\n", xmlBuffer);
@@ -370,47 +367,60 @@ isValidImageIconFile(const Glib::ustring &fileName)
     return false;
 }
 
-/// \fixme This function is almost an exact duplicate of SVGPreview::set() in ui/dialog/filedialogimpl-gtkmm.cpp.
 bool ImageIcon::show(const Glib::ustring &fileName)
 {
-    if (!Glib::file_test(fileName, Glib::FILE_TEST_EXISTS)) {
-        showBrokenImage("File does not exist");
-        return false;
-    }
 
-    if (Glib::file_test(fileName, Glib::FILE_TEST_IS_REGULAR)) {
-        gchar *fName = const_cast<gchar *>(fileName.c_str()); // this const-cast seems not necessary, was it put there because of older sys/stat.h version?
-        struct stat info;
-        if (stat(fName, &info)) // stat returns 0 upon success
+    if (!Glib::file_test(fileName, Glib::FILE_TEST_EXISTS))
+        return false;
+
+    gchar *fName = (gchar *)fileName.c_str();
+    //g_message("fname:%s\n", fName);
+
+
+    if (Glib::file_test(fileName, Glib::FILE_TEST_IS_REGULAR))
         {
-            showBrokenImage("Cannot get file info");
+        struct stat info;
+        if (stat(fName, &info))
+            {
+            Glib::ustring err = "cannot get file info";
+            showBrokenImage(err);
             return false;
-        }
-        if (info.st_size > 0x150000L) {
-            showBrokenImage("File too large");
+            }
+        long fileLen = info.st_size;
+        if (fileLen > 0x150000L)
+            {
+            Glib::ustring err = "File too large";
+            showBrokenImage(err);
             return false;
+            }
         }
-    }
 
     Glib::ustring svg = ".svg";
     Glib::ustring svgz = ".svgz";
 
-    if (hasSuffix(fileName, svg) || hasSuffix(fileName, svgz)) {
-        if (!showSvgFile(fileName)) {
+    if (hasSuffix(fileName, svg) || hasSuffix(fileName, svgz)   )
+        {
+        if (!showSvgFile(fileName))
+            {
             showBrokenImage(bitmapError);
             return false;
-        }
+            }
         return true;
-    } else if (isValidImageIconFile(fileName)) {
-        if (!showBitmap(fileName)) {
+        }
+    else if (isValidImageIconFile(fileName))
+        {
+        if (!showBitmap(fileName))
+            {
             showBrokenImage(bitmapError);
             return false;
-        }
+            }
         return true;
-    } else {
+        }
+    else
+        {
         showBrokenImage("unsupported file type");
         return false;
-    }
+        }
 }
 
 

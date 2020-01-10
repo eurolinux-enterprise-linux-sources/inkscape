@@ -28,12 +28,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 # On failure, outputs an error message to stderr, and exits with a return
 # code of 1.
 
-# standard library
 import os
 import sys
 import tempfile
-# local library
-import inkex
+import gettext
+_ = gettext.gettext
 
 def run(command_format, prog_name, uniconv_format):
     outfile = tempfile.mktemp(uniconv_format)
@@ -118,15 +117,14 @@ def get_command():
             import imp
             imp.find_module("uniconvertor")
         except ImportError:
-            inkex.localize()
-            inkex.errormsg(_('You need to install the UniConvertor software.\n'+\
+            sys.stderr.write(_('You need to install the UniConvertor software.\n'+\
                          'For GNU/Linux: install the package python-uniconvertor.\n'+\
                          'For Windows: download it from\n'+\
-                         'https://sk1project.net/modules.php?name=Products&product=uniconvertor&op=download\n'+\
+                         'http://sk1project.org/modules.php?name=Products&product=uniconvertor\n'+\
                          'and install into your Inkscape\'s Python location\n'))
             sys.exit(1)
         cmd = 'python -c "import uniconvertor; uniconvertor.uniconv_run();"'
 
     return cmd
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

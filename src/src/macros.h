@@ -1,7 +1,7 @@
-#ifndef SEEN_MACROS_H
-#define SEEN_MACROS_H
+#ifndef __MACROS_H__
+#define __MACROS_H__
 
-/**
+/*
  * Useful macros for inkscape
  *
  * Author:
@@ -11,9 +11,6 @@
  *
  * Released under GNU GPL
  */
-
-// I'm of the opinion that this file should be removed, so I will in the future take the necessary steps to wipe it out.
-// Macros are not in general bad, but these particular ones are rather ugly. Especially that sp_round one. --Liam
 
 #ifdef SP_MACROS_SILENT
 #define SP_PRINT_MATRIX(s,m)
@@ -38,12 +35,12 @@
 #endif
 
 // keyboard modifiers in an event
-#define MOD__SHIFT(event) ((event)->key.state & GDK_SHIFT_MASK)
-#define MOD__CTRL(event) ((event)->key.state & GDK_CONTROL_MASK)
-#define MOD__ALT(event) ((event)->key.state & GDK_MOD1_MASK)
-#define MOD__SHIFT_ONLY(event) (((event)->key.state & GDK_SHIFT_MASK) && !((event)->key.state & GDK_CONTROL_MASK) && !((event)->key.state & GDK_MOD1_MASK))
-#define MOD__CTRL_ONLY(event) (!((event)->key.state & GDK_SHIFT_MASK) && ((event)->key.state & GDK_CONTROL_MASK) && !((event)->key.state & GDK_MOD1_MASK))
-#define MOD__ALT_ONLY(event) (!((event)->key.state & GDK_SHIFT_MASK) && !((event)->key.state & GDK_CONTROL_MASK) && ((event)->key.state & GDK_MOD1_MASK))
+#define MOD__SHIFT (event->key.state & GDK_SHIFT_MASK)
+#define MOD__CTRL (event->key.state & GDK_CONTROL_MASK)
+#define MOD__ALT (event->key.state & GDK_MOD1_MASK)
+#define MOD__SHIFT_ONLY ((event->key.state & GDK_SHIFT_MASK) && !(event->key.state & GDK_CONTROL_MASK) && !(event->key.state & GDK_MOD1_MASK))
+#define MOD__CTRL_ONLY (!(event->key.state & GDK_SHIFT_MASK) && (event->key.state & GDK_CONTROL_MASK) && !(event->key.state & GDK_MOD1_MASK))
+#define MOD__ALT_ONLY (!(event->key.state & GDK_SHIFT_MASK) && !(event->key.state & GDK_CONTROL_MASK) && (event->key.state & GDK_MOD1_MASK))
 
 /*
   Local Variables:
@@ -54,4 +51,4 @@
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

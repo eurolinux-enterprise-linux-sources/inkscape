@@ -42,7 +42,7 @@
     </description>
 
   <!-- set global properties for this build -->
-  <property name="version"       value="0.92pre1"/>
+  <property name="version"       value="0.48.3.1"/>
   <property name="src"           location="src"/>
   <property name="lib"           location="lib"/>
   <property name="build"         location="build"/>
@@ -51,9 +51,6 @@
   <!-- Use these settings for the native compiler -->  
   <!-- -->
   <property name="arch"          value="mingw32-"/>
-  <property name="arch_cc"       value="${arch}gcc"/>
-  <property name="arch_cxx"      value="${arch}g++"/>
-  <property name="arch_link"     value="${arch}g++"/>
   <property name="archutil"      value=""/>
   <property name="devlibs"       location="${env.DEVLIBS_PATH}"/>
   <property name="mingw"         location="${env.MINGW_PATH}"/>
@@ -65,9 +62,6 @@
   <!-- Use these settings for the cross compiler -->  
   <!--
   <property name="arch"          value="i686-pc-mingw32-"/>
-  <property name="arch_cc"       value="${arch}gcc"/>
-  <property name="arch_cxx"      value="${arch}g++"/>
-  <property name="arch_link"     value="${arch}g++"/>
   <property name="archutil"      value="${arch}"/>
   <property name="devlibs"       location="/target"/>
   <property name="mingw_bin"     location="${env.MINGW_BIN}"/>
@@ -98,6 +92,9 @@
 
 
     <mkdir dir="${build}"/>
+    <mkdir dir="${build}/java"/>
+    <mkdir dir="${build}/java/classes"/>
+    <mkdir dir="${build}/java/lib"/>
     <mkdir dir="${dist}"/>
     
     <copy file="${src}/helper/sp-marshal.h.mingw"
@@ -156,7 +153,7 @@
         #define HAVE_OPENMP                   1
         #define HAVE_TR1_UNORDERED_SET        1
 
-        #define HAVE_LIBLCMS2                 1
+        #define HAVE_LIBLCMS1                 1
 
         #define WITH_GTKMM_2_24               1
 
@@ -177,17 +174,16 @@
         /* internal interpreter */
         #define WITH_PYTHON                   1
 
+        /* shared whiteboard */
+        #undef WITH_INKBOARD
+        #undef HAVE_SSL
+        
         /* use poppler for pdf import? */
         #define HAVE_POPPLER                  1
-        #define HAVE_POPPLER_GLIB             1
         #define HAVE_POPPLER_CAIRO            1
 
         /* do we want bitmap manipulation? */
         #define WITH_IMAGE_MAGICK             1
-
-        /* Exif and JPEG support for image resolution import */
-        #define HAVE_EXIF                     1
-        #define HAVE_JPEG                     1
 
         /* Allow reading WordPerfect? */
         #define WITH_LIBWPG                   1
@@ -195,31 +191,13 @@
         /* Default  to libwpg 0.2.x */
         #define WITH_LIBWPG02                 1
 
-        /* Visio import filter */
-        #define WITH_LIBVISIO                 1
-        /* Librevenge based filter */
-        #define WITH_LIBVISIO01               1
-
-        /* Corel Draw import filter */
-        #define WITH_LIBCDR                   1
-        /* Librevenge based filter */
-        #define WITH_LIBCDR01                 1
-		
         /* Do we support SVG Fonts? */
         #define ENABLE_SVG_FONTS              1
 
         /* Do we want experimental, unsupported, unguaranteed, etc., LivePathEffects enabled? */
         //#define LPE_ENABLE_TEST_EFFECTS    1
 
-        /* Do we want experimental, unsupported, unguaranteed, etc., SVG2 features enabled? */
-        #define WITH_SVG2                     1
-        #define WITH_CSSCOMPOSITE             1
-        #define WITH_CSSBLEND                 1
-        #define WITH_MESH                     1
-
         #define HAVE_ASPELL                   1
-        
-        #define HAVE_POTRACE                  1
 
         #endif /* _CONFIG_H_ */
     </makefile>
@@ -243,7 +221,6 @@
             <include name="extract-uri-test.h"/>
             <include name="marker-test.h"/>
             <include name="mod360-test.h"/>
-            <include name="object-test.h"/>
             <include name="preferences-test.h"/>
             <include name="round-test.h"/>
             <include name="sp-gradient-test.h"/>
@@ -266,9 +243,23 @@
         </fileset>
     </cxxtestpart>
     <cxxtestpart command="${python} ${cxxtest}/cxxtestgen.py --have-eh"
+                 out="${src}/libnr/test-nr.cpp">
+        <fileset dir="${src}/libnr">
+            <include name="nr-compose-test.h"/>
+            <include name="nr-types-test.h"/>
+            <include name="nr-translate-test.h"/>
+            <include name="nr-rotate-test.h"/>
+            <include name="nr-scale-test.h"/>
+            <include name="nr-point-fns-test.h"/>
+            <include name="nr-rotate-fns-test.h"/>
+            <include name="in-svg-plane-test.h"/>
+            <include name="nr-matrix-test.h"/>
+        </fileset>
+    </cxxtestpart>
+    <cxxtestpart command="${python} ${cxxtest}/cxxtestgen.py --have-eh"
                  out="${src}/svg/test-svg.cpp">
         <fileset dir="${src}/svg">
-            <!--<include name="css-ostringstream-test.h"/>-->
+            <include name="css-ostringstream-test.h"/>
             <include name="stringstream-test.h"/>
             <include name="svg-affine-test.h"/>
             <include name="svg-color-test.h"/>
@@ -310,12 +301,13 @@
         description="compile the source to .o" >
 
     <!-- Compile from source to build -->
-    <cc cc="${arch_cc}" cxx="${arch_cxx}"
+    <cc cc="${arch}gcc" cxx="${arch}g++"
              destdir="${build}/obj"
              continueOnError="true"
              refreshCache="${refresh}">
         <fileset dir="${src}">
             <!-- THINGS TO EXCLUDE -->
+            <exclude name="2geom/chebyshev.cpp"/>
             <exclude name="ast/.*"/>
             <exclude name="bonobo/.*"/>
             <exclude name="deptool.cpp"/>
@@ -324,14 +316,28 @@
             <!--<exclude name="test-src.cpp"/>-->
             <exclude name="display/test-display.cpp"/>
             <exclude name="display/testnr.cpp"/>
+            <exclude name="dom/work/.*"/>
+            <exclude name="dom/odf/SvgOdg.cpp"/>
             <exclude name="extension/api.cpp"/>
-            <exclude name="extension/dbus/.*"/>
             <exclude name="extension/dxf2svg/.*"/>
             <exclude name="extension/implementation/plugin.cpp"/>
-            <exclude name="extension/plugins/.*"/>
+            <exclude name="extension/script/bindtest.cpp"/>
+            <exclude name="extension/script/cpptest.cpp"/>
+            <exclude name="extension/plugin/.*"/>
             <exclude name="extract-uri-test.cpp"/>
             <exclude name="helper/units-test.cpp"/>
             <!-- exclude name="inkview.cpp"/-->
+            <!--<exclude name="libnr/test-nr.cpp"/>-->
+            <exclude name="libnr/test-nr-main.cpp"/>
+            <exclude name="libnr/testnr.cpp"/>
+            <exclude name="libnr/in-svg-plane-test.cpp"/>
+            <exclude name="libnr/nr-matrix-test.cpp"/>
+            <exclude name="libnr/nr-point-fns-test.cpp"/>
+            <exclude name="libnr/nr-rotate-fns-test.cpp"/>
+            <exclude name="libnr/nr-rotate-test.cpp"/>
+            <exclude name="libnr/nr-scale-test.cpp"/>
+            <exclude name="libnr/nr-translate-test.cpp"/>
+            <exclude name="libnr/nr-types-test.cpp"/>
             <exclude name="livarot/Path-test.cpp"/>
             <exclude name="mod360-test.cpp"/>
             <exclude name="trace/potrace/potest.cpp"/>
@@ -343,12 +349,26 @@
             <exclude name="svg/test-svg-main.cpp"/>
             <exclude name="util/list-container-test.cpp"/>
             <exclude name="widgets/test-widgets.cpp"/>
-            <exclude name="widgets/image-menu-item.c"/>
             <exclude name="xml/quote-test.cpp"/>
             <exclude name="xml/repr-action-test.cpp"/>
             <exclude name="xml/test-xml.cpp"/>
             <!--<exclude name="xml/test-xml-main.cpp"/>-->
             <exclude name="io/streamtest.cpp"/>
+            <!--JABBER-->
+            <exclude name="pedro/pedrogui.cpp"/>
+            <exclude name="pedro/pedrogui.h"/>
+            <exclude name="pedro/work/.*"/>
+            <!--WHITEBOARD-->
+            <exclude name="ui/dialog/session-player.cpp"/>
+            <exclude name="ui/dialog/whiteboard-connect.cpp"/>
+            <exclude name="ui/dialog/whiteboard-sharewithchat.cpp"/>
+            <exclude name="ui/dialog/whiteboard-sharewithuser.cpp"/>
+            <exclude name="dialogs/whiteboard-connect-dialog.cpp"/>
+            <exclude name="dialogs/whiteboard-common-dialog.cpp"/>
+            <exclude name="dialogs/whiteboard-sharewithchat-dialog.cpp"/>
+            <exclude name="dialogs/whiteboard-sharewithuser-dialog.cpp"/>
+            <exclude name="jabber_whiteboard/node-tracker.cpp"/>
+            <exclude name="jabber_whiteboard/node-utilities.cpp"/>
             <!--OVERLAP-->
             <exclude name="removeoverlap/placement_SolveVPSC.cpp"/>
             <exclude name="removeoverlap/placement_SolveVPSC.h"/>
@@ -360,23 +380,11 @@
             <file name="extension/param"/>
         </excludeinc>
         <flags>
-            -Wall -Wformat -Werror=format-security -Wextra -Wpointer-arith -Wcast-align -Wsign-compare -Wswitch
-            -Werror=return-type
-            <!-- -Werror -->
-            <!-- A list of warnings that should not error *yet*, any help is welcome in fixing the code generating these warnings! -->
-            <!-- libcroco is using guchar where it should use gchar, so we need: --> -Wno-error=pointer-sign
-            -Wno-error=unused-parameter -Wno-error=unused-but-set-variable -Wno-error=strict-overflow -Wno-error=write-strings
-            <!-- Format warnings are obviously bad errors, but with the current old compiler on Windows (gcc 4.6.) we run into a problem with long long ints...
-                 The errors can be restored by removing these flags after updating to a newer compiler (soon after 0.91 release hopefully)  -->
-            -Wno-error=format -Wno-error=format-extra-args
+            -Wall -Wformat -Werror=format-security -W -Wpointer-arith -Wcast-align -Wsign-compare -Woverloaded-virtual -Wswitch
             -O2
             -mms-bitfields
             -fopenmp
         </flags>
-        <cxxflags>
-            <!-- -std=gnu++0x -DCPP11  -Wno-unused-local-typedefs -->
-            -Woverloaded-virtual 
-        </cxxflags>
         <defines>
             -DVERSION=\"${version}\"
             -DHAVE_CONFIG_H
@@ -384,24 +392,11 @@
             -DHAVE_SSL
             -DRELAYTOOL_SSL="static const int libssl_is_present=1; static int __attribute__((unused)) libssl_symbol_is_present(char *s){ return 1; }" <!-- inkboard -->
             -DPOPPLER_NEW_GFXFONT <!-- poppler changed the api for 0.8.3 -->
-            -DPOPPLER_NEW_GFXPATCH <!-- GfxPatch no longer uses GfxColor in >= 0.15.1 -->
-            -DPOPPLER_NEW_ERRORAPI <!-- poppler changed the error api for 0.20.0 -->
-            -DPOPPLER_EVEN_NEWER_COLOR_SPACE_API <!-- poppler changed the colorspace api for 0.26.0 -->
-            -DPOPPLER_EVEN_NEWER_NEW_COLOR_SPACE_API <!-- poppler changed the colorspace api for 0.29.0 -->
-            <!-- GTK+3 migration -->
-            -DGLIBMM_DISABLE_DEPRECATED
-            -DG_DISABLE_DEPRECATED
-            -DGTK_DISABLE_SINGLE_INCLUDES
-            <!-- -DGTKMM_DISABLE_DEPRECATED -->
-            <!-- -DGTK_DISABLE_DEPRECATED  -->
-            -DGDKMM_DISABLE_DEPRECATED
-            -DGSEAL_ENABLE
         </defines>
         <includes>
             -I${devlibs}/include
             <!-- GTK / GTKMM -->
             ${pcc.gtkmm-2.4}
-            ${pcc.gmodule-2.0}
             <!-- OTHER -->
 			${pcc.Magick++}
 			${pcc.libxml-2.0}
@@ -409,18 +404,46 @@
             ${pcc.cairo}
             ${pcc.poppler}
             -I${devlibs}/include/gc
-            -I${devlibs}/include/potracelib
-            ${pcc.librevenge-0.0} ${pcc.librevenge-stream-0.0}
-            ${pcc.libwpg-0.2} ${pcc.libvisio-0.1} ${pcc.libcdr-0.1}
+            ${pcc.libwpg-0.2}
             -I${cxxtest}
             <!-- PERL -->
             <!-- -Wno-comment -I${devlibs}/perl/lib/CORE -->
             <!-- PYTHON -->
             -I${devlibs}/python/include
+            <!-- JAVA -->
+            -I${src}/bind/javainc -I${src}/bind/javainc/win32
         </includes>
     </cc>
   </target>
   
+
+  <!--
+  ########################################################################
+  ## T A R G E T    :    L I B
+  ########################################################################
+  -->
+  <target name="lib" depends="compile"
+      description="create a static library">
+    <staticlib command="${archutil}ar crsv"
+           file="${build}/libinkscape.a">
+       <fileset dir="${build}/obj">
+           <exclude name="main.o"/>
+           <exclude name="winmain.o"/>
+           <exclude name="inkview.o"/>
+           <!-- CxxTest -->
+           <exclude name="test-main.o"/>
+           <exclude name="test-src.o"/>
+           <exclude name="display/test-display.o"/>
+           <exclude name="helper/test-helper.o"/>
+           <exclude name="libnr/nr-compose-reference.o"/>
+           <exclude name="libnr/test-nr.o"/>
+           <exclude name="svg/test-svg.o"/>
+           <exclude name="util/test-util.o"/>
+           <exclude name="xml/test-xml.o"/>
+       </fileset>
+    </staticlib>
+  </target>
+
 
 
   <!--
@@ -447,17 +470,17 @@
   ## T A R G E T    :    L I N K
   ########################################################################
   -->
-  <target name="link" depends="compile"
+  <target name="link" depends="lib"
       description="link objects and library to create executable">
 
     <rc command="${archutil}windres" 
         file="${src}/inkscape.rc"
-        out="${build}/obj/inkres.o">
+        out="${build}/inkres.o">
         <flags>
         --include-dir=${src}
         </flags>
     </rc>
-    <link command="${arch_link}" out="${build}/inkscape.exe"
+    <link command="${arch}g++" out="${build}/inkscape.exe"
               strip="true" symfile="${build}/inkscape.dbg"
               stripcommand="${archutil}strip"
               objcopycommand="${archutil}objcopy">
@@ -465,38 +488,28 @@
            -mwindows
            -mthreads
        </flags>
-       <fileset dir="${build}/obj">
-           <exclude name="winconsole.o"/>
-           <exclude name="inkview.o"/>
-           <exclude name="inkviewres.o"/>
-           <!-- CxxTest -->
-           <exclude name="test-main.o"/>
-           <exclude name="test-src.o"/>
-           <exclude name="display/test-display.o"/>
-           <exclude name="helper/test-helper.o"/>
-           <exclude name="svg/test-svg.o"/>
-           <exclude name="util/test-util.o"/>
-           <exclude name="xml/test-xml.o"/>
+       <fileset dir="${build}">
+           <include name="inkres.o"/>
+           <include name="obj/main.o"/>
+           <include name="obj/winmain.o"/>
+           <include name="libinkscape.a"/>
        </fileset>
        <!-- WARNING: If you change these libraries, don't forget to change them for inkview and cxxtests below as well! -->
        <libs>
            -L${devlibs}/lib
            ${pcl.poppler-cairo} ${pcl.poppler-glib} ${pcl.poppler} 
-           ${pcl.gmodule-2.0}
            ${pcl.gtkmm-2.4}  ${pcl.pangoft2} ${pcl.gthread-2.0}
            ${devlibs}/bin/libxml2.dll
            ${devlibs}/bin/libxslt.dll
-           ${devlibs}/bin/libexslt.dll
            ${pcl.cairo} ${pcl.cairomm-1.0}
-           ${pcl.librevenge-0.0} ${pcl.librevenge-stream-0.0}
-           ${pcl.libwpg-0.2} ${pcl.libvisio-0.1} ${pcl.libcdr-0.1}
+           ${pcl.libwpg-0.2}
            -liconv
            ${pcl.Magick++}
            ${pcl.fontconfig} ${pcl.freetype2}
-           ${pcl.lcms2}
+           ${pcl.lcms}
            ${pcl.gsl}
-           -lpng -ljpeg -ltiff -lexif -lpopt -lz
-           -lgc -lpotrace
+           -lpng -ljpeg -ltiff -lpopt -lz
+           -lgc
            -lws2_32 -lintl -lgdi32 -lcomdlg32 -lm
            -lgomp -lpthreadGC2 -laspell
            -lmscms  <!-- required for color profiles -->
@@ -512,7 +525,7 @@
   <target name="linkconsole" depends="compile"
         description="link console helper">
 
-    <link command="${arch_link}" out="${build}/inkscape-console.exe"
+    <link command="${arch}g++" out="${build}/inkscape-console.exe"
               strip="true" stripcommand="${archutil}strip">
        <flags>
            -mconsole
@@ -530,17 +543,17 @@
   ## T A R G E T    :    L I N K I N K V I E W
   ########################################################################
   -->
-  <target name="linkinkview" depends="compile"
+  <target name="linkinkview" depends="lib"
         description="link objects and library to create Inkview executable">
 
     <rc command="${archutil}windres" 
         file="${src}/inkview.rc"
-        out="${build}/obj/inkviewres.o">
+        out="${build}/inkviewres.o">
         <flags>
         --include-dir=${src}
         </flags>
     </rc>
-    <link command="${arch_link}" out="${build}/inkview.exe"
+    <link command="${arch}g++" out="${build}/inkview.exe"
               strip="true" symfile="${build}/inkview.dbg"
               stripcommand="${archutil}strip"
               objcopycommand="${archutil}objcopy">
@@ -548,39 +561,26 @@
            -mwindows
            -mthreads
        </flags>
-       <fileset dir="${build}/obj">
-           <!-- exclude the other programs -->
-           <exclude name="main.o"/>
-           <exclude name="winmain.o"/>
-           <exclude name="winconsole.o"/>
-           <exclude name="inkres.o"/>
-           <!-- CxxTest -->
-           <exclude name="test-main.o"/>
-           <exclude name="test-src.o"/>
-           <exclude name="display/test-display.o"/>
-           <exclude name="helper/test-helper.o"/>
-           <exclude name="svg/test-svg.o"/>
-           <exclude name="util/test-util.o"/>
-           <exclude name="xml/test-xml.o"/>
+       <fileset dir="${build}">
+           <include name="inkviewres.o"/>
+           <include name="obj/inkview.o"/>
+           <include name="libinkscape.a"/>
        </fileset>
        <libs>
            -L${devlibs}/lib
            ${pcl.poppler-cairo} ${pcl.poppler-glib} ${pcl.poppler} 
            ${pcl.gtkmm-2.4}  ${pcl.pangoft2} ${pcl.gthread-2.0}
-		   ${pcl.gmodule-2.0}
            ${devlibs}/bin/libxml2.dll
            ${devlibs}/bin/libxslt.dll
-           ${devlibs}/bin/libexslt.dll
            ${pcl.cairo} ${pcl.cairomm-1.0}
-           ${pcl.librevenge-0.0} ${pcl.librevenge-stream-0.0}
-           ${pcl.libwpg-0.2} ${pcl.libvisio-0.1} ${pcl.libcdr-0.1}
+           ${pcl.libwpg-0.2}
            -liconv
            ${pcl.Magick++}
            ${pcl.fontconfig} ${pcl.freetype2}
-           ${pcl.lcms2}
+           ${pcl.lcms}
            ${pcl.gsl}
-           -lpng -ljpeg -ltiff -lexif -lpopt -lz
-           -lgc -lpotrace
+           -lpng -ljpeg -ltiff -lpopt -lz
+           -lgc
            -lws2_32 -lintl -lgdi32 -lcomdlg32 -lm
            -lgomp -lpthreadGC2 -laspell
            -lmscms  <!-- required for color profiles -->
@@ -595,44 +595,43 @@
   ## T A R G E T    :    L I N K C X X T E S T S
   ########################################################################
   -->
-  <target name="linkcxxtests" depends="compile"
+  <target name="linkcxxtests" depends="lib"
       description="link objects and library to create executable">
 
-    <link command="${arch_link}" out="${build}/cxxtests.exe"
+    <link command="${arch}g++" out="${build}/cxxtests.exe"
               strip="true" symfile="${build}/cxxtests.dbg"
               stripcommand="${archutil}strip"
               objcopycommand="${archutil}objcopy">
        <flags>
-           -mconsole
            -mthreads
        </flags>
-       <fileset dir="${build}/obj">
-           <!-- exclude the other programs -->
-           <exclude name="main.o"/>
-           <exclude name="winmain.o"/>
-           <exclude name="winconsole.o"/>
-           <exclude name="inkres.o"/>
-           <exclude name="inkviewres.o"/>
-           <exclude name="inkview.o"/>
+       <fileset dir="${build}">
+           <include name="obj/test-main.o"/>
+           <include name="obj/test-src.o"/>
+           <include name="obj/display/test-display.o"/>
+           <include name="obj/helper/test-helper.o"/>
+           <include name="obj/libnr/nr-compose-reference.o"/>
+           <include name="obj/libnr/test-nr.o"/>
+           <include name="obj/svg/test-svg.o"/>
+           <include name="obj/util/test-util.o"/>
+           <include name="obj/xml/test-xml.o"/>
+           <include name="libinkscape.a"/>
        </fileset>
        <libs>
            -L${devlibs}/lib
            ${pcl.poppler-cairo} ${pcl.poppler-glib} ${pcl.poppler} 
            ${pcl.gtkmm-2.4}  ${pcl.pangoft2} ${pcl.gthread-2.0}
-           ${pcl.gmodule-2.0}
            ${devlibs}/bin/libxml2.dll
            ${devlibs}/bin/libxslt.dll
-           ${devlibs}/bin/libexslt.dll
            ${pcl.cairo} ${pcl.cairomm-1.0}
-           ${pcl.librevenge-0.0} ${pcl.librevenge-stream-0.0}
-           ${pcl.libwpg-0.2} ${pcl.libvisio-0.1} ${pcl.libcdr-0.1}
+           ${pcl.libwpg-0.2}
            -liconv
            ${pcl.Magick++}
            ${pcl.fontconfig} ${pcl.freetype2}
-           ${pcl.lcms2}
+           ${pcl.lcms}
            ${pcl.gsl}
-           -lpng -ljpeg -ltiff -lexif -lpopt -lz
-           -lgc -lpotrace
+           -lpng -ljpeg -ltiff -lpopt -lz
+           -lgc
            -lws2_32 -lintl -lgdi32 -lcomdlg32 -lm
            -lgomp -lpthreadGC2 -laspell
            -lmscms  <!-- required for color profiles -->
@@ -652,15 +651,13 @@
     <!-- Create the distribution directory -->
     <copy todir="${dist}" file="AUTHORS"/>
     <copy todir="${dist}" file="COPYING"/>
-    <copy todir="${dist}" file="GPL2.txt"/>
-    <copy todir="${dist}" file="GPL3.txt"/>
-    <copy todir="${dist}" file="LGPL2.1.txt"/>
+    <copy todir="${dist}" file="COPYING.LIB"/>
     <copy todir="${dist}" file="NEWS"/>
     <copy todir="${dist}" file="README"/>
     <copy todir="${dist}" file="TRANSLATORS"/>
     <copy todir="${dist}" file="${devlibs}/bin/libatkmm-1.6-1.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libglibmm-2.4-1.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libgiomm-2.4-1.dll"/>
+	<copy todir="${dist}" file="${devlibs}/bin/libgiomm-2.4-1.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libgtkmm-2.4-1.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libgdkmm-2.4-1.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libpangomm-1.4-1.dll"/>
@@ -679,47 +676,38 @@
     <copy todir="${dist}" file="${devlibs}/bin/libgio-2.0-0.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libcairo-2.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libpixman-1-0.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libpoppler-58.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libpoppler-glib-8.dll"/>
+    <copy todir="${dist}" file="${devlibs}/bin/libpoppler-5.dll"/>
+	<copy todir="${dist}" file="${devlibs}/bin/libpoppler-glib-4.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libpangocairo-1.0-0.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libpango-1.0-0.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libpangoft2-1.0-0.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libpangowin32-1.0-0.dll"/>
+    <copy todir="${dist}" file="${devlibs}/bin/freetype6.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libfontconfig-1.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libxml2.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libxslt.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libexslt.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libexpat-1.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/librevenge-0.0.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/librevenge-stream-0.0.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libwpg-0.2.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libwpd-0.9.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libwpd-stream-0.9.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libvisio-0.1.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libcdr-0.1.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/icui18n50.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/icudata50.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/icuuc50.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libjpeg-7.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libpng12-0.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libpng14-14.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libtiff-3.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libexif-12.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libopenjpeg-2.dll"/>
+	<copy todir="${dist}" file="${devlibs}/bin/libopenjpeg-2.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/msvcr70.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/msvcr71.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/zlib1.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/bzip2.dll"/>
+	<copy todir="${dist}" file="${devlibs}/bin/bzip2.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/iconv.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/libpopt-0.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/liblcms-1.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/liblcms2-2.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libMagick++-3.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libMagickCore-3.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libMagickWand-3.dll"/>
+	<copy todir="${dist}" file="${devlibs}/bin/libMagick++-3.dll"/>
+	<copy todir="${dist}" file="${devlibs}/bin/libMagickCore-3.dll"/>
+	<copy todir="${dist}" file="${devlibs}/bin/libMagickWand-3.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/intl.dll"/>
-    <copy todir="${dist}" file="${devlibs}/bin/libintl-8.dll"/>
     <copy todir="${dist}" file="${devlibs}/bin/pthreadGC2.dll"/>
+    <copy file="${devlibs}/bin/libintl-8.dll" tofile="${dist}/libintl-8.dll"/>
     <!-- MINGW support DLLs needed for openmp support  -->
     <copy todir="${dist}" file="${mingw_bin}/mingwm10.dll"/>
     <copy todir="${dist}" file="${mingw_bin}/libgomp-1.dll"/>
@@ -727,7 +715,7 @@
     <!-- MSGFMT files -->
     <copy todir="${dist}">
         <fileset dir="${build}/locale">
-          <exclude name="\.am$"/>
+          <exclude name=".*\.am"/>
         </fileset>
     </copy>
 
@@ -742,9 +730,9 @@
     <copy todir="${dist}/lib"> <fileset dir="${devlibs}/lib/glib-2.0"/> </copy>
     <copy todir="${dist}">
         <fileset dir="share">
-          <exclude name="\.am$"/>
-          <exclude name="\.in$"/>
-          <exclude name="\.sh$"/>
+          <exclude name=".*\.am"/>
+          <exclude name=".*\.in"/>
+          <exclude name=".*\.sh"/>
         </fileset>
     </copy>
     <copy todir="${dist}/share"> <fileset dir="${devlibs}/share/locale"/> </copy>
@@ -763,12 +751,12 @@
     <copy todir="${dist}" file="${devlibs}/perl/bin/perl58.dll"/>
 
     <!-- PYTHON -->
-    <copy todir="${dist}" file="${devlibs}/python/python27.dll"/>
+    <copy todir="${dist}" file="${devlibs}/python/python26.dll"/>
     <copy todir="${dist}/python" file="${devlibs}/python/python.exe" />
     <copy todir="${dist}/python" file="${devlibs}/python/pythonw.exe"/>
     <copy todir="${dist}/python"> <fileset dir="${devlibs}/python/Lib"/> </copy>
     <copy todir="${dist}/python"> <fileset dir="${devlibs}/python/DLLs"/> </copy>
-    <copy todir="${dist}/python"> <fileset dir="${devlibs}/python/Scripts"/> </copy>
+    <!-- <copy todir="${dist}/python"> <fileset dir="${devlibs}/python/Scripts"/> </copy> -->
 
     <!--<copy file="${devlibs}/share/themes/MS-Windows/gtk-2.0/gtkrc" todir="${dist}/etc/gtk-2.0"/>-->
     <makefile file="${dist}/etc/gtk-2.0/gtkrc">
@@ -859,9 +847,56 @@
   -->
   <target name="check" depends="linkcxxtests,distbase"
       description="perform unit tests">
-    <copy todir="${dist}" file="${build}/cxxtests.exe"/>
-    <cxxtestrun command="${dist}/cxxtests" workingdir="${dist}" />
+    <cxxtestrun command="${build}/cxxtests" workingdir="${dist}" />
   </target>
+
+
+  <!--
+  ########################################################################
+  ## T A R G E T    :    JAVAC
+  ########################################################################
+  -->
+  <target name="javac" depends="init"
+      description="compile java binding classes">
+    <javac srcdir="${src}/bind/java" destdir="${build}/java/classes"/>
+  </target>
+
+
+  <!--
+  ########################################################################
+  ## T A R G E T    :    JAR
+  ########################################################################
+  -->
+  <target name="jar" depends="javac"
+      description="pack java classes and resources into a jar file">
+    <copy todir="${build}/java/classes"> <fileset dir="${devlibs}/bind/data"/> </copy>
+    <jar basedir="${build}/java/classes" destfile="${build}/java/lib/inkscape.jar"/>
+  </target>
+
+  <!--
+  ########################################################################
+  ## T A R G E T    :    BINDDIST
+  ########################################################################
+  -->
+  <target name="binddist" depends="jar"
+      description="pack java classes and resources into a jar file">
+    <copy todir="${dist}/share/bind"> <fileset dir="${devlibs}/bind/java"/> </copy>
+    <copy todir="${dist}/share/bind/java"> <fileset dir="${build}/java/lib"/> </copy>
+
+  </target>
+
+  <!--
+  ########################################################################
+  ## T A R G E T    :    BINDCLEAN
+  ########################################################################
+  -->
+  <target name="bindclean" depends=""
+      description="clean up java binding classes">
+        <delete dir="${build}/java"/>
+  </target>
+
+
+
 
   <!--
   ########################################################################
@@ -893,7 +928,7 @@
   ## T A R G E T    :    C L E A N
   ########################################################################
   -->
-  <target name="clean"
+  <target name="clean" depends="bindclean"
         description="clean up.  deleting build and distro dirs" >
 
     <delete dir="${build}"/>
@@ -905,6 +940,7 @@
     <delete file="${src}/test-src.cpp"/>
     <delete file="${src}/display/test-display.cpp"/>
     <delete file="${src}/helper/test-helper.cpp"/>
+    <delete file="${src}/libnr/test-nr.cpp"/>
     <delete file="${src}/svg/test-svg.cpp"/>
     <delete file="${src}/util/test-util.cpp"/>
     <delete file="${src}/xml/test-xml.cpp"/>

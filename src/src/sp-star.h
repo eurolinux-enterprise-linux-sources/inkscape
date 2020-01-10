@@ -1,5 +1,5 @@
-#ifndef SEEN_SP_STAR_H
-#define SEEN_SP_STAR_H
+#ifndef __SP_STAR_H__
+#define __SP_STAR_H__
 
 /*
  * <sodipodi:star> implementation
@@ -17,20 +17,23 @@
 #include "sp-polygon.h"
 
 
-#define SP_STAR(obj) (dynamic_cast<SPStar*>((SPObject*)obj))
-#define SP_IS_STAR(obj) (dynamic_cast<const SPStar*>((SPObject*)obj) != NULL)
+
+#define SP_TYPE_STAR            (sp_star_get_type ())
+#define SP_STAR(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_STAR, SPStar))
+#define SP_STAR_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_STAR, SPStarClass))
+#define SP_IS_STAR(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_STAR))
+#define SP_IS_STAR_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_STAR))
+
+class SPStar;
+class SPStarClass;
 
 typedef enum {
 	SP_STAR_POINT_KNOT1,
 	SP_STAR_POINT_KNOT2
 } SPStarPoint;
 
-class SPStar : public SPPolygon {
-public:
-	SPStar();
-	virtual ~SPStar();
-
-	int sides;
+struct SPStar : public SPPolygon {
+	gint sides;
 
 	Geom::Point center;
 	double r[2];
@@ -39,29 +42,17 @@ public:
 
 	double rounded;
 	double randomized;
-
-// CPPIFY: This derivation is a bit weird.
-// parent_class = reinterpret_cast<SPShapeClass *>(g_type_class_ref(SP_TYPE_SHAPE));
-// So shouldn't star be derived from shape instead of polygon?
-// What does polygon have that shape doesn't?
-
-	virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
-	virtual void set(unsigned int key, char const* value);
-	virtual void update(SPCtx* ctx, unsigned int flags);
-
-    virtual const char* displayName() const;
-	virtual char* description() const;
-	virtual void snappoints(std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs) const;
-
-	virtual void update_patheffect(bool write);
-	virtual void set_shape();
-	virtual Geom::Affine set_transform(Geom::Affine const& xform);
 };
 
-void sp_star_position_set (SPStar *star, int sides, Geom::Point center, double r1, double r2, double arg1, double arg2, bool isflat, double rounded, double randomized);
+struct SPStarClass {
+	SPPolygonClass parent_class;
+};
 
-Geom::Point sp_star_get_xy (SPStar const *star, SPStarPoint point, int index, bool randomized = false);
+GType sp_star_get_type (void);
+
+void sp_star_position_set (SPStar *star, gint sides, Geom::Point center, gdouble r1, gdouble r2, gdouble arg1, gdouble arg2, bool isflat, double rounded, double randomized);
+
+Geom::Point sp_star_get_xy (SPStar *star, SPStarPoint point, gint index, bool randomized = false);
 
 
 

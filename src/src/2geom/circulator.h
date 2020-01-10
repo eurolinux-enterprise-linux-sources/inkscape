@@ -1,6 +1,7 @@
-/** @file
- * @brief Circular iterator adapter
- *//*
+/**
+ * \file circulator.h
+ * \brief  \todo brief description
+ *
  * Copyright 2006 MenTaLguY <mental@rydia.net>
  *
  * This library is free software; you can redistribute it and/or
@@ -28,16 +29,13 @@
  *
  */
 
-#ifndef LIB2GEOM_SEEN_CIRCULATOR_H
-#define LIB2GEOM_SEEN_CIRCULATOR_H
+#ifndef SEEN_Circulator_H
+#define SEEN_Circulator_H
 
 #include <iterator>
 
 namespace Geom {
 
-/** @brief Circular iterator adapter
- * This iterator adapter will loop indefinitely over a set of values
- * from a random access container. */
 template <typename Iterator>
 class Circulator {
 public:
@@ -136,7 +134,7 @@ Geom::Circulator<T> operator+(int n, Geom::Circulator<T> const &c) {
     return c + n;
 }
 
-#endif // LIB2GEOM_SEEN_CIRCULATOR_H
+#endif // SEEN_Circulator_H
 
 /*
   Local Variables:
@@ -147,4 +145,4 @@ Geom::Circulator<T> operator+(int n, Geom::Circulator<T> const &c) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

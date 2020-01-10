@@ -1,7 +1,7 @@
 /**
  * \file
  * \brief  Simple closed interval class
- *//*
+ *
  * Copyright 2007 Michael Sloan <mgsloan@gmail.com>
  *
  * Original Rect/Range code by:
@@ -34,210 +34,243 @@
  * the specific language governing rights and limitations.
  *
  */
-#ifndef LIB2GEOM_SEEN_INTERVAL_H
-#define LIB2GEOM_SEEN_INTERVAL_H
+#ifndef SEEN_INTERVAL_H
+#define SEEN_INTERVAL_H
 
-#include <boost/none.hpp>
-#include <boost/optional.hpp>
-#include <boost/operators.hpp>
+#include <assert.h>
 #include <2geom/coord.h>
-#include <2geom/math-utils.h>
-#include <2geom/generic-interval.h>
-#include <2geom/int-interval.h>
+
+#include <boost/optional/optional.hpp>
 
 namespace Geom {
 
+class Interval;
+
 /** 
- * @brief Range of real numbers that is never empty.
+ * \brief This class represents a range of numbers that is never empty.
  *
- * Intervals are closed ranges \f$[a, b]\f$, which means they include their endpoints.
- * To use them as open ranges, you can use the interiorContains() methods.
- *
- * @ingroup Primitives
+ * The endpoints are included in the range.
  */
-class Interval
-    : public GenericInterval<Coord>
-{
-    typedef GenericInterval<Coord> Base;
+class Interval {
+private:
+    Coord _b[2];
+
 public:
-    /// @name Create intervals.
-    /// @{
-    /** @brief Create an interval that contains only zero. */
-    Interval() {}
-    /** @brief Create an interval that contains a single point. */
-    explicit Interval(Coord u) : Base(u) {}
-    /** @brief Create an interval that contains all points between @c u and @c v. */
-    Interval(Coord u, Coord v) : Base(u,v) {}
-    /** @brief Convert from integer interval */
-    Interval(IntInterval const &i) : Base(i.min(), i.max()) {}
-    Interval(Base const &b) : Base(b) {}
-
-    /** @brief Create an interval containing a range of values.
-     * The resulting interval will contain all values from the given range.
-     * The return type of iterators must be convertible to Coord. The given range
-     * must not be empty. For potentially empty ranges, see OptInterval.
-     * @param start Beginning of the range
-     * @param end   End of the range
-     * @return Interval that contains all values from [start, end). */
-    template <typename InputIterator>
-    static Interval from_range(InputIterator start, InputIterator end) {
-        Interval result = Base::from_range(start, end);
-        return result;
+    /// The default constructor creates an interval [0,0]  DO NOT RELY ON THIS, BEST NOT TO USE THIS CONSTRUCTOR
+    explicit Interval() { _b[0] = 0;  _b[1] = 0; }
+    explicit Interval(Coord u) { _b[0] = _b[1] = u; }
+    /* When creating an Interval using the constructor specifying the exact range, the created interval
+     * will be [u,v] when u<=v ; and will be [v,u] when v < u !!!
+     */
+    Interval(Coord u, Coord v) {
+        if(u < v) {
+            _b[0] = u; _b[1] = v;
+        } else {
+            _b[0] = v; _b[1] = u;
+        }
     }
-    /** @brief Create an interval from a C-style array of values it should contain. */
-    static Interval from_array(Coord const *c, unsigned n) {
-        Interval result = from_range(c, c+n);
-        return result;
-    }
-    /// @}
-
-    /// @name Inspect contained values.
-    /// @{
-    /// Check whether both endpoints are finite.
-    bool isFinite() const {
-        return IS_FINITE(min()) && IS_FINITE(max());
-    }
-    /** @brief Map the interval [0,1] onto this one.
-     * This method simply performs 1D linear interpolation between endpoints. */
-    Coord valueAt(Coord t) {
-        return lerp(t, min(), max());
-    }
-    /** @brief Compute a time value that maps to the given value.
-     * The supplied value does not need to be in the interval for this method to work. */
-    Coord timeAt(Coord v) {
-        return (v - min()) / extent();
-    }
-    /// Find closest time in [0,1] that maps to the given value. */
-    Coord nearestTime(Coord v) {
-        if (v <= min()) return 0;
-        if (v >= max()) return 1;
-        return timeAt(v);
-    }
-    /// @}
-
-    /// @name Test coordinates and other intervals for inclusion.
-    /// @{
-    /** @brief Check whether the interior of the interval includes this number.
-     * Interior means all numbers in the interval except its ends. */
-    bool interiorContains(Coord val) const { return min() < val && val < max(); }
-    /** @brief Check whether the interior of the interval includes the given interval.
-     * Interior means all numbers in the interval except its ends. */
-    bool interiorContains(Interval const &val) const { return min() < val.min() && val.max() < max(); }
-    /// Check whether the number is contained in the union of the interior and the lower boundary.
-    bool lowerContains(Coord val) { return min() <= val && val < max(); }
-    /// Check whether the given interval is contained in the union of the interior and the lower boundary.
-    bool lowerContains(Interval const &val) const { return min() <= val.min() && val.max() < max(); }
-    /// Check whether the number is contained in the union of the interior and the upper boundary.
-    bool upperContains(Coord val) { return min() < val && val <= max(); }
-    /// Check whether the given interval is contained in the union of the interior and the upper boundary.
-    bool upperContains(Interval const &val) const { return min() < val.min() && val.max() <= max(); }
-    /** @brief Check whether the interiors of the intervals have any common elements.
-     * A single point in common is not considered an intersection. */
-    bool interiorIntersects(Interval const &val) const {
-        return std::max(min(), val.min()) < std::min(max(), val.max());
-    }
-    /// @}
-
-    /// @name Operators
-    /// @{
-    // IMPL: ScalableConcept
-    /** @brief Scale an interval */
-    Interval &operator*=(Coord s) {
-        using std::swap;
-        _b[0] *= s;
-        _b[1] *= s;
-        if(s < 0) swap(_b[0], _b[1]);
-        return *this;
-    }
-    /** @brief Scale an interval by the inverse of the specified value */
-    Interval &operator/=(Coord s) {
-        using std::swap;
-        _b[0] /= s;
-        _b[1] /= s;
-        if(s < 0) swap(_b[0], _b[1]);
-        return *this;
-    }
-    /** @brief Multiply two intervals.
-     * Product is defined as the set of points that can be obtained by multiplying
-     * any value from the second operand by any value from the first operand:
-     * \f$S = \{x \in A, y \in B: x * y\}\f$ */
-    Interval &operator*=(Interval const &o) {
-        // TODO implement properly
-        Coord mn = min(), mx = max();
-        expandTo(mn * o.min());
-        expandTo(mn * o.max());
-        expandTo(mx * o.min());
-        expandTo(mx * o.max());
-        return *this;
-    }
-    bool operator==(IntInterval const &ii) const {
-        return min() == Coord(ii.min()) && max() == Coord(ii.max());
-    }
-    bool operator==(Interval const &other) const {
-        return Base::operator==(other);
-    }
-    /// @}
     
-    /// @name Rounding to integer values
-    /// @{
-    /** @brief Return the smallest integer interval which contains this one. */
-    IntInterval roundOutwards() const {
-        IntInterval ret(floor(min()), ceil(max()));
-        return ret;
+    double operator[](unsigned i) const {
+        assert(i < 2);
+        return _b[i];
     }
-    /** @brief Return the largest integer interval which is contained in this one. */
-    OptIntInterval roundInwards() const {
-        IntCoord u = ceil(min()), v = floor(max());
-        if (u > v) { OptIntInterval e; return e; }
-        IntInterval ret(u, v);
-        return ret;
+    inline double& operator[](unsigned i) { return _b[i]; }  //Trust the user...
+    
+    inline Coord min() const { return _b[0]; }
+    inline Coord max() const { return _b[1]; }
+    inline Coord extent() const { return _b[1] - _b[0]; }
+    inline Coord middle() const { return (_b[1] + _b[0]) * 0.5; }
+    
+//    inline bool isEmpty() const { return _b[0] > _b[1]; }
+    inline bool isSingular() const { return _b[0] == _b[1]; }
+    inline bool contains(Coord val) const { return _b[0] <= val && val <= _b[1]; }
+    bool contains(const Interval & val) const { return _b[0] <= val._b[0] && val._b[1] <= _b[1]; }
+    bool intersects(const Interval & val) const {
+        return contains(val._b[0]) || contains(val._b[1]) || val.contains(*this);
     }
-    /// @}
+    
+    inline bool operator==(Interval other) const { return _b[0] == other._b[0] && _b[1] == other._b[1]; }
+    inline bool operator!=(Interval other) const { return _b[0] != other._b[0] || _b[1] != other._b[1]; }
+    
+    //IMPL: OffsetableConcept
+    //TODO: rename output_type to something else in the concept
+    typedef Coord output_type;
+    inline Interval operator+(Coord amnt) {
+        return Interval(_b[0] + amnt, _b[1] + amnt);
+    }
+    inline Interval operator-(Coord amnt) {
+        return Interval(_b[0] - amnt, _b[1] - amnt);
+    }
+    inline Interval operator+=(Coord amnt) {
+        _b[0] += amnt; _b[1] += amnt;
+        return *this;
+    }
+    inline Interval operator-=(Coord amnt) {
+        _b[0] -= amnt; _b[1] -= amnt;
+        return *this;
+    }
+    
+    //IMPL: ScalableConcept
+    inline Interval operator-() const { return Interval(*this); }
+    inline Interval operator*(Coord s) const { return Interval(_b[0]*s, _b[1]*s); }
+    inline Interval operator/(Coord s) const { return Interval(_b[0]/s, _b[1]/s); }
+    Interval operator*=(Coord s) {
+        if(s < 0) {
+            Coord temp = _b[0];
+            _b[0] = _b[1]*s;
+            _b[1] = temp*s;
+        } else {
+            _b[0] *= s;
+            _b[1] *= s;
+        }
+        return *this;
+    }
+    Interval operator/=(Coord s) {
+        //TODO: what about s=0?
+        if(s < 0) {
+            Coord temp = _b[0];
+            _b[0] = _b[1]/s;
+            _b[1] = temp/s;
+        } else {
+            _b[0] /= s;
+            _b[1] /= s;
+        }
+        return *this;
+    }
+    
+    //TODO: NaN handleage for the next two?
+    //TODO: Evaluate if wrap behaviour is proper.
+    //If val > max, then rather than becoming a min==max range, it 'wraps' over
+    void setMin(Coord val) {
+        if(val > _b[1]) {
+            _b[0] = _b[1];
+            _b[1] = val;
+        } else {
+            _b[0] = val;
+        }
+    }
+    //If val < min, then rather than becoming a min==max range, it 'wraps' over
+    void setMax(Coord val) {
+        if(val < _b[0]) {
+            _b[1] = _b[0];
+            _b[0] = val;
+        } else {
+            _b[1] = val;
+        }
+    }
+    
+    inline void extendTo(Coord val) {
+       if(val < _b[0]) _b[0] = val;
+       if(val > _b[1]) _b[1] = val;  //no else, as we want to handle NaN
+    }
+    
+    static Interval fromArray(const Coord* c, int n) {
+        assert(n > 0);
+        Interval result(c[0]);
+        for(int i = 1; i < n; i++) result.extendTo(c[i]);
+        return result;
+    }
+    
+    /** When this would create an empty interval, the interval will be the centerpoint of the old range only.
+     */
+    inline void expandBy(double amnt) {
+        _b[0] -= amnt;
+        _b[1] += amnt;
+        if (_b[0] > _b[1]) {
+            Coord halfway = (_b[0]+_b[1])/2;
+            _b[0] = _b[1] = halfway;
+        }
+    }
+    
+    inline void unionWith(const Interval & a) {
+        if(a._b[0] < _b[0]) _b[0] = a._b[0];
+        if(a._b[1] > _b[1]) _b[1] = a._b[1];
+    }
 };
+
+//IMPL: AddableConcept
+inline Interval operator+(const Interval & a, const Interval & b) {
+    return Interval(a.min() + b.min(), a.max() + b.max());
+}
+inline Interval operator-(const Interval & a, const Interval & b) {
+    return Interval(a.min() - b.max(), a.max() - b.min());
+}
+inline Interval operator+=(Interval & a, const Interval & b) { a = a + b; return a; }
+inline Interval operator-=(Interval & a, const Interval & b) { a = a - b; return a; }
+
+//There might be impls of this based off sign checks
+inline Interval operator*(const Interval & a, const Interval & b) {
+    Interval res(a.min() * b.min());
+    res.extendTo(a.min() * b.max());
+    res.extendTo(a.max() * b.min());
+    res.extendTo(a.max() * b.max());
+    return res;
+}
+inline Interval operator*=(Interval & a, const Interval & b) { a = a * b; return a; }
+
+/* reinstate if useful (doesn't do the proper thing for 0 inclusion)
+inline Interval operator/(const Interval & a, const Interval & b) {
+    Interval res(a.min() / b.min());
+    res.extendTo(a.min() / b.max());
+    res.extendTo(a.max() / b.min());
+    res.extendTo(a.max() / b.max());
+    return res;
+}
+inline Interval operator/=(Interval & a, const Interval & b) { a = a / b; return a; }
+*/
+
+// 'union' conflicts with C keyword
+inline Interval unify(const Interval & a, const Interval & b) {
+    return Interval(std::min(a.min(), b.min()),
+                    std::max(a.max(), b.max()));
+}
 
 /**
- * @brief Range of real numbers that can be empty.
- * @ingroup Primitives
+ * \brief OptInterval is an Interval that can be empty.
  */
-class OptInterval
-    : public GenericOptInterval<Coord>
-{
-    typedef GenericOptInterval<Coord> Base;
+class OptInterval : public boost::optional<Interval> {
 public:
-    /// @name Create optionally empty intervals.
-    /// @{
-    /** @brief Create an empty interval. */
-    OptInterval() : Base() {}
-    /** @brief Wrap an existing interval. */
-    OptInterval(Interval const &a) : Base(a) {}
-    /** @brief Create an interval containing a single point. */
-    OptInterval(Coord u) : Base(u) {}
-    /** @brief Create an interval containing a range of numbers. */
-    OptInterval(Coord u, Coord v) : Base(u,v) {}
-    OptInterval(Base const &b) : Base(b) {}
+    OptInterval() : boost::optional<Interval>() {};
+    OptInterval(Interval const &a) : boost::optional<Interval>(a) {};
+    OptInterval(Coord u) : boost::optional<Interval>(Interval(u)) {};
+    OptInterval(Coord u, Coord v) : boost::optional<Interval>(Interval(u,v)) {};
 
-    /** @brief Promote from IntInterval. */
-    OptInterval(IntInterval const &i) : Base(Interval(i)) {}
-    /** @brief Promote from OptIntInterval. */
-    OptInterval(OptIntInterval const &i) : Base() {
-        if (i) *this = Interval(*i);
+    /**
+     * Check whether this OptInterval is empty or not.
+     */
+    inline bool isEmpty() { return (*this == false); };
+    
+    /**
+     * If \c this is empty, copy argument \c a. Otherwise, union with it (and do nothing when \c a is empty)
+     */
+    inline void unionWith(const OptInterval & a) {
+        if (a) {
+            if (*this) { // check that we are not empty
+                (*this)->unionWith(*a);
+            } else {
+                *this = a;
+            }
+        }
     }
 };
 
-// functions required for Python bindings
-inline Interval unify(Interval const &a, Interval const &b)
-{
-    Interval r = a | b;
-    return r;
-}
-inline OptInterval intersect(Interval const &a, Interval const &b)
-{
-    OptInterval r = a & b;
-    return r;
+inline OptInterval intersect(const Interval & a, const Interval & b) {
+    Coord u = std::max(a.min(), b.min()),
+          v = std::min(a.max(), b.max());
+    //technically >= might be incorrect, but singulars suck
+    return u > v ? OptInterval()
+                  : OptInterval(Interval(u, v));
 }
 
-} // end namespace Geom
+#ifdef _GLIBCXX_IOSTREAM
+inline std::ostream &operator<< (std::ostream &os, 
+                                 const Geom::Interval &I) {
+    os << "Interval("<<I[0] << ", "<<I[1] << ")";
+    return os;
+}
+#endif
 
+}
 #endif //SEEN_INTERVAL_H
 
 /*
@@ -249,4 +282,4 @@ inline OptInterval intersect(Interval const &a, Interval const &b)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

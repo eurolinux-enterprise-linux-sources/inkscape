@@ -1,14 +1,17 @@
-#include <glibmm/i18n.h>
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
-#include "context-fns.h"
+#include <glibmm/i18n.h>
+#include "sp-item.h"
 #include "desktop.h"
-#include "display/snap-indicator.h"
 #include "message-context.h"
 #include "message-stack.h"
+#include "context-fns.h"
 #include "snap.h"
-#include "sp-item.h"
+#include "event-context.h"
 #include "sp-namedview.h"
-#include "ui/tools/tool-base.h"
+#include "display/snap-indicator.h"
 
 static const double midpt_1_goldenratio = (1 + goldenratio) / 2;
 static const double midpt_goldenratio_2 = (goldenratio + 2) / 2;
@@ -129,11 +132,11 @@ Geom::Rect Inkscape::snap_rectangular_box(SPDesktop const *desktop, SPItem *item
 
             /* Try to snap p[0] (the opposite corner) along the constraint vector */
             s[0] = m.constrainedSnap(Inkscape::SnapCandidatePoint(p[0], Inkscape::SNAPSOURCE_NODE_HANDLE),
-                                     Inkscape::Snapper::SnapConstraint(p[0] - p[1]));
+                                     Inkscape::Snapper::ConstraintLine(p[0] - p[1]));
 
             /* Try to snap p[1] (the dragged corner) along the constraint vector */
             s[1] = m.constrainedSnap(Inkscape::SnapCandidatePoint(p[1], Inkscape::SNAPSOURCE_NODE_HANDLE),
-                                     Inkscape::Snapper::SnapConstraint(p[1] - p[0]));
+                                     Inkscape::Snapper::ConstraintLine(p[1] - p[0]));
 
             /* Choose the best snap and update points accordingly */
             if (s[0].getSnapDistance() < s[1].getSnapDistance()) {
@@ -154,7 +157,7 @@ Geom::Rect Inkscape::snap_rectangular_box(SPDesktop const *desktop, SPItem *item
             /* Our origin is the opposite corner.  Snap the drag point along the constraint vector */
             p[0] = center;
             snappoint = m.constrainedSnap(Inkscape::SnapCandidatePoint(p[1], Inkscape::SNAPSOURCE_NODE_HANDLE),
-                                          Inkscape::Snapper::SnapConstraint(p[1] - p[0]));
+                                          Inkscape::Snapper::ConstraintLine(p[1] - p[0]));
             if (snappoint.getSnapped()) {
                 p[1] = snappoint.getPoint();
             }
@@ -206,22 +209,20 @@ Geom::Rect Inkscape::snap_rectangular_box(SPDesktop const *desktop, SPItem *item
     p[0] *= desktop->dt2doc();
     p[1] *= desktop->dt2doc();
 
-    m.unSetup();
-
     return Geom::Rect(Geom::Point(MIN(p[0][Geom::X], p[1][Geom::X]), MIN(p[0][Geom::Y], p[1][Geom::Y])),
                     Geom::Point(MAX(p[0][Geom::X], p[1][Geom::X]), MAX(p[0][Geom::Y], p[1][Geom::Y])));
 }
 
 
 
-Geom::Point Inkscape::setup_for_drag_start(SPDesktop *desktop, Inkscape::UI::Tools::ToolBase* ec, GdkEvent *ev)
+Geom::Point Inkscape::setup_for_drag_start(SPDesktop *desktop, SPEventContext* ec, GdkEvent *ev)
 {
     ec->xp = static_cast<gint>(ev->button.x);
     ec->yp = static_cast<gint>(ev->button.y);
     ec->within_tolerance = true;
 
     Geom::Point const p(ev->button.x, ev->button.y);
-    ec->item_to_select = Inkscape::UI::Tools::sp_event_context_find_item(desktop, p, ev->button.state & GDK_MOD1_MASK, TRUE);
+    ec->item_to_select = sp_event_context_find_item(desktop, p, ev->button.state & GDK_MOD1_MASK, TRUE);
     return ec->desktop->w2d(p);
 }
 
@@ -235,4 +236,4 @@ Geom::Point Inkscape::setup_for_drag_start(SPDesktop *desktop, Inkscape::UI::Too
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

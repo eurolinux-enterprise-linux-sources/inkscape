@@ -6,7 +6,6 @@
  *
  * Authors:
  *   Ted Gould <ted@gould.cx>
- *   Abhishek Sharma
  *
  * Copyright (C) 2006 Authors
  *
@@ -48,28 +47,17 @@
 #include "extension/system.h"
 #include "extension/input.h"
 #include "document.h"
-#include "sp-root.h"
-#include "util/units.h"
-#include <cstring>
 
-// Take a guess and fallback to 0.2.x if no configure has run
-#if !defined(WITH_LIBWPG03) && !defined(WITH_LIBWPG02)
-#define WITH_LIBWPG02 1
+// Take a guess and fallback to 0.1.x if no configure has run
+#if !defined(WITH_LIBWPG01) && !defined(WITH_LIBWPG02)
+#define WITH_LIBWPG01 1
 #endif
 
 #include "libwpg/libwpg.h"
-#if WITH_LIBWPG03
-  #include <librevenge-stream/librevenge-stream.h>
-
-  using librevenge::RVNGString;
-  using librevenge::RVNGFileStream;
-  using librevenge::RVNGInputStream;
-#else
-  #include "libwpd-stream/libwpd-stream.h"
-
-  typedef WPXString               RVNGString;
-  typedef WPXFileStream           RVNGFileStream;
-  typedef WPXInputStream          RVNGInputStream;
+#if WITH_LIBWPG01
+#include "libwpg/WPGStreamImplementation.h"
+#elif WITH_LIBWPG02
+#include "libwpd-stream/libwpd-stream.h"
 #endif
 
 using namespace libwpg;
@@ -79,27 +67,19 @@ namespace Extension {
 namespace Internal {
 
 
-SPDocument *WpgInput::open(Inkscape::Extension::Input * /*mod*/, const gchar * uri)
-{
-    #ifdef WIN32
-        // RVNGFileStream uses fopen() internally which unfortunately only uses ANSI encoding on Windows
-        // therefore attempt to convert uri to the system codepage
-        // even if this is not possible the alternate short (8.3) file name will be used if available
-        gchar * converted_uri = g_win32_locale_filename_from_utf8(uri);
-        RVNGInputStream* input = new RVNGFileStream(converted_uri);
-        g_free(converted_uri);
-    #else
-        RVNGInputStream* input = new RVNGFileStream(uri);
-    #endif
-
-#if WITH_LIBWPG03
-    if (input->isStructured()) {
-        RVNGInputStream* olestream = input->getSubStreamByName("PerfectOffice_MAIN");
-#else
-    if (input->isOLEStream()) {
-        RVNGInputStream* olestream = input->getDocumentOLEStream("PerfectOffice_MAIN");
+SPDocument *
+WpgInput::open(Inkscape::Extension::Input * mod, const gchar * uri) {
+#if WITH_LIBWPG01
+    WPXInputStream* input = new libwpg::WPGFileStream(uri);
+#elif WITH_LIBWPG02
+    WPXInputStream* input = new WPXFileStream(uri);
 #endif
-
+    if (input->isOLEStream()) {
+#if WITH_LIBWPG01
+        WPXInputStream* olestream = input->getDocumentOLEStream();
+#elif WITH_LIBWPG02
+        WPXInputStream* olestream = input->getDocumentOLEStream("PerfectOffice_MAIN");
+#endif
         if (olestream) {
             delete input;
             input = olestream;
@@ -114,42 +94,30 @@ SPDocument *WpgInput::open(Inkscape::Extension::Input * /*mod*/, const gchar * u
         return NULL;
     }
 
-#if WITH_LIBWPG03
-    librevenge::RVNGStringVector vec;
-    librevenge::RVNGSVGDrawingGenerator generator(vec, "");
-
-    if (!libwpg::WPGraphics::parse(input, &generator) || vec.empty() || vec[0].empty()) {
-        delete input;
-        return NULL;
-    }
-
-    RVNGString output("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
-    output.append(vec[0]);
-#else
-    RVNGString output;
+#if WITH_LIBWPG01
+    libwpg::WPGString output;
+#elif WITH_LIBWPG02
+    WPXString output;
+#endif
     if (!libwpg::WPGraphics::generateSVG(input, output)) {
         delete input;
         return NULL;
     }
-#endif
 
     //printf("I've got a doc: \n%s", painter.document.c_str());
 
-    SPDocument * doc = SPDocument::createNewDocFromMem(output.cstr(), strlen(output.cstr()), TRUE);
-    
-    // Set viewBox if it doesn't exist
-    if (doc && !doc->getRoot()->viewBox_set) {
-        doc->setViewBox(Geom::Rect::from_xywh(0, 0, doc->getWidth().value(doc->getDisplayUnit()), doc->getHeight().value(doc->getDisplayUnit())));
-    }
-    
+    SPDocument * doc = sp_document_new_from_mem(output.cstr(), strlen(output.cstr()), TRUE);
     delete input;
     return doc;
 }
 
 #include "clear-n_.h"
 
-void WpgInput::init(void) {
-    Inkscape::Extension::build_from_mem(
+void
+WpgInput::init(void) {
+    Inkscape::Extension::Extension * ext;
+
+    ext = Inkscape::Extension::build_from_mem(
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
             "<name>" N_("WPG Input") "</name>\n"
             "<id>org.inkscape.input.wpg</id>\n"

@@ -19,13 +19,12 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
 
 import inkex
 import simplestyle, sys
 from math import *
-from simpletransform import computePointInNode
 
 def draw_SVG_line(x1, y1, x2, y2, width, name, parent):
     style = { 'stroke': '#000000', 'stroke-width':str(width), 'fill': 'none' }
@@ -44,9 +43,6 @@ def draw_SVG_rect(x,y,w,h, width, fill, name, parent):
 class Grid_Polar(inkex.Effect):
     def __init__(self):
         inkex.Effect.__init__(self)
-        self.OptionParser.add_option("--tab",
-                        action="store", type="string", 
-                        dest="tab", default="x_tab") 
         self.OptionParser.add_option("--x_divs",
                         action="store", type="int", 
                         dest="x_divs", default=5,
@@ -126,26 +122,15 @@ class Grid_Polar(inkex.Effect):
 
 
     def effect(self):
-
-        self.options.border_th = self.unittouu(str(self.options.border_th) + 'px')
-        self.options.dx = self.unittouu(str(self.options.dx) + 'px')
-        self.options.x_divs_th = self.unittouu(str(self.options.x_divs_th) + 'px')
-        self.options.x_subdivs_th = self.unittouu(str(self.options.x_subdivs_th) + 'px')
-        self.options.x_subsubdivs_th = self.unittouu(str(self.options.x_subsubdivs_th) + 'px')
-        self.options.dy = self.unittouu(str(self.options.dy) + 'px')
-        self.options.y_divs_th = self.unittouu(str(self.options.y_divs_th) + 'px')
-        self.options.y_subdivs_th = self.unittouu(str(self.options.y_subdivs_th) + 'px')
-        self.options.y_subsubdivs_th = self.unittouu(str(self.options.y_subsubdivs_th) + 'px')
-
+        
         #find the pixel dimensions of the overall grid
         ymax = self.options.dy * self.options.y_divs
         xmax = self.options.dx * self.options.x_divs
         
         # Embed grid in group
         #Put in in the centre of the current view
-        view_center = computePointInNode(list(self.view_center), self.current_layer)
-        t = 'translate(' + str( view_center[0]- xmax/2.0) + ',' + \
-                           str( view_center[1]- ymax/2.0) + ')'
+        t = 'translate(' + str( self.view_center[0]- xmax/2.0) + ',' + \
+                           str( self.view_center[1]- ymax/2.0) + ')'
         g_attribs = {inkex.addNS('label','inkscape'):'Grid_Polar:X' + \
                      str( self.options.x_divs )+':Y'+str( self.options.y_divs ),
                      'transform':t }
@@ -276,4 +261,4 @@ if __name__ == '__main__':
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

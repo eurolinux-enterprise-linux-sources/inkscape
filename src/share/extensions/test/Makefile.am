@@ -3,13 +3,9 @@
 #TESTS = svgcalendar.test.py
 # that is not working :-/
 
-SUBDIRS = \
-	svg
-
 EXTRA_DIST = \
 		addnodes.test.py \
 		chardataeffect.test.py \
-		color_randomize.test.py \
 		coloreffect.test.py \
 		create_test_from_template.sh \
 		dots.test.py \
@@ -24,6 +20,7 @@ EXTRA_DIST = \
 		foldablebox.test.py \
 		fractalize.test.py \
 		funcplot.test.py \
+		gears.test.py \
 		gimp_xcf.test.py \
 		grid_cartesian.test.py \
 		grid_polar.test.py \
@@ -35,7 +32,6 @@ EXTRA_DIST = \
 		inkwebjs-move.test.svg \
 		interp_att_g.test.py \
 		interp.test.py \
-		jitternodes.test.py \
 		lindenmayer.test.py \
 		lorem_ipsum.test.py \
 		markers_strokepaint.test.py \
@@ -46,10 +42,10 @@ EXTRA_DIST = \
 		perfectboundcover.test.py \
 		perspective.test.py \
 		polyhedron_3d.test.py \
+		printing-marks.test.py \
+		radiusrand.test.py \
 		render_alphabetsoup.test.py \
 		render_barcode.test.py \
-		render_barcode.data \
-		render_gears.test.py \
 		restack.test.py \
 		rtree.test.py \
 		run-all-extension-tests \

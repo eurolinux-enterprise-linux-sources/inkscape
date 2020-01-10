@@ -2,6 +2,7 @@
 #define SEEN_COLOR_PROFILE_H
 
 #include <vector>
+#include <glib.h>
 #include <sp-object.h>
 #include <glibmm/ustring.h>
 #include "cms-color-types.h"
@@ -23,19 +24,25 @@ class ColorProfileImpl;
 
 
 /**
+ * The SPColorProfile vtable.
+ */
+struct ColorProfileClass {
+    SPObjectClass parent_class;
+};
+
+/**
  * Color Profile.
  */
-class ColorProfile : public SPObject {
-public:
-	ColorProfile();
-	virtual ~ColorProfile();
-
-    friend cmsHPROFILE colorprofile_get_handle( SPDocument*, unsigned int*, char const* );
+struct ColorProfile : public SPObject {
+    friend cmsHPROFILE colorprofile_get_handle( SPDocument*, guint*, gchar const* );
     friend class CMSSystem;
 
-    static std::vector<std::pair<Glib::ustring, bool> > getBaseProfileDirs();
-    static std::vector<std::pair<Glib::ustring, bool> > getProfileFiles();
-    static std::vector<std::pair<std::pair<Glib::ustring, bool>, Glib::ustring> > getProfileFilesWithNames();
+    static GType getType();
+    static void classInit( ColorProfileClass *klass );
+
+    static std::vector<Glib::ustring> getBaseProfileDirs();
+    static std::vector<Glib::ustring> getProfileFiles();
+    static std::vector<std::pair<Glib::ustring, Glib::ustring> > getProfileFilesWithNames();
 #if defined(HAVE_LIBLCMS1) || defined(HAVE_LIBLCMS2)
     //icColorSpaceSignature getColorSpace() const;
     ColorSpaceSig getColorSpace() const;
@@ -48,28 +55,32 @@ public:
 
 #endif // defined(HAVE_LIBLCMS1) || defined(HAVE_LIBLCMS2)
 
-    char* href;
-    char* local;
-    char* name;
-    char* intentStr;
-    unsigned int rendering_intent; // FIXME: type the enum and hold that instead
+    gchar* href;
+    gchar* local;
+    gchar* name;
+    gchar* intentStr;
+    guint rendering_intent;
 
-protected:
+private:
+    static void init( ColorProfile *cprof );
+
+    static void release( SPObject *object );
+    static void build( SPObject *object, SPDocument *document, Inkscape::XML::Node *repr );
+    static void set( SPObject *object, unsigned key, gchar const *value );
+    static Inkscape::XML::Node *write( SPObject *object, Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags );
+
     ColorProfileImpl *impl;
-
-    virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-    virtual void release();
-
-    virtual void set(unsigned int key, char const* value);
-
-    virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
 };
+
+GType colorprofile_get_type();
 
 } // namespace Inkscape
 
-//#define COLORPROFILE_TYPE (Inkscape::colorprofile_get_type())
-#define COLORPROFILE(obj) ((Inkscape::ColorProfile*)obj)
-#define IS_COLORPROFILE(obj) (dynamic_cast<const Inkscape::ColorProfile*>((SPObject*)obj))
+#define COLORPROFILE_TYPE (Inkscape::colorprofile_get_type())
+#define COLORPROFILE(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), COLORPROFILE_TYPE, Inkscape::ColorProfile))
+#define COLORPROFILE_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), COLORPROFILE_TYPE, Inkscape::ColorProfileClass))
+#define IS_COLORPROFILE(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), COLORPROFILE_TYPE))
+#define IS_COLORPROFILE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), COLORPROFILE_TYPE))
 
 #endif // !SEEN_COLOR_PROFILE_H
 

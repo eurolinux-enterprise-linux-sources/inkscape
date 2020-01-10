@@ -1,12 +1,11 @@
+#define __SP_PNG_WRITE_C__
+
 /*
  * PNG file format utilities
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Whoever wrote this example in libpng documentation
- *   Peter Bostrom
- *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 1999-2002 authors
  *
@@ -17,24 +16,22 @@
 # include "config.h"
 #endif
 
-#include <png.h>
-#include "ui/interface.h"
+#include <interface.h>
+#include <libnr/nr-pixops.h>
+#include <libnr/nr-translate-scale-ops.h>
 #include <2geom/rect.h>
-#include <2geom/transforms.h>
 #include <glib.h>
+#include <png.h>
 #include "png-write.h"
 #include "io/sys.h"
-#include "display/drawing.h"
-#include "display/drawing-context.h"
-#include "display/drawing-item.h"
-#include "document.h"
-#include "sp-item.h"
-#include "sp-root.h"
-#include "sp-defs.h"
+#include <display/nr-arena-item.h>
+#include <display/nr-arena.h>
+#include <document.h>
+#include <sp-item.h>
+#include <sp-root.h>
+#include <sp-defs.h>
 #include "preferences.h"
 #include "rdf.h"
-#include "display/cairo-utils.h"
-#include "util/units.h"
 
 /* This is an example of how to use libpng to read and write PNG files.
  * The file libpng.txt is much more verbose then this.  If you have not
@@ -52,8 +49,8 @@ static unsigned int const MAX_STRIPE_SIZE = 1024*1024;
 
 struct SPEBP {
     unsigned long int width, height, sheight;
-    guint32 background;
-    Inkscape::Drawing *drawing; // it is assumed that all unneeded items are hidden
+    guchar r, g, b, a;
+    NRArenaItem *root; // the root arena item to show; it is assumed that all unneeded items are hidden
     guchar *px;
     unsigned (*status)(float, void *);
     void *data;
@@ -125,12 +122,9 @@ void PngTextList::add(gchar const* key, gchar const* text)
 static bool
 sp_png_write_rgba_striped(SPDocument *doc,
                           gchar const *filename, unsigned long int width, unsigned long int height, double xdpi, double ydpi,
-                          int (* get_rows)(guchar const **rows, void **to_free, int row, int num_rows, void *data),
+                          int (* get_rows)(guchar const **rows, int row, int num_rows, void *data),
                           void *data)
 {
-    g_return_val_if_fail(filename != NULL, false);
-    g_return_val_if_fail(data != NULL, false);
-
     struct SPEBP *ebp = (struct SPEBP *) data;
     FILE *fp;
     png_structp png_ptr;
@@ -138,11 +132,14 @@ sp_png_write_rgba_striped(SPDocument *doc,
     png_color_8 sig_bit;
     png_uint_32 r;
 
+    g_return_val_if_fail(filename != NULL, false);
+    g_return_val_if_fail(data != NULL, false);
+
     /* open the file */
 
     Inkscape::IO::dump_fopen_call(filename, "M");
     fp = Inkscape::IO::fopen_utf8name(filename, "wb");
-    if(fp == NULL) return false;
+    g_return_val_if_fail(fp != NULL, false);
 
     /* Create and initialize the png_struct with the desired error handler
      * functions.  If you want to use the default stderr and longjump method,
@@ -275,12 +272,10 @@ sp_png_write_rgba_striped(SPDocument *doc,
     png_bytep* row_pointers = new png_bytep[ebp->sheight];
 
     r = 0;
-    while (r < static_cast<png_uint_32>(height)) {
-        void *to_free;
-        int n = get_rows((unsigned char const **) row_pointers, &to_free, r, height-r, data);
+    while (r < static_cast< png_uint_32 > (height) ) {
+        int n = get_rows((unsigned char const **) row_pointers, r, height-r, data);
         if (!n) break;
         png_write_rows(png_ptr, row_pointers, n);
-        g_free(to_free);
         r += n;
     }
 
@@ -310,7 +305,7 @@ sp_png_write_rgba_striped(SPDocument *doc,
  *
  */
 static int
-sp_export_get_rows(guchar const **rows, void **to_free, int row, int num_rows, void *data)
+sp_export_get_rows(guchar const **rows, int row, int num_rows, void *data)
 {
     struct SPEBP *ebp = (struct SPEBP *) data;
 
@@ -325,35 +320,41 @@ sp_export_get_rows(guchar const **rows, void **to_free, int row, int num_rows, v
     // bbox is now set to the entire image to prevent discontinuities
     // in the image when blur is used (the borders may still be a bit
     // off, but that's less noticeable).
-    Geom::IntRect bbox = Geom::IntRect::from_xywh(0, row, ebp->width, num_rows);
-
+    NRRectL bbox;
+    bbox.x0 = 0;
+    bbox.y0 = row;
+    bbox.x1 = ebp->width;
+    bbox.y1 = row + num_rows;
     /* Update to renderable state */
-    ebp->drawing->update(bbox);
+    NRGC gc(NULL);
+    gc.transform.setIdentity();
 
-    int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, ebp->width);
-    unsigned char *px = g_new(guchar, num_rows * stride);
+    nr_arena_item_invoke_update(ebp->root, &bbox, &gc,
+           NR_ARENA_ITEM_STATE_ALL, NR_ARENA_ITEM_STATE_NONE);
 
-    cairo_surface_t *s = cairo_image_surface_create_for_data(
-        px, CAIRO_FORMAT_ARGB32, ebp->width, num_rows, stride);
-    Inkscape::DrawingContext dc(s, bbox.min());
-    dc.setSource(ebp->background);
-    dc.setOperator(CAIRO_OPERATOR_SOURCE);
-    dc.paint();
-    dc.setOperator(CAIRO_OPERATOR_OVER);
-
-    /* Render */
-    ebp->drawing->render(dc, bbox);
-    cairo_surface_destroy(s);
-
-    *to_free = px;
-
-    // PNG stores data as unpremultiplied big-endian RGBA, which means
-    // it's identical to the GdkPixbuf format.
-    convert_pixels_argb32_to_pixbuf(px, ebp->width, num_rows, stride);
+    NRPixBlock pb;
+    nr_pixblock_setup_extern(&pb, NR_PIXBLOCK_MODE_R8G8B8A8N,
+                             bbox.x0, bbox.y0, bbox.x1, bbox.y1,
+                             ebp->px, 4 * ebp->width, FALSE, FALSE);
 
     for (int r = 0; r < num_rows; r++) {
-        rows[r] = px + r * stride;
+        guchar *p = NR_PIXBLOCK_PX(&pb) + r * pb.rs;
+        for (int c = 0; c < static_cast<int>(ebp->width); c++) {
+            *p++ = ebp->r;
+            *p++ = ebp->g;
+            *p++ = ebp->b;
+            *p++ = ebp->a;
+        }
     }
+
+    /* Render */
+    nr_arena_item_invoke_render(NULL, ebp->root, &bbox, &pb, 0);
+
+    for (int r = 0; r < num_rows; r++) {
+        rows[r] = NR_PIXBLOCK_PX(&pb) + r * pb.rs;
+    }
+
+    nr_pixblock_release(&pb);
 
     return num_rows;
 }
@@ -361,62 +362,70 @@ sp_export_get_rows(guchar const **rows, void **to_free, int row, int num_rows, v
 /**
  * Hide all items that are not listed in list, recursively, skipping groups and defs.
  */
-static void hide_other_items_recursively(SPObject *o, const std::vector<SPItem*> &list, unsigned dkey)
+static void
+hide_other_items_recursively(SPObject *o, GSList *list, unsigned dkey)
 {
     if ( SP_IS_ITEM(o)
          && !SP_IS_DEFS(o)
          && !SP_IS_ROOT(o)
          && !SP_IS_GROUP(o)
-         && list.end()==find(list.begin(),list.end(),o))
+         && !g_slist_find(list, o) )
     {
-        SP_ITEM(o)->invoke_hide(dkey);
+        sp_item_invoke_hide(SP_ITEM(o), dkey);
     }
 
     // recurse
-    if (list.end()==find(list.begin(),list.end(),o)) {
-        for ( SPObject *child = o->firstChild() ; child; child = child->getNext() ) {
+    if (!g_slist_find(list, o)) {
+        for (SPObject *child = sp_object_first_child(o) ; child != NULL; child = SP_OBJECT_NEXT(child) ) {
             hide_other_items_recursively(child, list, dkey);
         }
     }
 }
 
 
-ExportResult sp_export_png_file(SPDocument *doc, gchar const *filename,
-                                double x0, double y0, double x1, double y1,
-                                unsigned long int width, unsigned long int height, double xdpi, double ydpi,
-                                unsigned long bgcolor,
-                                unsigned int (*status) (float, void *),
-                                void *data, bool force_overwrite,
-                                const std::vector<SPItem*> &items_only)
+/**
+ * Export the given document as a Portable Network Graphics (PNG) file.
+ *
+ * \return true if succeeded (or if no action was taken), false if an error occurred.
+ */
+bool sp_export_png_file (SPDocument *doc, gchar const *filename,
+                   double x0, double y0, double x1, double y1,
+                   unsigned long int width, unsigned long int height, double xdpi, double ydpi,
+                   unsigned long bgcolor,
+                   unsigned int (*status) (float, void *),
+                   void *data, bool force_overwrite,
+                   GSList *items_only)
 {
     return sp_export_png_file(doc, filename, Geom::Rect(Geom::Point(x0,y0),Geom::Point(x1,y1)),
                               width, height, xdpi, ydpi, bgcolor, status, data, force_overwrite, items_only);
 }
-
-ExportResult sp_export_png_file(SPDocument *doc, gchar const *filename,
-                                Geom::Rect const &area,
-                                unsigned long width, unsigned long height, double xdpi, double ydpi,
-                                unsigned long bgcolor,
-                                unsigned (*status)(float, void *),
-                                void *data, bool force_overwrite,
-                                const std::vector<SPItem*> &items_only)
+bool
+sp_export_png_file(SPDocument *doc, gchar const *filename,
+                   Geom::Rect const &area,
+                   unsigned long width, unsigned long height, double xdpi, double ydpi,
+                   unsigned long bgcolor,
+                   unsigned (*status)(float, void *),
+                   void *data, bool force_overwrite,
+                   GSList *items_only)
 {
-    g_return_val_if_fail(doc != NULL, EXPORT_ERROR);
-    g_return_val_if_fail(filename != NULL, EXPORT_ERROR);
-    g_return_val_if_fail(width >= 1, EXPORT_ERROR);
-    g_return_val_if_fail(height >= 1, EXPORT_ERROR);
-    g_return_val_if_fail(!area.hasZeroArea(), EXPORT_ERROR);
-
+    g_return_val_if_fail(doc != NULL, false);
+    g_return_val_if_fail(filename != NULL, false);
+    g_return_val_if_fail(width >= 1, false);
+    g_return_val_if_fail(height >= 1, false);
+    g_return_val_if_fail(!area.hasZeroArea(), false);
 
     if (!force_overwrite && !sp_ui_overwrite_file(filename)) {
-        // aborted overwrite
-	return EXPORT_ABORTED;
+        /* Remark: We return true so as not to invoke an error dialog in case export is cancelled
+           by the user; currently this is safe because the callers only act when false is returned.
+           If this changes in the future we need better distinction of return types (e.g., use int)
+        */
+        return true;
     }
 
-    doc->ensureUpToDate();
+    sp_document_ensure_up_to_date(doc);
 
     /* Calculate translation by transforming to document coordinates (flipping Y)*/
-    Geom::Point translation = Geom::Point(-area[Geom::X][0], area[Geom::Y][1] - doc->getHeight().value("px"));
+    Geom::Point translation = Geom::Point(-area[Geom::X][0], area[Geom::Y][1] - sp_document_height(doc));
 
     /*  This calculation is only valid when assumed that (x0,y0)= area.corner(0) and (x1,y1) = area.corner(2)
      * 1) a[0] * x0 + a[2] * y1 + a[4] = 0.0
@@ -434,7 +443,7 @@ ExportResult sp_export_png_file(SPDocument *doc, gchar const *filename,
      * (2) a[5] = -a[3] * y1
      */
 
-    Geom::Affine const affine(Geom::Translate(translation)
+    Geom::Matrix const affine(Geom::Translate(translation)
                             * Geom::Scale(width / area.width(),
                                         height / area.height()));
 
@@ -443,41 +452,50 @@ ExportResult sp_export_png_file(SPDocument *doc, gchar const *filename,
     struct SPEBP ebp;
     ebp.width  = width;
     ebp.height = height;
-    ebp.background = bgcolor;
+    ebp.r      = NR_RGBA32_R(bgcolor);
+    ebp.g      = NR_RGBA32_G(bgcolor);
+    ebp.b      = NR_RGBA32_B(bgcolor);
+    ebp.a      = NR_RGBA32_A(bgcolor);
 
-    /* Create new drawing */
-    Inkscape::Drawing drawing;
-    drawing.setExact(true); // export with maximum blur rendering quality
-    unsigned const dkey = SPItem::display_key_new(1);
+    /* Create new arena */
+    NRArena *const arena = NRArena::create();
+    // export with maximum blur rendering quality
+    nr_arena_set_renderoffscreen(arena);
+    unsigned const dkey = sp_item_display_key_new(1);
 
-    // Create ArenaItems and set transform
-    drawing.setRoot(doc->getRoot()->invoke_show(drawing, dkey, SP_ITEM_SHOW_DISPLAY));
-    drawing.root()->setTransform(affine);
-    ebp.drawing = &drawing;
+    /* Create ArenaItems and set transform */
+    ebp.root = sp_item_invoke_show(SP_ITEM(sp_document_root(doc)), arena, dkey, SP_ITEM_SHOW_DISPLAY);
+    nr_arena_item_set_transform(NR_ARENA_ITEM(ebp.root), affine);
 
     // We show all and then hide all items we don't want, instead of showing only requested items,
     // because that would not work if the shown item references something in defs
-    if (!items_only.empty()) {
-        hide_other_items_recursively(doc->getRoot(), items_only, dkey);
+    if (items_only) {
+        hide_other_items_recursively(sp_document_root(doc), items_only, dkey);
     }
 
     ebp.status = status;
     ebp.data   = data;
 
-    bool write_status = false;;
-
-    ebp.sheight = 64;
-    ebp.px = g_try_new(guchar, 4 * ebp.sheight * width);
-
-    if (ebp.px) {
+    bool write_status;
+    if ((width < 256) || ((width * height) < 32768)) {
+        ebp.px = nr_pixelstore_64K_new(FALSE, 0);
+        ebp.sheight = 65536 / (4 * width);
+        write_status = sp_png_write_rgba_striped(doc, filename, width, height, xdpi, ydpi, sp_export_get_rows, &ebp);
+        nr_pixelstore_64K_free(ebp.px);
+    } else {
+        ebp.sheight = 64;
+        ebp.px = g_try_new(guchar, 4 * ebp.sheight * width);
         write_status = sp_png_write_rgba_striped(doc, filename, width, height, xdpi, ydpi, sp_export_get_rows, &ebp);
         g_free(ebp.px);
     }
 
     // Hide items, this releases arenaitem
-    doc->getRoot()->invoke_hide(dkey);
+    sp_item_invoke_hide(SP_ITEM(sp_document_root(doc)), dkey);
 
-    return write_status ? EXPORT_OK : EXPORT_ERROR;
+    /* Free arena */
+    nr_object_unref((NRObject *) arena);
+
+    return write_status;
 }
 
 
@@ -490,4 +508,4 @@ ExportResult sp_export_png_file(SPDocument *doc, gchar const *filename,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

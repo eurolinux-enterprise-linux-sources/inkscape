@@ -1,9 +1,6 @@
 /**
- * @file
- * Functions to automatically generate constraints for the
+ * \brief Functions to automatically generate constraints for the
  * rectangular node overlap removal problem.
- */
-/*
  *
  * Authors:
  *   Tim Dwyer <tgdwyer@gmail.com>
@@ -19,7 +16,7 @@
 #include "generate-constraints.h"
 #include "constraint.h"
 
-#include <2geom/math-utils.h>
+#include "2geom/isnan.h" /* Include last */
 
 using std::set;
 using std::vector;
@@ -105,7 +102,7 @@ bool CmpNodePos::operator() (const Node* u, const Node* v) const {
 	 */
 }
 
-static NodeSet* getLeftNeighbours(NodeSet &scanline,Node *v) {
+NodeSet* getLeftNeighbours(NodeSet &scanline,Node *v) {
 	NodeSet *leftv = new NodeSet;
 	NodeSet::iterator i=scanline.find(v);
 	while(i--!=scanline.begin()) {
@@ -120,7 +117,7 @@ static NodeSet* getLeftNeighbours(NodeSet &scanline,Node *v) {
 	}
 	return leftv;
 }
-static NodeSet* getRightNeighbours(NodeSet &scanline,Node *v) {
+NodeSet* getRightNeighbours(NodeSet &scanline,Node *v) {
 	NodeSet *rightv = new NodeSet;
 	NodeSet::iterator i=scanline.find(v);
 	for(++i;i!=scanline.end(); ++i) {
@@ -144,7 +141,7 @@ struct Event {
 	Event(EventType t, Node *v, double p) : type(t),v(v),pos(p) {};
 };
 Event **events;
-static int compare_events(const void *a, const void *b) {
+int compare_events(const void *a, const void *b) {
 	Event *ea=*(Event**)a;
 	Event *eb=*(Event**)b;
 	if(ea->v->r==eb->v->r) {
@@ -209,6 +206,7 @@ int generateXConstraints(const int n, Rectangle** rs, Variable** vars, Constrain
 			}
 		} else {
 			// Close event
+			int r;
 			if(useNeighbourLists) {
 				for(NodeSet::iterator i=v->leftNeighbours->begin();
 					i!=v->leftNeighbours->end();i++
@@ -216,7 +214,7 @@ int generateXConstraints(const int n, Rectangle** rs, Variable** vars, Constrain
 					Node *u=*i;
 					double sep = (v->r->width()+u->r->width())/2.0;
 					constraints.push_back(new Constraint(u->v,v->v,sep));
-					u->rightNeighbours->erase(v);
+					r=u->rightNeighbours->erase(v);
 				}
 				
 				for(NodeSet::iterator i=v->rightNeighbours->begin();
@@ -225,22 +223,22 @@ int generateXConstraints(const int n, Rectangle** rs, Variable** vars, Constrain
 					Node *u=*i;
 					double sep = (v->r->width()+u->r->width())/2.0;
 					constraints.push_back(new Constraint(v->v,u->v,sep));
-					u->leftNeighbours->erase(v);
+					r=u->leftNeighbours->erase(v);
 				}
 			} else {
 				Node *l=v->firstAbove, *r=v->firstBelow;
 				if(l!=NULL) {
 					double sep = (v->r->width()+l->r->width())/2.0;
 					constraints.push_back(new Constraint(l->v,v->v,sep));
-					l->firstBelow = v->firstBelow;
+					l->firstBelow=v->firstBelow;
 				}
 				if(r!=NULL) {
 					double sep = (v->r->width()+r->r->width())/2.0;
 					constraints.push_back(new Constraint(v->v,r->v,sep));
-					r->firstAbove = v->firstAbove;
+					r->firstAbove=v->firstAbove;
 				}
 			}
-			scanline.erase(v);
+			r=scanline.erase(v);
 			delete v;
 		}
 		delete e;

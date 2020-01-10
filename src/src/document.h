@@ -1,5 +1,5 @@
-#ifndef SEEN_SP_DOCUMENT_H
-#define SEEN_SP_DOCUMENT_H
+#ifndef __SP_DOCUMENT_H__
+#define __SP_DOCUMENT_H__
 
 /** \file
  * SPDocument: Typed SVG document implementation
@@ -7,8 +7,6 @@
 /* Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   MenTaLguY <mental@rydia.net>
- *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 2004-2005 MenTaLguY
  * Copyright (C) 1999-2002 Lauris Kaplinski
@@ -17,76 +15,64 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include <glib-object.h>
+#include <gtk/gtk.h>
 #include <stddef.h>
 #include <sigc++/sigc++.h>
+#include <sigc++/class_slot.h>
+
 #include "libcroco/cr-cascade.h"
 #include <2geom/forward.h>
-#include "inkgc/gc-managed.h"
+
+#include "gc-managed.h"
 #include "gc-finalized.h"
 #include "gc-anchored.h"
 #include <glibmm/ustring.h>
-#include <boost/ptr_container/ptr_list.hpp>
+#include "verbs.h"
 #include <vector>
 #include <set>
-#include <deque>
-
-// This variable is introduced with 0.92.1
-// with the introduction of automatic fix 
-// for files detected to have been created 
-// with previous versions to have a similar
-// look in 0.92+.
-extern bool sp_no_convert_text_baseline_spacing;
-
-
 
 namespace Avoid {
 class Router;
 }
 
-class  SPItem;
-class  SPObject;
-class SPGroup;
-class SPRoot;
+struct NRRect;
+struct SPDesktop;
+struct SPItem;
+struct SPObject;
+struct SPGroup;
 
 namespace Inkscape {
+    struct Application;
     class Selection; 
     class UndoStackObserver;
     class EventLog;
     class ProfileManager;
     namespace XML {
-        struct Document;
+        class Document;
         class Node;
-    }
-    namespace Util {
-        class Unit;
-        class Quantity;
     }
 }
 
-class SPDefs;
 class SP3DBox;
 class Persp3D;
 class Persp3DImpl;
-class SPItemCtx;
 
 namespace Proj {
     class TransfMat3x4;
 }
 
-struct SPDocumentPrivate;
+class SPDocumentPrivate;
 
 /// Typed SVG document implementation.
-class SPDocument : public Inkscape::GC::Managed<>,
+struct SPDocument : public Inkscape::GC::Managed<>,
                     public Inkscape::GC::Finalized,
                     public Inkscape::GC::Anchored
 {
-// Note: multiple public and private sections is not a good practice, but happens
-// in this class as transitional to fixing encapsulation:
-public:
     typedef sigc::signal<void, SPObject *> IDChangedSignal;
     typedef sigc::signal<void> ResourcesChangedSignal;
-    typedef sigc::signal<void, unsigned> ModifiedSignal;
-    typedef sigc::signal<void, char const *> URISetSignal;
+    typedef sigc::signal<void, guint> ModifiedSignal;
+    typedef sigc::signal<void, gchar const *> URISetSignal;
     typedef sigc::signal<void, double, double> ResizedSignal;
     typedef sigc::signal<void> ReconstructionStart;
     typedef sigc::signal<void> ReconstructionFinish;
@@ -95,26 +81,18 @@ public:
     SPDocument();
     virtual ~SPDocument();
 
-    sigc::connection connectDestroy(sigc::signal<void>::slot_type slot);
-
-
     unsigned int keepalive : 1;
     unsigned int virgin    : 1; ///< Has the document never been touched?
     unsigned int modified_since_save : 1;
 
     Inkscape::XML::Document *rdoc; ///< Our Inkscape::XML::Document
     Inkscape::XML::Node *rroot; ///< Root element of Inkscape::XML::Document
-private:
-    SPRoot *root;             ///< Our SPRoot
-public:
+    SPObject *root;             ///< Our SPRoot
     CRCascade *style_cascade;
 
-protected:
-    char *uri;   ///< A filename (not a URI yet), or NULL
-    char *base;  ///< To be used for resolving relative hrefs.
-    char *name;  ///< basename(uri) or other human-readable label for the document.
-
-public:
+    gchar *uri;   ///< A filename (not a URI yet), or NULL
+    gchar *base;  ///< To be used for resolving relative hrefs.
+    gchar *name;  ///< basename(uri) or other human-readable label for the document.
 
     SPDocumentPrivate *priv;
 
@@ -122,24 +100,21 @@ public:
     Glib::ustring actionkey;
 
     /// Handler ID
-    unsigned modified_id;
+    guint modified_id;
     
     /// Connector rerouting handler ID
-    unsigned rerouting_handler_id;
+    guint rerouting_handler_id;
 
     Inkscape::ProfileManager* profileManager;
 
     // Instance of the connector router
     Avoid::Router *router;
 
-    std::vector<SPObject *> _collection_queue;
+    GSList *_collection_queue;
 
     bool oldSignalsConnected;
 
     /** Returns our SPRoot */
-    SPRoot *getRoot() { return root; }
-    SPRoot const *getRoot() const { return root; }
-
     Inkscape::XML::Node *getReprRoot() { return rroot; }
 
     /** Our Inkscape::XML::Document. */
@@ -147,15 +122,15 @@ public:
     Inkscape::XML::Document const *getReprDoc() const { return rdoc; }
 
     /** A filename (not a URI yet), or NULL */
-    char const *getURI() const { return uri; }
-    void setUri(char const *uri);
+    gchar const *getURI() const { return uri; }
+    void setUri(gchar const *uri);
 
     /** To be used for resolving relative hrefs. */
-    char const *getBase() const { return base; };
-    void setBase( char const* base );
+    gchar const *getBase() const { return base; };
+    void setBase( gchar const* base );
 
     /** basename(uri) or other human-readable label for the document. */
-    char const* getName() const { return name; }
+    gchar const* getName() const { return name; }
 
     /** Return the main defs object for the document. */
     SPDefs *getDefs();
@@ -169,29 +144,28 @@ public:
      */
     Persp3D * getCurrentPersp3D();
     Persp3DImpl * getCurrentPersp3DImpl();
-
-    void getPerspectivesInDefs(std::vector<Persp3D*> &list) const;
-
-    unsigned int numPerspectivesInDefs() const {
+    void getPerspectivesInDefs(std::vector<Persp3D*> &list);
+    unsigned int numPerspectivesInDefs() {
         std::vector<Persp3D*> list;
         getPerspectivesInDefs(list);
         return list.size();
     }
 
+    //void initialize_current_persp3d();
+
     sigc::connection connectModified(ModifiedSignal::slot_type slot);
     sigc::connection connectURISet(URISetSignal::slot_type slot);
     sigc::connection connectResized(ResizedSignal::slot_type slot);
-    sigc::connection connectCommit(CommitSignal::slot_type slot);
+sigc::connection connectCommit(CommitSignal::slot_type slot);
 
-    void bindObjectToId(char const *id, SPObject *object);
-    SPObject *getObjectById(Glib::ustring const &id) const;
-    SPObject *getObjectById(char const *id) const;
-    sigc::connection connectIdChanged(const char *id, IDChangedSignal::slot_type slot);
+    void bindObjectToId(gchar const *id, SPObject *object);
+    SPObject *getObjectById(gchar const *id);
+    sigc::connection connectIdChanged(const gchar *id, IDChangedSignal::slot_type slot);
 
     void bindObjectToRepr(Inkscape::XML::Node *repr, SPObject *object);
-    SPObject *getObjectByRepr(Inkscape::XML::Node *repr) const;
+    SPObject *getObjectByRepr(Inkscape::XML::Node *repr);
 
-    Glib::ustring getLanguage() const;
+    Glib::ustring getLanguage();
 
     void queueForOrphanCollection(SPObject *object);
     void collectOrphans();
@@ -207,7 +181,9 @@ public:
     bool isSeeking() const;
 
     bool isModifiedSinceSave() const { return modified_since_save; }
-    void setModifiedSinceSave(bool const modified = true);
+    void setModifiedSinceSave(bool modified = true) {
+        modified_since_save = modified;
+    }
 
 private:
     SPDocument(SPDocument const &); // no copy
@@ -215,11 +191,6 @@ private:
 
     Persp3D *current_persp3d; /**< Currently 'active' perspective (to which, e.g., newly created boxes are attached) */
     Persp3DImpl *current_persp3d_impl;
-
-    // A list of svg documents being used or shown within this document
-    boost::ptr_list<SPDocument> _child_documents;
-    // Conversely this is a parent document because this is a child.
-    SPDocument *_parent_document;
 
 public:
     sigc::connection connectReconstructionStart(ReconstructionStart::slot_type slot);
@@ -232,64 +203,82 @@ public:
     sigc::connection _selection_changed_connection;
     sigc::connection _desktop_activated_connection;
 
-    sigc::connection connectResourcesChanged(char const *key, SPDocument::ResourcesChangedSignal::slot_type slot);
-
     void fitToRect(Geom::Rect const &rect, bool with_margins = false);
-    static SPDocument *createNewDoc(char const*uri, unsigned int keepalive,
-            bool make_new = false, SPDocument *parent=NULL );
-    static SPDocument *createNewDocFromMem(char const*buffer, int length, unsigned int keepalive);
-           SPDocument *createChildDoc(std::string const &uri);
-
-    /**
-     * Returns the bottommost item from the list which is at the point, or NULL if none.
-     */
-    static SPItem *getItemFromListAtPointBottom(unsigned int dkey, SPGroup *group, const std::vector<SPItem*> &list, Geom::Point const &p, bool take_insensitive = false);
-
-    static SPDocument *createDoc(Inkscape::XML::Document *rdoc, char const *uri,
-            char const *base, char const *name, unsigned int keepalive,
-            SPDocument *parent);
-
-    SPDocument *doRef();
-    SPDocument *doUnref();
-    Inkscape::Util::Unit const* getDisplayUnit() const;
-    void setDocumentScale( const double scaleX, const double scaleY );
-    void setDocumentScale( const double scale );
-    Geom::Scale getDocumentScale() const;
-    Inkscape::Util::Quantity getWidth() const;
-    Inkscape::Util::Quantity getHeight() const;
-    Geom::Rect getViewBox() const;
-    Geom::Point getDimensions() const;
-    Geom::OptRect preferredBounds() const;
-    void setWidthAndHeight(const Inkscape::Util::Quantity &width, const Inkscape::Util::Quantity &height, bool changeSize=true);
-    void setWidth(const Inkscape::Util::Quantity &width, bool changeSize=true);
-    void setHeight(const Inkscape::Util::Quantity &height, bool changeSize=true);
-    void setViewBox(const Geom::Rect &viewBox);
-    void requestModified();
-    int ensureUpToDate();
-    bool addResource(char const *key, SPObject *object);
-    bool removeResource(char const *key, SPObject *object);
-    const std::vector<SPObject *> getResourceList(char const *key) const;
-    std::vector<SPItem*> getItemsInBox(unsigned int dkey, Geom::Rect const &box, bool into_groups = false) const;
-    std::vector<SPItem*> getItemsPartiallyInBox(unsigned int dkey, Geom::Rect const &box, bool into_groups = false) const;
-    SPItem *getItemAtPoint(unsigned int key, Geom::Point const &p, bool into_groups, SPItem *upto = NULL) const;
-    std::vector<SPItem*> getItemsAtPoints(unsigned const key, std::vector<Geom::Point> points, bool all_layers = true, size_t limit = 0) const ;
-    SPItem *getGroupAtPoint(unsigned int key,  Geom::Point const &p) const;
-
-    void changeUriAndHrefs(char const *uri);
-    void emitResizedSignal(double width, double height);
-	
-    unsigned int vacuumDocument();
-
-    void importDefs(SPDocument *source);
-
-private:
-    void do_change_uri(char const *const filename, bool const rebase);
-    void setupViewport(SPItemCtx *ctx);
-    void importDefsNode(SPDocument *source, Inkscape::XML::Node *defs, Inkscape::XML::Node *target_defs);
-    void build_flat_item_list(unsigned int dkey, SPGroup *group, gboolean into_groups) const;
-    mutable std::deque<SPItem*> _node_cache;
-    mutable bool _node_cache_valid;
 };
+
+SPDocument *sp_document_new(const gchar *uri, unsigned int keepalive, bool make_new = false);
+SPDocument *sp_document_new_from_mem(const gchar *buffer, gint length, unsigned int keepalive);
+
+SPDocument *sp_document_ref(SPDocument *doc);
+SPDocument *sp_document_unref(SPDocument *doc);
+
+
+SPDocument *sp_document_create(Inkscape::XML::Document *rdoc, gchar const *uri, gchar const *base, gchar const *name, unsigned int keepalive);
+
+/*
+ * Access methods
+ */
+
+#define sp_document_repr_doc(d) (d->rdoc)
+#define sp_document_repr_root(d) (d->rroot)
+#define sp_document_root(d) (d->root)
+#define SP_DOCUMENT_ROOT(d) (d->root)
+
+gdouble sp_document_width(SPDocument *document);
+gdouble sp_document_height(SPDocument *document);
+Geom::Point sp_document_dimensions(SPDocument *document);
+
+struct SPUnit;
+
+void sp_document_set_width(SPDocument *document, gdouble width, const SPUnit *unit);
+void sp_document_set_height(SPDocument *document, gdouble height, const SPUnit *unit);
+
+#define SP_DOCUMENT_URI(d)  (d->uri)
+#define SP_DOCUMENT_NAME(d) (d->name)
+#define SP_DOCUMENT_BASE(d) (d->base)
+
+/*
+ * Dictionary
+ */
+
+/*
+ * Undo & redo
+ */
+
+void sp_document_set_undo_sensitive(SPDocument *document, bool sensitive);
+bool sp_document_get_undo_sensitive(SPDocument const *document);
+
+void sp_document_clear_undo(SPDocument *document);
+void sp_document_clear_redo(SPDocument *document);
+
+void sp_document_child_added(SPDocument *doc, SPObject *object, Inkscape::XML::Node *child, Inkscape::XML::Node *ref);
+void sp_document_child_removed(SPDocument *doc, SPObject *object, Inkscape::XML::Node *child, Inkscape::XML::Node *ref);
+void sp_document_attr_changed(SPDocument *doc, SPObject *object, const gchar *key, const gchar *oldval, const gchar *newval);
+void sp_document_content_changed(SPDocument *doc, SPObject *object, const gchar *oldcontent, const gchar *newcontent);
+void sp_document_order_changed(SPDocument *doc, SPObject *object, Inkscape::XML::Node *child, Inkscape::XML::Node *oldref, Inkscape::XML::Node *newref);
+
+/* Object modification root handler */
+void sp_document_request_modified(SPDocument *doc);
+gint sp_document_ensure_up_to_date(SPDocument *doc);
+
+/* Save all previous actions to stack, as one undo step */
+void sp_document_done(SPDocument *document, unsigned int event_type, Glib::ustring event_description);
+void sp_document_maybe_done(SPDocument *document, const gchar *keyconst, unsigned int event_type, Glib::ustring event_description);
+void sp_document_reset_key(Inkscape::Application *inkscape, SPDesktop *desktop, GtkObject *base);
+
+/* Cancel (and revert) current unsaved actions */
+void sp_document_cancel(SPDocument *document);
+
+/* Undo and redo */
+gboolean sp_document_undo(SPDocument *document);
+gboolean sp_document_redo(SPDocument *document);
+
+/* Resource management */
+gboolean sp_document_add_resource(SPDocument *document, const gchar *key, SPObject *object);
+gboolean sp_document_remove_resource(SPDocument *document, const gchar *key, SPObject *object);
+const GSList *sp_document_get_resource_list(SPDocument *document, const gchar *key);
+sigc::connection sp_document_resources_changed_connect(SPDocument *document, const gchar *key, SPDocument::ResourcesChangedSignal::slot_type slot);
+
 
 /*
  * Ideas: How to overcome style invalidation nightmare
@@ -305,7 +294,26 @@ private:
  *
  */
 
-#endif // SEEN_SP_DOCUMENT_H
+/*
+ * Misc
+ */
+
+GSList *sp_document_items_in_box(SPDocument *document, unsigned int dkey, Geom::Rect const &box);
+GSList *sp_document_partial_items_in_box(SPDocument *document, unsigned int dkey, Geom::Rect const &box);
+SPItem *sp_document_item_from_list_at_point_bottom(unsigned int dkey, SPGroup *group, const GSList *list, Geom::Point const p, bool take_insensitive = false);
+SPItem *sp_document_item_at_point  (SPDocument *document, unsigned int key, Geom::Point const p, gboolean into_groups, SPItem *upto = NULL);
+GSList *sp_document_items_at_points(SPDocument *document, unsigned const key, std::vector<Geom::Point> points);
+SPItem *sp_document_group_at_point (SPDocument *document, unsigned int key,  Geom::Point const p);
+
+void sp_document_set_uri(SPDocument *document, gchar const *uri);
+void sp_document_change_uri_and_hrefs(SPDocument *document, gchar const *uri);
+
+void sp_document_resized_signal_emit(SPDocument *doc, gdouble width, gdouble height);
+
+unsigned int vacuum_document(SPDocument *document);
+
+
+#endif
 
 /*
   Local Variables:
@@ -316,4 +324,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

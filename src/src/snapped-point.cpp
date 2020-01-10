@@ -1,6 +1,6 @@
 /**
  *  \file src/snapped-point.cpp
- *  SnappedPoint class.
+ *  \brief SnappedPoint class.
  *
  *  Authors:
  *    Mathieu Dimanche <mdimanche@free.fr>
@@ -14,113 +14,93 @@
 #include "preferences.h"
 
 // overloaded constructor
-Inkscape::SnappedPoint::SnappedPoint(Geom::Point const &p, SnapSourceType const &source, long source_num, SnapTargetType const &target, Geom::Coord const &d, Geom::Coord const &t, bool const &a, bool const &constrained_snap, bool const &fully_constrained, Geom::OptRect target_bbox) :
-    _point(p),
-    _tangent(Geom::Point(0,0)),
-    _source(source),
-    _source_num(source_num),
-    _target(target),
-    _at_intersection (false),
-    _constrained_snap (constrained_snap),
-    _fully_constrained (fully_constrained),
-    _distance(d),
-    _tolerance(std::max(t,1.0)),// tolerance should never be smaller than 1 px, as it is used for normalization in isOtherSnapBetter. We don't want a division by zero.
-    _always_snap(a),
-    _second_distance (Geom::infinity()),
-    _second_tolerance (1),
-    _second_always_snap (false),
-    _target_bbox(target_bbox),
-    _pointer_distance (Geom::infinity())
+Inkscape::SnappedPoint::SnappedPoint(Geom::Point const &p, SnapSourceType const &source, long source_num, SnapTargetType const &target, Geom::Coord const &d, Geom::Coord const &t, bool const &a, bool const &constrained_snap, bool const &fully_constrained, Geom::OptRect target_bbox)
+    : _point(p), _source(source), _source_num(source_num), _target(target), _distance(d), _tolerance(std::max(t,1.0)), _always_snap(a), _target_bbox(target_bbox)
 {
+    // tolerance should never be smaller than 1 px, as it is used for normalization in isOtherSnapBetter. We don't want a division by zero.
+    _at_intersection = false;
+    _constrained_snap = constrained_snap;
+    _fully_constrained = fully_constrained;
+    _second_distance = NR_HUGE;
+    _second_tolerance = 1;
+    _second_always_snap = false;
+    _transformation = Geom::Point(1,1);
+    _pointer_distance = NR_HUGE;
 }
 
-Inkscape::SnappedPoint::SnappedPoint(Inkscape::SnapCandidatePoint const &p, SnapTargetType const &target, Geom::Coord const &d, Geom::Coord const &t, bool const &a, bool const &constrained_snap, bool const &fully_constrained) :
-    _point (p.getPoint()),
-    _tangent (Geom::Point(0,0)),
-    _source (p.getSourceType()),
-    _source_num (p.getSourceNum()),
-    _target(target),
-    _at_intersection (false),
-    _constrained_snap (constrained_snap),
-    _fully_constrained (fully_constrained),
-    _distance(d),
-    _tolerance(std::max(t,1.0)),
-    _always_snap(a),
-    _second_distance (Geom::infinity()),
-    _second_tolerance (1),
-    _second_always_snap (false),
-    _target_bbox (p.getTargetBBox()),
-    _pointer_distance (Geom::infinity())
+Inkscape::SnappedPoint::SnappedPoint(Inkscape::SnapCandidatePoint const &p, SnapTargetType const &target, Geom::Coord const &d, Geom::Coord const &t, bool const &a, bool const &constrained_snap, bool const &fully_constrained)
+    : _target(target), _distance(d), _tolerance(std::max(t,1.0)), _always_snap(a)
 {
+    _point = p.getPoint();
+    _source = p.getSourceType();
+    _source_num = p.getSourceNum();
+    _at_intersection = false;
+    _constrained_snap = constrained_snap;
+    _fully_constrained = fully_constrained;
+    _second_distance = NR_HUGE;
+    _second_tolerance = 1;
+    _second_always_snap = false;
+    _transformation = Geom::Point(1,1);
+    _pointer_distance = NR_HUGE;
+    _target_bbox = p.getTargetBBox();
+
 }
 
-Inkscape::SnappedPoint::SnappedPoint(Geom::Point const &p, SnapSourceType const &source, long source_num, SnapTargetType const &target, Geom::Coord const &d, Geom::Coord const &t, bool const &a, bool const &at_intersection, bool const &constrained_snap, bool const &fully_constrained, Geom::Coord const &d2, Geom::Coord const &t2, bool const &a2) :
-    _point(p),
-    _tangent (Geom::Point(0,0)),
-    _source(source),
-    _source_num(source_num),
-    _target(target),
-    _at_intersection(at_intersection),
-    _constrained_snap(constrained_snap),
-    _fully_constrained(fully_constrained),
-    _distance(d),
-    _tolerance(std::max(t,1.0)),
-    _always_snap(a),
-    _second_distance(d2),
-    _second_tolerance(std::max(t2,1.0)),
-    _second_always_snap(a2),
+Inkscape::SnappedPoint::SnappedPoint(Geom::Point const &p, SnapSourceType const &source, long source_num, SnapTargetType const &target, Geom::Coord const &d, Geom::Coord const &t, bool const &a, bool const &at_intersection, bool const &constrained_snap, bool const &fully_constrained, Geom::Coord const &d2, Geom::Coord const &t2, bool const &a2)
+    : _point(p), _source(source), _source_num(source_num), _target(target), _at_intersection(at_intersection), _constrained_snap(constrained_snap), _fully_constrained(fully_constrained), _distance(d), _tolerance(std::max(t,1.0)), _always_snap(a),
+    _second_distance(d2), _second_tolerance(std::max(t2,1.0)), _second_always_snap(a2)
+{
     // tolerance should never be smaller than 1 px, as it is used for normalization in
     // isOtherSnapBetter. We don't want a division by zero.
-    _target_bbox (Geom::OptRect()),
-    _pointer_distance (Geom::infinity())
-{
+    _transformation = Geom::Point(1,1);
+    _pointer_distance = NR_HUGE;
+    _target_bbox = Geom::OptRect();
 }
 
-Inkscape::SnappedPoint::SnappedPoint():
-    _point (Geom::Point(0,0)),
-    _tangent (Geom::Point(0,0)),
-    _source (SNAPSOURCE_UNDEFINED),
-    _source_num (-1),
-    _target (SNAPTARGET_UNDEFINED),
-    _at_intersection (false),
-    _constrained_snap (false),
-    _fully_constrained (false),
-    _distance (Geom::infinity()),
-    _tolerance (1),
-    _always_snap (false),
-    _second_distance (Geom::infinity()),
-    _second_tolerance (1),
-    _second_always_snap (false),
-    _target_bbox (Geom::OptRect()),
-    _pointer_distance (Geom::infinity())
+Inkscape::SnappedPoint::SnappedPoint()
 {
+    _point = Geom::Point(0,0);
+    _source = SNAPSOURCE_UNDEFINED,
+    _source_num = 0,
+    _target = SNAPTARGET_UNDEFINED,
+    _at_intersection = false;
+    _constrained_snap = false;
+    _fully_constrained = false;
+    _distance = NR_HUGE;
+    _tolerance = 1;
+    _always_snap = false;
+    _second_distance = NR_HUGE;
+    _second_tolerance = 1;
+    _second_always_snap = false;
+    _transformation = Geom::Point(1,1);
+    _pointer_distance = NR_HUGE;
+    _target_bbox = Geom::OptRect();
 }
 
-Inkscape::SnappedPoint::SnappedPoint(Geom::Point const &p):
-    _point (p),
-    _tangent (Geom::Point(0,0)),
-    _source (SNAPSOURCE_UNDEFINED),
-    _source_num (-1),
-    _target (SNAPTARGET_UNDEFINED),
-    _at_intersection (false),
-    _constrained_snap (false),
-    _fully_constrained (false),
-    _distance (Geom::infinity()),
-    _tolerance (1),
-    _always_snap (false),
-    _second_distance (Geom::infinity()),
-    _second_tolerance (1),
-    _second_always_snap (false),
-    _target_bbox (Geom::OptRect()),
-    _pointer_distance (Geom::infinity())
+Inkscape::SnappedPoint::SnappedPoint(Geom::Point const &p)
 {
+    _point = p;
+    _source = SNAPSOURCE_UNDEFINED,
+    _source_num = 0,
+    _target = SNAPTARGET_UNDEFINED,
+    _at_intersection = false;
+    _fully_constrained = false;
+    _distance = NR_HUGE;
+    _tolerance = 1;
+    _always_snap = false;
+    _second_distance = NR_HUGE;
+    _second_tolerance = 1;
+    _second_always_snap = false;
+    _transformation = Geom::Point(1,1);
+    _pointer_distance = NR_HUGE;
+    _target_bbox = Geom::OptRect();
 }
 
 Inkscape::SnappedPoint::~SnappedPoint()
 {
 }
 
-void Inkscape::SnappedPoint::getPointIfSnapped(Geom::Point &p) const
+void Inkscape::SnappedPoint::getPoint(Geom::Point &p) const
 {
     // When we have snapped
     if (getSnapped()) {
@@ -134,7 +114,7 @@ bool getClosestSP(std::list<Inkscape::SnappedPoint> const &list, Inkscape::Snapp
 {
     bool success = false;
 
-    for (std::list<Inkscape::SnappedPoint>::const_iterator i = list.begin(); i != list.end(); ++i) {
+    for (std::list<Inkscape::SnappedPoint>::const_iterator i = list.begin(); i != list.end(); i++) {
         if ((i == list.begin()) || (*i).getSnapDistance() < result.getSnapDistance()) {
             result = *i;
             success = true;
@@ -147,12 +127,8 @@ bool getClosestSP(std::list<Inkscape::SnappedPoint> const &list, Inkscape::Snapp
 bool Inkscape::SnappedPoint::isOtherSnapBetter(Inkscape::SnappedPoint const &other_one, bool weighted) const
 {
 
-    if (getSnapped() && !other_one.getSnapped()) {
+    if (!other_one.getSnapped()) {
         return false;
-    }
-
-    if (!getSnapped() && other_one.getSnapped()) {
-        return true;
     }
 
     double dist_other = other_one.getSnapDistance();
@@ -176,7 +152,7 @@ bool Inkscape::SnappedPoint::isOtherSnapBetter(Inkscape::SnappedPoint const &oth
                 // When accounting for the distance to the mouse pointer, then at least one of the snapped points should
                 // have that distance set. If not, then this is a bug. Either "weighted" must be set to false, or the
                 // mouse pointer distance must be set.
-                g_assert(dist_pointer_this != Geom::infinity() || dist_pointer_other != Geom::infinity());
+                g_assert(dist_pointer_this != NR_HUGE || dist_pointer_other != NR_HUGE);
                 // The snap distance will always be smaller than the tolerance set for the snapper. The pointer distance can
                 // however be very large. To compare these in a fair way, we will have to normalize these metrics first
                 // The closest pointer distance will be normalized to 1.0; the other one will be > 1.0
@@ -219,7 +195,7 @@ bool Inkscape::SnappedPoint::isOtherSnapBetter(Inkscape::SnappedPoint const &oth
 
     // or, if it's just as close then consider the second distance ...
     bool c5a = (dist_other == dist_this);
-    bool c5b = (other_one.getSecondSnapDistance() < getSecondSnapDistance()) && (getSecondSnapDistance() < Geom::infinity());
+    bool c5b = (other_one.getSecondSnapDistance() < getSecondSnapDistance()) && (getSecondSnapDistance() < NR_HUGE);
     // ... or prefer free snaps over constrained snaps
     bool c5c = !other_one.getConstrainedSnap() && getConstrainedSnap();
 

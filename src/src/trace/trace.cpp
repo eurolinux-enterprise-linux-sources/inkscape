@@ -1,47 +1,59 @@
-/*
+/**
  * A generic interface for plugging different
  *  autotracers into Inkscape.
  *
  * Authors:
  *   Bob Jamison <rjamison@earthlink.net>
- *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 2004-2006 Bob Jamison
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+
+
 #include "trace/potrace/inkscape-potrace.h"
 
-#include "inkscape.h"
-#include "desktop.h"
-
-#include "document.h"
-#include "document-undo.h"
-#include "message-stack.h"
+#include <inkscape.h>
+#include <desktop.h>
+#include <desktop-handles.h>
+#include <document.h>
+#include <message-stack.h>
+#include <gtkmm.h>
 #include <glibmm/i18n.h>
-#include <gtkmm/main.h>
-#include "selection.h"
-#include "xml/repr.h"
-#include "xml/attribute-record.h"
-#include "sp-item.h"
-#include "sp-shape.h"
-#include "sp-image.h"
+#include <selection.h>
+#include <xml/repr.h>
+#include <xml/attribute-record.h>
+#include <sp-item.h>
+#include <sp-shape.h>
+#include <sp-image.h>
+#include <libnr/nr-matrix-ops.h>
 #include <2geom/transforms.h>
-#include "verbs.h"
 
-#include "display/cairo-utils.h"
-#include "display/drawing.h"
-#include "display/drawing-shape.h"
+#include <display/nr-arena.h>
+#include <display/nr-arena-shape.h>
 
 #include "siox.h"
 #include "imagemap-gdk.h"
 
-namespace Inkscape {
-namespace Trace {
 
-SPImage *Tracer::getSelectedSPImage()
+
+namespace Inkscape
+{
+
+namespace Trace
+{
+
+
+
+
+
+/**
+ * Get the selected image.  Also check for any SPItems over it, in
+ * case the user wants SIOX pre-processing.
+ */
+SPImage *
+Tracer::getSelectedSPImage()
 {
 
     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
@@ -51,9 +63,9 @@ SPImage *Tracer::getSelectedSPImage()
         return NULL;
         }
 
-    Inkscape::MessageStack *msgStack = desktop->getMessageStack();
+    Inkscape::MessageStack *msgStack = sp_desktop_message_stack(desktop);
 
-    Inkscape::Selection *sel = desktop->getSelection();
+    Inkscape::Selection *sel = sp_desktop_selection(desktop);
     if (!sel)
         {
         char *msg = _("Select an <b>image</b> to trace");
@@ -65,7 +77,7 @@ SPImage *Tracer::getSelectedSPImage()
     if (sioxEnabled)
         {
         SPImage *img = NULL;
-        std::vector<SPItem*> const list = sel->itemList();
+        GSList const *list = sel->itemList();
         std::vector<SPItem *> items;
         sioxShapes.clear();
 
@@ -74,17 +86,17 @@ SPImage *Tracer::getSelectedSPImage()
            them as bottom-to-top so that we can discover the image and any
            SPItems above it
         */
-        for (std::vector<SPItem*>::const_iterator i=list.begin() ; list.end()!=i ; ++i)
+        for ( ; list ; list=list->next)
             {
-            if (!SP_IS_ITEM(*i))
+            if (!SP_IS_ITEM(list->data))
                 {
                 continue;
                 }
-            SPItem *item = *i;
+            SPItem *item = SP_ITEM(list->data);
             items.insert(items.begin(), item);
             }
         std::vector<SPItem *>::iterator iter;
-        for (iter = items.begin() ; iter!= items.end() ; ++iter)
+        for (iter = items.begin() ; iter!= items.end() ; iter++)
             {
             SPItem *item = *iter;
             if (SP_IS_IMAGE(item))
@@ -196,7 +208,13 @@ public:
 
 
 
-Glib::RefPtr<Gdk::Pixbuf> Tracer::sioxProcessImage(SPImage *img, Glib::RefPtr<Gdk::Pixbuf>origPixbuf)
+/**
+ * Process a GdkPixbuf, according to which areas have been
+ * obscured in the GUI.
+ */
+Glib::RefPtr<Gdk::Pixbuf>
+Tracer::sioxProcessImage(SPImage *img,
+             Glib::RefPtr<Gdk::Pixbuf>origPixbuf)
 {
     if (!sioxEnabled)
         return origPixbuf;
@@ -213,13 +231,13 @@ Glib::RefPtr<Gdk::Pixbuf> Tracer::sioxProcessImage(SPImage *img, Glib::RefPtr<Gd
     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
     if (!desktop)
         {
-        g_warning("%s", _("Trace: No active desktop"));
+        g_warning(_("Trace: No active desktop"));
         return Glib::RefPtr<Gdk::Pixbuf>(NULL);
         }
 
-    Inkscape::MessageStack *msgStack = desktop->getMessageStack();
+    Inkscape::MessageStack *msgStack = sp_desktop_message_stack(desktop);
 
-    Inkscape::Selection *sel = desktop->getSelection();
+    Inkscape::Selection *sel = sp_desktop_selection(desktop);
     if (!sel)
         {
         char *msg = _("Select an <b>image</b> to trace");
@@ -228,25 +246,25 @@ Glib::RefPtr<Gdk::Pixbuf> Tracer::sioxProcessImage(SPImage *img, Glib::RefPtr<Gd
         return Glib::RefPtr<Gdk::Pixbuf>(NULL);
         }
 
-    Inkscape::DrawingItem *aImg = img->get_arenaitem(desktop->dkey);
+    NRArenaItem *aImg = sp_item_get_arenaitem(img, desktop->dkey);
     //g_message("img: %d %d %d %d\n", aImg->bbox.x0, aImg->bbox.y0,
     //                                aImg->bbox.x1, aImg->bbox.y1);
 
-    double width  = aImg->geometricBounds()->width();
-    double height = aImg->geometricBounds()->height();
+    double width  = (double)(aImg->bbox.x1 - aImg->bbox.x0);
+    double height = (double)(aImg->bbox.y1 - aImg->bbox.y0);
 
-    double iwidth  = simage.getWidth();
-    double iheight = simage.getHeight();
+    double iwidth  = (double)simage.getWidth();
+    double iheight = (double)simage.getHeight();
 
     double iwscale = width  / iwidth;
     double ihscale = height / iheight;
 
-    std::vector<Inkscape::DrawingItem *> arenaItems;
+    std::vector<NRArenaItem *> arenaItems;
     std::vector<SPShape *>::iterator iter;
-    for (iter = sioxShapes.begin() ; iter!=sioxShapes.end() ; ++iter)
+    for (iter = sioxShapes.begin() ; iter!=sioxShapes.end() ; iter++)
         {
         SPItem *item = *iter;
-        Inkscape::DrawingItem *aItem = item->get_arenaitem(desktop->dkey);
+        NRArenaItem *aItem = sp_item_get_arenaitem(item, desktop->dkey);
         arenaItems.push_back(aItem);
         }
 
@@ -259,23 +277,25 @@ Glib::RefPtr<Gdk::Pixbuf> Tracer::sioxProcessImage(SPImage *img, Glib::RefPtr<Gd
 
     for (int row=0 ; row<iheight ; row++)
         {
-        double ypos = aImg->geometricBounds()->top() + ihscale * (double) row;
+        double ypos = ((double)aImg->bbox.y0) + ihscale * (double) row;
         for (int col=0 ; col<simage.getWidth() ; col++)
             {
             //Get absolute X,Y position
-            double xpos = aImg->geometricBounds()->left() + iwscale * (double)col;
+            double xpos = ((double)aImg->bbox.x0) + iwscale * (double)col;
             Geom::Point point(xpos, ypos);
-            point *= aImg->transform();
+            if (aImg->transform)
+                point *= *aImg->transform;
             //point *= imgMat;
             //point = desktop->doc2dt(point);
             //g_message("x:%f    y:%f\n", point[0], point[1]);
             bool weHaveAHit = false;
-            std::vector<Inkscape::DrawingItem *>::iterator aIter;
-            for (aIter = arenaItems.begin() ; aIter!=arenaItems.end() ; ++aIter)
+            std::vector<NRArenaItem *>::iterator aIter;
+            for (aIter = arenaItems.begin() ; aIter!=arenaItems.end() ; aIter++)
                 {
-                Inkscape::DrawingItem *arenaItem = *aIter;
-                arenaItem->drawing().update();
-                if (arenaItem->pick(point, 1.0f, 1))
+                NRArenaItem *arenaItem = *aIter;
+                NRArenaItemClass *arenaClass =
+                    (NRArenaItemClass *) NR_OBJECT_GET_CLASS (arenaItem);
+                if (arenaClass->pick(arenaItem, point, 1.0f, 1))
                     {
                     weHaveAHit = true;
                     break;
@@ -311,11 +331,22 @@ Glib::RefPtr<Gdk::Pixbuf> Tracer::sioxProcessImage(SPImage *img, Glib::RefPtr<Gd
     SioxImage result = sengine.extractForeground(simage, 0xffffff);
     if (!result.isValid())
         {
-        g_warning("%s", _("Invalid SIOX result"));
+        g_warning(_("Invalid SIOX result"));
         return Glib::RefPtr<Gdk::Pixbuf>(NULL);
         }
 
     //result.writePPM("siox2.ppm");
+
+    /* Free Arena and ArenaItem */
+    /*
+    std::vector<NRArenaItem *>::iterator aIter;
+    for (aIter = arenaItems.begin() ; aIter!=arenaItems.end() ; aIter++)
+       {
+       NRArenaItem *arenaItem = *aIter;
+       nr_arena_item_unref(arenaItem);
+       }
+    nr_object_unref((NRObject *) arena);
+    */
 
     Glib::RefPtr<Gdk::Pixbuf> newPixbuf = Glib::wrap(result.getGdkPixbuf());
 
@@ -327,7 +358,11 @@ Glib::RefPtr<Gdk::Pixbuf> Tracer::sioxProcessImage(SPImage *img, Glib::RefPtr<Gd
 }
 
 
-Glib::RefPtr<Gdk::Pixbuf> Tracer::getSelectedImage()
+/**
+ *
+ */
+Glib::RefPtr<Gdk::Pixbuf>
+Tracer::getSelectedImage()
 {
 
 
@@ -338,17 +373,8 @@ Glib::RefPtr<Gdk::Pixbuf> Tracer::getSelectedImage()
     if (!img->pixbuf)
         return Glib::RefPtr<Gdk::Pixbuf>(NULL);
 
-    GdkPixbuf *raw_pb = img->pixbuf->getPixbufRaw(false);
-    GdkPixbuf *trace_pb = gdk_pixbuf_copy(raw_pb);
-    if (img->pixbuf->pixelFormat() == Inkscape::Pixbuf::PF_CAIRO) {
-        convert_pixels_argb32_to_pixbuf(
-            gdk_pixbuf_get_pixels(trace_pb),
-            gdk_pixbuf_get_width(trace_pb),
-            gdk_pixbuf_get_height(trace_pb),
-            gdk_pixbuf_get_rowstride(trace_pb));
-    }
-
-    Glib::RefPtr<Gdk::Pixbuf> pixbuf = Glib::wrap(trace_pb, false);
+    Glib::RefPtr<Gdk::Pixbuf> pixbuf =
+          Glib::wrap(img->pixbuf, true);
 
     if (sioxEnabled)
         {
@@ -376,12 +402,18 @@ Glib::RefPtr<Gdk::Pixbuf> Tracer::getSelectedImage()
 //#  T R A C E
 //#########################################################################
 
+/**
+ *  Whether we want to enable SIOX subimage selection
+ */
 void Tracer::enableSiox(bool enable)
 {
     sioxEnabled = enable;
 }
 
 
+/**
+ *  Threaded method that does single bitmap--->path conversion
+ */
 void Tracer::traceThread()
 {
     //## Remember. NEVER leave this method without setting
@@ -398,9 +430,9 @@ void Tracer::traceThread()
         return;
         }
 
-    Inkscape::MessageStack *msgStack = desktop->getMessageStack();
+    Inkscape::MessageStack *msgStack = sp_desktop_message_stack(desktop);
 
-    Inkscape::Selection *selection = desktop->getSelection();
+    Inkscape::Selection *selection = sp_desktop_selection (desktop);
 
     if (!SP_ACTIVE_DOCUMENT)
         {
@@ -411,7 +443,7 @@ void Tracer::traceThread()
         return;
         }
     SPDocument *doc = SP_ACTIVE_DOCUMENT;
-    doc->ensureUpToDate();
+    sp_document_ensure_up_to_date(doc);
 
 
     SPImage *img = getSelectedSPImage();
@@ -421,16 +453,7 @@ void Tracer::traceThread()
         return;
         }
 
-    GdkPixbuf *trace_pb = gdk_pixbuf_copy(img->pixbuf->getPixbufRaw(false));
-    if (img->pixbuf->pixelFormat() == Inkscape::Pixbuf::PF_CAIRO) {
-        convert_pixels_argb32_to_pixbuf(
-            gdk_pixbuf_get_pixels(trace_pb),
-            gdk_pixbuf_get_width(trace_pb),
-            gdk_pixbuf_get_height(trace_pb),
-            gdk_pixbuf_get_rowstride(trace_pb));
-    }
-
-    Glib::RefPtr<Gdk::Pixbuf> pixbuf = Glib::wrap(trace_pb, false);
+    Glib::RefPtr<Gdk::Pixbuf> pixbuf = Glib::wrap(img->pixbuf, true);
 
     pixbuf = sioxProcessImage(img, pixbuf);
 
@@ -459,9 +482,8 @@ void Tracer::traceThread()
         }
 
     //### Get pointers to the <image> and its parent
-    //XML Tree being used directly here while it shouldn't be.
-    Inkscape::XML::Node *imgRepr   = SP_OBJECT(img)->getRepr();
-    Inkscape::XML::Node *par       = imgRepr->parent();
+    Inkscape::XML::Node *imgRepr   = SP_OBJECT(img)->repr;
+    Inkscape::XML::Node *par       = sp_repr_parent(imgRepr);
 
     //### Get some information for the new transform()
     double x      = 0.0;
@@ -490,13 +512,13 @@ void Tracer::traceThread()
     Geom::Scale scal(iwscale, ihscale);
 
     //# Convolve scale, translation, and the original transform
-    Geom::Affine tf(scal * trans);
+    Geom::Matrix tf(scal * trans);
     tf *= img->transform;
 
 
     //#OK.  Now let's start making new nodes
 
-    Inkscape::XML::Document *xml_doc = desktop->doc()->getReprDoc();
+    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(desktop->doc());
     Inkscape::XML::Node *groupRepr = NULL;
 
     //# if more than 1, make a <g>roup of <path>s
@@ -527,7 +549,7 @@ void Tracer::traceThread()
         if (reprobj)
             {
             SPItem *newItem = SP_ITEM(reprobj);
-            newItem->doWriteTransform(pathRepr, tf, NULL);
+            sp_item_write_transform(newItem, pathRepr, tf, NULL);
             }
         if (nrPaths == 1)
             {
@@ -546,7 +568,7 @@ void Tracer::traceThread()
         }
 
     //## inform the document, so we can undo
-    DocumentUndo::done(doc, SP_VERB_SELECTION_TRACE, _("Trace bitmap"));
+    sp_document_done(doc, SP_VERB_SELECTION_TRACE, _("Trace bitmap"));
 
     engine = NULL;
 
@@ -560,6 +582,9 @@ void Tracer::traceThread()
 
 
 
+/**
+ *  Main tracing method
+ */
 void Tracer::trace(TracingEngine *theEngine)
 {
     //Check if we are already running
@@ -586,6 +611,9 @@ void Tracer::trace(TracingEngine *theEngine)
 
 
 
+/**
+ *  Abort the thread that is executing trace()
+ */
 void Tracer::abort()
 {
 

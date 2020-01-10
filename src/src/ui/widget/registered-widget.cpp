@@ -1,4 +1,6 @@
-/*
+/** \file
+ *
+ *
  * Authors:
  *   Johan Engelen <j.b.c.engelen@utwente.nl>
  *   bulia byak <buliabyak@users.sf.net>
@@ -6,7 +8,6 @@
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Jon Phillips <jon@rejon.org>
  *   Ralf Stephan <ralf@ark.in-berlin.de> (Gtkmm)
- *   Abhishek Sharma
  *
  * Copyright (C) 2000 - 2007 Authors
  *
@@ -18,7 +19,6 @@
 #endif
 
 #include "registered-widget.h"
-#include <gtkmm/radiobutton.h>
 
 #include "ui/widget/color-picker.h"
 #include "ui/widget/registry.h"
@@ -27,6 +27,7 @@
 #include "ui/widget/random.h"
 #include "widgets/spinbutton-events.h"
 
+#include "helper/units.h"
 #include "xml/repr.h"
 #include "svg/svg-color.h"
 #include "svg/stringstream.h"
@@ -35,11 +36,6 @@
 
 // for interruptability bug:
 #include "display/sp-canvas.h"
-
-#include "desktop.h"
-
-
-#include "sp-root.h"
 
 namespace Inkscape {
 namespace UI {
@@ -54,16 +50,14 @@ RegisteredCheckButton::~RegisteredCheckButton()
     _toggled_connection.disconnect();
 }
 
-RegisteredCheckButton::RegisteredCheckButton (const Glib::ustring& label, const Glib::ustring& tip, const Glib::ustring& key, Registry& wr, bool right, Inkscape::XML::Node* repr_in, SPDocument *doc_in, char const *active_str, char const *inactive_str)
+RegisteredCheckButton::RegisteredCheckButton (const Glib::ustring& label, const Glib::ustring& tip, const Glib::ustring& key, Registry& wr, bool right, Inkscape::XML::Node* repr_in, SPDocument *doc_in)
     : RegisteredWidget<Gtk::CheckButton>()
-    , _active_str(active_str)
-    , _inactive_str(inactive_str)
 {
     init_parent(key, wr, repr_in, doc_in);
 
     setProgrammatically = false;
 
-    set_tooltip_text (tip);
+    _tt.set_tip (*this, tip);
     Gtk::Label *l = new Gtk::Label (label);
     l->set_use_underline (true);
     add (*manage (l));
@@ -77,7 +71,7 @@ RegisteredCheckButton::setActive (bool b)
     setProgrammatically = true;
     set_active (b);
     //The slave button is greyed out if the master button is unchecked
-    for (std::list<Gtk::Widget*>::const_iterator i = _slavewidgets.begin(); i != _slavewidgets.end(); ++i) {
+    for (std::list<Gtk::Widget*>::const_iterator i = _slavewidgets.begin(); i != _slavewidgets.end(); i++) {
         (*i)->set_sensitive(b);
     }
     setProgrammatically = false;
@@ -95,66 +89,15 @@ RegisteredCheckButton::on_toggled()
         return;
     _wr->setUpdating (true);
 
-    write_to_xml(get_active() ? _active_str : _inactive_str);
-    //The slave button is greyed out if the master button is unchecked
-    for (std::list<Gtk::Widget*>::const_iterator i = _slavewidgets.begin(); i != _slavewidgets.end(); ++i) {
-        (*i)->set_sensitive(get_active());
-    }
-
-    _wr->setUpdating (false);
-}
-
-/*#########################################
- * Registered TOGGLEBUTTON
- */
-
-RegisteredToggleButton::~RegisteredToggleButton()
-{
-    _toggled_connection.disconnect();
-}
-
-RegisteredToggleButton::RegisteredToggleButton (const Glib::ustring& /*label*/, const Glib::ustring& tip, const Glib::ustring& key, Registry& wr, bool right, Inkscape::XML::Node* repr_in, SPDocument *doc_in, char const *icon_active, char const *icon_inactive)
-    : RegisteredWidget<Gtk::ToggleButton>()
-{
-    init_parent(key, wr, repr_in, doc_in);
-    setProgrammatically = false;
-    set_tooltip_text (tip);
-    set_alignment (right? 1.0 : 0.0, 0.5);
-    _toggled_connection = signal_toggled().connect (sigc::mem_fun (*this, &RegisteredToggleButton::on_toggled));
-}
-
-void
-RegisteredToggleButton::setActive (bool b)
-{
-    setProgrammatically = true;
-    set_active (b);
-    //The slave button is greyed out if the master button is untoggled
-    for (std::list<Gtk::Widget*>::const_iterator i = _slavewidgets.begin(); i != _slavewidgets.end(); ++i) {
-        (*i)->set_sensitive(b);
-    }
-    setProgrammatically = false;
-}
-
-void
-RegisteredToggleButton::on_toggled()
-{
-    if (setProgrammatically) {
-        setProgrammatically = false;
-        return;
-    }
-
-    if (_wr->isUpdating())
-        return;
-    _wr->setUpdating (true);
-
     write_to_xml(get_active() ? "true" : "false");
-    //The slave button is greyed out if the master button is untoggled
-    for (std::list<Gtk::Widget*>::const_iterator i = _slavewidgets.begin(); i != _slavewidgets.end(); ++i) {
+    //The slave button is greyed out if the master button is unchecked
+    for (std::list<Gtk::Widget*>::const_iterator i = _slavewidgets.begin(); i != _slavewidgets.end(); i++) {
         (*i)->set_sensitive(get_active());
     }
 
     _wr->setUpdating (false);
 }
+
 
 /*#########################################
  * Registered UNITMENU
@@ -175,9 +118,9 @@ RegisteredUnitMenu::RegisteredUnitMenu (const Glib::ustring& label, const Glib::
 }
 
 void
-RegisteredUnitMenu::setUnit (Glib::ustring unit)
+RegisteredUnitMenu::setUnit (const SPUnit* unit)
 {
-    getUnitMenu()->setUnit(unit);
+    getUnitMenu()->setUnit (sp_unit_get_abbreviation (unit));
 }
 
 void
@@ -206,7 +149,7 @@ RegisteredScalarUnit::~RegisteredScalarUnit()
     _value_changed_connection.disconnect();
 }
 
-RegisteredScalarUnit::RegisteredScalarUnit (const Glib::ustring& label, const Glib::ustring& tip, const Glib::ustring& key, const RegisteredUnitMenu &rum, Registry& wr, Inkscape::XML::Node* repr_in, SPDocument *doc_in, RSU_UserUnits user_units)
+RegisteredScalarUnit::RegisteredScalarUnit (const Glib::ustring& label, const Glib::ustring& tip, const Glib::ustring& key, const RegisteredUnitMenu &rum, Registry& wr, Inkscape::XML::Node* repr_in, SPDocument *doc_in)
     : RegisteredWidget<ScalarUnit>(label, tip, UNIT_TYPE_LINEAR, "", "", rum.getUnitMenu()),
       _um(0)
 {
@@ -218,7 +161,6 @@ RegisteredScalarUnit::RegisteredScalarUnit (const Glib::ustring& label, const Gl
     setUnit (rum.getUnitMenu()->getUnitAbbr());
     setDigits (2);
     _um = rum.getUnitMenu();
-    _user_units = user_units;
     _value_changed_connection = signal_value_changed().connect (sigc::mem_fun (*this, &RegisteredScalarUnit::on_value_changed));
 }
 
@@ -237,31 +179,12 @@ RegisteredScalarUnit::on_value_changed()
     _wr->setUpdating (true);
 
     Inkscape::SVGOStringStream os;
-    if (_user_units != RSU_none) {
-        // Output length in 'user units', taking into account scale in 'x' or 'y'.
-        double scale = 1.0;
-        if (doc) {
-            SPRoot *root = doc->getRoot();
-            if (root->viewBox_set) {
-                // check to see if scaling is uniform
-                if(Geom::are_near((root->viewBox.width() * root->height.computed) / (root->width.computed * root->viewBox.height()), 1.0, Geom::EPSILON)) {
-                    scale = (root->viewBox.width() / root->width.computed + root->viewBox.height() / root->height.computed)/2.0;
-                } else if (_user_units == RSU_x) { 
-                    scale = root->viewBox.width() / root->width.computed;
-                } else {
-                    scale = root->viewBox.height() / root->height.computed;
-                }
-            }
-        }
-        os << getValue("px") * scale;
-    } else {
-        // Output using unit identifiers.
-        os << getValue("");
-        if (_um)
-            os << _um->getUnitAbbr();
-    }
+    os << getValue("");
+    if (_um)
+        os << _um->getUnitAbbr();
 
     write_to_xml(os.str().c_str());
+
     _wr->setUpdating (false);
 }
 
@@ -420,21 +343,21 @@ RegisteredColorPicker::on_changed (guint32 rgba)
         SPDesktop *dt = SP_ACTIVE_DESKTOP;
         if (!dt)
             return;
-        local_repr = dt->getNamedView()->getRepr();
-        local_doc = dt->getDocument();
+        local_repr = SP_OBJECT_REPR (sp_desktop_namedview(dt));
+        local_doc = sp_desktop_document(dt);
     }
 
     gchar c[32];
     sp_svg_write_color(c, sizeof(c), rgba);
-    bool saved = DocumentUndo::getUndoSensitive(local_doc);
-    DocumentUndo::setUndoSensitive(local_doc, false);
+    bool saved = sp_document_get_undo_sensitive (local_doc);
+    sp_document_set_undo_sensitive (local_doc, false);
     local_repr->setAttribute(_ckey.c_str(), c);
     sp_repr_set_css_double(local_repr, _akey.c_str(), (rgba & 0xff) / 255.0);
-    DocumentUndo::setUndoSensitive(local_doc, saved);
+    sp_document_set_undo_sensitive (local_doc, saved);
 
     local_doc->setModifiedSinceSave();
-    DocumentUndo::done(local_doc, SP_VERB_NONE,
-                       /* TODO: annotate */ "registered-widget.cpp: RegisteredColorPicker::on_changed");
+    sp_document_done (local_doc, SP_VERB_NONE,
+                      /* TODO: annotate */ "registered-widget.cpp: RegisteredColorPicker::on_changed");
 
     _wr->setUpdating (false);
 }
@@ -505,15 +428,15 @@ RegisteredRadioButtonPair::RegisteredRadioButtonPair (const Glib::ustring& label
 
     setProgrammatically = false;
 
-    add(*Gtk::manage(new Gtk::Label(label)));
-    _rb1 = Gtk::manage(new Gtk::RadioButton(label1, true));
+    add (*manage (new Gtk::Label (label)));
+    _rb1 = manage (new Gtk::RadioButton (label1, true));
     add (*_rb1);
     Gtk::RadioButtonGroup group = _rb1->get_group();
-    _rb2 = Gtk::manage(new Gtk::RadioButton(group, label2, true));
+    _rb2 = manage (new Gtk::RadioButton (group, label2, true));
     add (*_rb2);
     _rb2->set_active();
-    _rb1->set_tooltip_text(tip1);
-    _rb2->set_tooltip_text(tip2);
+    _tt.set_tip (*_rb1, tip1);
+    _tt.set_tip (*_rb2, tip2);
     _changed_connection = _rb1->signal_toggled().connect (sigc::mem_fun (*this, &RegisteredRadioButtonPair::on_value_changed));
 }
 
@@ -629,7 +552,7 @@ RegisteredTransformedPoint::setValue(Geom::Point const & p)
 }
 
 void
-RegisteredTransformedPoint::setTransform(Geom::Affine const & canvas_to_svg)
+RegisteredTransformedPoint::setTransform(Geom::Matrix const & canvas_to_svg)
 {
     // check if matrix is singular / has inverse
     if ( ! canvas_to_svg.isSingular() ) {
@@ -708,7 +631,13 @@ RegisteredVector::setValue(Geom::Point const & p, Geom::Point const & origin)
     _origin = origin;
 }
 
-void RegisteredVector::setPolarCoords(bool polar_coords)
+/**
+ * Changes the widgets text to polar coordinates. The SVG output will still be a normal carthesian vector.
+ * Careful: when calling getValue(), the return value's X-coord will be the angle, Y-value will be the distance/length. 
+ * After changing the coords type (polar/non-polar), the value has to be reset (setValue).
+ */
+void
+RegisteredVector::setPolarCoords(bool polar_coords)
 {
     _polar_coords = polar_coords;
     if (polar_coords) {
@@ -811,9 +740,9 @@ RegisteredRandom::on_value_changed()
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  c-file-offsets:((innamespace . 0)(inline-open . 0))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

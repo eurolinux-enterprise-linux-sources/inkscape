@@ -18,8 +18,9 @@
 #ifndef SEEN_INKSCAPE_XML_NODE_OBSERVER_H
 #define SEEN_INKSCAPE_XML_NODE_OBSERVER_H
 
+#include <glib.h>
 #include "util/share.h"
-typedef unsigned int GQuark;
+#include "xml/xml-forward.h"
 
 #ifndef INK_UNUSED
 #define INK_UNUSED(x) ((void)(x))
@@ -27,8 +28,6 @@ typedef unsigned int GQuark;
 
 namespace Inkscape {
 namespace XML {
-
-class Node;
 
 /**
  * @brief Interface for XML node observers
@@ -56,9 +55,7 @@ protected:
     NodeObserver() {}
 public:
     virtual ~NodeObserver() {}
-
-    // FIXME: somebody needs to learn what "pure virtual" means
-
+    
     /**
      * @brief Child addition callback
      *
@@ -163,4 +160,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

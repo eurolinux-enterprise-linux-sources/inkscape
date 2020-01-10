@@ -1,6 +1,6 @@
-/**
- * @file
- * LPE effect for extruding paths (making them "3D").
+#define INKSCAPE_LPE_EXTRUDE_CPP
+/** \file
+ * @brief LPE effect for extruding paths (making them "3D").
  *
  */
 /* Authors:
@@ -12,8 +12,6 @@
  */
 
 #include "live_effects/lpe-extrude.h"
-
-#include <glibmm/i18n.h>
 
 #include <2geom/path.h>
 #include <2geom/piecewise.h>
@@ -124,9 +122,9 @@ LPEExtrude::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2
         }
 
         std::vector<double> connector_pts;
-        if (rts.empty()) {
+        if (rts.size() < 1) {
             connector_pts = cusps;
-        } else if (cusps.empty()) {
+        } else if (cusps.size() < 1) {
             connector_pts = rts;
         } else {
             connector_pts = rts;
@@ -170,16 +168,16 @@ LPEExtrude::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2
 }
 
 void
-LPEExtrude::resetDefaults(SPItem const* item)
+LPEExtrude::resetDefaults(SPItem * item)
 {
     Effect::resetDefaults(item);
 
     using namespace Geom;
 
-    Geom::OptRect bbox = item->geometricBounds();
+    Geom::OptRect bbox = item->getBounds(Geom::identity(), SPItem::GEOMETRIC_BBOX);
     if (bbox) {
-        Interval const &boundingbox_X = (*bbox)[Geom::X];
-        Interval const &boundingbox_Y = (*bbox)[Geom::Y];
+        Interval boundingbox_X = (*bbox)[Geom::X];
+        Interval boundingbox_Y = (*bbox)[Geom::Y];
         extrude_vector.set_and_write_new_values( Geom::Point(boundingbox_X.middle(), boundingbox_Y.middle()), 
                                                  (boundingbox_X.extent() + boundingbox_Y.extent())*Geom::Point(-0.05,0.2) );
     }
@@ -197,4 +195,4 @@ LPEExtrude::resetDefaults(SPItem const* item)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -9,17 +9,97 @@
 #include "display/curve.h"
 #include <typeinfo>
 #include <2geom/pathvector.h>
-#include <2geom/affine.h>
-#include <2geom/curves.h>
+#include <2geom/matrix.h>
+#include <2geom/bezier-curve.h>
+#include <2geom/hvlinesegment.h>
+#include <2geom/isnan.h>
 #include "helper/geom-nodetype.h"
 #include "helper/geom-curves.h"
 
+#include "live_effects/bezctx.h"
+#include "live_effects/bezctx_intf.h"
 #include "live_effects/spiro.h"
 
 // For handling un-continuous paths:
 #include "message-stack.h"
 #include "inkscape.h"
 #include "desktop.h"
+
+#define SPIRO_SHOW_INFINITE_COORDINATE_CALLS
+
+typedef struct {
+    bezctx base;
+    SPCurve *curve;
+    int is_open;
+} bezctx_ink;
+
+void bezctx_ink_moveto(bezctx *bc, double x, double y, int /*is_open*/)
+{
+    bezctx_ink *bi = (bezctx_ink *) bc;
+    if ( IS_FINITE(x) && IS_FINITE(y) ) {
+        bi->curve->moveto(x, y);
+    }
+#ifdef SPIRO_SHOW_INFINITE_COORDINATE_CALLS
+    else {
+        g_message("lpe moveto not finite");
+    }
+#endif
+}
+
+void bezctx_ink_lineto(bezctx *bc, double x, double y)
+{
+    bezctx_ink *bi = (bezctx_ink *) bc;
+    if ( IS_FINITE(x) && IS_FINITE(y) ) {
+        bi->curve->lineto(x, y);
+    }
+#ifdef SPIRO_SHOW_INFINITE_COORDINATE_CALLS
+    else {
+        g_message("lpe lineto not finite");
+    }
+#endif
+}
+
+void bezctx_ink_quadto(bezctx *bc, double xm, double ym, double x3, double y3)
+{
+    bezctx_ink *bi = (bezctx_ink *) bc;
+
+    if ( IS_FINITE(xm) && IS_FINITE(ym) && IS_FINITE(x3) && IS_FINITE(y3) ) {
+        bi->curve->quadto(xm, ym, x3, y3);
+    }
+#ifdef SPIRO_SHOW_INFINITE_COORDINATE_CALLS
+    else {
+        g_message("lpe quadto not finite");
+    }
+#endif
+}
+
+void bezctx_ink_curveto(bezctx *bc, double x1, double y1, double x2, double y2,
+		    double x3, double y3)
+{
+    bezctx_ink *bi = (bezctx_ink *) bc;
+    if ( IS_FINITE(x1) && IS_FINITE(y1) && IS_FINITE(x2) && IS_FINITE(y2) ) {
+        bi->curve->curveto(x1, y1, x2, y2, x3, y3);
+    }
+#ifdef SPIRO_SHOW_INFINITE_COORDINATE_CALLS
+    else {
+        g_message("lpe curveto not finite");
+    }
+#endif
+}
+
+bezctx *
+new_bezctx_ink(SPCurve *curve) {
+    bezctx_ink *result = g_new(bezctx_ink, 1);
+    result->base.moveto = bezctx_ink_moveto;
+    result->base.lineto = bezctx_ink_lineto;
+    result->base.quadto = bezctx_ink_quadto;
+    result->base.curveto = bezctx_ink_curveto;
+    result->base.mark_knot = NULL;
+    result->curve = curve;
+    return &result->base;
+}
+
+
 
 
 namespace Inkscape {
@@ -37,10 +117,6 @@ LPESpiro::~LPESpiro()
 void
 LPESpiro::doEffect(SPCurve * curve)
 {
-    sp_spiro_do_effect(curve);
-}
-
-void sp_spiro_do_effect(SPCurve *curve){
     using Geom::X;
     using Geom::Y;
 
@@ -49,7 +125,8 @@ void sp_spiro_do_effect(SPCurve *curve){
     guint len = curve->get_segment_count() + 2;
 
     curve->reset();
-    Spiro::spiro_cp *path = g_new (Spiro::spiro_cp, len);
+    bezctx *bc = new_bezctx_ink(curve);
+    spiro_cp *path = g_new (spiro_cp, len);
     int ip = 0;
 
     for(Geom::PathVector::const_iterator path_it = original_pathv.begin(); path_it != original_pathv.end(); ++path_it) {
@@ -58,7 +135,7 @@ void sp_spiro_do_effect(SPCurve *curve){
 
         // start of path
         {
-            Geom::Point p = path_it->initialPoint();
+            Geom::Point p = path_it->front().pointAt(0);
             path[ip].x = p[X];
             path[ip].y = p[Y];
             path[ip].ty = '{' ;  // for closed paths, this is overwritten
@@ -68,7 +145,17 @@ void sp_spiro_do_effect(SPCurve *curve){
         // midpoints
         Geom::Path::const_iterator curve_it1 = path_it->begin();      // incoming curve
         Geom::Path::const_iterator curve_it2 = ++(path_it->begin());         // outgoing curve
+
         Geom::Path::const_iterator curve_endit = path_it->end_default(); // this determines when the loop has to stop
+        if (path_it->closed()) {
+            // if the path is closed, maybe we have to stop a bit earlier because the closing line segment has zerolength.
+            const Geom::Curve &closingline = path_it->back_closed(); // the closing line segment is always of type Geom::LineSegment.
+            if (are_near(closingline.initialPoint(), closingline.finalPoint())) {
+                // closingline.isDegenerate() did not work, because it only checks for *exact* zero length, which goes wrong for relative coordinates and rounding errors...
+                // the closing line segment has zero-length. So stop before that one!
+                curve_endit = path_it->end_open();
+            }
+        }
 
         while ( curve_it2 != curve_endit )
         {
@@ -132,7 +219,9 @@ void sp_spiro_do_effect(SPCurve *curve){
 
         // run subpath through spiro
         int sp_len = ip;
-        Spiro::spiro_run(path, sp_len, *curve);
+        spiro_seg *s = run_spiro(path, sp_len);
+        spiro_to_bpath(s, sp_len, bc);
+        free(s);
         ip = 0;
     }
 

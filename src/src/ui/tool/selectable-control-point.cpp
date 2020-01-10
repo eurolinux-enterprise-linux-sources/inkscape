@@ -1,44 +1,48 @@
+/** @file
+ * Desktop-bound selectable control object - implementation
+ */
 /* Authors:
  *   Krzysztof Kosiński <tweenk.pl@gmail.com>
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2009 Authors
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "ui/tool/selectable-control-point.h"
 #include "ui/tool/control-point-selection.h"
 #include "ui/tool/event-utils.h"
+#include "ui/tool/selectable-control-point.h"
 
 namespace Inkscape {
 namespace UI {
 
-ControlPoint::ColorSet SelectableControlPoint::_default_scp_color_set = {
-    {0xffffff00, 0x01000000}, // normal fill, stroke
-    {0xff0000ff, 0x01000000}, // mouseover fill, stroke
-    {0x0000ffff, 0x01000000}, // clicked fill, stroke
-    //
+static SelectableControlPoint::ColorSet default_scp_color_set = {
+    {
+        {0xffffff00, 0x01000000}, // normal fill, stroke
+        {0xff0000ff, 0x01000000}, // mouseover fill, stroke
+        {0x0000ffff, 0x01000000}  // clicked fill, stroke
+    },
     {0x0000ffff, 0x000000ff}, // normal fill, stroke when selected
     {0xff000000, 0x000000ff}, // mouseover fill, stroke when selected
     {0xff000000, 0x000000ff}  // clicked fill, stroke when selected
 };
 
-SelectableControlPoint::SelectableControlPoint(SPDesktop *d, Geom::Point const &initial_pos, SPAnchorType anchor,
-                                               Inkscape::ControlType type,
-                                               ControlPointSelection &sel,
-                                               ColorSet const &cset, SPCanvasGroup *group) :
-    ControlPoint(d, initial_pos, anchor, type, cset, group),
-    _selection(sel)
+SelectableControlPoint::SelectableControlPoint(SPDesktop *d, Geom::Point const &initial_pos,
+        Gtk::AnchorType anchor, SPCtrlShapeType shape, unsigned int size,
+        ControlPointSelection &sel, ColorSet *cset, SPCanvasGroup *group)
+    : ControlPoint (d, initial_pos, anchor, shape, size,
+        cset ? reinterpret_cast<ControlPoint::ColorSet*>(cset)
+        : reinterpret_cast<ControlPoint::ColorSet*>(&default_scp_color_set), group)
+    , _selection (sel)
 {
     _selection.allPoints().insert(this);
 }
-
-SelectableControlPoint::SelectableControlPoint(SPDesktop *d, Geom::Point const &initial_pos, SPAnchorType anchor,
-                                               Glib::RefPtr<Gdk::Pixbuf> pixbuf,
-                                               ControlPointSelection &sel,
-                                               ColorSet const &cset, SPCanvasGroup *group) :
-    ControlPoint(d, initial_pos, anchor, pixbuf, cset, group),
-    _selection (sel)
+SelectableControlPoint::SelectableControlPoint(SPDesktop *d, Geom::Point const &initial_pos,
+        Gtk::AnchorType anchor, Glib::RefPtr<Gdk::Pixbuf> pixbuf,
+        ControlPointSelection &sel, ColorSet *cset, SPCanvasGroup *group)
+    : ControlPoint (d, initial_pos, anchor, pixbuf,
+        cset ? reinterpret_cast<ControlPoint::ColorSet*>(cset)
+        : reinterpret_cast<ControlPoint::ColorSet*>(&default_scp_color_set), group)
+    , _selection (sel)
 {
     _selection.allPoints().insert(this);
 }
@@ -103,23 +107,21 @@ void SelectableControlPoint::_setState(State state)
 {
     if (!selected()) {
         ControlPoint::_setState(state);
-    } else {
-        ColorEntry current = {0, 0};
-        ColorSet const &activeCset = (_isLurking()) ? invisible_cset : _cset;
-        switch (state) {
-            case STATE_NORMAL:
-                current = activeCset.selected_normal;
-                break;
-            case STATE_MOUSEOVER:
-                current = activeCset.selected_mouseover;
-                break;
-            case STATE_CLICKED:
-                current = activeCset.selected_clicked;
-                break;
-        }
-        _setColors(current);
-        _state = state;
+        return;
     }
+
+    ColorSet *cset = reinterpret_cast<ColorSet*>(_cset);
+    ColorEntry current = {0, 0};
+    switch (state) {
+    case STATE_NORMAL:
+        current = cset->selected_normal; break;
+    case STATE_MOUSEOVER:
+        current = cset->selected_mouseover; break;
+    case STATE_CLICKED:
+        current = cset->selected_clicked; break;
+    }
+    _setColors(current);
+    _state = state;
 }
 
 } // namespace UI
@@ -134,4 +136,4 @@ void SelectableControlPoint::_setState(State state)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -1,5 +1,10 @@
-/**
- * Authors:
+#ifndef SEEN_DISPLAY_CURVE_H
+#define SEEN_DISPLAY_CURVE_H
+
+/** \file
+ * Wrapper around a Geom::PathVector objects.
+ *
+ * Author:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *
  * Copyright (C) 2000 Lauris Kaplinski
@@ -7,21 +12,15 @@
  * Copyright (C) 2002 Lauris Kaplinski
  * Copyright (C) 2008 Johan Engelen
  *
- * Released under GNU GPL, see file 'COPYING' for more information
+ * Released under GNU GPL
  */
 
-#ifndef SEEN_DISPLAY_CURVE_H
-#define SEEN_DISPLAY_CURVE_H
+#include <glib.h>
 
-#include <2geom/pathvector.h>
-#include <cstddef>
+#include <2geom/forward.h>
+
 #include <boost/optional.hpp>
 
-extern "C" { typedef struct _GSList GSList; }
-
-/**
- * Wrapper around a Geom::PathVector object.
- */
 class SPCurve {
 public:
     /* Constructors */
@@ -39,13 +38,11 @@ public:
 
     SPCurve * copy() const;
 
-    size_t get_segment_count() const;
-    size_t nodes_in_path() const;
+    guint get_segment_count() const;
+    guint nodes_in_path() const;
 
     bool is_empty() const;
-    bool is_unset() const;
     bool is_closed() const;
-    bool is_equal(SPCurve * other) const;
     Geom::Curve const * last_segment() const;
     Geom::Path const * last_path() const;
     Geom::Curve const * first_segment() const;
@@ -58,31 +55,31 @@ public:
     void reset();
 
     void moveto(Geom::Point const &p);
-    void moveto(double x, double y);
+    void moveto(gdouble x, gdouble y);
     void lineto(Geom::Point const &p);
-    void lineto(double x, double y);
+    void lineto(gdouble x, gdouble y);
     void quadto(Geom::Point const &p1, Geom::Point const &p2);
-    void quadto(double x1, double y1, double x2, double y2);
+    void quadto(gdouble x1, gdouble y1, gdouble x2, gdouble y2);
     void curveto(Geom::Point const &p0, Geom::Point const &p1, Geom::Point const &p2);
-    void curveto(double x0, double y0, double x1, double y1, double x2, double y2);
+    void curveto(gdouble x0, gdouble y0, gdouble x1, gdouble y1, gdouble x2, gdouble y2);
     void closepath();
     void closepath_current();
     void backspace();
 
-    void transform(Geom::Affine const &m);
+    void transform(Geom::Matrix const &m);
     void stretch_endpoints(Geom::Point const &, Geom::Point const &);
     void move_endpoints(Geom::Point const &, Geom::Point const &);
     void last_point_additive_move(Geom::Point const & p);
 
     void append(SPCurve const *curve2, bool use_lineto);
-    SPCurve * append_continuous(SPCurve const *c1, double tolerance);
+    SPCurve * append_continuous(SPCurve const *c1, gdouble tolerance);
     SPCurve * create_reverse() const;
 
     GSList * split() const;
     static SPCurve * concat(GSList const *list);
 
 protected:
-    size_t _refcount;
+    gint _refcount;
 
     Geom::PathVector _pathv;
 
@@ -92,7 +89,7 @@ private:
     SPCurve& operator=(const SPCurve&);
 };
 
-#endif // !SEEN_DISPLAY_CURVE_H
+#endif /* !SEEN_DISPLAY_CURVE_H */
 
 /*
   Local Variables:
@@ -103,4 +100,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

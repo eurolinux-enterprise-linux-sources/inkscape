@@ -2,38 +2,48 @@
 #define INKSCAPE_LIVEPATHEFFECT_H
 
 /*
- * Copyright (C) Johan Engelen 2007-2012 <j.b.c.engelen@alumnus.utwente.nl>
+ * Inkscape::LivePathEffect
+ *
+* Copyright (C) Johan Engelen 2007-2008 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+
+#include "display/display-forward.h"
+#include <map>
 #include <glibmm/ustring.h>
 #include <2geom/forward.h>
 #include "ui/widget/registry.h"
 #include "parameter/bool.h"
 #include "effect-enum.h"
 
-
 #define  LPE_CONVERSION_TOLERANCE 0.01    // FIXME: find good solution for this.
 
-class  SPDocument;
-class  SPDesktop;
-class  SPItem;
-class LivePathEffectObject;
-class  SPLPEItem;
-class  KnotHolder;
-class  KnotHolderEntity;
-class  SPPath;
-class  SPCurve;
+struct SPDocument;
+struct SPDesktop;
+struct SPItem;
+class SPNodeContext;
+struct LivePathEffectObject;
+class SPLPEItem;
+class KnotHolder;
+class KnotHolderEntity;
+class SPPath;
 
 namespace Gtk {
     class Widget;
+    class VBox;
+    class Tooltips;
 }
 
 namespace Inkscape {
 
 namespace XML {
     class Node;
+}
+
+namespace NodePath {
+    class Path ;
 }
 
 namespace LivePathEffect {
@@ -52,76 +62,64 @@ public:
 
     virtual ~Effect();
 
-    EffectType effectType() const;
+    EffectType effectType ();
 
-    //basically, to get this method called before the derived classes, a bit
-    //of indirection is needed. We first call these methods, then the below.
-    void doOnApply_impl(SPLPEItem const* lpeitem);
-    void doBeforeEffect_impl(SPLPEItem const* lpeitem);
-    void setCurrentZoom(double cZ);
-    void setSelectedNodePoints(std::vector<Geom::Point> sNP);
-    bool isNodePointSelected(Geom::Point const &nodePoint) const;
-    virtual void doOnApply (SPLPEItem const* lpeitem);
-    virtual void doBeforeEffect (SPLPEItem const* lpeitem);
-    
-    virtual void doAfterEffect (SPLPEItem const* lpeitem);
-    virtual void doOnRemove (SPLPEItem const* lpeitem);
+    virtual void doOnApply (SPLPEItem *lpeitem);
+    virtual void doBeforeEffect (SPLPEItem *lpeitem);
 
     void writeParamsToSVG();
 
-    virtual void acceptParamPath (SPPath const* param_path);
+    virtual void acceptParamPath (SPPath *param_path);
     static int acceptsNumClicks(EffectType type);
-    int acceptsNumClicks() const { return acceptsNumClicks(effectType()); }
+    int acceptsNumClicks() { return acceptsNumClicks(effectType()); }
     void doAcceptPathPreparations(SPLPEItem *lpeitem);
 
     /*
      * isReady() indicates whether all preparations which are necessary to apply the LPE are done,
      * e.g., waiting for a parameter path either before the effect is created or when it needs a
-     * path as argument. This is set in SPLPEItem::addPathEffect().
+     * path as argument. This is set in sp_lpe_item_add_path_effect().
      */
-    inline bool isReady() const { return is_ready; }
+    inline bool isReady() { return is_ready; }
     inline void setReady(bool ready = true) { is_ready = ready; }
 
     virtual void doEffect (SPCurve * curve);
 
-    virtual Gtk::Widget * newWidget();
+    virtual Gtk::Widget * newWidget(Gtk::Tooltips * tooltips);
 
     /**
      * Sets all parameters to their default values and writes them to SVG.
      */
-    virtual void resetDefaults(SPItem const* item);
+    virtual void resetDefaults(SPItem * item);
 
     /// /todo: is this method really necessary? it causes UI inconsistensies... (johan)
-    virtual void transform_multiply(Geom::Affine const& postmul, bool set);
+    virtual void transform_multiply(Geom::Matrix const& postmul, bool set);
 
     // /TODO: providesKnotholder() is currently used as an indicator of whether a nodepath is
     // created for an item or not. When we allow both at the same time, this needs rethinking!
-    bool providesKnotholder() const;
+    bool providesKnotholder();
     // /TODO: in view of providesOwnFlashPaths() below, this is somewhat redundant
     //       (but spiro lpe still needs it!)
-    virtual LPEPathFlashType pathFlashType() const { return DEFAULT; }
+    virtual LPEPathFlashType pathFlashType() { return DEFAULT; }
     void addHandles(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item);
-    std::vector<Geom::PathVector> getCanvasIndicators(SPLPEItem const* lpeitem);
-    void update_helperpath();
-    inline bool providesOwnFlashPaths() const {
+    std::vector<Geom::PathVector> getHelperPaths(SPLPEItem *lpeitem);
+
+    inline bool providesOwnFlashPaths() {
         return provides_own_flash_paths || show_orig_path;
     }
-    inline bool showOrigPath() const { return show_orig_path; }
+    inline bool showOrigPath() { return show_orig_path; }
 
-    Glib::ustring          getName() const;
+    Glib::ustring          getName();
     Inkscape::XML::Node *  getRepr();
     SPDocument *           getSPDoc();
     LivePathEffectObject * getLPEObj() {return lpeobj;};
-    LivePathEffectObject const * getLPEObj() const {return lpeobj;};
     Parameter *            getParameter(const char * key);
 
-    void readallParameters(Inkscape::XML::Node const* repr);
+    void readallParameters(Inkscape::XML::Node * repr);
     void setParameter(const gchar * key, const gchar * new_value);
 
-    inline bool isVisible() const { return is_visible; }
+    inline bool isVisible() { return is_visible; }
 
     void editNextParamOncanvas(SPItem * item, SPDesktop * desktop);
-    bool apply_to_clippath_and_mask;
 
 protected:
     Effect(LivePathEffectObject *lpeobject);
@@ -130,22 +128,24 @@ protected:
     // of what kind of input/output parameters he desires.
     // the order in which they appear is the order in which they are
     // called by this base class. (i.e. doEffect(SPCurve * curve) defaults to calling
-    // doEffect(Geom::PathVector )
-    virtual Geom::PathVector
-            doEffect_path (Geom::PathVector const & path_in);
+    // doEffect(std::vector<Geom::Path> )
+    virtual std::vector<Geom::Path>
+            doEffect_path (std::vector<Geom::Path> const & path_in);
     virtual Geom::Piecewise<Geom::D2<Geom::SBasis> >
             doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in);
 
     void registerParameter(Parameter * param);
+    void registerKnotHolderHandle(KnotHolderEntity* entity, const char* descr);
     Parameter * getNextOncanvasEditableParam();
 
-    virtual void addKnotHolderEntities(KnotHolder * /*knotholder*/, SPDesktop * /*desktop*/, SPItem * /*item*/) {};
+    void addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item);
 
-    virtual void addCanvasIndicators(SPLPEItem const* lpeitem, std::vector<Geom::PathVector> &hp_vec);
+    //virtual std::vector<Geom::PathVector> getCanvasIndicators(SPLPEItem *lpeitem);
+    virtual void addCanvasIndicators(SPLPEItem *lpeitem, std::vector<Geom::PathVector> &hp_vec);
+
 
     std::vector<Parameter *> param_vector;
-    bool _provides_knotholder_entities;
-
+    std::vector<std::pair<KnotHolderEntity*, const char*> > kh_entity_vector;
     int oncanvasedit_it;
     BoolParam is_visible;
 
@@ -157,14 +157,9 @@ protected:
     LivePathEffectObject *lpeobj;
 
     // this boolean defaults to false, it concatenates the input path to one pwd2,
-    // instead of normally 'splitting' the path into continuous pwd2 paths and calling doEffect_pwd2 for each.
+    // instead of normally 'splitting' the path into continuous pwd2 paths.
     bool concatenate_before_pwd2;
 
-    SPLPEItem * sp_lpe_item; // these get stored in doBeforeEffect_impl, and derived classes may do as they please with them.
-    double current_zoom;
-    std::vector<Geom::Point> selectedNodesPoints;
-    SPCurve * sp_curve;
-    Geom::PathVector pathvector_before_effect;
 private:
     bool provides_own_flash_paths; // if true, the standard flash path is suppressed
 

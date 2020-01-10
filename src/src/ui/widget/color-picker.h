@@ -14,14 +14,15 @@
 #define __COLOR_PICKER_H__
 
 #include <stddef.h>
-
-#include <gtkmm/dialog.h>
-#include <gtkmm/button.h>
 #include <sigc++/sigc++.h>
-#include "ui/selected-color.h"
+#include <gtkmm/button.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/tooltips.h>
+#include "widgets/sp-color-selector.h"
 #include "ui/widget/color-preview.h"
+//#include "ui/dialog/dialog.h"
 
-struct SPColorSelector;
+
 
 namespace Inkscape
 {
@@ -50,24 +51,25 @@ public:
 
 protected:
 
-    void _onSelectedColorChanged();
+    friend void sp_color_picker_color_mod(SPColorSelector *csel, GObject *cp);
     virtual void on_clicked();
     virtual void on_changed (guint32);
 
     ColorPreview        _preview;
+    Gtk::Tooltips       _tt;
 
     /*const*/ Glib::ustring _title;
     sigc::signal<void,guint32> _changed_signal;
     guint32             _rgba;
     bool                _undo;
-    bool                _updating;
+
 
     //Dialog
     void setupDialog(const Glib::ustring &title);
     //Inkscape::UI::Dialog::Dialog _colorSelectorDialog;
     Gtk::Dialog _colorSelectorDialog;
-    SelectedColor _selected_color;
-    Gtk::Widget *_color_selector;
+    SPColorSelector *_colorSelector;
+
 };
 
 }//namespace Widget
@@ -85,4 +87,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

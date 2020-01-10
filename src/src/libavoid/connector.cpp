@@ -286,7 +286,7 @@ void ConnRef::common_updateEndPoint(const unsigned int type, const ConnEnd& conn
     }
     
     VertInf *altered = NULL;
-    // VertInf *partner = NULL;
+    VertInf *partner = NULL;
     bool isShape = false;
 
     if (type == (unsigned int) VertID::src)
@@ -302,7 +302,7 @@ void ConnRef::common_updateEndPoint(const unsigned int type, const ConnEnd& conn
         _srcVert->visDirections = connEnd.directions();
         
         altered = _srcVert;
-        // partner = _dstVert;
+        partner = _dstVert;
     }
     else // if (type == (unsigned int) VertID::tar)
     {
@@ -317,7 +317,7 @@ void ConnRef::common_updateEndPoint(const unsigned int type, const ConnEnd& conn
         _dstVert->visDirections = connEnd.directions();
         
         altered = _dstVert;
-        // partner = _srcVert;
+        partner = _srcVert;
     }
     
     // XXX: Seems to be faster to just remove the edges and recreate
@@ -442,11 +442,11 @@ void ConnRef::makeActive(void)
 
 void ConnRef::makeInactive(void)
 {
-    if (_active) {
-        // Remove from connRefs list.
-        _router->connRefs.erase(_pos);
-        _active = false;
-    }
+    COLA_ASSERT(_active);
+    
+    // Remove from connRefs list.
+    _router->connRefs.erase(_pos);
+    _active = false;
 }
 
 
@@ -553,12 +553,8 @@ void ConnRef::unInitialise(void)
 
 void ConnRef::removeFromGraph(void)
 {
-    if (_srcVert) {
-        _srcVert->removeFromGraph();
-    }
-    if (_dstVert) {
-        _dstVert->removeFromGraph();
-    }
+    _srcVert->removeFromGraph();
+    _dstVert->removeFromGraph();
 }
 
 
@@ -845,10 +841,7 @@ bool ConnRef::generatePath(void)
             break;
         }
         // Check we don't have an apparent infinite connector path.
-//#ifdef PATHDEBUG
-        db_printf("Path length: %i\n", pathlen);
-//#endif
-        COLA_ASSERT(pathlen < 10000);
+        COLA_ASSERT(pathlen < 200);
     }
     std::vector<Point> path(pathlen);
 
@@ -1476,6 +1469,7 @@ CrossingsInfoPair countRealCrossings(Avoid::Polygon& poly,
                 int prevTurnDir = -1;
                 int startCornerSide = 1;
                 int endCornerSide = 1;
+                bool reversed = false;
                 if (!front_same)
                 {
                     // If there is a divergence at the beginning, 
@@ -1484,6 +1478,7 @@ CrossingsInfoPair countRealCrossings(Avoid::Polygon& poly,
                     startCornerSide = Avoid::cornerSide(*c_path[0], *c_path[1], 
                             *c_path[2], *p_path[0]) 
                         * segDir(*c_path[1], *c_path[2]);
+                    reversed = (startCornerSide != -prevTurnDir);
                 }
                 if (!back_same)
                 {
@@ -1495,6 +1490,7 @@ CrossingsInfoPair countRealCrossings(Avoid::Polygon& poly,
                             *c_path[size - 2], *c_path[size - 1], 
                             *p_path[size - 1])
                         * segDir(*c_path[size - 3], *c_path[size - 2]);
+                    reversed = (endCornerSide != -prevTurnDir);
                 }
                 else
                 {
@@ -1575,9 +1571,10 @@ CrossingsInfoPair countRealCrossings(Avoid::Polygon& poly,
                     }
                 }
 #endif
+                prevTurnDir = 0;
                 if (pointOrders)
                 {
-                    bool reversed = false;
+                    reversed = false;
                     size_t startPt = (front_same) ? 0 : 1;
                     
                     // Orthogonal should always have at least one segment.
@@ -1739,8 +1736,7 @@ CrossingsInfoPair countRealCrossings(Avoid::Polygon& poly,
                                 !reversedY);
                     }
                     else
-                    { /// \todo FIXME: this whole branch was not doing anything
-                    /*
+                    {
                         int turnDirA = vecDir(a0, a1, a2); 
                         int turnDirB = vecDir(b0, b1, b2); 
                         bool reversed = (side1 != -turnDirA); 
@@ -1765,7 +1761,6 @@ CrossingsInfoPair countRealCrossings(Avoid::Polygon& poly,
                         }
                         VertID vID(b1.id, true, b1.vn);
                         //(*pointOrders)[b1].addPoints(&b1, &a1, reversed);
-                    */
                     }
                 }
             }

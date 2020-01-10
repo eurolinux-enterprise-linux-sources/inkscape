@@ -14,8 +14,8 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "live_effects/parameter/enum.h"
 #include "live_effects/effect.h"
+#include "live_effects/parameter/enum.h"
 
 namespace Inkscape {
 namespace LivePathEffect {
@@ -32,9 +32,9 @@ public:
     LPELineSegment(LivePathEffectObject *lpeobject);
     virtual ~LPELineSegment();
 
-    virtual void doBeforeEffect (SPLPEItem const* lpeitem);
+    virtual void doBeforeEffect (SPLPEItem *lpeitem);
 
-    virtual Geom::PathVector doEffect_path (Geom::PathVector const & path_in);
+    virtual std::vector<Geom::Path> doEffect_path (std::vector<Geom::Path> const & path_in);
 
 //private:
     EnumParam<EndType> end_type;

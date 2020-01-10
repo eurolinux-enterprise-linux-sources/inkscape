@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-Copyright (c) 2005-2015 authors:
+Copyright (c) 2005-2007 authors:
 Original version: Toine de Greef (a.degreef@chello.nl)
-Modified (2010-2015) by Nicolas Dufour (nicoduf@yahoo.fr) (blur support, units
+Modified (2010-2011) by Nicolas Dufour (nicoduf@yahoo.fr) (blur support, units
 convertion, comments, and some other fixes)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -34,13 +34,12 @@ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 xmlns:exsl="http://exslt.org/common"
 xmlns:libxslt="http://xmlsoft.org/XSLT/namespace"
-xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
+exclude-result-prefixes="rdf xlink xs exsl libxslt">
 
 <xsl:strip-space elements="*" />
 <xsl:output method="xml" encoding="UTF-8" indent="yes"/>
 
-<xsl:param name="silverlight_compatible" select="$silverlight" />
+<xsl:param name="silverlight_compatible" select="2" />
 
 <!-- 
   // Containers //
@@ -54,16 +53,10 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
 -->
 <xsl:template match="/">
   <xsl:choose>
-    <xsl:when test="$silverlight_compatible = 'true'">
-      <xsl:comment>
-        <xsl:value-of select="'This file is compatible with Silverlight'" />
-      </xsl:comment>
+    <xsl:when test="$silverlight_compatible = 1">
       <xsl:apply-templates mode="forward" />
     </xsl:when>
     <xsl:otherwise>
-      <xsl:comment>
-        <xsl:value-of select="'This file is NOT compatible with Silverlight'" />
-      </xsl:comment>
       <Viewbox Stretch="Uniform">
         <xsl:apply-templates mode="forward" />
       </Viewbox>
@@ -81,8 +74,9 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
       <Canvas>
         <xsl:apply-templates mode="id" select="." />
         <xsl:apply-templates mode="filter_effect" select="." />
+        <!--
         <xsl:apply-templates mode="clip" select="." />
-
+        -->
         <xsl:if test="@style and contains(@style, 'display:none')">
           <xsl:attribute name="Visibility">Collapsed</xsl:attribute>
         </xsl:if>
@@ -140,10 +134,10 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
           <Canvas.RenderTransform>
             <TranslateTransform>
               <xsl:attribute name="X">
-                <xsl:value-of select="format-number(-number(substring-before($viewBox, ' ')), '#.#')" />
+                <xsl:value-of select="-number(substring-before($viewBox, ' '))" />
               </xsl:attribute>
               <xsl:attribute name="Y">
-                <xsl:value-of select="format-number(-number(substring-before(substring-after($viewBox, ' '), ' ')), '#.#')" />
+                <xsl:value-of select="-number(substring-before(substring-after($viewBox, ' '), ' '))" />
               </xsl:attribute>
             </TranslateTransform>
           </Canvas.RenderTransform>
@@ -178,7 +172,6 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
 
   * Parse transform
   * Apply transform
-  * Rotation center
 -->
 
 <!-- 
@@ -418,20 +411,6 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
 </xsl:template>
 
 <!--
-  // Rotation center //
-  In XAML, relative to the object's bounding box (RenderTransformOrigin="0.5,0.5"  is the center)
-  Unfortunately, converting would require that the bounding box of all objects and groups is calculated, which is rather complex...
--->
-<xsl:template mode="rotation-center" match="*">
-  <xsl:if test="@inkscape:transform-center-x">
-<!--    <xsl:attribute name="RenderTransformOrigin">
-      <xsl:value-of select="concat(@inkscape:transform-center-x, ',', @inkscape:transform-center-y)" />
-    </xsl:attribute>
--->>
-  </xsl:if>
-</xsl:template>
-
-<!--
   // Resources (defs) //
 
   * Resources ids
@@ -497,22 +476,6 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
         </xsl:otherwise>
       </xsl:choose>          
     </xsl:if>
-  </BlurEffect>  
-</xsl:template>
-
-<!--
-  // Fake GaussianBlur filter effect //
-  Replaces all the other SVG effects with a zero radius blur effect.
--->
-<xsl:template mode="forward" match="*[name(.) = 'feBlend' or name(.) = 'feColorMatrix' or name(.) = 'feComponentTransfer' or name(.) = 'feComposite' or name(.) = 'feConvolveMatrix' or name(.) = 'feDiffuseLighting' or name(.) = 'feDisplacementMap' or name(.) = 'feFlood' or name(.) = 'feImage' or name(.) = 'feMerge' or name(.) = 'feMorphology' or name(.) = 'feOffset' or name(.) = 'feSpecularLighting' or name(.) = 'feTile' or name(.) = 'feTurbulence']">
-  <xsl:comment>
-    <xsl:value-of select="concat('Tag ', name(.), ' not supported, replaced with empty blur')" />
-  </xsl:comment>
-  <BlurEffect>
-    <xsl:if test="../@id"><xsl:attribute name="x:Key"><xsl:value-of select="../@id" /></xsl:attribute></xsl:if>
-    <xsl:attribute name="Radius">
-      <xsl:value-of select="0" />
-    </xsl:attribute>
   </BlurEffect>  
 </xsl:template>
 
@@ -765,7 +728,7 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
         <xsl:choose>
           <xsl:when test="@xlink:href">
             <xsl:variable name="reference_id" select="@xlink:href" />
-            <xsl:apply-templates mode="forward" select="//*[name(.) = 'radialGradient' and $reference_id = concat('#', @id)]/*" />
+            <xsl:apply-templates mode="forward" select="//*[name(.) = 'linearGradient' and $reference_id = concat('#', @id)]/*" />
           </xsl:when>
           <xsl:otherwise>
             <xsl:apply-templates mode="forward" />
@@ -858,7 +821,7 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
 
 <!-- 
   // Unit to pixel converter //
-  Values with units (except %) are converted to pixels.
+  Values with units (except %) are converted to pixels and rounded.
   Unknown units are kept.
   em, ex and % not implemented
 -->
@@ -866,25 +829,28 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
   <xsl:param name="convert_value" />
   <xsl:choose>
     <xsl:when test="contains($convert_value, 'px')">
-      <xsl:value-of select="translate($convert_value, 'px', '')" />
+      <xsl:value-of select="round(translate($convert_value, 'px', ''))" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'pt')">
-      <xsl:value-of select="translate($convert_value, 'pt', '') * 1.333333" />
+      <xsl:value-of select="round(translate($convert_value, 'pt', '') * 1.25)" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'pc')">
-      <xsl:value-of select="translate($convert_value, 'pc', '') * 16" />
+      <xsl:value-of select="round(translate($convert_value, 'pc', '') * 15)" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'mm')">
-      <xsl:value-of select="translate($convert_value, 'mm', '') * 3.779527" />
+      <xsl:value-of select="round(translate($convert_value, 'mm', '') * 3.543307)" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'cm')">
-      <xsl:value-of select="translate($convert_value, 'cm', '') * 37.79527" />
+      <xsl:value-of select="round(translate($convert_value, 'cm', '') * 35.43307)" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'in')">
-      <xsl:value-of select="translate($convert_value, 'in', '') * 96" />
+      <xsl:value-of select="round(translate($convert_value, 'in', '') * 90)" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'ft')">
-      <xsl:value-of select="translate($convert_value, 'ft', '') * 1152" />
+      <xsl:value-of select="round(translate($convert_value, 'ft', '') * 1080)" />
+    </xsl:when>
+    <xsl:when test="not(string(number($convert_value))='NaN')">
+      <xsl:value-of select="round($convert_value)" />
     </xsl:when>
     <xsl:otherwise>
       <xsl:value-of select="$convert_value" />
@@ -1266,28 +1232,25 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
 -->
 <xsl:template mode="fill_rule" match="*">
   <xsl:choose>
-    <xsl:when test="@fill-rule and (@fill-rule = 'nonzero')">
-      <xsl:attribute name="FillRule">NonZero</xsl:attribute>
-    </xsl:when>
-    <xsl:when test="@fill-rule and (@fill-rule = 'evenodd')">
-      <xsl:attribute name="FillRule">EvenOdd</xsl:attribute>
+    <xsl:when test="@fill-rule and (@fill-rule = 'nonzero' or @fill-rule = 'evenodd')">
+      <xsl:attribute name="FillRule">
+        <xsl:value-of select="normalize-space(@fill-rule)" />
+      </xsl:attribute>
     </xsl:when>
     <xsl:when test="@style and contains(@style, 'fill-rule:')">
       <xsl:variable name="FillRule" select="normalize-space(substring-after(@style, 'fill-rule:'))" />
       <xsl:choose>
         <xsl:when test="contains($FillRule, ';')">
-          <xsl:if test="substring-before($FillRule, ';') = 'nonzero'">
-            <xsl:attribute name="FillRule">NonZero</xsl:attribute>
-          </xsl:if>
-          <xsl:if test="substring-before($FillRule, ';') = 'evenodd'">
-            <xsl:attribute name="FillRule">EvenOdd</xsl:attribute>
+          <xsl:if test="substring-before($FillRule, ';') = 'nonzero' or substring-before($FillRule, ';') = 'evenodd'">
+            <xsl:attribute name="FillRule">
+              <xsl:value-of select="substring-before($FillRule, ';')" />
+            </xsl:attribute>
           </xsl:if>
         </xsl:when>
-        <xsl:when test="$FillRule = 'nonzero'">
-          <xsl:attribute name="FillRule">NonZero</xsl:attribute>
-        </xsl:when>
-        <xsl:when test="$FillRule = 'evenodd'">
-          <xsl:attribute name="FillRule">EvenOdd</xsl:attribute>
+        <xsl:when test="$FillRule = 'nonzero' or $FillRule = 'evenodd'">
+          <xsl:attribute name="FillRule">
+            <xsl:value-of select="$FillRule" />
+          </xsl:attribute>
         </xsl:when>
       </xsl:choose>
     </xsl:when>
@@ -2385,7 +2348,7 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
         </xsl:choose>
       </xsl:variable>
       <xsl:if test="$top_val != '' and $size_val != ''">
-        <xsl:value-of select='format-number($top_val - $size_val, "#.#")' />
+        <xsl:value-of select="$top_val - $size_val" />
       </xsl:if>
     </xsl:attribute>
   </xsl:if>
@@ -2584,7 +2547,6 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
     <xsl:apply-templates mode="desc" select="." />
     <xsl:apply-templates mode="clip" select="." />
 
-
     <xsl:apply-templates mode="transform" select=".">
       <xsl:with-param name="mapped_type" select="'Rectangle'" />
     </xsl:apply-templates>
@@ -2672,7 +2634,7 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt inkscape">
     
     <xsl:if test="@d">
       <xsl:choose>
-        <xsl:when test="$silverlight_compatible = 'true'">
+        <xsl:when test="$silverlight_compatible = 1">
           <xsl:attribute name="Data">
             <xsl:value-of select="translate(@d , ',', ' ')" />
           </xsl:attribute>

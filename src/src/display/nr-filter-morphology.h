@@ -1,5 +1,5 @@
-#ifndef SEEN_NR_FILTER_MORPHOLOGY_H
-#define SEEN_NR_FILTER_MORPHOLOGY_H
+#ifndef __NR_FILTER_MORPHOLOGY_H__
+#define __NR_FILTER_MORPHOLOGY_H__
 
 /*
  * feMorphology filter primitive renderer
@@ -13,11 +13,11 @@
  */
 
 #include "display/nr-filter-primitive.h"
+#include "display/nr-filter-slot.h"
+#include "display/nr-filter-units.h"
 
 namespace Inkscape {
 namespace Filters {
-
-class FilterSlot;
 
 enum FilterMorphologyOperator {
     MORPHOLOGY_OPERATOR_ERODE,
@@ -31,10 +31,9 @@ public:
     static FilterPrimitive *create();
     virtual ~FilterMorphology();
 
-    virtual void render_cairo(FilterSlot &slot);
-    virtual void area_enlarge(Geom::IntRect &area, Geom::Affine const &trans);
-    virtual double complexity(Geom::Affine const &ctm);
-
+    virtual int render(FilterSlot &slot, FilterUnits const &units);
+    virtual void area_enlarge(NRRectL &area, Geom::Matrix const &trans);
+    virtual FilterTraits get_input_traits();
     void set_operator(FilterMorphologyOperator &o);
     void set_xradius(double x);
     void set_yradius(double y);
@@ -58,4 +57,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

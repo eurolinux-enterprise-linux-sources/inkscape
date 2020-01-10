@@ -17,21 +17,17 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 """
-# standard library
-import random
-# local library
-import inkex
-import simplestyle, simpletransform
-import voronoi
+import random, inkex, simplestyle, gettext, voronoi
+_ = gettext.gettext
 
 try:
     from subprocess import Popen, PIPE
 except:
-    inkex.errormsg(_("Failed to import the subprocess module. Please report this as a bug at: https://bugs.launchpad.net/inkscape."))
-    inkex.errormsg(_("Python version is: ") + str(inkex.sys.version_info))
+    inkex.errormsg(_("Failed to import the subprocess module. Please report this as a bug at : https://bugs.launchpad.net/inkscape."))
+    inkex.errormsg("Python version is : " + str(inkex.sys.version_info))
     exit()
 
 def clip_line(x1, y1, x2, y2, w, h):
@@ -82,30 +78,22 @@ class Pattern(inkex.Effect):
                         action="store", type="int", 
                         dest="border", default=0,
                         help="Size of Border (px)")
-        self.OptionParser.add_option("--tab",
-                        action="store", type="string",
-                        dest="tab",
-                        help="The selected UI-tab when OK was pressed")
 
     def effect(self):
         if not self.options.ids:
             inkex.errormsg(_("Please select an object"))
             exit()
-        scale = self.unittouu('1px')            # convert to document units
-        self.options.size *= scale
-        self.options.border *= scale
         q = {'x':0,'y':0,'width':0,'height':0}  # query the bounding box of ids[0]
         for query in q.keys():
             p = Popen('inkscape --query-%s --query-id=%s "%s"' % (query, self.options.ids[0], self.args[-1]), shell=True, stdout=PIPE, stderr=PIPE)
             rc = p.wait()
-            q[query] = scale*float(p.stdout.read())
-        mat = simpletransform.composeParents(self.selected[self.options.ids[0]], [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+            q[query] = float(p.stdout.read())
         defs = self.xpathSingle('/svg:svg//svg:defs')
         pattern = inkex.etree.SubElement(defs ,inkex.addNS('pattern','svg'))
         pattern.set('id', 'Voronoi' + str(random.randint(1, 9999)))
         pattern.set('width', str(q['width']))
         pattern.set('height', str(q['height']))
-        pattern.set('patternTransform', 'translate(%s,%s)' % (q['x'] - mat[0][2], q['y'] - mat[1][2]))
+        pattern.set('patternTransform', 'translate(%s,%s)' % (q['x'], q['y']))
         pattern.set('patternUnits', 'userSpaceOnUse')
 
         # generate random pattern of points
@@ -147,7 +135,6 @@ class Pattern(inkex.Effect):
         # plot Voronoi diagram
         sl = voronoi.SiteList(pts)
         voronoi.voronoi(sl, c)
-        path = ""
         for edge in c.edges:
             if edge[1] >= 0 and edge[2] >= 0:       # two vertices
                 [x1, y1, x2, y2] = clip_line(c.vertices[edge[1]][0], c.vertices[edge[1]][1], c.vertices[edge[2]][0], c.vertices[edge[2]][1], q['width'], q['height'])
@@ -174,11 +161,9 @@ class Pattern(inkex.Effect):
                     ytemp = c.lines[edge[0]][2]/c.lines[edge[0]][1]
                 [x1, y1, x2, y2] = clip_line(xtemp, ytemp, c.vertices[edge[2]][0], c.vertices[edge[2]][1], q['width'], q['height'])
             if x1 or x2 or y1 or y2:
-                path += 'M %.3f,%.3f %.3f,%.3f ' % (x1, y1, x2, y2)
-
-        patternstyle = {'stroke': '#000000', 'stroke-width': str(scale)}
-        attribs = {'d': path, 'style': simplestyle.formatStyle(patternstyle)}
-        inkex.etree.SubElement(pattern, inkex.addNS('path', 'svg'), attribs)
+                path = 'M %f,%f %f,%f' % (x1, y1, x2, y2)
+                attribs = {'d': path, 'style': 'stroke:#000000'}
+                inkex.etree.SubElement(pattern, inkex.addNS('path', 'svg'), attribs)
 
         # link selected object to pattern
         obj = self.selected[self.options.ids[0]]
@@ -199,4 +184,4 @@ if __name__ == '__main__':
     e = Pattern()
     e.affect()
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

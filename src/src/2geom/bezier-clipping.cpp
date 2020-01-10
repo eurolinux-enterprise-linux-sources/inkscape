@@ -39,9 +39,8 @@
 #include <2geom/point.h>
 #include <2geom/interval.h>
 #include <2geom/bezier.h>
+//#include <2geom/convex-cover.h>
 #include <2geom/numeric/matrix.h>
-#include <2geom/convex-hull.h>
-#include <2geom/line.h>
 
 #include <cassert>
 #include <vector>
@@ -49,7 +48,7 @@
 #include <utility>
 //#include <iomanip>
 
-using std::swap;
+
 
 
 #define VERBOSE 0
@@ -64,6 +63,7 @@ namespace detail { namespace bezier_clipping {
 // for debugging
 //
 
+inline
 void print(std::vector<Point> const& cp, const char* msg = "")
 {
     std::cerr << msg << std::endl;
@@ -72,6 +72,7 @@ void print(std::vector<Point> const& cp, const char* msg = "")
 }
 
 template< class charT >
+inline
 std::basic_ostream<charT> &
 operator<< (std::basic_ostream<charT> & os, const Interval & I)
 {
@@ -79,6 +80,7 @@ operator<< (std::basic_ostream<charT> & os, const Interval & I)
     return os;
 }
 
+inline
 double angle (std::vector<Point> const& A)
 {
     size_t n = A.size() -1;
@@ -86,6 +88,7 @@ double angle (std::vector<Point> const& A)
     return (180 * a / M_PI);
 }
 
+inline
 size_t get_precision(Interval const& I)
 {
     double d = I.extent();
@@ -100,6 +103,7 @@ size_t get_precision(Interval const& I)
     return n;
 }
 
+inline
 void range_assertion(int k, int m, int n, const char* msg)
 {
     if ( k < m || k > n)
@@ -114,11 +118,92 @@ void range_assertion(int k, int m, int n, const char* msg)
 
 
 ////////////////////////////////////////////////////////////////////////////////
+//  convex hull
+
+/*
+ * return true in case the oriented polyline p0, p1, p2 is a right turn
+ */
+inline
+bool is_a_right_turn (Point const& p0, Point const& p1, Point const& p2)
+{
+    if (p1 == p2) return false;
+    Point q1 = p1 - p0;
+    Point q2 = p2 - p0;
+    if (q1 == -q2) return false;
+    return (cross (q1, q2) < 0);
+}
+
+/*
+ * return true if p < q wrt the lexicographyc order induced by the coordinates
+ */
+struct lex_less
+{
+    bool operator() (Point const& p, Point const& q)
+    {
+      return ((p[X] < q[X]) || (p[X] == q[X] && p[Y] < q[Y]));
+    }
+};
+
+/*
+ * return true if p > q wrt the lexicographyc order induced by the coordinates
+ */
+struct lex_greater
+{
+    bool operator() (Point const& p, Point const& q)
+    {
+        return ((p[X] > q[X]) || (p[X] == q[X] && p[Y] > q[Y]));
+    }
+};
+
+/*
+ * Compute the convex hull of a set of points.
+ * The implementation is based on the Andrew's scan algorithm
+ * note: in the Bezier clipping for collinear normals it seems
+ * to be more stable wrt the Graham's scan algorithm and in general
+ * a bit quikier
+ */
+void convex_hull (std::vector<Point> & P)
+{
+    size_t n = P.size();
+    if (n < 2)  return;
+    std::sort(P.begin(), P.end(), lex_less());
+    if (n < 4) return;
+    // upper hull
+    size_t u = 2;
+    for (size_t i = 2; i < n; ++i)
+    {
+        while (u > 1 && !is_a_right_turn(P[u-2], P[u-1], P[i]))
+        {
+            --u;
+        }
+        std::swap(P[u], P[i]);
+        ++u;
+    }
+    std::sort(P.begin() + u, P.end(), lex_greater());
+    std::rotate(P.begin(), P.begin() + 1, P.end());
+    // lower hull
+    size_t l = u;
+    size_t k = u - 1;
+    for (size_t i = l; i < n; ++i)
+    {
+        while (l > k && !is_a_right_turn(P[l-2], P[l-1], P[i]))
+        {
+            --l;
+        }
+        std::swap(P[l], P[i]);
+        ++l;
+    }
+    P.resize(l);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 //  numerical routines
 
 /*
  * Compute the binomial coefficient (n, k)
  */
+inline
 double binomial(unsigned int n, unsigned int k)
 {
     return choose<double>(n, k);
@@ -127,6 +212,7 @@ double binomial(unsigned int n, unsigned int k)
 /*
  * Compute the determinant of the 2x2 matrix with column the point P1, P2
  */
+inline
 double det(Point const& P1, Point const& P2)
 {
     return P1[X]*P2[Y] - P1[Y]*P2[X];
@@ -136,6 +222,7 @@ double det(Point const& P1, Point const& P2)
  * Solve the linear system [P1,P2] * P = Q
  * in case there isn't exactly one solution the routine returns false
  */
+inline
 bool solve(Point & P, Point const& P1, Point const& P2, Point const& Q)
 {
     double d = det(P1, P2);
@@ -152,10 +239,26 @@ bool solve(Point & P, Point const& P1, Point const& P2, Point const& Q)
 /*
  * Map the sub-interval I in [0,1] into the interval J and assign it to J
  */
+inline
 void map_to(Interval & J, Interval const& I)
 {
-    J.setEnds(J.valueAt(I.min()), J.valueAt(I.max()));
+    double length = J.extent();
+    J[1] = I.max() * length + J[0];
+    J[0] = I.min() * length + J[0];
 }
+
+/*
+ * The interval [1,0] is used to represent the empty interval, this routine
+ * is just an helper function for creating such an interval
+ */
+inline
+Interval make_empty_interval()
+{
+    Interval I(0);
+    I[0] = 1;
+    return I;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // bezier curve routines
@@ -164,8 +267,8 @@ void map_to(Interval & J, Interval const& I)
  * Return true if all the Bezier curve control points are near,
  * false otherwise
  */
-// Bezier.isConstant(precision)
-bool is_constant(std::vector<Point> const& A, double precision)
+inline
+bool is_constant(std::vector<Point> const& A, double precision = EPSILON)
 {
     for (unsigned int i = 1; i < A.size(); ++i)
     {
@@ -178,7 +281,7 @@ bool is_constant(std::vector<Point> const& A, double precision)
 /*
  * Compute the hodograph of the bezier curve B and return it in D
  */
-// derivative(Bezier)
+inline
 void derivative(std::vector<Point> & D, std::vector<Point> const& B)
 {
     D.clear();
@@ -201,7 +304,7 @@ void derivative(std::vector<Point> & D, std::vector<Point> const& B)
  * Compute the hodograph of the Bezier curve B rotated of 90 degree
  * and return it in D; we have N(t) orthogonal to B(t) for any t
  */
-// rot90(derivative(Bezier))
+inline
 void normal(std::vector<Point> & N, std::vector<Point> const& B)
 {
     derivative(N,B);
@@ -214,7 +317,7 @@ void normal(std::vector<Point> & N, std::vector<Point> const& B)
 /*
  *  Compute the portion of the Bezier curve "B" wrt the interval [0,t]
  */
-// portion(Bezier, 0, t)
+inline
 void left_portion(Coord t, std::vector<Point> & B)
 {
     size_t n = B.size();
@@ -230,7 +333,7 @@ void left_portion(Coord t, std::vector<Point> & B)
 /*
  *  Compute the portion of the Bezier curve "B" wrt the interval [t,1]
  */
-// portion(Bezier, t, 1)
+inline
 void right_portion(Coord t, std::vector<Point> & B)
 {
     size_t n = B.size();
@@ -246,7 +349,7 @@ void right_portion(Coord t, std::vector<Point> & B)
 /*
  *  Compute the portion of the Bezier curve "B" wrt the interval "I"
  */
-// portion(Bezier, I)
+inline
 void portion (std::vector<Point> & B , Interval const& I)
 {
     if (I.min() == 0)
@@ -268,9 +371,9 @@ void portion (std::vector<Point> & B , Interval const& I)
 struct intersection_point_tag;
 struct collinear_normal_tag;
 template <typename Tag>
-OptInterval clip(std::vector<Point> const& A,
-                 std::vector<Point> const& B,
-                 double precision);
+void clip(Interval & dom,
+          std::vector<Point> const& A,
+          std::vector<Point> const& B);
 template <typename Tag>
 void iterate(std::vector<Interval>& domsA,
              std::vector<Interval>& domsB,
@@ -289,14 +392,14 @@ void iterate(std::vector<Interval>& domsA,
  *  the line is returned in the output parameter "l" in the form of a 3 element
  *  vector : l[0] * x + l[1] * y + l[2] == 0; the line is normalized.
  */
-// Line(c[i], c[j])
+inline
 void orientation_line (std::vector<double> & l,
                        std::vector<Point> const& c,
                        size_t i, size_t j)
 {
     l[0] = c[j][Y] - c[i][Y];
     l[1] = c[i][X] - c[j][X];
-    l[2] = cross(c[j], c[i]);
+    l[2] = cross(c[i], c[j]);
     double length = std::sqrt(l[0] * l[0] + l[1] * l[1]);
     assert (length != 0);
     l[0] /= length;
@@ -308,20 +411,22 @@ void orientation_line (std::vector<double> & l,
  * Pick up an orientation line for the Bezier curve "c" and return it in
  * the output parameter "l"
  */
-Line pick_orientation_line (std::vector<Point> const &c, double precision)
+inline
+void pick_orientation_line (std::vector<double> & l,
+                            std::vector<Point> const& c)
 {
     size_t i = c.size();
-    while (--i > 0 && are_near(c[0], c[i], precision))
+    while (--i > 0 && are_near(c[0], c[i]))
     {}
- 
-    // this should never happen because when a new curve portion is created
-    // we check that it is not constant;
-    // however this requires that the precision used in the is_constant
-    // routine has to be the same used here in the are_near test
-    assert(i != 0);
-
-    Line line(c[0], c[i]);
-    return line;
+    if (i == 0)
+    {
+        // this should never happen because when a new curve portion is created
+        // we check that it is not constant;
+        // however this requires that the precision used in the is_constant
+        // routine has to be the same used here in the are_near test
+        assert(i != 0);
+    }
+    orientation_line(l, c, 0, i);
     //std::cerr << "i = " << i << std::endl;
 }
 
@@ -331,25 +436,29 @@ Line pick_orientation_line (std::vector<Point> const &c, double precision)
  *  the line is returned in the output parameter "l" in the form of a 3 element
  *  vector : l[0] * x + l[1] * y + l[2] == 0; the line is normalized.
  */
-Line orthogonal_orientation_line (std::vector<Point> const &c,
-                                  Point const &p,
-                                  double precision)
+inline
+void orthogonal_orientation_line (std::vector<double> & l,
+                                  std::vector<Point> const& c,
+                                  Point const& p)
 {
-    // this should never happen
-    assert(!is_constant(c, precision));
-
-    Line line(p, (c.back() - c.front()).cw() + p);
-    return line;
+    if (is_constant(c))
+    {
+        // this should never happen
+        assert(!is_constant(c));
+    }
+    std::vector<Point> ol(2);
+    ol[0] = p;
+    ol[1] = (c.back() - c.front()).cw() + p;
+    orientation_line(l, ol, 0, 1);
 }
 
 /*
  *  Compute the signed distance of the point "P" from the normalized line l
  */
-double signed_distance(Point const &p, Line const &l)
+inline
+double distance (Point const& P, std::vector<double> const& l)
 {
-    Coord a, b, c;
-    l.coefficients(a, b, c);
-    return a * p[X] + b * p[Y] + c;
+    return l[X] * P[X] + l[Y] * P[Y] + l[2];
 }
 
 /*
@@ -357,20 +466,27 @@ double signed_distance(Point const &p, Line const &l)
  * curve "c" from the normalized orientation line "l".
  * This bounds are returned through the output Interval parameter"bound".
  */
-Interval fat_line_bounds (std::vector<Point> const &c,
-                          Line const &l)
+inline
+void fat_line_bounds (Interval& bound,
+                      std::vector<Point> const& c,
+                      std::vector<double> const& l)
 {
-    Interval bound(0, 0);
-    for (size_t i = 0; i < c.size(); ++i) {
-        bound.expandTo(signed_distance(c[i], l));
+    bound[0] = 0;
+    bound[1] = 0;
+    double d;
+    for (size_t i = 0; i < c.size(); ++i)
+    {
+        d = distance(c[i], l);
+        if (bound[0] > d)  bound[0] = d;
+        if (bound[1] < d)  bound[1] = d;
     }
-    return bound;
 }
 
 /*
  * return the x component of the intersection point between the line
  * passing through points p1, p2 and the line Y = "y"
  */
+inline
 double intersect (Point const& p1, Point const& p2, double y)
 {
     // we are sure that p2[Y] != p1[Y] because this routine is called
@@ -385,22 +501,24 @@ double intersect (Point const& p1, Point const& p2, double y)
  * line "l" and the interval range "bound", the new parameter interval for
  * the clipped curve is returned through the output parameter "dom"
  */
-OptInterval clip_interval (std::vector<Point> const& B,
-                           Line const &l,
-                           Interval const &bound)
+void clip_interval (Interval& dom,
+                    std::vector<Point> const& B,
+                    std::vector<double> const& l,
+                    Interval const& bound)
 {
     double n = B.size() - 1;  // number of sub-intervals
     std::vector<Point> D;     // distance curve control points
     D.reserve (B.size());
+    double d;
     for (size_t i = 0; i < B.size(); ++i)
     {
-        const double d = signed_distance(B[i], l);
+        d = distance (B[i], l);
         D.push_back (Point(i/n, d));
     }
     //print(D);
 
-    ConvexHull p;
-    p.swap(D);
+    convex_hull(D);
+    std::vector<Point> & p = D;
     //print(p);
 
     bool plower, phigher;
@@ -473,11 +591,8 @@ OptInterval clip_interval (std::vector<Point> const& B,
 //                  << " : tmin = " << tmin << ", tmax = " << tmax << std::endl;
     }
 
-    if (tmin == 1 && tmax == 0) {
-        return OptInterval();
-    } else {
-        return Interval(tmin, tmax);
-    }
+    dom[0] = tmin;
+    dom[1] = tmax;
 }
 
 /*
@@ -486,20 +601,24 @@ OptInterval clip_interval (std::vector<Point> const& B,
  *  is returned through the output parameter "dom"
  */
 template <>
-OptInterval clip<intersection_point_tag> (std::vector<Point> const& A,
-                                          std::vector<Point> const& B,
-                                          double precision)
+inline
+void clip<intersection_point_tag> (Interval & dom,
+                                   std::vector<Point> const& A,
+                                   std::vector<Point> const& B)
 {
-    Line bl;
-    if (is_constant(A, precision)) {
+    std::vector<double> bl(3);
+    Interval bound;
+    if (is_constant(A))
+    {
         Point M = middle_point(A.front(), A.back());
-        bl = orthogonal_orientation_line(B, M, precision);
-    } else {
-        bl = pick_orientation_line(A, precision);
+        orthogonal_orientation_line(bl, B, M);
     }
-    bl.normalize();
-    Interval bound = fat_line_bounds(A, bl);
-    return clip_interval(B, bl, bound);
+    else
+    {
+        pick_orientation_line(bl, A);
+    }
+    fat_line_bounds(bound, A, bl);
+    clip_interval(dom, B, bl, bound);
 }
 
 
@@ -510,6 +629,7 @@ OptInterval clip<intersection_point_tag> (std::vector<Point> const& A,
  * Compute a closed focus for the Bezier curve B and return it in F
  * A focus is any curve through which all lines perpendicular to B(t) pass.
  */
+inline
 void make_focus (std::vector<Point> & F, std::vector<Point> const& B)
 {
     assert (B.size() > 2);
@@ -556,7 +676,7 @@ void distance_control_points (std::vector<Point> & D,
                               std::vector<Point> const& F)
 {
     assert (B.size() > 1);
-    assert (!F.empty());
+    assert (F.size() > 0);
     const size_t n = B.size() - 1;
     const size_t m = F.size() - 1;
     const size_t r = 2 * n - 1;
@@ -579,8 +699,8 @@ void distance_control_points (std::vector<Point> & D,
         for (size_t j = 0; j < F.size(); ++j)
             dBF(i,j) = dot (dB[i], F[j]);
 
-    size_t l;
-    double bc;
+    size_t k0, kn, l;
+    double bc, bri;
     Point dij;
     std::vector<double> d(F.size());
     for (size_t i = 0; i <= r; ++i)
@@ -589,9 +709,9 @@ void distance_control_points (std::vector<Point> & D,
         {
             d[j] = 0;
         }
-        const size_t k0 = std::max(i, n) - n;
-        const size_t kn = std::min(i, n-1);
-        const double bri = n / binomial(r,i);
+        k0 = std::max(i, n) - n;
+        kn = std::min(i, n-1);
+        bri = n / binomial(r,i);
         for (size_t k = k0; k <= kn; ++k)
         {
             //if (k > i || (i-k) > n) continue;
@@ -625,8 +745,9 @@ void distance_control_points (std::vector<Point> & D,
  * Clip the Bezier curve "B" wrt the focus "F"; the new parameter interval for
  * the clipped curve is returned through the output parameter "dom"
  */
-OptInterval clip_interval (std::vector<Point> const& B,
-                           std::vector<Point> const& F)
+void clip_interval (Interval& dom,
+                    std::vector<Point> const& B,
+                    std::vector<Point> const& F)
 {
     std::vector<Point> D;     // distance curve control points
     distance_control_points(D, B, F);
@@ -634,8 +755,8 @@ OptInterval clip_interval (std::vector<Point> const& B,
 //    ConvexHull chD(D);
 //    std::vector<Point>& p = chD.boundary; // convex hull vertices
 
-    ConvexHull p;
-    p.swap(D);
+    convex_hull(D);
+    std::vector<Point> & p = D;
     //print(p, "CH(D)");
 
     bool plower, clower;
@@ -684,11 +805,8 @@ OptInterval clip_interval (std::vector<Point> const& B,
 //        std::cerr << "0 : lower " << p[0]
 //                  << " : tmin = " << tmin << ", tmax = " << tmax << std::endl;
     }
-    if (tmin == 1 && tmax == 0) {
-        return OptInterval();
-    } else {
-        return Interval(tmin, tmax);
-    }
+    dom[0] = tmin;
+    dom[1] = tmax;
 }
 
 /*
@@ -697,13 +815,14 @@ OptInterval clip_interval (std::vector<Point> const& B,
  *  for the clipped curve is returned through the output parameter "dom"
  */
 template <>
-OptInterval clip<collinear_normal_tag> (std::vector<Point> const& A,
-                                        std::vector<Point> const& B,
-                                        double /*precision*/)
+inline
+void clip<collinear_normal_tag> (Interval & dom,
+                                 std::vector<Point> const& A,
+                                 std::vector<Point> const& B)
 {
     std::vector<Point> F;
     make_focus(F, A);
-    return clip_interval(B, F);
+    clip_interval(dom, B, F);
 }
 
 
@@ -711,9 +830,9 @@ OptInterval clip<collinear_normal_tag> (std::vector<Point> const& A,
 const double MAX_PRECISION = 1e-8;
 const double MIN_CLIPPED_SIZE_THRESHOLD = 0.8;
 const Interval UNIT_INTERVAL(0,1);
-const OptInterval EMPTY_INTERVAL;
+const Interval EMPTY_INTERVAL = make_empty_interval();
 const Interval H1_INTERVAL(0, 0.5);
-const Interval H2_INTERVAL(nextafter(0.5, 1.0), 1.0);
+const Interval H2_INTERVAL(0.5 + MAX_PRECISION, 1.0);
 
 /*
  * iterate
@@ -767,9 +886,9 @@ void iterate<intersection_point_tag> (std::vector<Interval>& domsA,
     Interval* dom1 = &dompA;
     Interval* dom2 = &dompB;
 
-    OptInterval dom;
+    Interval dom;
 
-    if ( is_constant(A, precision) && is_constant(B, precision) ){
+    if ( is_constant(A) && is_constant(B) ){
         Point M1 = middle_point(C1->front(), C1->back());
         Point M2 = middle_point(C2->front(), C2->back());
         if (are_near(M1,M2)){
@@ -786,9 +905,10 @@ void iterate<intersection_point_tag> (std::vector<Interval>& domsA,
 #if VERBOSE
         std::cerr << "iter: " << iter << std::endl;
 #endif
-        dom = clip<intersection_point_tag>(*C1, *C2, precision);
+        clip<intersection_point_tag>(dom, *C1, *C2);
 
-        if (dom.empty())
+        // [1,0] is utilized to represent an empty interval
+        if (dom == EMPTY_INTERVAL)
         {
 #if VERBOSE
             std::cerr << "dom: empty" << std::endl;
@@ -799,12 +919,15 @@ void iterate<intersection_point_tag> (std::vector<Interval>& domsA,
         std::cerr << "dom : " << dom << std::endl;
 #endif
         // all other cases where dom[0] > dom[1] are invalid
-        assert(dom->min() <= dom->max());
+        if (dom.min() >  dom.max())
+        {
+            assert(dom.min() <  dom.max());
+        }
 
-        map_to(*dom2, *dom);
+        map_to(*dom2, dom);
 
-        portion(*C2, *dom);
-        if (is_constant(*C2, precision) && is_constant(*C1, precision))
+        portion(*C2, dom);
+        if (is_constant(*C2) && is_constant(*C1))
         {
             Point M1 = middle_point(C1->front(), C1->back());
             Point M2 = middle_point(C2->front(), C2->back());
@@ -824,10 +947,10 @@ void iterate<intersection_point_tag> (std::vector<Interval>& domsA,
 
         // if we have clipped less than 20% than we need to subdive the curve
         // with the largest domain into two sub-curves
-        if (dom->extent() > MIN_CLIPPED_SIZE_THRESHOLD)
+        if ( dom.extent() > MIN_CLIPPED_SIZE_THRESHOLD)
         {
 #if VERBOSE
-            std::cerr << "clipped less than 20% : " << dom->extent() << std::endl;
+            std::cerr << "clipped less than 20% : " << dom.extent() << std::endl;
             std::cerr << "angle(pA) : " << angle(pA) << std::endl;
             std::cerr << "angle(pB) : " << angle(pB) << std::endl;
 #endif
@@ -862,8 +985,8 @@ void iterate<intersection_point_tag> (std::vector<Interval>& domsA,
             return;
         }
 
-        swap(C1, C2);
-        swap(dom1, dom2);
+        std::swap(C1, C2);
+        std::swap(dom1, dom2);
 #if VERBOSE
         std::cerr << "dom(pA) : " << dompA << std::endl;
         std::cerr << "dom(pB) : " << dompB << std::endl;
@@ -926,7 +1049,7 @@ void iterate<collinear_normal_tag> (std::vector<Interval>& domsA,
     Interval* dom1 = &dompA;
     Interval* dom2 = &dompB;
 
-    OptInterval dom;
+    Interval dom;
 
     size_t iter = 0;
     while (++iter < 100
@@ -935,9 +1058,11 @@ void iterate<collinear_normal_tag> (std::vector<Interval>& domsA,
 #if VERBOSE
         std::cerr << "iter: " << iter << std::endl;
 #endif
-        dom = clip<collinear_normal_tag>(*C1, *C2, precision);
+        clip<collinear_normal_tag>(dom, *C1, *C2);
 
-        if (dom.empty()) {
+        // [1,0] is utilized to represent an empty interval
+        if (dom == EMPTY_INTERVAL)
+        {
 #if VERBOSE
             std::cerr << "dom: empty" << std::endl;
 #endif
@@ -946,9 +1071,13 @@ void iterate<collinear_normal_tag> (std::vector<Interval>& domsA,
 #if VERBOSE
         std::cerr << "dom : " << dom << std::endl;
 #endif
-        assert(dom->min() <= dom->max());
+        // all other cases where dom[0] > dom[1] are invalid
+        if (dom.min() >  dom.max())
+        {
+            assert(dom.min() <  dom.max());
+        }
 
-        map_to(*dom2, *dom);
+        map_to(*dom2, dom);
 
         // it's better to stop before losing computational precision
         if (iter > 1 && (dom2->extent() <= MAX_PRECISION))
@@ -959,8 +1088,8 @@ void iterate<collinear_normal_tag> (std::vector<Interval>& domsA,
             break;
         }
 
-        portion(*C2, *dom);
-        if (iter > 1 && is_constant(*C2, precision))
+        portion(*C2, dom);
+        if (iter > 1 && is_constant(*C2))
         {
 #if VERBOSE
             std::cerr << "new curve portion pC1 is constant" << std::endl;
@@ -971,10 +1100,10 @@ void iterate<collinear_normal_tag> (std::vector<Interval>& domsA,
 
         // if we have clipped less than 20% than we need to subdive the curve
         // with the largest domain into two sub-curves
-        if ( dom->extent() > MIN_CLIPPED_SIZE_THRESHOLD)
+        if ( dom.extent() > MIN_CLIPPED_SIZE_THRESHOLD)
         {
 #if VERBOSE
-            std::cerr << "clipped less than 20% : " << dom->extent() << std::endl;
+            std::cerr << "clipped less than 20% : " << dom.extent() << std::endl;
             std::cerr << "angle(pA) : " << angle(pA) << std::endl;
             std::cerr << "angle(pB) : " << angle(pB) << std::endl;
 #endif
@@ -988,7 +1117,7 @@ void iterate<collinear_normal_tag> (std::vector<Interval>& domsA,
                 }
                 pC1 = pC2 = pA;
                 portion(pC1, H1_INTERVAL);
-                if (false && is_constant(pC1, precision))
+                if (false && is_constant(pC1))
                 {
 #if VERBOSE
                     std::cerr << "new curve portion pC1 is constant" << std::endl;
@@ -996,7 +1125,7 @@ void iterate<collinear_normal_tag> (std::vector<Interval>& domsA,
                     break;
                 }
                 portion(pC2, H2_INTERVAL);
-                if (is_constant(pC2, precision))
+                if (is_constant(pC2))
                 {
 #if VERBOSE
                     std::cerr << "new curve portion pC2 is constant" << std::endl;
@@ -1019,7 +1148,7 @@ void iterate<collinear_normal_tag> (std::vector<Interval>& domsA,
                 }
                 pC1 = pC2 = pB;
                 portion(pC1, H1_INTERVAL);
-                if (is_constant(pC1, precision))
+                if (is_constant(pC1))
                 {
 #if VERBOSE
                     std::cerr << "new curve portion pC1 is constant" << std::endl;
@@ -1027,7 +1156,7 @@ void iterate<collinear_normal_tag> (std::vector<Interval>& domsA,
                     break;
                 }
                 portion(pC2, H2_INTERVAL);
-                if (is_constant(pC2, precision))
+                if (is_constant(pC2))
                 {
 #if VERBOSE
                     std::cerr << "new curve portion pC2 is constant" << std::endl;
@@ -1045,8 +1174,8 @@ void iterate<collinear_normal_tag> (std::vector<Interval>& domsA,
             return;
         }
 
-        swap(C1, C2);
-        swap(dom1, dom2);
+        std::swap(C1, C2);
+        std::swap(dom1, dom2);
 #if VERBOSE
         std::cerr << "dom(pA) : " << dompA << std::endl;
         std::cerr << "dom(pB) : " << dompB << std::endl;
@@ -1160,4 +1289,4 @@ void find_intersections_bezier_clipping (std::vector< std::pair<double, double> 
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

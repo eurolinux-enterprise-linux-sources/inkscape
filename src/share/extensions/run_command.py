@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 import os
 import sys
 import tempfile
@@ -61,11 +62,8 @@ def run(command_format, prog_name):
             except ImportError:
                 # shouldn't happen...
                 msg = "Neither subprocess.Popen nor popen2.Popen3 is available"
-        if msg is None:
-            if rc:
-                msg = "%s failed:\n%s\n%s\n" % (prog_name, out, err)
-            elif err:
-                sys.stderr.write("%s executed but logged the following error:\n%s\n%s\n" % (prog_name, out, err))
+        if rc and msg is None:
+            msg = "%s failed:\n%s\n%s\n" % (prog_name, out, err)
     except Exception, inst:
         msg = "Error attempting to run %s: %s" % (prog_name, str(inst))
 
@@ -96,4 +94,4 @@ def run(command_format, prog_name):
         sys.exit(0)
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

@@ -1,7 +1,9 @@
-#ifndef SEEN_EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H
-#define SEEN_EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H
+#ifndef __EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H__
+#define __EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H__
 
-/*
+ /** \file
+ * SVG representation creator using libpoppler.
+ *
  * Authors:
  *   miklos erdelyi
  *
@@ -19,22 +21,22 @@
 class SPDocument;
 namespace Inkscape {
     namespace XML {
-        struct Document;
+        class Document;
         class Node;
     }
 }
 
 #include <2geom/point.h>
-#include <2geom/affine.h>
+#include <2geom/matrix.h>
 #include <glibmm/ustring.h>
 
 #include "CharTypes.h"
 class GooString;
 class Function;
-class GfxState;
-struct GfxColor;
+struct GfxState;
+class GfxColor;
 class GfxColorSpace;
-struct GfxRGB;
+class GfxRGB;
 class GfxPath;
 class GfxPattern;
 class GfxTilingPattern;
@@ -56,7 +58,8 @@ namespace Internal {
 struct SvgTransparencyGroup;
 
 /**
- * Holds information about the current softmask and group depth for use of libpoppler.
+ * \struct SvgGraphicsState
+ * Holds information about the current softmask and group depth.
  * Could be later used to store other graphics state parameters so that we could
  * emit only the differences in style settings from the parent state.
  */
@@ -66,6 +69,7 @@ struct SvgGraphicsState {
 };
 
 /**
+ * \struct SvgGlyph
  * Holds information about glyphs added by PdfParser which haven't been added
  * to the document yet.
  */
@@ -85,7 +89,10 @@ struct SvgGlyph {
 };
 
 /**
- * Builds the inner SVG representation using libpoppler from the calls of PdfParser.
+ * \class SvgBuilder
+ *
+ * Builds the inner SVG representation from the calls of PdfParser
+ *
  */
 class SvgBuilder {
 public:
@@ -112,17 +119,17 @@ public:
 
     // Image handling
     void addImage(GfxState *state, Stream *str, int width, int height,
-                  GfxImageColorMap *color_map, bool interpolate, int *mask_colors);
+                  GfxImageColorMap *color_map, int *mask_colors);
     void addImageMask(GfxState *state, Stream *str, int width, int height,
-                      bool invert, bool interpolate);
+                      bool invert);
     void addMaskedImage(GfxState *state, Stream *str, int width, int height,
-                        GfxImageColorMap *color_map, bool interpolate,
+                        GfxImageColorMap *color_map,
                         Stream *mask_str, int mask_width, int mask_height,
-                        bool invert_mask, bool mask_interpolate);
+                        bool invert_mask);
     void addSoftMaskedImage(GfxState *state, Stream *str, int width, int height,
-                            GfxImageColorMap *color_map, bool interpolate,
+                            GfxImageColorMap *color_map,
                             Stream *mask_str, int mask_width, int mask_height,
-                            GfxImageColorMap *mask_color_map, bool mask_interpolate);
+                            GfxImageColorMap *mask_color_map);
 
     // Transparency group and soft mask handling
     void pushTransparencyGroup(GfxState *state, double *bbox,
@@ -180,9 +187,8 @@ private:
                                 bool is_stroke=false);
     // Image/mask creation
     Inkscape::XML::Node *_createImage(Stream *str, int width, int height,
-                                      GfxImageColorMap *color_map, bool interpolate,
-                                      int *mask_colors, bool alpha_only=false,
-                                      bool invert_alpha=false);
+                                      GfxImageColorMap *color_map, int *mask_colors,
+                                      bool alpha_only=false, bool invert_alpha=false);
     Inkscape::XML::Node *_createMask(double width, double height);
     // Style setting
     SPCSSAttr *_setStyle(GfxState *state, bool fill, bool stroke, bool even_odd=false);
@@ -206,7 +212,7 @@ private:
     char *_font_specification;
     double _font_scaling;
     bool _need_font_update;
-    Geom::Affine _text_matrix;
+    Geom::Matrix _text_matrix;
     Geom::Point _text_position;
     std::vector<SvgGlyph> _glyphs;   // Added characters
     bool _in_text_object;   // Whether we are inside a text object
@@ -222,20 +228,15 @@ private:
     Inkscape::XML::Node *_root;  // Root node from the point of view of this SvgBuilder
     Inkscape::XML::Node *_container; // Current container (group/pattern/mask)
     Inkscape::XML::Node *_preferences;  // Preferences container node
-    double _width;       // Document size in px
-    double _height;       // Document size in px
-    double _ttm[6]; ///< temporary transform matrix
-    bool _ttm_is_set;
+    double _width, _height;       // Document size in px
 };
 
 
-} // namespace Internal
-} // namespace Extension
-} // namespace Inkscape
+} } } /* namespace Inkscape, Extension, Internal */
 
-#endif // HAVE_POPPLER
+#endif /* HAVE_POPPLER */
 
-#endif // SEEN_EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H
+#endif /* __EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H__ */
 
 /*
   Local Variables:

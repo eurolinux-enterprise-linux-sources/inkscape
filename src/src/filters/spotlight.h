@@ -17,51 +17,53 @@
 
 #include "sp-object.h"
 
-#define SP_FESPOTLIGHT(obj) (dynamic_cast<SPFeSpotLight*>((SPObject*)obj))
-#define SP_IS_FESPOTLIGHT(obj) (dynamic_cast<const SPFeSpotLight*>((SPObject*)obj) != NULL)
+#define SP_TYPE_FESPOTLIGHT (sp_fespotlight_get_type())
+#define SP_FESPOTLIGHT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), SP_TYPE_FESPOTLIGHT, SPFeSpotLight))
+#define SP_FESPOTLIGHT_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), SP_TYPE_FESPOTLIGHT, SPFeSpotLightClass))
+#define SP_IS_FESPOTLIGHT(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), SP_TYPE_FESPOTLIGHT))
+#define SP_IS_FESPOTLIGHT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), SP_TYPE_FESPOTLIGHT))
 
-class SPFeSpotLight : public SPObject {
-public:
-	SPFeSpotLight();
-	virtual ~SPFeSpotLight();
+/* Distant light class */
+
+
+class SPFeSpotLight;
+class SPFeSpotLightClass;
+
+struct SPFeSpotLight : public SPObject {
 
     /** x coordinate of the light source */
-    float x; 
-    unsigned int x_set : 1;
+    gfloat x; 
+    guint x_set : 1;
     /** y coordinate of the light source */
-    float y; 
-    unsigned int y_set : 1;
+    gfloat y; 
+    guint y_set : 1;
     /** z coordinate of the light source */
-    float z; 
-    unsigned int z_set : 1;
+    gfloat z; 
+    guint z_set : 1;
     /** x coordinate of the point the source is pointing at */
-    float pointsAtX;
-    unsigned int pointsAtX_set : 1;
+    gfloat pointsAtX;
+    guint pointsAtX_set : 1;
     /** y coordinate of the point the source is pointing at */
-    float pointsAtY;
-    unsigned int pointsAtY_set : 1;
+    gfloat pointsAtY;
+    guint pointsAtY_set : 1;
     /** z coordinate of the point the source is pointing at */
-    float pointsAtZ;
-    unsigned int pointsAtZ_set : 1;
+    gfloat pointsAtZ;
+    guint pointsAtZ_set : 1;
     /** specular exponent (focus of the light) */
-    float specularExponent;
-    unsigned int specularExponent_set : 1;
+    gfloat specularExponent;
+    guint specularExponent_set : 1;
     /** limiting cone angle */
-    float limitingConeAngle;
-    unsigned int limitingConeAngle_set : 1;
+    gfloat limitingConeAngle;
+    guint limitingConeAngle_set : 1;
     //other fields
-
-protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-
-	virtual void set(unsigned int key, char const* value);
-
-	virtual void update(SPCtx* ctx, unsigned int flags);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
 };
 
+struct SPFeSpotLightClass {
+    SPObjectClass parent_class;
+};
+
+GType
+sp_fespotlight_get_type();
 #endif /* !SP_FESPOTLIGHT_H_SEEN */
 
 /*
@@ -73,4 +75,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

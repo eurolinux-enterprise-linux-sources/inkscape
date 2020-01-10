@@ -1,14 +1,16 @@
-/* Copyright (C) 2001-2015 Peter Selinger.
+/* Copyright (C) 2001-2007 Peter Selinger.
    This file is part of Potrace. It is free software and it is covered
    by the GNU General Public License. See the file COPYING for details. */
 
 #ifndef BITMAP_H
 #define BITMAP_H
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <string.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <stddef.h>
 
 /* The bitmap type is defined in potracelib.h */
 #include "potracelib.h"
@@ -29,7 +31,7 @@
 /* macros for accessing pixel at index (x,y). U* macros omit the
    bounds check. */
 
-#define bm_scanline(bm, y) ((bm)->map + (ptrdiff_t)(y)*(ptrdiff_t)(bm)->dy)
+#define bm_scanline(bm, y) ((bm)->map + (y)*(bm)->dy)
 #define bm_index(bm, x, y) (&bm_scanline(bm, y)[(x)/BM_WORDBITS])
 #define bm_mask(x) (BM_HIBIT >> ((x) & (BM_WORDBITS-1)))
 #define bm_range(x, a) ((int)(x) >= 0 && (int)(x) < (a))
@@ -53,18 +55,10 @@ static inline void bm_free(potrace_bitmap_t *bm) {
   free(bm);
 }
 
-/* return new un-initialized bitmap. NULL with errno on error.
-   Assumes w, h >= 0. */
+/* return new un-initialized bitmap. NULL with errno on error */
 static inline potrace_bitmap_t *bm_new(int w, int h) {
   potrace_bitmap_t *bm;
-  int dy = w == 0 ? 0 : (w - 1) / BM_WORDBITS + 1;
-  ptrdiff_t size = (ptrdiff_t)dy * (ptrdiff_t)h * (ptrdiff_t)BM_WORDSIZE;
-
-  /* check for overflow error */
-  if (size < 0 || (h != 0 && dy != 0 && size / h / dy != BM_WORDSIZE)) {
-    errno = ENOMEM;
-    return NULL;
-  }
+  int dy = (w + BM_WORDBITS - 1) / BM_WORDBITS;
 
   bm = (potrace_bitmap_t *) malloc(sizeof(potrace_bitmap_t));
   if (!bm) {
@@ -73,7 +67,7 @@ static inline potrace_bitmap_t *bm_new(int w, int h) {
   bm->w = w;
   bm->h = h;
   bm->dy = dy;
-  bm->map = (potrace_word *) malloc(size);
+  bm->map = (potrace_word *) malloc(dy * h * BM_WORDSIZE);
   if (!bm->map) {
     free(bm);
     return NULL;
@@ -83,29 +77,23 @@ static inline potrace_bitmap_t *bm_new(int w, int h) {
 
 /* clear the given bitmap. Set all bits to c. */
 static inline void bm_clear(potrace_bitmap_t *bm, int c) {
-  /* Note: if the bitmap was created with bm_new, then it is
-     guaranteed that size will fit into the ptrdiff_t type. */
-  ptrdiff_t size = (ptrdiff_t)bm->dy * (ptrdiff_t)bm->h * (ptrdiff_t)BM_WORDSIZE;
-  memset(bm->map, c ? -1 : 0, size);
+  memset(bm->map, c ? -1 : 0, bm->dy * bm->h * BM_WORDSIZE);
 }
 
 /* duplicate the given bitmap. Return NULL on error with errno set. */
 static inline potrace_bitmap_t *bm_dup(const potrace_bitmap_t *bm) {
   potrace_bitmap_t *bm1 = bm_new(bm->w, bm->h);
-  ptrdiff_t size = (ptrdiff_t)bm->dy * (ptrdiff_t)bm->h * (ptrdiff_t)BM_WORDSIZE;
   if (!bm1) {
     return NULL;
   }
-  memcpy(bm1->map, bm->map, size);
+  memcpy(bm1->map, bm->map, bm->dy * bm->h * BM_WORDSIZE);
   return bm1;
 }
 
 /* invert the given bitmap. */
 static inline void bm_invert(potrace_bitmap_t *bm) {
-  ptrdiff_t i;
-  ptrdiff_t size = (ptrdiff_t)bm->dy * (ptrdiff_t)bm->h;
-
-  for (i = 0; i < size; i++) {
+  int i;
+  for (i = 0; i < bm->dy * bm->h; i++) {
     bm->map[i] ^= BM_ALLBITS;
   }
 }

@@ -11,8 +11,9 @@
 #ifndef SEEN_DIALOGS_UNCLUMP_H
 #define SEEN_DIALOGS_UNCLUMP_H
 
+#include <glib.h>
 
-void unclump(std::vector<SPItem*> &items);
+void unclump(GSList *items);
 
 #endif /* !UNCLUMP_H_SEEN */
 
@@ -25,4 +26,4 @@ void unclump(std::vector<SPItem*> &items);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

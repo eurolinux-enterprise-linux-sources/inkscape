@@ -1,11 +1,12 @@
-/** @file
- * @brief PathVector - a sequence of subpaths
- *//*
+/*
+ * PathVector - std::vector containing Geom::Path
+ * This file provides a set of operations that can be performed on PathVector,
+ * e.g. an affine transform.
+ *
  * Authors:
- *   Johan Engelen <goejendaagh@zonnet.nl>
- *   Krzysztof Kosiński <tweenk.pl@gmail.com>
+ *  Johan Engelen <goejendaagh@zonnet.nl>
  * 
- * Copyright 2008-2014 Authors
+ * Copyright 2008  authors
  *
  * This library is free software; you can redistribute it and/or
  * modify it either under the terms of the GNU Lesser General Public
@@ -31,296 +32,113 @@
  * the specific language governing rights and limitations.
  */
 
-#include <2geom/affine.h>
-#include <2geom/path.h>
+#ifndef SEEN_GEOM_PATHVECTOR_CPP
+#define SEEN_GEOM_PATHVECTOR_CPP
+
 #include <2geom/pathvector.h>
-#include <2geom/svg-path-writer.h>
-#include <2geom/sweeper.h>
+
+#include <2geom/path.h>
+#include <2geom/matrix.h>
 
 namespace Geom {
 
-//PathVector &PathVector::operator+=(PathVector const &other);
+// TODO: see which of these functions can be inlined for optimization
 
-PathVector::size_type PathVector::curveCount() const
+/**
+ * Reverses all Paths and the order of paths in the vector as well
+ **/
+PathVector reverse_paths_and_order (PathVector const & path_in)
 {
-    size_type n = 0;
-    for (const_iterator it = begin(); it != end(); ++it) {
-        n += it->size_default();
+    PathVector path_out;
+    for (PathVector::const_reverse_iterator it = path_in.rbegin(); it != path_in.rend(); ++it) {
+        path_out.push_back( (*it).reverse() );
     }
-    return n;
-}
-
-void PathVector::reverse(bool reverse_paths)
-{
-    if (reverse_paths) {
-        std::reverse(begin(), end());
-    }
-    for (iterator i = begin(); i != end(); ++i) {
-        *i = i->reversed();
-    }
+    return path_out;
 }
 
-PathVector PathVector::reversed(bool reverse_paths) const
+OptRect bounds_fast( PathVector const& pv )
 {
-    PathVector ret;
-    for (const_iterator i = begin(); i != end(); ++i) {
-        ret.push_back(i->reversed());
-    }
-    if (reverse_paths) {
-        std::reverse(ret.begin(), ret.end());
-    }
-    return ret;
-}
-
-Path &PathVector::pathAt(Coord t, Coord *rest)
-{
-    return const_cast<Path &>(static_cast<PathVector const*>(this)->pathAt(t, rest));
-}
-Path const &PathVector::pathAt(Coord t, Coord *rest) const
-{
-    PathVectorTime pos = _factorTime(t);
-    if (rest) {
-        *rest = Coord(pos.curve_index) + pos.t;
-    }
-    return at(pos.path_index);
-}
-Curve const &PathVector::curveAt(Coord t, Coord *rest) const
-{
-    PathVectorTime pos = _factorTime(t);
-    if (rest) {
-        *rest = pos.t;
-    }
-    return at(pos.path_index).at(pos.curve_index);
-}
-Coord PathVector::valueAt(Coord t, Dim2 d) const
-{
-    PathVectorTime pos = _factorTime(t);
-    return at(pos.path_index).at(pos.curve_index).valueAt(pos.t, d);
-}
-Point PathVector::pointAt(Coord t) const
-{
-    PathVectorTime pos = _factorTime(t);
-    return at(pos.path_index).at(pos.curve_index).pointAt(pos.t);
-}
-
-OptRect PathVector::boundsFast() const
-{
+    typedef PathVector::const_iterator const_iterator;
+    
     OptRect bound;
-    if (empty()) return bound;
-
-    bound = front().boundsFast();
-    for (const_iterator it = ++begin(); it != end(); ++it) {
+    if (pv.empty()) return bound;
+    
+    bound = (pv.begin())->boundsFast();
+    for (const_iterator it = ++(pv.begin()); it != pv.end(); ++it)
+    {
         bound.unionWith(it->boundsFast());
     }
     return bound;
 }
 
-OptRect PathVector::boundsExact() const
+OptRect bounds_exact( PathVector const& pv )
 {
+    typedef PathVector::const_iterator const_iterator;
+    
     OptRect bound;
-    if (empty()) return bound;
-
-    bound = front().boundsExact();
-    for (const_iterator it = ++begin(); it != end(); ++it) {
+    if (pv.empty()) return bound;
+    
+    bound = (pv.begin())->boundsExact();
+    for (const_iterator it = ++(pv.begin()); it != pv.end(); ++it)
+    {
         bound.unionWith(it->boundsExact());
     }
     return bound;
 }
 
-void PathVector::snapEnds(Coord precision)
+/* Note: undefined for empty pathvectors or pathvectors with empty paths.
+ * */
+boost::optional<PathVectorPosition> nearestPoint(PathVector const & path_in, Point const& _point, double *distance_squared)
 {
-    for (std::size_t i = 0; i < size(); ++i) {
-        (*this)[i].snapEnds(precision);
-    }
-}
+    boost::optional<PathVectorPosition> retval;
 
-// sweepline optimization
-// this is very similar to CurveIntersectionSweepSet in path.cpp
-// should probably be merged
-class PathIntersectionSweepSet {
-public:
-    struct PathRecord {
-        boost::intrusive::list_member_hook<> _hook;
-        Path const *path;
-        std::size_t index;
-        unsigned which;
-
-        PathRecord(Path const &p, std::size_t i, unsigned w)
-            : path(&p)
-            , index(i)
-            , which(w)
-        {}
-    };
-
-    typedef std::vector<PathRecord>::iterator ItemIterator;
-
-    PathIntersectionSweepSet(std::vector<PVIntersection> &result,
-                             PathVector const &a, PathVector const &b, Coord precision)
-        : _result(result)
-        , _precision(precision)
-    {
-        _records.reserve(a.size() + b.size());
-        for (std::size_t i = 0; i < a.size(); ++i) {
-            _records.push_back(PathRecord(a[i], i, 0));
+    double mindsq = infinity();
+    unsigned int i = 0;
+    for (Geom::PathVector::const_iterator pit = path_in.begin(); pit != path_in.end(); ++pit) {
+        double dsq;
+        double t = pit->nearestPoint(_point, &dsq);
+        //std::cout << t << "," << dsq << std::endl;
+        if (dsq < mindsq) {
+            mindsq = dsq;
+            retval = PathVectorPosition(i, t);
         }
-        for (std::size_t i = 0; i < b.size(); ++i) {
-            _records.push_back(PathRecord(b[i], i, 1));
-        }
+
+        ++i;
     }
 
-    std::vector<PathRecord> &items() { return _records; }
-
-    Interval itemBounds(ItemIterator ii) {
-        OptRect r = ii->path->boundsFast();
-        return (*r)[X];
-    }
-
-    void addActiveItem(ItemIterator ii) {
-        unsigned w = ii->which;
-        unsigned ow = (ii->which + 1) % 2;
-
-        for (ActivePathList::iterator i = _active[ow].begin(); i != _active[ow].end(); ++i) {
-            if (!ii->path->boundsFast().intersects(i->path->boundsFast())) continue;
-            std::vector<PathIntersection> px = ii->path->intersect(*i->path, _precision);
-            for (std::size_t k = 0; k < px.size(); ++k) {
-                PathVectorTime tw(ii->index, px[k].first), tow(i->index, px[k].second);
-                _result.push_back(PVIntersection(
-                    w == 0 ? tw : tow,
-                    w == 0 ? tow : tw,
-                    px[k].point()));
-            }
-        }
-        _active[w].push_back(*ii);
-    }
-
-    void removeActiveItem(ItemIterator ii) {
-        ActivePathList &apl = _active[ii->which];
-        apl.erase(apl.iterator_to(*ii));
-    }
-
-private:
-    typedef boost::intrusive::list
-        < PathRecord
-        , boost::intrusive::member_hook
-            < PathRecord
-            , boost::intrusive::list_member_hook<>
-            , &PathRecord::_hook
-            >
-        > ActivePathList;
-
-    std::vector<PVIntersection> &_result;
-    std::vector<PathRecord> _records;
-    ActivePathList _active[2];
-    Coord _precision;
-};
-
-std::vector<PVIntersection> PathVector::intersect(PathVector const &other, Coord precision) const
-{
-    std::vector<PVIntersection> result;
-
-    PathIntersectionSweepSet pisset(result, *this, other, precision);
-    Sweeper<PathIntersectionSweepSet> sweeper(pisset);
-    sweeper.process();
-
-    std::sort(result.begin(), result.end());
-
-    return result;
-}
-
-int PathVector::winding(Point const &p) const
-{
-    int wind = 0;
-    for (const_iterator i = begin(); i != end(); ++i) {
-        if (!i->boundsFast().contains(p)) continue;
-        wind += i->winding(p);
-    }
-    return wind;
-}
-
-boost::optional<PathVectorTime> PathVector::nearestTime(Point const &p, Coord *dist) const
-{
-    boost::optional<PathVectorTime> retval;
-
-    Coord mindist = infinity();
-    for (size_type i = 0; i < size(); ++i) {
-        Coord d;
-        PathTime pos = (*this)[i].nearestTime(p, &d);
-        if (d < mindist) {
-            mindist = d;
-            retval = PathVectorTime(i, pos.curve_index, pos.t);
-        }
-    }
-
-    if (dist) {
-        *dist = mindist;
+    if (distance_squared) {
+        *distance_squared = mindsq;
     }
     return retval;
 }
 
-std::vector<PathVectorTime> PathVector::allNearestTimes(Point const &p, Coord *dist) const
+std::vector<PathVectorPosition> allNearestPoints(PathVector const & path_in, Point const& _point, double *distance_squared)
 {
-    std::vector<PathVectorTime> retval;
+    std::vector<PathVectorPosition> retval;
 
-    Coord mindist = infinity();
-    for (size_type i = 0; i < size(); ++i) {
-        Coord d;
-        PathTime pos = (*this)[i].nearestTime(p, &d);
-        if (d < mindist) {
-            mindist = d;
-            retval.clear();
+    double mindsq = infinity();
+    unsigned int i = 0;
+    for (Geom::PathVector::const_iterator pit = path_in.begin(); pit != path_in.end(); ++pit) {
+        double dsq;
+        double t = pit->nearestPoint(_point, &dsq);
+        if (dsq < mindsq) {
+            mindsq = dsq;
+            retval.push_back(PathVectorPosition(i, t));
         }
-        if (d <= mindist) {
-            retval.push_back(PathVectorTime(i, pos.curve_index, pos.t));
-        }
+
+        ++i;
     }
 
-    if (dist) {
-        *dist = mindist;
+    if (distance_squared) {
+        *distance_squared = mindsq;
     }
     return retval;
-}
 
-std::vector<Point> PathVector::nodes() const
-{
-    std::vector<Point> result;
-    for (size_type i = 0; i < size(); ++i) {
-        size_type path_size = (*this)[i].size_closed();
-        for (size_type j = 0; j < path_size; ++j) {
-            result.push_back((*this)[i][j].initialPoint());
-        }
-    }
-    return result;
-}
-
-PathVectorTime PathVector::_factorTime(Coord t) const
-{
-    PathVectorTime ret;
-    Coord rest = 0;
-    ret.t = modf(t, &rest);
-    ret.curve_index = rest;
-    for (; ret.path_index < size(); ++ret.path_index) {
-        unsigned s = _data.at(ret.path_index).size_default();
-        if (s > ret.curve_index) break;
-        // special case for the last point
-        if (s == ret.curve_index && ret.path_index + 1 == size()) {
-            --ret.curve_index;
-            ret.t = 1;
-            break;
-        }
-        ret.curve_index -= s;
-    }
-    return ret;
-}
-
-std::ostream &operator<<(std::ostream &out, PathVector const &pv)
-{
-    SVGPathWriter wr;
-    wr.feed(pv);
-    out << wr.str();
-    return out;
 }
 
 } // namespace Geom
+
+#endif // SEEN_GEOM_PATHVECTOR_CPP
 
 /*
   Local Variables:
@@ -331,4 +149,4 @@ std::ostream &operator<<(std::ostream &out, PathVector const &pv)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -1,29 +1,22 @@
-#ifndef SEEN_SP_ITEM_FLOWTEXT_H
-#define SEEN_SP_ITEM_FLOWTEXT_H
+#ifndef __SP_ITEM_FLOWTEXT_H__
+#define __SP_ITEM_FLOWTEXT_H__
 
 /*
  */
 
-#include <2geom/forward.h>
-
-#include "libnrtype/Layout-TNG.h"
 #include "sp-item.h"
 
-#define SP_FLOWTEXT(obj) (dynamic_cast<SPFlowtext*>((SPObject*)obj))
-#define SP_IS_FLOWTEXT(obj) (dynamic_cast<const SPFlowtext*>((SPObject*)obj) != NULL)
+#include "display/nr-arena-forward.h"
+#include <2geom/forward.h>
+#include "libnrtype/Layout-TNG.h"
 
+#define SP_TYPE_FLOWTEXT            (sp_flowtext_get_type ())
+#define SP_FLOWTEXT(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_FLOWTEXT, SPFlowtext))
+#define SP_FLOWTEXT_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_FLOWTEXT, SPFlowtextClass))
+#define SP_IS_FLOWTEXT(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_FLOWTEXT))
+#define SP_IS_FLOWTEXT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_FLOWTEXT))
 
-namespace Inkscape {
-
-class DrawingGroup;
-
-} // namespace Inkscape
-
-class SPFlowtext : public SPItem {
-public:
-	SPFlowtext();
-	virtual ~SPFlowtext();
-
+struct SPFlowtext : public SPItem {
     /** Completely recalculates the layout. */
     void rebuildLayout();
 
@@ -31,32 +24,17 @@ public:
     but losing the automatic wrapping ability. */
     Inkscape::XML::Node *getAsText();
 
-    // TODO check if these should return SPRect instead of SPItem
+    SPItem *get_frame(SPItem *after);
 
-    SPItem *get_frame(SPItem const *after);
-
-    SPItem const *get_frame(SPItem const *after) const;
-
-    bool has_internal_frame() const;
+    bool has_internal_frame();
 
 //semiprivate:  (need to be accessed by the C-style functions still)
     Inkscape::Text::Layout layout;
 
-    /** discards the drawing objects representing this text. */
-    void _clearFlow(Inkscape::DrawingGroup* in_arena);
+    /** discards the NRArena objects representing this text. */
+    void _clearFlow(NRArenaGroup* in_arena);
 
     double par_indent;
-
-    bool _optimizeScaledText;
-
-	/** Converts the text object to its component curves */
-	SPCurve *getNormalizedBpath() const {
-		return layout.convertToCurves();
-	}
-
-    /** Optimize scaled flow text on next set_transform. */
-    void optimizeScaledText()
-        {_optimizeScaledText = true;}
 
 private:
     /** Recursively walks the xml tree adding tags and their contents. */
@@ -66,32 +44,17 @@ private:
     of this flowroot. */
     Shape* _buildExclusionShape() const;
 
-public:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-
-	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
-	virtual void remove_child(Inkscape::XML::Node* child);
-
-	virtual void set(unsigned int key, const char* value);
-	virtual Geom::Affine set_transform(Geom::Affine const& xform);
-
-	virtual void update(SPCtx* ctx, unsigned int flags);
-	virtual void modified(unsigned int flags);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
-
-	virtual Geom::OptRect bbox(Geom::Affine const &transform, SPItem::BBoxType type) const;
-	virtual void print(SPPrintContext *ctx);
-        virtual const char* displayName() const;
-	virtual char* description() const;
-	virtual Inkscape::DrawingItem* show(Inkscape::Drawing &drawing, unsigned int key, unsigned int flags);
-	virtual void hide(unsigned int key);
-    virtual void snappoints(std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs) const;
 };
+
+struct SPFlowtextClass {
+    SPItemClass parent_class;
+};
+
+GType sp_flowtext_get_type (void);
 
 SPItem *create_flowtext_with_internal_frame (SPDesktop *desktop, Geom::Point p1, Geom::Point p2);
 
-#endif // SEEN_SP_ITEM_FLOWTEXT_H
+#endif
 
 /*
   Local Variables:
@@ -102,4 +65,4 @@ SPItem *create_flowtext_with_internal_frame (SPDesktop *desktop, Geom::Point p1,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

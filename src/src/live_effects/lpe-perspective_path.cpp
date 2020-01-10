@@ -1,30 +1,26 @@
-/**
- * @file
- * LPE perspective path effect implementation.
+/** @file
+ * @brief LPE perspective path effect implementation.
  */
 /* Authors:
  *   Maximilian Albert <maximilian.albert@gmail.com>
- *   Johan Engelen <j.b.c.engelen@alumnus.utwente.nl>
+ *   Johan Engelen <j.b.c.engelen@utwente.nl>
  *
- * Copyright (C) 2007-2012 Authors
+ * Copyright (C) 2007-2008 Authors
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
-#include <gtkmm.h>
+
 #include "persp3d.h"
+//#include "transf_mat_3x4.h"
 #include "document.h"
-#include "document-private.h"
+
 #include "live_effects/lpe-perspective_path.h"
-#include "live_effects/lpeobject.h"
 #include "sp-item-group.h"
 #include "knot-holder-entity.h"
-#include "knotholder.h"
-#include "desktop.h"
-#include "util/units.h"
+
 #include "inkscape.h"
-#include "2geom/path.h"
-// TODO due to internal breakage in glibmm headers, this must be last:
-#include <glibmm/i18n.h>
+
+#include <2geom/path.h>
 
 namespace Inkscape {
 namespace LivePathEffect {
@@ -34,15 +30,11 @@ namespace PP {
 class KnotHolderEntityOffset : public LPEKnotHolderEntity
 {
 public:
-    KnotHolderEntityOffset(LPEPerspectivePath *effect) : LPEKnotHolderEntity(effect) {};
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
-    virtual Geom::Point knot_get() const;
+    virtual Geom::Point knot_get();
 };
 
 } // namespace PP
-
-static Glib::ustring perspectiveID = _("First perspective");
-
 
 LPEPerspectivePath::LPEPerspectivePath(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
@@ -60,84 +52,27 @@ LPEPerspectivePath::LPEPerspectivePath(LivePathEffectObject *lpeobject) :
     registerParameter( dynamic_cast<Parameter *>(&offsety) );
     registerParameter( dynamic_cast<Parameter *>(&uses_plane_xy) );
 
+    registerKnotHolderHandle(new PP::KnotHolderEntityOffset(), _("Adjust the origin"));
+
     concatenate_before_pwd2 = true; // don't split the path into its subpaths
-    _provides_knotholder_entities = true;
-    apply_to_clippath_and_mask = true;
+
+    Persp3D *persp = persp3d_document_first_persp(inkscape_active_document());
+
+    Proj::TransfMat3x4 pmat = persp->perspective_impl->tmat;
+
+    pmat.copy_tmat(tmat);
 }
 
 LPEPerspectivePath::~LPEPerspectivePath()
 {
 
 }
+
 void
-LPEPerspectivePath::doOnApply(SPLPEItem const* lpeitem)
-{
-    Persp3D *persp = persp3d_document_first_persp(lpeitem->document);
-    if(persp == 0 ){
-        char *msg = _("You need a BOX 3D object");
-        Gtk::MessageDialog dialog(msg, false, Gtk::MESSAGE_INFO,
-                                  Gtk::BUTTONS_OK, true);
-        dialog.run();
-        SPLPEItem * item = const_cast<SPLPEItem*>(lpeitem);
-        item->removeCurrentPathEffect(false);
-    }
-}
-void
-LPEPerspectivePath::doBeforeEffect (SPLPEItem const* lpeitem)
+LPEPerspectivePath::doBeforeEffect (SPLPEItem *lpeitem)
 {
     original_bbox(lpeitem, true);
-    SPLPEItem * item = const_cast<SPLPEItem*>(lpeitem);
-    Persp3D *persp = persp3d_document_first_persp(lpeitem->document);
-    if(persp == 0 ){
-        char *msg = _("You need a BOX 3D object");
-        Gtk::MessageDialog dialog(msg, false, Gtk::MESSAGE_INFO,
-                                  Gtk::BUTTONS_OK, true);
-        dialog.run();
-        return;
-    }
-    Proj::TransfMat3x4 pmat = persp->perspective_impl->tmat;
-    Geom::Affine doc2d = Geom::Scale(1, -1) * Geom::Translate(0, item->document->getHeight().value("px"));
-    pmat = pmat * doc2d;
-    pmat.copy_tmat(tmat);
 }
-
-void LPEPerspectivePath::refresh(Gtk::Entry* perspective) {
-    perspectiveID = perspective->get_text();
-    Persp3D *first = 0;
-    Persp3D *persp = 0;
-    for ( SPObject *child = this->lpeobj->document->getDefs()->firstChild(); child && !persp; child = child->getNext() ) {
-        if (SP_IS_PERSP3D(child) && first == 0) {
-            first = SP_PERSP3D(child);
-        }
-        if (SP_IS_PERSP3D(child) && strcmp(child->getId(), const_cast<const gchar *>(perspectiveID.c_str())) == 0) {
-            persp = SP_PERSP3D(child);
-            break;
-        }
-    }
-    if(first == 0 ){
-        char *msg = _("You need a BOX 3D object");
-        Gtk::MessageDialog dialog(msg, false, Gtk::MESSAGE_INFO,
-                                  Gtk::BUTTONS_OK, true);
-        dialog.run();
-        return;
-    }
-    if(persp == 0){
-        persp = first;
-        char *msg = _("First perspective selected");
-        Gtk::MessageDialog dialog(msg, false, Gtk::MESSAGE_INFO,
-                                      Gtk::BUTTONS_OK, true);
-        dialog.run();
-        perspectiveID = _("First perspective");
-    }else{
-        char *msg = _("Perspective changed");
-        Gtk::MessageDialog dialog(msg, false, Gtk::MESSAGE_INFO,
-                                      Gtk::BUTTONS_OK, true);
-        dialog.run();
-    }
-    Proj::TransfMat3x4 pmat = persp->perspective_impl->tmat;
-    pmat = pmat * SP_ACTIVE_DESKTOP->doc2dt();
-    pmat.copy_tmat(tmat);
-};
 
 Geom::Piecewise<Geom::D2<Geom::SBasis> >
 LPEPerspectivePath::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in)
@@ -154,7 +89,7 @@ LPEPerspectivePath::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > cons
     Piecewise<SBasis> preimage[4];
 
     //Geom::Point orig = Geom::Point(bounds_X.min(), bounds_Y.middle());
-    //orig = Geom::Point(orig[X], sp_document_height(this->lpeobj->document) - orig[Y]);
+    //orig = Geom::Point(orig[X], sp_document_height(inkscape_active_document()) - orig[Y]);
 
     //double offset = uses_plane_xy ? boundingbox_X.extent() : 0.0;
 
@@ -202,66 +137,28 @@ LPEPerspectivePath::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > cons
     return output;
 }
 
-Gtk::Widget *
-LPEPerspectivePath::newWidget()
-{
-    // use manage here, because after deletion of Effect object, others might still be pointing to this widget.
-    Gtk::VBox * vbox = Gtk::manage( new Gtk::VBox(Effect::newWidget()) );
-
-    vbox->set_border_width(5);
-    std::vector<Parameter *>::iterator it = param_vector.begin();
-    while (it != param_vector.end()) {
-        if ((*it)->widget_is_visible) {
-            Parameter * param = *it;
-            Gtk::Widget * widg = dynamic_cast<Gtk::Widget *>(param->param_newWidget());
-            Glib::ustring * tip = param->param_getTooltip();
-            if (widg) {
-                vbox->pack_start(*widg, true, true, 2);
-                if (tip) {
-                    widg->set_tooltip_text(*tip);
-                } else {
-                    widg->set_tooltip_text("");
-                    widg->set_has_tooltip(false);
-                }
-            }
-        }
-
-        ++it;
-    }
-    Gtk::HBox * perspectiveId = Gtk::manage(new Gtk::HBox(true,0));
-    Gtk::Label* labelPerspective = Gtk::manage(new Gtk::Label("Perspective ID:", 0., 0.));
-    Gtk::Entry* perspective = Gtk::manage(new Gtk::Entry());
-    perspective->set_text(perspectiveID);
-    perspective->set_tooltip_text("Set the perspective ID to apply");
-    perspectiveId->pack_start(*labelPerspective, true, true, 2);
-    perspectiveId->pack_start(*perspective, true, true, 2);
-    vbox->pack_start(*perspectiveId, true, true, 2);
-    Gtk::Button* apply3D = Gtk::manage(new Gtk::Button(Glib::ustring(_("Refresh perspective"))));
-    apply3D->set_alignment(0.0, 0.5);
-    apply3D->signal_clicked().connect(sigc::bind<Gtk::Entry*>(sigc::mem_fun(*this,&LPEPerspectivePath::refresh),perspective));
-    Gtk::Widget* apply3DWidget = dynamic_cast<Gtk::Widget *>(apply3D);
-    apply3DWidget->set_tooltip_text("Refresh perspective");
-    vbox->pack_start(*apply3DWidget, true, true,2);
-    return dynamic_cast<Gtk::Widget *>(vbox);
-}
-
-void LPEPerspectivePath::addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item) {
-    KnotHolderEntity *e = new PP::KnotHolderEntityOffset(this);
-    e->create( desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN,
-               _("Adjust the origin") );
-    knotholder->add(e);
-};
-
 namespace PP {
 
+// TODO: make this more generic
+static LPEPerspectivePath *
+get_effect(SPItem *item)
+{
+    Effect *effect = sp_lpe_item_get_current_lpe(SP_LPE_ITEM(item));
+    if (effect->effectType() != PERSPECTIVE_PATH) {
+        g_print ("Warning: Effect is not of type LPEPerspectivePath!\n");
+        return NULL;
+    }
+    return static_cast<LPEPerspectivePath *>(effect);
+}
+
 void
-KnotHolderEntityOffset::knot_set(Geom::Point const &p, Geom::Point const &origin, guint state)
+KnotHolderEntityOffset::knot_set(Geom::Point const &p, Geom::Point const &origin, guint /*state*/)
 {
     using namespace Geom;
  
-    LPEPerspectivePath* lpe = dynamic_cast<LPEPerspectivePath *>(_effect);
+    LPEPerspectivePath* lpe = get_effect(item);
 
-    Geom::Point const s = snap_knot_position(p, state);
+    Geom::Point const s = snap_knot_position(p);
 
     lpe->offsetx.param_set_value((s - origin)[Geom::X]);
     lpe->offsety.param_set_value(-(s - origin)[Geom::Y]); // additional minus sign is due to coordinate system flipping
@@ -271,9 +168,9 @@ KnotHolderEntityOffset::knot_set(Geom::Point const &p, Geom::Point const &origin
 }
 
 Geom::Point
-KnotHolderEntityOffset::knot_get() const
+KnotHolderEntityOffset::knot_get()
 {
-    LPEPerspectivePath const *lpe = dynamic_cast<LPEPerspectivePath const*>(_effect);
+    LPEPerspectivePath* lpe = get_effect(item);
     return lpe->orig + Geom::Point(lpe->offsetx, -lpe->offsety);
 }
 
@@ -291,4 +188,4 @@ KnotHolderEntityOffset::knot_get() const
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

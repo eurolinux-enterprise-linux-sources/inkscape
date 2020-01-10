@@ -4,8 +4,6 @@
 /*
  * Authors:
  *   Ted Gould <ted@gould.cx>
- *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 2006-2007 Authors
  *
@@ -16,21 +14,19 @@
 # include <config.h>
 #endif
 
-#include "file.h"
 #include "xslt.h"
 #include "../extension.h"
 #include "../output.h"
-#include "extension/input.h"
 
 #include "xml/repr.h"
 #include "io/sys.h"
+#include "file.h"
 #include <unistd.h>
 #include <cstring>
 #include "document.h"
 
 #include <libxml/parser.h>
 #include <libxslt/transform.h>
-#include <libxslt/xsltutils.h>
 
 Inkscape::XML::Document * sp_repr_do_read (xmlDocPtr doc, const gchar * default_ns);
 
@@ -54,12 +50,13 @@ XSLT::XSLT(void) :
 {
 }
 
-Glib::ustring XSLT::solve_reldir(Inkscape::XML::Node *reprin) {
+Glib::ustring
+XSLT::solve_reldir(Inkscape::XML::Node *reprin) {
 
     gchar const *s = reprin->attribute("reldir");
 
     if (!s) {
-        Glib::ustring str = reprin->firstChild()->content();
+        Glib::ustring str = sp_repr_children(reprin)->content();
         return str;
     }
 
@@ -73,7 +70,7 @@ Glib::ustring XSLT::solve_reldir(Inkscape::XML::Node *reprin) {
 
             gchar * fname = g_build_filename(
                Inkscape::Extension::Extension::search_path[i],
-               reprin->firstChild()->content(),
+               sp_repr_children(reprin)->content(),
                NULL);
             Glib::ustring filename = fname;
             g_free(fname);
@@ -83,14 +80,15 @@ Glib::ustring XSLT::solve_reldir(Inkscape::XML::Node *reprin) {
 
         }
     } else {
-        Glib::ustring str = reprin->firstChild()->content();
+        Glib::ustring str = sp_repr_children(reprin)->content();
         return str;
     }
 
     return "";
 }
 
-bool XSLT::check(Inkscape::Extension::Extension *module)
+bool
+XSLT::check(Inkscape::Extension::Extension *module)
 {
     if (load(module)) {
         unload(module);
@@ -100,24 +98,25 @@ bool XSLT::check(Inkscape::Extension::Extension *module)
     }
 }
 
-bool XSLT::load(Inkscape::Extension::Extension *module)
+bool
+XSLT::load(Inkscape::Extension::Extension *module)
 {
     if (module->loaded()) { return true; }
 
-    Inkscape::XML::Node *child_repr = module->get_repr()->firstChild();
+    Inkscape::XML::Node *child_repr = sp_repr_children(module->get_repr());
     while (child_repr != NULL) {
         if (!strcmp(child_repr->name(), INKSCAPE_EXTENSION_NS "xslt")) {
-            child_repr = child_repr->firstChild();
+            child_repr = sp_repr_children(child_repr);
             while (child_repr != NULL) {
                 if (!strcmp(child_repr->name(), INKSCAPE_EXTENSION_NS "file")) {
                     _filename = solve_reldir(child_repr);
                 }
-                child_repr = child_repr->next();
+                child_repr = sp_repr_next(child_repr);
             }
 
             break;
         }
-        child_repr = child_repr->next();
+        child_repr = sp_repr_next(child_repr);
     }
 
     _parsedDoc = xmlParseFile(_filename.c_str());
@@ -128,7 +127,8 @@ bool XSLT::load(Inkscape::Extension::Extension *module)
     return true;
 }
 
-void XSLT::unload(Inkscape::Extension::Extension *module)
+void
+XSLT::unload(Inkscape::Extension::Extension *module)
 {
     if (!module->loaded()) { return; }
     xsltFreeStylesheet(_stylesheet);
@@ -136,8 +136,8 @@ void XSLT::unload(Inkscape::Extension::Extension *module)
     return;
 }
 
-SPDocument * XSLT::open(Inkscape::Extension::Input */*module*/,
-                        gchar const *filename)
+SPDocument *
+XSLT::open(Inkscape::Extension::Input */*module*/, gchar const *filename)
 {
     xmlDocPtr filein = xmlParseFile(filename);
     if (filein == NULL) { return NULL; }
@@ -174,21 +174,23 @@ SPDocument * XSLT::open(Inkscape::Extension::Input */*module*/,
     }
     g_free(s);
 
-    SPDocument * doc = SPDocument::createDoc(rdoc, filename, base, name, true, NULL);
+    SPDocument * doc = sp_document_create(rdoc, filename, base, name, true);
 
     g_free(base); g_free(name);
 
     return doc;
 }
 
-void XSLT::save(Inkscape::Extension::Output *module, SPDocument *doc, gchar const *filename)
+void
+XSLT::save(Inkscape::Extension::Output */*module*/, SPDocument *doc, gchar const *filename)
 {
     /* TODO: Should we assume filename to be in utf8 or to be a raw filename?
      * See JavaFXOutput::save for discussion. */
     g_return_if_fail(doc != NULL);
     g_return_if_fail(filename != NULL);
 
-    Inkscape::XML::Node *repr = doc->getReprRoot();
+    Inkscape::XML::Node *repr = NULL;
+    repr = sp_document_repr_root (doc);
 
     std::string tempfilename_out;
     int tempfd_out = 0;
@@ -200,7 +202,7 @@ void XSLT::save(Inkscape::Extension::Output *module, SPDocument *doc, gchar cons
     }
 
     if (!sp_repr_save_rebased_file(repr->document(), tempfilename_out.c_str(), SP_SVG_NS_URI,
-                                   doc->getBase(), filename)) {
+                                   doc->base, filename)) {
         throw Inkscape::Extension::Output::save_failed();
     }
 
@@ -210,36 +212,14 @@ void XSLT::save(Inkscape::Extension::Output *module, SPDocument *doc, gchar cons
         return;
     }
 
-    std::list<std::string> params;
-    module->paramListString(params);
-    const int max_parameters = params.size() * 2;
-    const char * xslt_params[max_parameters+1] ;
+    const char * params[1];
+    params[0] = NULL;
 
-    int count = 0;
-    for(std::list<std::string>::iterator t=params.begin(); t != params.end(); ++t) {
-        std::size_t pos = t->find("=");
-        std::ostringstream parameter;
-        std::ostringstream value;
-        parameter << t->substr(2,pos-2);
-        value << t->substr(pos+1);
-        xslt_params[count++] = g_strdup_printf("%s", parameter.str().c_str());
-        xslt_params[count++] = g_strdup_printf("'%s'", value.str().c_str());
-    }
-    xslt_params[count] = NULL;
-
-    xmlDocPtr newdoc = xsltApplyStylesheet(_stylesheet, svgdoc, xslt_params);
-    //xmlSaveFile(filename, newdoc);
-    int success = xsltSaveResultToFilename(filename, newdoc, _stylesheet, 0);
+    xmlDocPtr newdoc = xsltApplyStylesheet(_stylesheet, svgdoc, params);
+    xmlSaveFile(filename, newdoc);
 
     xmlFreeDoc(newdoc);
     xmlFreeDoc(svgdoc);
-
-    xsltCleanupGlobals();
-    xmlCleanupParser();
-
-    if (success < 1) {
-        throw Inkscape::Extension::Output::save_failed();
-    }
 
     return;
 }
@@ -259,4 +239,4 @@ void XSLT::save(Inkscape::Extension::Output *module, SPDocument *doc, gchar cons
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

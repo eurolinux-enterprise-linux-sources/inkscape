@@ -1,4 +1,6 @@
-/**
+#define __PERSPECTIVE_LINE_C__
+
+/*
  * Perspective line for 3D perspectives
  *
  * Authors:
@@ -38,4 +40,4 @@ PerspectiveLine::PerspectiveLine (Geom::Point const &pt, Proj::Axis const axis, 
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

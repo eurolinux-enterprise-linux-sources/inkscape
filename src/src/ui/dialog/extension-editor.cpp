@@ -1,6 +1,5 @@
-/**
- * @file
- * Extension editor dialog.
+/** @file
+ * @brief Extension editor dialog
  */
 /* Authors:
  *   Bryce W. Harrington <bryce@bryceharrington.org>
@@ -15,7 +14,6 @@
 # include <config.h>
 #endif
 
-#include "extension-editor.h"
 #include <glibmm/i18n.h>
 
 #include <gtkmm/frame.h>
@@ -23,9 +21,10 @@
 #include <gtkmm/alignment.h>
 #include <gtkmm/notebook.h>
 
+#include "extension-editor.h"
 #include "verbs.h"
 #include "preferences.h"
-#include "ui/interface.h"
+#include "interface.h"
 
 #include "extension/extension.h"
 #include "extension/db.h"
@@ -34,15 +33,15 @@ namespace Inkscape {
 namespace UI {
 namespace Dialog {
 
-/**
- * Create a new ExtensionEditor dialog.
- *
- * This function creates a new extension editor dialog.  The dialog
- * consists of two basic areas.  The left side is a tree widget, which
- * is only used as a list.  And the right side is a notebook of information
- * about the selected extension.  A handler is set up so that when
- * a new extension is selected, the notebooks are changed appropriately.
- */
+/** \brief  Create a new ExtensionEditor dialog
+    \return None
+
+    This function creates a new extension editor dialog.  The dialog
+    consists of two basic areas.  The left side is a tree widget, which
+    is only used as a list.  And the right side is a notebook of information
+    about the selected extension.  A handler is set up so that when
+    a new extension is selected, the notebooks are changed appropriately.
+*/
 ExtensionEditor::ExtensionEditor()
     : UI::Widget::Panel ("", "/dialogs/extensioneditor", SP_VERB_DIALOG_EXTENSIONEDITOR)
 {
@@ -93,9 +92,9 @@ ExtensionEditor::ExtensionEditor()
     show_all_children();
 }
 
-/**
- * Destroys the extension editor dialog.
- */
+/** \brief  Destroys the extension editor dialog
+    \return None
+*/
 ExtensionEditor::~ExtensionEditor()
 {
 }
@@ -118,14 +117,15 @@ ExtensionEditor::setExtensionIter(const Gtk::TreeModel::iterator &iter)
     return false;
 }
 
-/**
- * Called every time a new extention is selected
- *
- * This function is set up to handle the signal for a changed extension
- * from the tree view in the left pane.  It figure out which extension
- * is selected and updates the widgets to have data for that extension.
- */
-void ExtensionEditor::on_pagelist_selection_changed(void)
+/** \brief  Called every time a new extention is selected
+    \return None
+
+    This function is set up to handle the signal for a changed extension
+    from the tree view in the left pane.  It figure out which extension
+    is selected and updates the widgets to have data for that extension.
+*/
+void
+ExtensionEditor::on_pagelist_selection_changed (void)
 {
     Glib::RefPtr<Gtk::TreeSelection> selection = _page_list.get_selection();
     Gtk::TreeModel::iterator iter = selection->get_selected();
@@ -179,35 +179,34 @@ void ExtensionEditor::on_pagelist_selection_changed(void)
     return;
 }
 
-/**
- * A function to pass to the iterator in the Extensions Database.
- *
- * This function is a static function with the prototype required for
- * the Extension Database's foreach function.  It will get called for
- * every extension in the database, and will then turn around and
- * call the more object oriented function \c add_extension in the
- * ExtensionEditor.
- *
- * @param  in_plug  The extension to evaluate.
- * @param  in_data  A pointer to the Extension Editor class.
- */
-void ExtensionEditor::dbfunc(Inkscape::Extension::Extension * in_plug, gpointer in_data)
+/** \brief  A function to pass to the iterator in the Extensions Database
+    \param  in_plug  The extension to evaluate
+    \param  in_data  A pointer to the Extension Editor class
+    \return None
+
+    This function is a static function with the prototype required for
+    the Extension Database's foreach function.  It will get called for
+    every extension in the database, and will then turn around and
+    call the more object oriented function \c add_extension in the
+    ExtensionEditor.
+*/
+void
+ExtensionEditor::dbfunc (Inkscape::Extension::Extension * in_plug, gpointer in_data)
 {
     ExtensionEditor * ee = static_cast<ExtensionEditor *>(in_data);
     ee->add_extension(in_plug);
     return;
 }
 
-/**
- * Adds an extension into the tree model.
- *
- * This function takes the data out of the extension and puts it
- * into the tree model for the dialog.
- *
- * @param  ext  The extension to add.
- * @return The iterator representing the location in the tree model.
- */
-Gtk::TreeModel::iterator ExtensionEditor::add_extension(Inkscape::Extension::Extension * ext)
+/** \brief  Adds an extension into the tree model
+    \param  ext  The extension to add
+    \return The iterator representing the location in the tree model
+
+    This function takes the data out of the extension and puts it
+    into the tree model for the dialog.
+*/
+Gtk::TreeModel::iterator
+ExtensionEditor::add_extension (Inkscape::Extension::Extension * ext)
 {
     Gtk::TreeModel::iterator iter;
 
@@ -233,4 +232,4 @@ Gtk::TreeModel::iterator ExtensionEditor::add_extension(Inkscape::Extension::Ext
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

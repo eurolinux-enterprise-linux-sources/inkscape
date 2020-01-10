@@ -192,18 +192,16 @@ PackedPixelMap *PackedPixelMapCreate(int width, int height)
     /** fields **/
     me->width  = width;
     me->height = height;
-    me->pixels = (unsigned long *) malloc(sizeof(unsigned long) * width * height);
-    if (!me->pixels){
+    me->pixels = (unsigned long *)
+              malloc(sizeof(unsigned long) * width * height);
+    me->rows = (unsigned long **)
+              malloc(sizeof(unsigned long *) * height);
+    if (!me->pixels)
+        {
         free(me);
         return NULL;
-    }
-    me->rows = (unsigned long **) malloc(sizeof(unsigned long *) * height);
-    if (!me->rows){
-        free(me->pixels); //allocated as me->pixels is not NULL here: see previous check
-        free(me);
-        return NULL;
-    }
-    
+        }
+
     unsigned long *row = me->pixels;
     for (int i=0 ; i<height ; i++)
         {
@@ -272,12 +270,10 @@ static int rWritePPM(RgbMap *me, char *fileName)
 
 static void rDestroy(RgbMap *me)
 {
-    if (me->pixels){
+    if (me->pixels)
         free(me->pixels);
-    }
-    if (me->rows){
+    if (me->rows)
         free(me->rows);
-    }
     free(me);
 }
 
@@ -287,10 +283,9 @@ RgbMap *RgbMapCreate(int width, int height)
 {
 
     RgbMap *me = (RgbMap *)malloc(sizeof(RgbMap));
-    if (!me){
+    if (!me)
         return NULL;
-    }
-    
+
     /** methods **/
     me->setPixel    = rSetPixel;
     me->setPixelRGB = rSetPixelRGB;
@@ -302,23 +297,22 @@ RgbMap *RgbMapCreate(int width, int height)
     /** fields **/
     me->width  = width;
     me->height = height;
-    me->pixels = (RGB *) malloc(sizeof(RGB) * width * height);
-    if (!me->pixels){
+    me->pixels = (RGB *)
+              malloc(sizeof(RGB) * width * height);
+    me->rows = (RGB **)
+              malloc(sizeof(RGB *) * height);
+    if (!me->pixels)
+        {
         free(me);
         return NULL;
-    }
-    me->rows = (RGB **) malloc(sizeof(RGB *) * height);
-    if (!me->rows){
-        free(me->pixels); //allocated as me->pixels is not NULL here: see previous check
-        free(me);
-        return NULL;
-    }
+        }
 
     RGB *row = me->pixels;
-    for (int i=0 ; i<height ; i++){
+    for (int i=0 ; i<height ; i++)
+        {
         me->rows[i] = row;
         row += width;
-    }
+        }
 
     return me;
 }
@@ -382,12 +376,10 @@ static int iWritePPM(IndexedMap *me, char *fileName)
 
 static void iDestroy(IndexedMap *me)
 {
-    if (me->pixels){
+    if (me->pixels)
         free(me->pixels);
-    }
-    if (me->rows){
+    if (me->rows)
         free(me->rows);
-    }
     free(me);
 }
 
@@ -411,31 +403,31 @@ IndexedMap *IndexedMapCreate(int width, int height)
     /** fields **/
     me->width  = width;
     me->height = height;
-    me->pixels = (unsigned int *) malloc(sizeof(unsigned int) * width * height);
-    if (!me->pixels){
+    me->pixels = (unsigned int *)
+              malloc(sizeof(unsigned int) * width * height);
+    me->rows = (unsigned int **)
+              malloc(sizeof(unsigned int *) * height);
+    if (!me->pixels)
+        {
         free(me);
         return NULL;
-    }
-    me->rows = (unsigned int **) malloc(sizeof(unsigned int *) * height);
-    if (!me->rows){
-        free(me->pixels); //allocated as me->pixels is not NULL here: see previous check
-        free(me);
-        return NULL;
-    }
+        }
 
     unsigned int *row = me->pixels;
-    for (int i=0 ; i<height ; i++){
+    for (int i=0 ; i<height ; i++)
+        {
         me->rows[i] = row;
         row += width;
-    }
+        }
 
     me->nrColors = 0;
 
     RGB rgb;
     rgb.r = rgb.g = rgb.b = 0;
-    for (int i=0; i<256 ; i++){
+    for (int i=0; i<256 ; i++)
+        {
         me->clut[i] = rgb;
-    }
+        }
 
     return me;
 }

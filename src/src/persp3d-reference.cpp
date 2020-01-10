@@ -35,8 +35,7 @@ Persp3DReference::~Persp3DReference(void)
 bool
 Persp3DReference::_acceptObject(SPObject *obj) const
 {
-    return SP_IS_PERSP3D(obj) && URIReference::_acceptObject(obj);
-;
+    return SP_IS_PERSP3D(obj);
     /* effic: Don't bother making this an inline function: _acceptObject is a virtual function,
        typically called from a context where the runtime type is not known at compile time. */
 }
@@ -56,7 +55,7 @@ Persp3DReference::start_listening(Persp3D* to)
         return;
     }
     persp = to;
-    persp_repr = to->getRepr();
+    persp_repr = SP_OBJECT_REPR(to);
     _delete_connection = to->connectDelete(sigc::bind(sigc::ptr_fun(&persp3dreference_delete_self), this));
     _modified_connection = to->connectModified(sigc::bind<2>(sigc::ptr_fun(&persp3dreference_source_modified), this));
 }
@@ -108,4 +107,4 @@ persp3dreference_source_modified(SPObject */*iSource*/, guint /*flags*/, Persp3D
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

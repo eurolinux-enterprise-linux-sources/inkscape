@@ -3,31 +3,31 @@
  */
 /* Author:
  *   Gustav Broberg <broberg@kth.se>
- *   Jon A. Cruz <jon@joncruz.org>
  *
- * Copyright (C) 2014 Authors
+ * Copyright (C) 2006 Authors
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
 
 #ifndef INKSCAPE_UI_DIALOG_UNDO_HISTORY_H
 #define INKSCAPE_UI_DIALOG_UNDO_HISTORY_H
 
-#include "ui/widget/panel.h"
+#include <glibmm/refptr.h>
 #include <gtkmm/cellrendererpixbuf.h>
+#include <gtkmm/image.h>
+#include <gtkmm/invisible.h>
 #include <gtkmm/scrolledwindow.h>
+#include <gtkmm/stock.h>
 #include <gtkmm/treemodel.h>
 #include <gtkmm/treeselection.h>
-#include <glibmm/property.h>
 
 #include <functional>
 #include <sstream>
 
+#include "desktop.h"
 #include "event-log.h"
 
+#include "ui/widget/panel.h"
 #include "widgets/icon.h"
-#include "ui/dialog/desktop-tracker.h"
-
-class SPDesktop;
 
 namespace Inkscape {
 namespace UI {
@@ -50,26 +50,19 @@ public:
     property_event_type() { return _property_event_type.get_proxy(); }
 
 protected:
-#if WITH_GTKMM_3_0
-    virtual void render_vfunc(const Cairo::RefPtr<Cairo::Context>& cr,
-                              Gtk::Widget& widget,
-                              const Gdk::Rectangle& background_area,
-                              const Gdk::Rectangle& cell_area,
-                              Gtk::CellRendererState flags);
-#else
-    virtual void render_vfunc(const Glib::RefPtr<Gdk::Drawable>& window,
-                              Gtk::Widget& widget,
-                              const Gdk::Rectangle& background_area,
-                              const Gdk::Rectangle& cell_area,
-                              const Gdk::Rectangle& expose_area,
-                              Gtk::CellRendererState flags);
-#endif
+
+    virtual void
+    render_vfunc(const Glib::RefPtr<Gdk::Drawable>& window,
+                 Gtk::Widget& widget,
+                 const Gdk::Rectangle& background_area,
+                 const Gdk::Rectangle& cell_area,
+                 const Gdk::Rectangle& expose_area,
+                 Gtk::CellRendererState flags);
 private:
 
     Glib::Property<Glib::RefPtr<Gdk::Pixbuf> > _property_icon;
     Glib::Property<unsigned int> _property_event_type;
     std::map<const unsigned int, Glib::RefPtr<Gdk::Pixbuf> > _icon_cache;
-
 };
 
 
@@ -94,21 +87,15 @@ public:
 
     static const Filter& no_filter;
 
-protected:
-#if WITH_GTKMM_3_0
-    virtual void render_vfunc(const Cairo::RefPtr<Cairo::Context>& cr,
-                              Gtk::Widget& widget,
-                              const Gdk::Rectangle& background_area,
-                              const Gdk::Rectangle& cell_area,
-                              Gtk::CellRendererState flags);
-#else
-    virtual void render_vfunc(const Glib::RefPtr<Gdk::Drawable>& window,
-                              Gtk::Widget& widget,
-                              const Gdk::Rectangle& background_area,
-                              const Gdk::Rectangle& cell_area,
-                              const Gdk::Rectangle& expose_area,
-                              Gtk::CellRendererState flags);
-#endif
+ protected:
+
+    virtual void 
+    render_vfunc(const Glib::RefPtr<Gdk::Drawable>& window,
+                 Gtk::Widget& widget,
+                 const Gdk::Rectangle& background_area,
+                 const Gdk::Rectangle& cell_area,
+                 const Gdk::Rectangle& expose_area,
+                 Gtk::CellRendererState flags);
 
 private:
 
@@ -135,10 +122,8 @@ public:
 
 protected:
 
-    SPDesktop *_desktop;
     SPDocument *_document;
     EventLog *_event_log;
-
 
     const EventLog::EventModelColumns *_columns;
 
@@ -148,17 +133,8 @@ protected:
     Gtk::TreeView _event_list_view;
     Glib::RefPtr<Gtk::TreeSelection> _event_list_selection;
 
-    DesktopTracker _deskTrack;
-    sigc::connection _desktopChangeConn;
-
     EventLog::CallbackMap _callback_connections;
 
-    static void *_handleEventLogDestroyCB(void *data);
-
-    void _connectDocument(SPDesktop* desktop, SPDocument *document);
-    void _connectEventLog();
-    void _handleDocumentReplaced(SPDesktop* desktop, SPDocument *document);
-    void *_handleEventLogDestroy();
     void _onListSelectionChange();
     void _onExpandEvent(const Gtk::TreeModel::iterator &iter, const Gtk::TreeModel::Path &path);
     void _onCollapseEvent(const Gtk::TreeModel::iterator &iter, const Gtk::TreeModel::Path &path);
@@ -194,4 +170,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

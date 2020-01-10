@@ -1,3 +1,5 @@
+#define INKSCAPE_LPE_DOEFFECT_STACK_CPP
+
 /*
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  * Copyright 2006 Michael G. Sloan <mgsloan@gmail.com>
@@ -9,9 +11,6 @@
 #include "live_effects/lpe-gears.h"
 
 #include <vector>
-
-#include <glibmm/i18n.h>
-
 #include <2geom/d2.h>
 #include <2geom/sbasis.h>
 #include <2geom/bezier-to-sbasis.h>
@@ -112,8 +111,7 @@ private:
     }
 };
 
-static void
-makeContinuous(D2<SBasis> &a, Point const b) {
+void makeContinuous(D2<SBasis> &a, Point const b) {
     for(unsigned d=0;d<2;d++)
         a[d][0][0] = b[d];
 }
@@ -168,7 +166,7 @@ Geom::Path Gear::path() {
         D2<SBasis> root = _arc(cursor, cursor+root_advance, root_radius());
         makeContinuous(root, prev);
         pb.append(SBasisCurve(root));
-        //cursor += root_advance;
+        cursor += root_advance;
         prev = root.at1();
 
         if (base_radius() > root_radius()) {
@@ -211,9 +209,8 @@ namespace LivePathEffect {
 
 LPEGears::LPEGears(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    teeth(_("_Teeth:"), _("The number of teeth"), "teeth", &wr, this, 10),
-    phi(_("_Phi:"), _("Tooth pressure angle (typically 20-25 deg).  The ratio of teeth not in contact."), "phi", &wr, this, 5),
-    min_radius(_("Min Radius:"), _("Minimum radius, low values can be slow"), "min_radius", &wr, this, 5.0)
+    teeth(_("Teeth"), _("The number of teeth"), "teeth", &wr, this, 10),
+    phi(_("Phi"), _("Tooth pressure angle (typically 20-25 deg).  The ratio of teeth not in contact."), "phi", &wr, this, 5)
 {
     /* Tooth pressure angle: The angle between the tooth profile and a perpendicular to the pitch
      * circle, usually at the point where the pitch circle meets the tooth profile. Standard angles
@@ -224,10 +221,8 @@ LPEGears::LPEGears(LivePathEffectObject *lpeobject) :
 
     teeth.param_make_integer();
     teeth.param_set_range(3, 1e10);
-    min_radius.param_set_range(0.01, 9999.0);
-    registerParameter(&teeth);
-    registerParameter(&phi);
-    registerParameter(&min_radius);
+    registerParameter( dynamic_cast<Parameter *>(&teeth) );
+    registerParameter( dynamic_cast<Parameter *>(&phi) );
 }
 
 LPEGears::~LPEGears()
@@ -235,10 +230,10 @@ LPEGears::~LPEGears()
 
 }
 
-Geom::PathVector
-LPEGears::doEffect_path (Geom::PathVector const &path_in)
+std::vector<Geom::Path>
+LPEGears::doEffect_path (std::vector<Geom::Path> const & path_in)
 {
-    Geom::PathVector path_out;
+    std::vector<Geom::Path> path_out;
     Geom::Path gearpath = path_in[0];
 
     Geom::Path::iterator it(gearpath.begin());
@@ -249,19 +244,13 @@ LPEGears::doEffect_path (Geom::PathVector const &path_in)
     gear->centre(gear_centre);
     gear->angle(atan2((*it).initialPoint() - gear_centre));
 
-    ++it;
-    if ( it == gearpath.end() ) return path_out;
-    double radius = Geom::distance(gear_centre, (*it).finalPoint());
-    radius = radius < min_radius?min_radius:radius;
-    gear->pitch_radius(radius);
+    it++; if ( it == gearpath.end() ) return path_out;
+    gear->pitch_radius(Geom::distance(gear_centre, (*it).finalPoint()));
 
     path_out.push_back( gear->path());
-    
-    for (++it; it != gearpath.end() ; ++it) {
+
+    for (it++ ; it != gearpath.end() ; it++) {
         // iterate through Geom::Curve in path_in
-        if (are_near((*it).initialPoint(), (*it).finalPoint())) {
-            continue;
-        }
         Gear* gearnew = new Gear(gear->spawn( (*it).finalPoint() ));
         path_out.push_back( gearnew->path() );
         delete gear;

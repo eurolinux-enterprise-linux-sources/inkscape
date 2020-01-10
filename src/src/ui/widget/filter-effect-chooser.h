@@ -14,10 +14,14 @@
 
 #include <gtkmm/box.h>
 #include <gtkmm/combobox.h>
+#include <gtkmm/liststore.h>
+#include <gtkmm/treeview.h>
 
 #include "combo-enums.h"
 #include "filter-enums.h"
-#include "spin-scale.h"
+#include "labelled.h"
+#include "spin-slider.h"
+#include "sp-filter.h"
 
 namespace Inkscape {
 namespace UI {
@@ -45,16 +49,14 @@ public:
     double get_blur_value() const;
     void set_blur_value(const double);
     void set_blur_sensitive(const bool);
-    Gtk::Label *get_blur_label() { return &_lb_blur; };
 
 private:
     int _flags;
     Gtk::HBox _hb_blend;
-    Gtk::HBox _hb_blur;
-    Gtk::Label _lb_blend, _lb_blur, _lb_blur_unit;
-
+    Gtk::VBox _vb_blur;
+    Gtk::Label _lb_blend, _lb_blur;
     ComboBoxEnum<Inkscape::Filters::FilterBlendMode> _blend;
-    SpinScale _blur;
+    SpinSlider _blur;
 
     sigc::signal<void> _signal_blend_blur_changed;
 };
@@ -74,4 +76,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

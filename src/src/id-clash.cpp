@@ -1,10 +1,9 @@
-/*
+#define __ID_CLASH_C__
+/** \file
  * Routines for resolving ID clashes when importing or pasting.
  *
  * Authors:
  *   Stephen Silver <sasilver@users.sourceforge.net>
- *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 2008 authors
  *
@@ -25,8 +24,6 @@
 #include "sp-paint-server.h"
 #include "xml/node.h"
 #include "xml/repr.h"
-#include "sp-root.h"
-#include "sp-gradient.h"
 
 typedef enum { REF_HREF, REF_STYLE, REF_URL, REF_CLIPBOARD } ID_REF_TYPE;
 
@@ -36,9 +33,9 @@ struct IdReference {
     const char *attr;  // property or href-like attribute
 };
 
-typedef std::map<Glib::ustring, std::list<IdReference> > refmap_type;
+typedef std::map<std::string, std::list<IdReference> > refmap_type;
 
-typedef std::pair<SPObject*, Glib::ustring> id_changeitem_type;
+typedef std::pair<SPObject*, std::string> id_changeitem_type;
 typedef std::list<id_changeitem_type> id_changelist_type;
 
 const char *href_like_attributes[] = {
@@ -53,12 +50,12 @@ const char *href_like_attributes[] = {
 #define NUM_HREF_LIKE_ATTRIBUTES (sizeof(href_like_attributes) / sizeof(*href_like_attributes))
 
 const SPIPaint SPStyle::* SPIPaint_members[] = {
-    //&SPStyle::color,
+    &SPStyle::color,
     &SPStyle::fill,
     &SPStyle::stroke,
 };
 const char* SPIPaint_properties[] = {
-    //"color",
+    "color",
     "fill",
     "stroke",
 };
@@ -76,13 +73,10 @@ const char* other_url_properties[] = {
 #define NUM_OTHER_URL_PROPERTIES (sizeof(other_url_properties) / sizeof(*other_url_properties))
 
 const char* clipboard_properties[] = {
-    //"color",
+    "color",
     "fill",
     "filter",
     "stroke",
-    "marker-end",
-    "marker-mid",
-    "marker-start"
 };
 #define NUM_CLIPBOARD_PROPERTIES (sizeof(clipboard_properties) / sizeof(*clipboard_properties))
 
@@ -92,10 +86,10 @@ const char* clipboard_properties[] = {
  *         (e.g., ID selectors in CSS stylesheets, and references in scripts).
  */
 static void
-find_references(SPObject *elem, refmap_type &refmap)
+find_references(SPObject *elem, refmap_type *refmap)
 {
-    if (elem->cloned) return;
-    Inkscape::XML::Node *repr_elem = elem->getRepr();
+    if (SP_OBJECT_IS_CLONED(elem)) return;
+    Inkscape::XML::Node *repr_elem = SP_OBJECT_REPR(elem);
     if (!repr_elem) return;
     if (repr_elem->type() != Inkscape::XML::ELEMENT_NODE) return;
 
@@ -110,12 +104,11 @@ find_references(SPObject *elem, refmap_type &refmap)
                     gchar *uri = extract_uri(value);
                     if (uri && uri[0] == '#') {
                         IdReference idref = { REF_CLIPBOARD, elem, attr };
-                        refmap[uri+1].push_back(idref);
+                        (*refmap)[uri+1].push_back(idref);
                     }
                     g_free(uri);
                 }
             }
-
         }
         return; // nothing more to do for inkscape:clipboard elements
     }
@@ -127,11 +120,11 @@ find_references(SPObject *elem, refmap_type &refmap)
         if (val && val[0] == '#') {
             std::string id(val+1);
             IdReference idref = { REF_HREF, elem, attr };
-            refmap[id].push_back(idref);
+            (*refmap)[id].push_back(idref);
         }
     }
 
-    SPStyle *style = elem->style;
+    SPStyle *style = SP_OBJECT_STYLE(elem);
 
     /* check for url(#...) references in 'fill' or 'stroke' */
     for (unsigned i = 0; i < NUM_SPIPAINT_PROPERTIES; ++i) {
@@ -142,7 +135,7 @@ find_references(SPObject *elem, refmap_type &refmap)
             if (obj) {
                 const gchar *id = obj->getId();
                 IdReference idref = { REF_STYLE, elem, SPIPaint_properties[i] };
-                refmap[id].push_back(idref);
+                (*refmap)[id].push_back(idref);
             }
         }
     }
@@ -154,21 +147,7 @@ find_references(SPObject *elem, refmap_type &refmap)
         if (obj) {
             const gchar *id = obj->getId();
             IdReference idref = { REF_STYLE, elem, "filter" };
-            refmap[id].push_back(idref);
-        }
-    }
-
-    /* check for url(#...) references in markers */
-    const gchar *markers[4] = { "", "marker-start", "marker-mid", "marker-end" };
-    for (unsigned i = SP_MARKER_LOC_START; i < SP_MARKER_LOC_QTY; i++) {
-        const gchar *value = style->marker_ptrs[i]->value;
-        if (value) {
-            gchar *uri = extract_uri(value);
-            if (uri && uri[0] == '#') {
-                IdReference idref = { REF_STYLE, elem, markers[i] };
-                refmap[uri+1].push_back(idref);
-            }
-            g_free(uri);
+            (*refmap)[id].push_back(idref);
         }
     }
 
@@ -180,14 +159,15 @@ find_references(SPObject *elem, refmap_type &refmap)
             gchar *uri = extract_uri(value);
             if (uri && uri[0] == '#') {
                 IdReference idref = { REF_URL, elem, attr };
-                refmap[uri+1].push_back(idref);
+                (*refmap)[uri+1].push_back(idref);
             }
             g_free(uri);
         }
     }
     
-    // recurse
-    for (SPObject *child = elem->firstChild(); child; child = child->getNext() )
+    /* recurse */
+    for (SPObject *child = sp_object_first_child(elem);
+         child; child = SP_OBJECT_NEXT(child) )
     {
         find_references(child, refmap);
     }
@@ -199,50 +179,34 @@ find_references(SPObject *elem, refmap_type &refmap)
  */
 static void
 change_clashing_ids(SPDocument *imported_doc, SPDocument *current_doc,
-                    SPObject *elem, refmap_type const &refmap,
+                    SPObject *elem, const refmap_type *refmap,
                     id_changelist_type *id_changes)
 {
     const gchar *id = elem->getId();
-    bool fix_clashing_ids = true;
 
     if (id && current_doc->getObjectById(id)) {
         // Choose a new ID.
         // To try to preserve any meaningfulness that the original ID
         // may have had, the new ID is the old ID followed by a hyphen
         // and one or more digits.
-        
-        if (SP_IS_GRADIENT(elem)) {
-            SPObject *cd_obj =  current_doc->getObjectById(id);
-
-            if (cd_obj && SP_IS_GRADIENT(cd_obj)) {
-                SPGradient *cd_gr = SP_GRADIENT(cd_obj);
-                if ( cd_gr->isEquivalent(SP_GRADIENT(elem))) {
-                    fix_clashing_ids = false;
-                 }
-             }
+        std::string old_id(id);
+        std::string new_id(old_id + '-');
+        for (;;) {
+            new_id += "0123456789"[std::rand() % 10];
+            const char *str = new_id.c_str();
+            if (current_doc->getObjectById(str) == NULL &&
+                imported_doc->getObjectById(str) == NULL) break;
         }
-        
-        if (fix_clashing_ids) {
-            std::string old_id(id);
-            std::string new_id(old_id + '-');
-            for (;;) {
-                new_id += "0123456789"[std::rand() % 10];
-                const char *str = new_id.c_str();
-                if (current_doc->getObjectById(str) == NULL &&
-                    imported_doc->getObjectById(str) == NULL) break;
-            }
-            // Change to the new ID
-
-            elem->getRepr()->setAttribute("id", new_id);
-                // Make a note of this change, if we need to fix up refs to it
-            if (refmap.find(old_id) != refmap.end())
+        // Change to the new ID
+        SP_OBJECT_REPR(elem)->setAttribute("id", new_id.c_str());
+        // Make a note of this change, if we need to fix up refs to it
+        if (refmap->find(old_id) != refmap->end())
             id_changes->push_back(id_changeitem_type(elem, old_id));
-        }
     }
 
-
-    // recurse
-    for (SPObject *child = elem->firstChild(); child; child = child->getNext() )
+    /* recurse */
+    for (SPObject *child = sp_object_first_child(elem);
+         child; child = SP_OBJECT_NEXT(child) )
     {
         change_clashing_ids(imported_doc, current_doc, child, refmap, id_changes);
     }
@@ -252,44 +216,39 @@ change_clashing_ids(SPDocument *imported_doc, SPDocument *current_doc,
  *  Fix up references to changed IDs.
  */
 static void
-fix_up_refs(refmap_type const &refmap, const id_changelist_type &id_changes)
+fix_up_refs(const refmap_type *refmap, const id_changelist_type &id_changes)
 {
     id_changelist_type::const_iterator pp;
     const id_changelist_type::const_iterator pp_end = id_changes.end();
     for (pp = id_changes.begin(); pp != pp_end; ++pp) {
         SPObject *obj = pp->first;
-        refmap_type::const_iterator pos = refmap.find(pp->second);
+        refmap_type::const_iterator pos = refmap->find(pp->second);
         std::list<IdReference>::const_iterator it;
         const std::list<IdReference>::const_iterator it_end = pos->second.end();
         for (it = pos->second.begin(); it != it_end; ++it) {
-            switch (it->type) {
-                case REF_HREF: {
-                    gchar *new_uri = g_strdup_printf("#%s", obj->getId());
-                    it->elem->getRepr()->setAttribute(it->attr, new_uri);
-                    g_free(new_uri);
-                    break;
-                }
-                case REF_STYLE: {
-                    sp_style_set_property_url(it->elem, it->attr, obj, false);
-                    break;
-                }
-                case REF_URL: {
-                    gchar *url = g_strdup_printf("url(#%s)", obj->getId());
-                    it->elem->getRepr()->setAttribute(it->attr, url);
-                    g_free(url);
-                    break;
-                }
-                case REF_CLIPBOARD: {
-                    SPCSSAttr *style = sp_repr_css_attr(it->elem->getRepr(), "style");
-                    gchar *url = g_strdup_printf("url(#%s)", obj->getId());
-                    sp_repr_css_set_property(style, it->attr, url);
-                    g_free(url);
-                    Glib::ustring style_string;
-                    sp_repr_css_write_string(style, style_string);
-                    it->elem->getRepr()->setAttribute("style", style_string);
-                    break;
-                }
+            if (it->type == REF_HREF) {
+                gchar *new_uri = g_strdup_printf("#%s", obj->getId());
+                SP_OBJECT_REPR(it->elem)->setAttribute(it->attr, new_uri);
+                g_free(new_uri);
             }
+            else if (it->type == REF_STYLE) {
+                sp_style_set_property_url(it->elem, it->attr, obj, false);
+            }
+            else if (it->type == REF_URL) {
+                gchar *url = g_strdup_printf("url(#%s)", obj->getId());
+                SP_OBJECT_REPR(it->elem)->setAttribute(it->attr, url);
+                g_free(url);
+            }
+            else if (it->type == REF_CLIPBOARD) {
+                SPCSSAttr *style = sp_repr_css_attr(SP_OBJECT_REPR(it->elem), "style");
+                gchar *url = g_strdup_printf("url(#%s)", obj->getId());
+                sp_repr_css_set_property(style, it->attr, url);
+                g_free(url);
+                gchar *style_string = sp_repr_css_write_string(style);
+                SP_OBJECT_REPR(it->elem)->setAttribute("style", style_string);
+                g_free(style_string);
+            }
+            else g_assert(0); // shouldn't happen
         }
     }
 }
@@ -303,111 +262,16 @@ fix_up_refs(refmap_type const &refmap, const id_changelist_type &id_changes)
 void
 prevent_id_clashes(SPDocument *imported_doc, SPDocument *current_doc)
 {
-    refmap_type refmap;
+    refmap_type *refmap = new refmap_type;
     id_changelist_type id_changes;
-    SPObject *imported_root = imported_doc->getRoot();
+    SPObject *imported_root = SP_DOCUMENT_ROOT(imported_doc);
         
     find_references(imported_root, refmap);
     change_clashing_ids(imported_doc, current_doc, imported_root, refmap,
                         &id_changes);
     fix_up_refs(refmap, id_changes);
-}
 
-/*
- * Change any references of svg:def from_obj into to_obj
- */
-void
-change_def_references(SPObject *from_obj, SPObject *to_obj)
-{
-    refmap_type refmap;
-    SPDocument *current_doc = from_obj->document;
-    std::string old_id(from_obj->getId());
-
-    find_references(current_doc->getRoot(), refmap);
-
-    refmap_type::const_iterator pos = refmap.find(old_id);
-    if (pos != refmap.end()) {
-        std::list<IdReference>::const_iterator it;
-        const std::list<IdReference>::const_iterator it_end = pos->second.end();
-        for (it = pos->second.begin(); it != it_end; ++it) {
-            switch (it->type) {
-                case REF_HREF: {
-                    gchar *new_uri = g_strdup_printf("#%s", to_obj->getId());
-                    it->elem->getRepr()->setAttribute(it->attr, new_uri);
-                    g_free(new_uri);
-                    break;
-                }
-                case REF_STYLE: {
-                    sp_style_set_property_url(it->elem, it->attr, to_obj, false);
-                    break;
-                }
-                case REF_URL: {
-                    gchar *url = g_strdup_printf("url(#%s)", to_obj->getId());
-                    it->elem->getRepr()->setAttribute(it->attr, url);
-                    g_free(url);
-                    break;
-                }
-                case REF_CLIPBOARD: {
-                    SPCSSAttr *style = sp_repr_css_attr(it->elem->getRepr(), "style");
-                    gchar *url = g_strdup_printf("url(#%s)", to_obj->getId());
-                    sp_repr_css_set_property(style, it->attr, url);
-                    g_free(url);
-                    Glib::ustring style_string;
-                    sp_repr_css_write_string(style, style_string);
-                    it->elem->getRepr()->setAttribute("style", style_string);
-                    break;
-                }
-            } 
-        }
-    }
-}
-
-/*
- * Change the id of a SPObject to new_name
- * If there is an id clash then rename to something similar
- */
-void rename_id(SPObject *elem, Glib::ustring const &new_name)
-{
-    if (new_name.empty()){
-        g_message("Invalid Id, will not change.");
-        return;
-    }
-    gchar *id = g_strdup(new_name.c_str()); //id is not empty here as new_name is check to be not empty
-    g_strcanon (id, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.:", '_');
-    Glib::ustring new_name2 = id; //will not fail as id can not be NULL, see length check on new_name
-    if (!isalnum (new_name2[0])) {
-        g_message("Invalid Id, will not change.");
-        g_free (id);
-        return;
-    }
-
-    SPDocument *current_doc = elem->document;
-    refmap_type refmap;
-    find_references(current_doc->getRoot(), refmap);
-
-    std::string old_id(elem->getId());
-    if (current_doc->getObjectById(id)) {
-        // Choose a new ID.
-        // To try to preserve any meaningfulness that the original ID
-        // may have had, the new ID is the old ID followed by a hyphen
-        // and one or more digits.
-        new_name2 += '-';
-        for (;;) {
-            new_name2 += "0123456789"[std::rand() % 10];
-            if (current_doc->getObjectById(new_name2) == NULL)
-                break;
-        }
-    }
-    g_free (id);
-    // Change to the new ID
-    elem->getRepr()->setAttribute("id", new_name2);
-    // Make a note of this change, if we need to fix up refs to it
-    id_changelist_type id_changes;
-    if (refmap.find(old_id) != refmap.end()) {
-        id_changes.push_back(id_changeitem_type(elem, old_id));
-    }
-
-    fix_up_refs(refmap, id_changes);
+    delete refmap;
 }
 
 /*

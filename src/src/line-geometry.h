@@ -12,14 +12,13 @@
 #ifndef SEEN_LINE_GEOMETRY_H
 #define SEEN_LINE_GEOMETRY_H
 
-#include <2geom/point.h>
 #include <boost/optional.hpp>
-
+#include "glib.h"
+#include "display/sp-ctrlline.h"
 #include "axis-manip.h" // FIXME: This is only for Box3D::epsilon; move that to a better location
-#include "persp3d.h"
 
-class SPDesktop;
-typedef unsigned int guint32;
+#include "document.h"
+#include "ui/view/view.h"
 
 namespace Box3D {
 

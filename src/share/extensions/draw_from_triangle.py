@@ -28,16 +28,14 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
-# standard library
-import sys
-from math import *
-# local library
-import inkex
-import simplestyle
-import simplepath
 
+import inkex
+import simplestyle, sys, simplepath
+from math import *
+import gettext
+_ = gettext.gettext
 
 #DRAWING ROUTINES
 
@@ -174,35 +172,32 @@ def cot(x):#cotangent(x)
         return 1/tan(x)
         
 def report_properties( params ):#report to the Inkscape console using errormsg
-    # TODO: unit identifier needs solution for arbitrary document scale
-    unit = Draw_From_Triangle.getDocumentUnit(e)
-
-    inkex.errormsg(_("Side Length 'a' ({0}): {1}").format(unit, str(params[0][0])) )
-    inkex.errormsg(_("Side Length 'b' ({0}): {1}").format(unit, str(params[0][1])) )
-    inkex.errormsg(_("Side Length 'c' ({0}): {1}").format(unit, str(params[0][2])) )
-    inkex.errormsg(_("Angle 'A' (radians): {}").format(str(params[1][0])) )
-    inkex.errormsg(_("Angle 'B' (radians): {}").format(str(params[1][1])) )
-    inkex.errormsg(_("Angle 'C' (radians): {}").format(params[1][2]) )
-    inkex.errormsg(_("Semiperimeter (px): {}").format(params[4][1]) )
-    inkex.errormsg(_("Area ({0}^2): {1}").format(unit, str(params[4][0])) )
+    inkex.errormsg(_("Side Length 'a'/px: " + str( params[0][0] ) ))
+    inkex.errormsg(_("Side Length 'b'/px: " + str( params[0][1] ) ))
+    inkex.errormsg(_("Side Length 'c'/px: " + str( params[0][2] ) ))
+    inkex.errormsg(_("Angle 'A'/radians: " + str( params[1][0] ) ))
+    inkex.errormsg(_("Angle 'B'/radians: " + str( params[1][1] ) ))
+    inkex.errormsg(_("Angle 'C'/radians: " + str( params[1][2] ) ))
+    inkex.errormsg(_("Semiperimeter/px: " + str( params[4][1] ) ))
+    inkex.errormsg(_("Area /px^2: " + str( params[4][0] ) ))
     return
-
+    
 
 class Style(object): #container for style information
     def __init__(self, options):
         #dot markers
-        self.d_rad = Draw_From_Triangle.unittouu(e, '4px') #dot marker radius
-        self.d_th  = Draw_From_Triangle.unittouu(e, '2px') #stroke width
+        self.d_rad = 4 #dot marker radius
+        self.d_th  = 2 #stroke width
         self.d_fill= '#aaaaaa' #fill colour
         self.d_col = '#000000' #stroke colour
 
         #lines
-        self.l_th  = Draw_From_Triangle.unittouu(e, '2px')
+        self.l_th  = 2
         self.l_fill= 'none'
         self.l_col = '#000000'
         
         #circles
-        self.c_th  = Draw_From_Triangle.unittouu(e, '2px')
+        self.c_th  = 2
         self.c_fill= 'none'
         self.c_col = '#000000'
 
@@ -316,7 +311,7 @@ class Draw_From_Triangle(inkex.Effect):
 
         if len(pts) == 3: #if we have right number of nodes, else skip and end program
             st = Style(so)#style for dots, lines and circles
-
+            
             #CREATE A GROUP TO HOLD ALL GENERATED ELEMENTS IN
             #Hold relative to point A (pt[0])
             group_translation = 'translate(' + str( pts[0][0] ) + ','+ str( pts[0][1] ) + ')'

@@ -1,6 +1,6 @@
 /*
  * This is what gets executed to initialize all of the modules.  For
- * the internal modules this involves executing their initialization
+ * the internal modules this invovles executing their initialization
  * functions, for external ones it involves reading their .spmodule
  * files and bringing them into Sodipodi.
  *
@@ -15,30 +15,31 @@
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
-
-#ifdef HAVE_POPPLER
-# include "internal/pdfinput/pdf-input.h"
-#endif
-
 #include "path-prefix.h"
 
-#include "inkscape.h"
 
-#include <glibmm/fileutils.h>
-#include <glibmm/i18n.h>
+#include "inkscape.h"
 #include <glibmm/ustring.h>
+#include <glibmm/i18n.h>
 
 #include "system.h"
 #include "db.h"
 #include "internal/svgz.h"
-# include "internal/emf-inout.h"
-# include "internal/emf-print.h"
-# include "internal/wmf-inout.h"
-# include "internal/wmf-print.h"
+#ifdef WIN32
+# include "internal/win32.h"
+# include "internal/emf-win32-inout.h"
+# include "internal/emf-win32-print.h"
+#endif
 #ifdef HAVE_CAIRO_PDF
 # include "internal/cairo-renderer-pdf-out.h"
 # include "internal/cairo-png-out.h"
 # include "internal/cairo-ps-out.h"
+#endif
+#ifdef HAVE_POPPLER
+# include "internal/pdfinput/pdf-input.h"
+#endif
+#ifdef HAVE_POPPLER_GLIB
+# include "internal/pdf-input-cairo.h"
 #endif
 #include "internal/pov-out.h"
 #include "internal/javafx-out.h"
@@ -52,17 +53,8 @@
 #ifdef WITH_LIBWPG
 #include "internal/wpg-input.h"
 #endif
-#ifdef WITH_LIBVISIO
-#include "internal/vsd-input.h"
-#endif
-#ifdef WITH_LIBCDR
-#include "internal/cdr-input.h"
-#endif
 #include "preferences.h"
 #include "io/sys.h"
-#ifdef WITH_DBUS
-#include "dbus/dbus-init.h"
-#endif
 
 #ifdef WITH_IMAGE_MAGICK
 #include "internal/bitmap/adaptiveThreshold.h"
@@ -72,7 +64,6 @@
 #include "internal/bitmap/charcoal.h"
 #include "internal/bitmap/colorize.h"
 #include "internal/bitmap/contrast.h"
-#include "internal/bitmap/crop.h"
 #include "internal/bitmap/cycleColormap.h"
 #include "internal/bitmap/despeckle.h"
 #include "internal/bitmap/edge.h"
@@ -104,7 +95,7 @@
 
 #include "internal/filter/filter.h"
 
-#include "init.h"
+extern gboolean inkscape_app_use_gui( Inkscape::Application const *app );
 
 namespace Inkscape {
 namespace Extension {
@@ -171,10 +162,16 @@ init()
 #ifdef HAVE_POPPLER
     Internal::PdfInput::init();
 #endif
-    Internal::PrintEmf::init();
-    Internal::Emf::init();
-    Internal::PrintWmf::init();
-    Internal::Wmf::init();
+#ifdef HAVE_POPPLER_GLIB
+    if (0) {
+    Internal::PdfInputCairo::init();
+    }
+#endif
+#ifdef WIN32
+    Internal::PrintWin32::init();
+    Internal::PrintEmfWin32::init();
+    Internal::EmfWin32::init();
+#endif
     Internal::PovOutput::init();
     Internal::JavaFXOutput::init();
     Internal::OdfOutput::init();
@@ -183,21 +180,11 @@ init()
 #ifdef WITH_LIBWPG
     Internal::WpgInput::init();
 #endif
-#ifdef WITH_LIBVISIO
-    Internal::VsdInput::init();
-#endif
-#ifdef WITH_LIBCDR
-    Internal::CdrInput::init();
-#endif
 
     /* Effects */
     Internal::BlurEdge::init();
     Internal::GimpGrad::init();
     Internal::Grid::init();
-
-#ifdef WITH_DBUS
-    Dbus::init();
-#endif
 
     /* Raster Effects */
 #ifdef WITH_IMAGE_MAGICK
@@ -208,7 +195,6 @@ init()
     Internal::Bitmap::Charcoal::init();
     Internal::Bitmap::Colorize::init();
     Internal::Bitmap::Contrast::init();
-    Internal::Bitmap::Crop::init();
     Internal::Bitmap::CycleColormap::init();
     Internal::Bitmap::Edge::init();
     Internal::Bitmap::Despeckle::init();
@@ -243,7 +229,7 @@ init()
     /* Load search path for extensions */
     if (Inkscape::Extension::Extension::search_path.size() == 0)
     {
-        Inkscape::Extension::Extension::search_path.push_back(Inkscape::Application::profile_path("extensions"));
+        Inkscape::Extension::Extension::search_path.push_back(profile_path("extensions"));
 
         Inkscape::Extension::Extension::search_path.push_back(g_strdup(INKSCAPE_EXTENSIONDIR));
 
@@ -285,7 +271,7 @@ static void
 build_module_from_dir(gchar const *dirname)
 {
     if (!dirname) {
-        g_warning("%s", _("Null external module directory name.  Modules will not be loaded."));
+        g_warning(_("Null external module directory name.  Modules will not be loaded."));
         return;
     }
 
@@ -314,7 +300,7 @@ build_module_from_dir(gchar const *dirname)
             continue;
         }
 
-        gchar *pathname = g_build_filename(dirname, filename, (char *) NULL);
+        gchar *pathname = g_build_filename(dirname, filename, NULL);
         build_from_file(pathname);
         g_free(pathname);
     }
@@ -337,14 +323,18 @@ check_extensions_internal(Extension *in_plug, gpointer in_data)
     }
 }
 
-static void check_extensions()
+static void
+check_extensions()
 {
     int count = 1;
+    bool anyfail = false;
+    // int pass = 0;
 
     Inkscape::Extension::Extension::error_file_open();
     while (count != 0) {
         count = 0;
         db.foreach(check_extensions_internal, (gpointer)&count);
+        if (count != 0) anyfail = true;
     }
     Inkscape::Extension::Extension::error_file_close();
 }
@@ -361,4 +351,4 @@ static void check_extensions()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

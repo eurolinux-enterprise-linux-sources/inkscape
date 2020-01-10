@@ -4,8 +4,6 @@
  * Authors:
  *   MenTaLguY <mental@rydia.net>
  *   bulia byak <buliabyak@users.sf.net>
- *   Abhishek Sharma
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2004-2006 Authors
  *
@@ -18,7 +16,6 @@
 
 #include <glibmm/i18n.h>
 #include "xml/quote.h"
-#include "layer-model.h"
 #include "selection.h"
 #include "selection-describer.h"
 #include "desktop.h"
@@ -26,7 +23,6 @@
 #include "sp-offset.h"
 #include "sp-flowtext.h"
 #include "sp-use.h"
-#include "sp-symbol.h"
 #include "sp-rect.h"
 #include "box3d.h"
 #include "sp-ellipse.h"
@@ -39,56 +35,63 @@
 #include "sp-polyline.h"
 #include "sp-spiral.h"
 
-// Returns a list of terms for the items to be used in the statusbar
-char* collect_terms (const std::vector<SPItem*> &items)
+const gchar *
+type2term(GType type)
 {
-    GSList *check = NULL;
-    std::stringstream ss;
-    bool first = true;
-
-    for ( std::vector<SPItem*>::const_iterator iter=items.begin();iter!=items.end();++iter ) {
-        SPItem *item = *iter;
-        if (item) {
-            const char *term = item->displayName();
-            if (term != NULL && g_slist_find (check, term) == NULL) {
-                check = g_slist_prepend (check, (void *) term);
-                ss << (first ? "" : ", ") << "<b>" << term << "</b>";
-                first = false;
-            }
-        }
-    }
-    return g_strdup(ss.str().c_str());
+    if (type == SP_TYPE_ANCHOR)
+        //TRANSLATORS: only translate "string" in "context|string".
+        // For more details, see http://developer.gnome.org/doc/API/2.0/glib/glib-I18N.html#Q-:CAPS
+	// "Link" means internet link (anchor)
+        { return Q_("web|Link"); }
+    if (type == SP_TYPE_CIRCLE)
+        { return _("Circle"); }
+    if (type == SP_TYPE_ELLIPSE)
+        { return _("Ellipse"); }
+    if (type == SP_TYPE_FLOWTEXT)
+        { return _("Flowed text"); }
+    if (type == SP_TYPE_GROUP)
+        { return _("Group"); }
+    if (type == SP_TYPE_IMAGE)
+        { return _("Image"); }
+    if (type == SP_TYPE_LINE)
+        { return _("Line"); }
+    if (type == SP_TYPE_PATH)
+        { return _("Path"); }
+    if (type == SP_TYPE_POLYGON)
+        { return _("Polygon"); }
+    if (type == SP_TYPE_POLYLINE)
+        { return _("Polyline"); }
+    if (type == SP_TYPE_RECT)
+        { return _("Rectangle"); }
+    if (type == SP_TYPE_BOX3D)
+        { return _("3D Box"); }
+    if (type == SP_TYPE_TEXT)
+        { return _("Text"); }
+    if (type == SP_TYPE_USE)
+        // TRANSLATORS: only translate "string" in "context|string".
+        // For more details, see http://developer.gnome.org/doc/API/2.0/glib/glib-I18N.html#Q-:CAPS
+        // "Clone" is a noun, type of object
+        { return Q_("object|Clone"); }
+    if (type == SP_TYPE_ARC)
+        { return _("Ellipse"); }
+    if (type == SP_TYPE_OFFSET)
+        { return _("Offset path"); }
+    if (type == SP_TYPE_SPIRAL)
+        { return _("Spiral"); }
+    if (type == SP_TYPE_STAR)
+        { return _("Star"); }
+    return NULL;
 }
 
-// Returns the number of terms in the list
-static int count_terms (const std::vector<SPItem*> &items)
+GSList *collect_terms (GSList *items)
 {
-    GSList *check = NULL;
-    int count=0;
-    for ( std::vector<SPItem*>::const_iterator iter=items.begin();iter!=items.end();++iter ) {
-        SPItem *item = *iter;
-        if (item) {
-            const char *term = item->displayName();
-            if (term != NULL && g_slist_find (check, term) == NULL) {
-                check = g_slist_prepend (check, (void *) term);
-                count++;
-            }
-        }
+    GSList *r = NULL;
+    for (GSList *i = items; i != NULL; i = i->next) {
+        const gchar *term = type2term (G_OBJECT_TYPE(i->data));
+        if (term != NULL && g_slist_find (r, term) == NULL)
+            r = g_slist_prepend (r, (void *) term);
     }
-    return count;
-}
-
-// Returns the number of filtered items in the list
-static int count_filtered (const std::vector<SPItem*> &items)
-{
-    int count=0;
-    for ( std::vector<SPItem*>::const_iterator iter=items.begin();iter!=items.end();++iter ) {
-        SPItem *item = *iter;
-        if (item) {
-            count += item->isFiltered();
-        }
-    }
-    return count;
+    return r;
 }
 
 
@@ -122,26 +125,23 @@ void SelectionDescriber::_selectionModified(Inkscape::Selection *selection, guin
 }
 
 void SelectionDescriber::_updateMessageFromSelection(Inkscape::Selection *selection) {
-	std::vector<SPItem*> const items = selection->itemList();
+    GSList const *items = selection->itemList();
 
-    if (items.empty()) { // no items
+    if (!items) { // no items
         _context.set(Inkscape::NORMAL_MESSAGE, _when_nothing);
     } else {
-        SPItem *item = items[0];
-        g_assert(item != NULL);
-        SPObject *layer = selection->layers()->layerForObject(item);
-        SPObject *root = selection->layers()->currentRoot();
+        SPItem *item = SP_ITEM(items->data);
+        SPObject *layer = selection->desktop()->layerForObject (SP_OBJECT (item));
+        SPObject *root = selection->desktop()->currentRoot();
 
         // Layer name
         gchar *layer_name;
         if (layer == root) {
             layer_name = g_strdup(_("root"));
-        } else if(!layer) {
-            layer_name = g_strdup(_("none"));
         } else {
             char const *layer_label;
             bool is_label = false;
-            if (layer->label()) {
+            if (layer && layer->label()) {
                 layer_label = layer->label();
                 is_label = true;
             } else {
@@ -157,14 +157,11 @@ void SelectionDescriber::_updateMessageFromSelection(Inkscape::Selection *select
         }
 
         // Parent name
-        SPObject *parent = item->parent;
+        SPObject *parent = SP_OBJECT_PARENT (item);
         gchar const *parent_label = parent->getId();
-        gchar *parent_name = NULL;
-        if (parent_label) {
-            char *quoted_parent_label = xml_quote_strdup(parent_label);
-            parent_name = g_strdup_printf(_("<i>%s</i>"), quoted_parent_label);
-            g_free(quoted_parent_label);
-        }
+        char *quoted_parent_label = xml_quote_strdup(parent_label);
+        gchar *parent_name = g_strdup_printf(_("<i>%s</i>"), quoted_parent_label);
+        g_free(quoted_parent_label);
 
         gchar *in_phrase;
         guint num_layers = selection->numberOfLayers();
@@ -173,91 +170,74 @@ void SelectionDescriber::_updateMessageFromSelection(Inkscape::Selection *select
             if (num_parents == 1) {
                 if (layer == parent)
                     in_phrase = g_strdup_printf(_(" in %s"), layer_name);
-                else if (!layer)
-                    in_phrase = g_strdup_printf("%s", _(" hidden in definitions"));
-                else if (parent_name)
+                else 
                     in_phrase = g_strdup_printf(_(" in group %s (%s)"), parent_name, layer_name);
-                else
-                    in_phrase = g_strdup_printf(_(" in unnamed group (%s)"), layer_name);
             } else {
-                    in_phrase = g_strdup_printf(ngettext(" in <b>%i</b> parent (%s)", " in <b>%i</b> parents (%s)", num_parents), num_parents, layer_name);
+                    in_phrase = g_strdup_printf(ngettext(" in <b>%i</b> parents (%s)", " in <b>%i</b> parents (%s)", num_parents), num_parents, layer_name);
             }
         } else {
-            in_phrase = g_strdup_printf(ngettext(" in <b>%i</b> layer", " in <b>%i</b> layers", num_layers), num_layers);
+            in_phrase = g_strdup_printf(ngettext(" in <b>%i</b> layers", " in <b>%i</b> layers", num_layers), num_layers);
         }
         g_free (layer_name);
         g_free (parent_name);
 
-        if (items.size()==1) { // one item
-            char *item_desc = item->detailedDescription();
-
-            bool isUse = dynamic_cast<SPUse *>(item) != NULL;
-            if (isUse && dynamic_cast<SPSymbol *>(item->firstChild())) {
+        if (!items->next) { // one item
+            char *item_desc = sp_item_description(item);
+            if (SP_IS_USE(item) || (SP_IS_OFFSET(item) && SP_OFFSET (item)->sourceHref)) {
                 _context.setF(Inkscape::NORMAL_MESSAGE, "%s%s. %s. %s.",
                               item_desc, in_phrase,
-                              _("Convert symbol to group to edit"), _when_selected);
-            } else if (dynamic_cast<SPSymbol *>(item)) {
-                _context.setF(Inkscape::NORMAL_MESSAGE, "%s%s. %s.",
+                              _("Use <b>Shift+D</b> to look up original"), _when_selected);
+            } else if (SP_IS_TEXT_TEXTPATH(item)) {
+                _context.setF(Inkscape::NORMAL_MESSAGE, "%s%s. %s. %s.",
                               item_desc, in_phrase,
-                              _("Remove from symbols tray to edit symbol"));
+                              _("Use <b>Shift+D</b> to look up path"), _when_selected);
+            } else if (SP_IS_FLOWTEXT(item) && !SP_FLOWTEXT(item)->has_internal_frame()) {
+                _context.setF(Inkscape::NORMAL_MESSAGE, "%s%s. %s. %s.",
+                              item_desc, in_phrase,
+                              _("Use <b>Shift+D</b> to look up frame"), _when_selected);
             } else {
-                SPOffset *offset = (isUse) ? NULL : dynamic_cast<SPOffset *>(item);
-                if (isUse || (offset && offset->sourceHref)) {
-                    _context.setF(Inkscape::NORMAL_MESSAGE, "%s%s. %s. %s.",
-                                  item_desc, in_phrase,
-                                  _("Use <b>Shift+D</b> to look up original"), _when_selected);
-                } else {
-                    SPText *text = dynamic_cast<SPText *>(item);
-                    if (text && text->firstChild() && dynamic_cast<SPText *>(text->firstChild())) {
-                        _context.setF(Inkscape::NORMAL_MESSAGE, "%s%s. %s. %s.",
-                                      item_desc, in_phrase,
-                                      _("Use <b>Shift+D</b> to look up path"), _when_selected);
-                    } else {
-                        SPFlowtext *flowtext = dynamic_cast<SPFlowtext *>(item);
-                        if (flowtext && !flowtext->has_internal_frame()) {
-                            _context.setF(Inkscape::NORMAL_MESSAGE, "%s%s. %s. %s.",
-                                          item_desc, in_phrase,
-                                          _("Use <b>Shift+D</b> to look up frame"), _when_selected);
-                        } else {
-                            _context.setF(Inkscape::NORMAL_MESSAGE, "%s%s. %s.",
-                                          item_desc, in_phrase, _when_selected);
-                        }
-                    }
-                }
+                _context.setF(Inkscape::NORMAL_MESSAGE, "%s%s. %s.",
+                              item_desc, in_phrase, _when_selected);
             }
-
             g_free(item_desc);
         } else { // multiple items
-            int objcount = items.size();
-            char *terms = collect_terms (items);
-            int n_terms = count_terms(items);
-            
-            gchar *objects_str = g_strdup_printf(ngettext(
-                "<b>%1$i</b> objects selected of type %2$s",
-                "<b>%1$i</b> objects selected of types %2$s", n_terms),
-                 objcount, terms);
+            int object_count = g_slist_length((GSList *)items);
 
-            g_free(terms);
-
-            // indicate all, some, or none filtered
-            gchar *filt_str = NULL;
-            int n_filt = count_filtered(items);  //all filtered
-            if (n_filt) {
-                filt_str = g_strdup_printf(ngettext("; <i>%d filtered object</i> ",
-                                                     "; <i>%d filtered objects</i> ", n_filt), n_filt);
+            const gchar *objects_str = NULL;
+            GSList *terms = collect_terms ((GSList *)items);
+            int n_terms = g_slist_length(terms);
+            if (n_terms == 0) {
+                objects_str = g_strdup_printf (
+                    // this is only used with 2 or more objects
+                    ngettext("<b>%i</b> object selected", "<b>%i</b> objects selected", object_count), 
+                    object_count);
+            } else if (n_terms == 1) {
+                objects_str = g_strdup_printf (
+                    // this is only used with 2 or more objects
+                    ngettext("<b>%i</b> object of type <b>%s</b>", "<b>%i</b> objects of type <b>%s</b>", object_count),
+                    object_count, (gchar *) terms->data);
+            } else if (n_terms == 2) {
+                objects_str = g_strdup_printf (
+                    // this is only used with 2 or more objects
+                    ngettext("<b>%i</b> object of types <b>%s</b>, <b>%s</b>", "<b>%i</b> objects of types <b>%s</b>, <b>%s</b>", object_count), 
+                    object_count, (gchar *) terms->data, (gchar *) terms->next->data);
+            } else if (n_terms == 3) {
+                objects_str = g_strdup_printf (
+                    // this is only used with 2 or more objects
+                    ngettext("<b>%i</b> object of types <b>%s</b>, <b>%s</b>, <b>%s</b>", "<b>%i</b> objects of types <b>%s</b>, <b>%s</b>, <b>%s</b>", object_count), 
+                    object_count, (gchar *) terms->data, (gchar *) terms->next->data, (gchar *) terms->next->next->data);
             } else {
-                filt_str = g_strdup("");
+                objects_str = g_strdup_printf (
+                    // this is only used with 2 or more objects
+                    ngettext("<b>%i</b> object of <b>%i</b> types", "<b>%i</b> objects of <b>%i</b> types", object_count), 
+                    object_count, n_terms);
             }
+            g_slist_free (terms);
 
-            _context.setF(Inkscape::NORMAL_MESSAGE, "%s%s%s. %s.", objects_str, filt_str, in_phrase, _when_selected);
-            if (objects_str) {
-                g_free(objects_str);
-                objects_str = 0;
-            }
-            if (filt_str) {
-                g_free(filt_str);
-                filt_str = 0;
-            }
+            _context.setF(Inkscape::NORMAL_MESSAGE, _("%s%s. %s."), objects_str, in_phrase, _when_selected);
+
+            if (objects_str)
+                g_free ((gchar *) objects_str);
         }
 
         g_free(in_phrase);
@@ -275,4 +255,4 @@ void SelectionDescriber::_updateMessageFromSelection(Inkscape::Selection *select
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

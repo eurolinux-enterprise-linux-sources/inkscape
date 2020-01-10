@@ -1,6 +1,5 @@
-/**
- * @file
- * LPE effect that draws a circle based on two points and a radius.
+/** @file
+ * @brief LPE effect that draws a circle based on two points and a radius
  * - implementation
  */
 /* Authors:
@@ -15,9 +14,10 @@
 #include "display/curve.h"
 
 // You might need to include other 2geom files. You can add them here:
-#include <2geom/pathvector.h>
-#include <2geom/circle.h>
-#include <2geom/path-sink.h>
+#include <2geom/path.h>
+#include <2geom/sbasis.h>
+#include <2geom/bezier-to-sbasis.h>
+#include <2geom/d2.h>
 
 using namespace Geom;
 
@@ -38,18 +38,35 @@ LPECircleWithRadius::~LPECircleWithRadius()
 
 }
 
-Geom::PathVector
-LPECircleWithRadius::doEffect_path (Geom::PathVector const & path_in)
+void _circle(Geom::Point center, double radius, std::vector<Geom::Path> &path_out) {
+    Geom::Path pb;
+
+    D2<SBasis> B;
+    Linear bo = Linear(0, 2 * M_PI);
+
+    B[0] = cos(bo,4);
+    B[1] = sin(bo,4);
+
+    B = B * radius + center;
+
+    pb.append(SBasisCurve(B));
+
+    path_out.push_back(pb);
+}
+
+std::vector<Geom::Path>
+LPECircleWithRadius::doEffect_path (std::vector<Geom::Path> const & path_in)
 {
-    Geom::PathVector path_out = Geom::PathVector();
+    std::vector<Geom::Path> path_out = std::vector<Geom::Path>();
 
     Geom::Point center = path_in[0].initialPoint();
     Geom::Point pt = path_in[0].finalPoint();
 
     double radius = Geom::L2(pt - center);
 
-    Geom::Circle c(center, radius);
-    return Geom::Path(c);
+    _circle(center, radius, path_out);
+
+    return path_out;
 }
 
 /*
@@ -80,4 +97,4 @@ LPECircleWithRadius::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > & p
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

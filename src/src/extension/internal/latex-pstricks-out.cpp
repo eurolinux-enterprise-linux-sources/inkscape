@@ -1,8 +1,6 @@
 /*
  * Authors:
  *   Michael Forbes <miforbes@mbhs.edu>
- *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 2004 Authors
  *
@@ -18,11 +16,11 @@
 #include "extension/system.h"
 #include "extension/print.h"
 #include "extension/db.h"
-#include "display/drawing.h"
-#include "sp-root.h"
+#include "display/nr-arena.h"
+#include "display/nr-arena-item.h"
 
 
-#include "document.h"
+
 
 
 namespace Inkscape {
@@ -39,43 +37,55 @@ LatexOutput::~LatexOutput (void) //The destructor
     return;
 }
 
-bool LatexOutput::check(Inkscape::Extension::Extension * /*module*/)
+bool
+LatexOutput::check (Inkscape::Extension::Extension * module)
 {
-    bool result = Inkscape::Extension::db.get("org.inkscape.print.latex") != NULL;
-    return result;
+	if (NULL == Inkscape::Extension::db.get("org.inkscape.print.latex"))
+		return FALSE;
+    return TRUE;
 }
 
 
-void LatexOutput::save(Inkscape::Extension::Output * /*mod2*/, SPDocument *doc, gchar const *filename)
+void
+LatexOutput::save(Inkscape::Extension::Output *mod2, SPDocument *doc, gchar const *filename)
 {
+    Inkscape::Extension::Print *mod;
     SPPrintContext context;
-    doc->ensureUpToDate();
+    const gchar * oldconst;
+    gchar * oldoutput;
+    unsigned int ret;
 
-    Inkscape::Extension::Print *mod = Inkscape::Extension::get_print(SP_MODULE_KEY_PRINT_LATEX);
-    const gchar * oldconst = mod->get_param_string("destination");
-    gchar * oldoutput = g_strdup(oldconst);
+    sp_document_ensure_up_to_date (doc);
+
+    mod = Inkscape::Extension::get_print(SP_MODULE_KEY_PRINT_LATEX);
+    oldconst = mod->get_param_string("destination");
+    oldoutput = g_strdup(oldconst);
     mod->set_param_string("destination", filename);
 
-    // Start
+    /* Start */
     context.module = mod;
-    // fixme: This has to go into module constructor somehow
-    mod->base = doc->getRoot();
-    Inkscape::Drawing drawing;
-    mod->dkey = SPItem::display_key_new(1);
-    mod->root = (mod->base)->invoke_show(drawing, mod->dkey, SP_ITEM_SHOW_DISPLAY);
-    drawing.setRoot(mod->root);
-    // Print document
-    mod->begin(doc);
-    (mod->base)->invoke_print(&context);
-    mod->finish();
-    // Release things
-    (mod->base)->invoke_hide(mod->dkey);
+    /* fixme: This has to go into module constructor somehow */
+    /* Create new arena */
+    mod->base = SP_ITEM (sp_document_root (doc));
+    mod->arena = NRArena::create();
+    mod->dkey = sp_item_display_key_new (1);
+    mod->root = sp_item_invoke_show (mod->base, mod->arena, mod->dkey, SP_ITEM_SHOW_DISPLAY);
+    /* Print document */
+    ret = mod->begin (doc);
+    sp_item_invoke_print (mod->base, &context);
+    ret = mod->finish ();
+    /* Release arena */
+    sp_item_invoke_hide (mod->base, mod->dkey);
     mod->base = NULL;
-    mod->root = NULL; // should have been deleted by invoke_hide
-    // end
+    mod->root = NULL;
+    nr_object_unref ((NRObject *) mod->arena);
+    mod->arena = NULL;
+    /* end */
 
     mod->set_param_string("destination", oldoutput);
     g_free(oldoutput);
+
+    return;
 }
 
 #include "clear-n_.h"

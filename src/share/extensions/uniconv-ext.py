@@ -20,11 +20,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 """
-# standard library
+
 import sys
-# local library
 from run_command import run
-import inkex
+import gettext
+_ = gettext.gettext
 
 cmd = None
 
@@ -51,15 +51,14 @@ if cmd == None:
         import imp
         imp.find_module("uniconvertor")
     except ImportError:
-        inkex.localize()
-        inkex.errormsg(_('You need to install the UniConvertor software.\n'+\
+        sys.stderr.write(_('You need to install the UniConvertor software.\n'+\
                      'For GNU/Linux: install the package python-uniconvertor.\n'+\
                      'For Windows: download it from\n'+\
-                     'https://sk1project.net/modules.php?name=Products&product=uniconvertor&op=download\n'+\
+                     'http://sk1project.org/modules.php?name=Products&product=uniconvertor\n'+\
                      'and install into your Inkscape\'s Python location\n'))
         sys.exit(1)
     cmd = 'python -c "import uniconvertor; uniconvertor.uniconv_run()"'
 
 run((cmd+' "%s" "%%s"') % sys.argv[1].replace("%","%%"), "UniConvertor")
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

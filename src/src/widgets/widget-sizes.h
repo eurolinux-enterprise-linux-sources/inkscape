@@ -29,11 +29,16 @@
 
 #define STATUS_ZOOM_WIDTH 57
 
-#define SELECTED_STYLE_SB_WIDTH 48
-#define SELECTED_STYLE_WIDTH 190
-#define STYLE_SWATCH_WIDTH 135
+#define SELECTED_STYLE_SB_WIDTH 38
+#define SELECTED_STYLE_WIDTH 180
+#define STYLE_SWATCH_WIDTH 100
 
 #define STATUS_LAYER_FONT_SIZE 7700
+
+#define RULER_WIDTH           12
+#define RULER_HEIGHT          12
+#define RULER_FONT_SIZE 6500
+#define RULER_FONT_VERTICAL_SPACING 1.2
 
 /*
   Local Variables:
@@ -44,4 +49,4 @@
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

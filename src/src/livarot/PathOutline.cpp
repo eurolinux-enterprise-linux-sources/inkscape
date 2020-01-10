@@ -8,6 +8,7 @@
 
 #include "livarot/Path.h"
 #include "livarot/path-description.h"
+#include <libnr/nr-point-fns.h>
 
 /*
  * the "outliner"
@@ -387,7 +388,7 @@ void Path::SubContractOutline(int off, int num_pd,
 				if (closeIfNeeded) {
 					if ( Geom::LInfty (curX- firstP) < 0.0001 ) {
 						OutlineJoin (dest, firstP, curT, firstT, width, join,
-									 miter, nType);
+									 miter);
 						dest->Close ();
 					}  else {
                                             PathDescrLineTo temp(firstP);
@@ -404,7 +405,7 @@ void Path::SubContractOutline(int off, int num_pd,
 							Geom::Point pos;
 							pos = curX;
 							OutlineJoin (dest, pos, curT, stNor, width, join,
-										 miter, nType);
+										 miter);
 						}
 						dest->LineTo (enPos+width*enNor);
 
@@ -413,7 +414,7 @@ void Path::SubContractOutline(int off, int num_pd,
 							Geom::Point pos;
 							pos = firstP;
 							OutlineJoin (dest, enPos, enNor, firstT, width, join,
-										 miter, nType);
+										 miter);
 							dest->Close ();
 						}
 					}
@@ -429,7 +430,7 @@ void Path::SubContractOutline(int off, int num_pd,
 				if (Geom::LInfty (curX - firstP) < 0.0001)
 				{
 					OutlineJoin (dest, firstP, curT, firstT, width, join,
-								 miter, nType);
+								 miter);
 					dest->Close ();
 				}
 				else
@@ -445,7 +446,7 @@ void Path::SubContractOutline(int off, int num_pd,
 					// jointure
 					{
 						OutlineJoin (dest, stPos, curT, stNor, width, join,
-									 miter, nType);
+									 miter);
 					}
 
 					dest->LineTo (enPos+width*enNor);
@@ -453,7 +454,7 @@ void Path::SubContractOutline(int off, int num_pd,
 					// jointure
 					{
 						OutlineJoin (dest, enPos, enNor, firstT, width, join,
-									 miter, nType);
+									 miter);
 						dest->Close ();
 					}
 				}
@@ -465,20 +466,15 @@ void Path::SubContractOutline(int off, int num_pd,
 		{
 			PathDescrLineTo* nData = dynamic_cast<PathDescrLineTo*>(descr_cmd[curD]);
 			nextX = nData->p;
-			// et on avance
-			TangentOnSegAt (0.0, curX, *nData, stPos, stTgt, stTle);
-			TangentOnSegAt (1.0, curX, *nData, enPos, enTgt, enTle);
 			// test de nullité du segment
 			if (IsNulCurve (descr_cmd, curD, curX))
 			{
-                if (descr_cmd.size() == 2) {  // single point, see LP Bug 1006666
-                    stTgt = dest->descr_cmd.size() ? Geom::Point(1, 0) : Geom::Point(-1, 0); // reverse direction
-                    enTgt = stTgt;
-                } else {
-                    curP++;
-                    continue;
-                }
+				curP++;
+				continue;
 			}
+			// et on avance
+			TangentOnSegAt (0.0, curX, *nData, stPos, stTgt, stTle);
+			TangentOnSegAt (1.0, curX, *nData, enPos, enTgt, enTle);
 			stNor=stTgt.cw();
 			enNor=enTgt.cw();
 
@@ -502,7 +498,7 @@ void Path::SubContractOutline(int off, int num_pd,
 				// jointure
 				Geom::Point pos;
 				pos = curX;
-				OutlineJoin (dest, pos, curT, stNor, width, join, miter, nType);
+				OutlineJoin (dest, pos, curT, stNor, width, join, miter);
 			}
 
 			int n_d = dest->LineTo (nextX+width*enNor);
@@ -552,7 +548,7 @@ void Path::SubContractOutline(int off, int num_pd,
 				// jointure
 				Geom::Point pos;
 				pos = curX;
-				OutlineJoin (dest, pos, curT, stNor, width, join, miter, nType);
+				OutlineJoin (dest, pos, curT, stNor, width, join, miter);
 			}
 
 			callsData.piece = curP;
@@ -608,7 +604,7 @@ void Path::SubContractOutline(int off, int num_pd,
 				// jointure
 				Geom::Point pos;
 				pos = curX;
-				OutlineJoin (dest, pos, curT, stNor, width, join, miter, nType);
+				OutlineJoin (dest, pos, curT, stNor, width, join, miter);
 			}
 
 			callsData.piece = curP;
@@ -666,7 +662,7 @@ void Path::SubContractOutline(int off, int num_pd,
 					// jointure
 					Geom::Point pos;
 					pos = curX;
-					if (stTle > 0) OutlineJoin (dest, pos, curT, stNor, width, join, miter, nType);
+					if (stTle > 0) OutlineJoin (dest, pos, curT, stNor, width, join, miter);
 				}
 				int n_d = dest->LineTo (nextX+width*enNor);
 				if (n_d >= 0) {
@@ -697,7 +693,7 @@ void Path::SubContractOutline(int off, int num_pd,
 					// jointure
 					Geom::Point pos;
 					pos = curX;
-					OutlineJoin (dest, pos, curT, stNor, width, join, miter, nType);
+					OutlineJoin (dest, pos, curT, stNor, width, join, miter);
 				}
 
 				callsData.piece = curP;
@@ -714,8 +710,9 @@ void Path::SubContractOutline(int off, int num_pd,
 			} else if (nbInterm > 1) {
 				Geom::Point  bx=curX;
 				Geom::Point cx=curX;
-				Geom::Point dx=nData->p;
+				Geom::Point dx=curX;
 
+				dx = nData->p;
 				TangentOnBezAt (0.0, curX, *nData, *nBData, false, stPos, stTgt, stTle, stRad);
 				stNor=stTgt.cw();
 
@@ -733,7 +730,7 @@ void Path::SubContractOutline(int off, int num_pd,
 					} else {
 						// jointure
 						Geom::Point pos=curX;
-						OutlineJoin (dest, pos, stTgt, stNor, width, join,  miter, nType);
+						OutlineJoin (dest, pos, stTgt, stNor, width, join,  miter);
 						//                                              dest->LineTo(curX+width*stNor.x,curY+width*stNor.y);
 					}
 				}
@@ -935,7 +932,7 @@ void Path::TangentOnArcAt(double at, const Geom::Point &iS, PathDescrArcTo const
 	Geom::Point const iE  = fin.p;
 	double const rx = fin.rx;
 	double const ry = fin.ry;
-	double const angle = fin.angle*M_PI/180.0;
+	double const angle = fin.angle;
 	bool const large = fin.large;
 	bool const wise = fin.clockwise;
 
@@ -1052,7 +1049,7 @@ void Path::TangentOnArcAt(double at, const Geom::Point &iS, PathDescrArcTo const
 		dtgt[0] = -ca * rx * cb + sa * ry * sb;
 		dtgt[1] = -sa * rx * cb - ca * ry * sb;
 		len = L2(tgt);
-		rad = -len * dot(tgt, tgt) / (tgt[0] * dtgt[1] - tgt[1] * dtgt[0]);
+		rad = len * dot(tgt, tgt) / (tgt[0] * dtgt[1] - tgt[1] * dtgt[0]);
 		tgt /= len;
 	}
 	else
@@ -1113,7 +1110,7 @@ Path::TangentOnCubAt (double at, Geom::Point const &iS, PathDescrCubicTo const &
 			}
 			return;
 		}
-		rad = -l * (dot(dder,dder)) / (cross(dder, ddder));
+		rad = -l * (dot(dder,dder)) / (cross(ddder,dder));
 		tgt = dder / l;
 		if (before) {
 			tgt = -tgt;
@@ -1122,7 +1119,7 @@ Path::TangentOnCubAt (double at, Geom::Point const &iS, PathDescrCubicTo const &
 	}
 	len = l;
 
-	rad = -l * (dot(der,der)) / (cross(der, dder));
+	rad = -l * (dot(der,der)) / (cross(dder,der));
 
 	tgt = der / l;
 }
@@ -1161,14 +1158,14 @@ Path::TangentOnBezAt (double at, Geom::Point const &iS,
 		return;
 	}
 	len = l;
-	rad = -l * (dot(der,der)) / (cross(der, dder));
+	rad = -l * (dot(der,der)) / (cross(dder,der));
 
 	tgt = der / l;
 }
 
 void
 Path::OutlineJoin (Path * dest, Geom::Point pos, Geom::Point stNor, Geom::Point enNor, double width,
-                   JoinType join, double miter, int nType)
+                   JoinType join, double miter)
 {
     /* 
         Arbitrarily decide if we're on the inside or outside of a half turn.
@@ -1185,27 +1182,15 @@ Path::OutlineJoin (Path * dest, Geom::Point pos, Geom::Point stNor, Geom::Point 
     TurnInside ^= PrevPos == pos;
     PrevPos = pos;
 
-	const double angSi = cross (stNor, enNor);
+	const double angSi = cross (enNor,stNor);
 	const double angCo = dot (stNor, enNor);
 
-    if ((fabs(angSi) < .0000001) && angCo > 0) { // The join is straight -> nothing to do.
+    if (angSi == 0 && angCo > 0) { // The join is straight -> nothing to do.
     } else {
         if ((angSi > 0 && width >= 0) 
             || (angSi < 0 && width < 0)) { // This is an inside join -> join is independent of chosen JoinType.
-            if ((dest->descr_cmd[dest->descr_cmd.size() - 1]->getType() == descr_lineto) && (nType == descr_lineto)) {
-                Geom::Point const biss = unit_vector(Geom::rot90( stNor - enNor ));
-                double c2 = Geom::dot (biss, enNor);
-                if (fabs(c2) > M_SQRT1_2) {    // apply only to obtuse angles
-                    double l = width / c2;
-                    PathDescrLineTo* nLine = dynamic_cast<PathDescrLineTo*>(dest->descr_cmd[dest->descr_cmd.size() - 1]);
-                    nLine->p = pos + l*biss;  // relocate to bisector
-                } else {
-                    dest->LineTo (pos + width*enNor);
-                }
-            } else {
-//                dest->LineTo (pos);	// redundant
-                dest->LineTo (pos + width*enNor);
-            }
+            dest->LineTo (pos);
+            dest->LineTo (pos + width*enNor);
         } else if (angSi == 0 && TurnInside) { // Half turn (180 degrees) ... inside (see above).
             dest->LineTo (pos + width*enNor);
         } else { // This is an outside join -> chosen JoinType should be applied.
@@ -1257,14 +1242,8 @@ Path::OutlineJoin (Path * dest, Geom::Point pos, Geom::Point stNor, Geom::Point 
                 if ( fabs(l) > miter) {
                     dest->LineTo (pos + width*enNor);
                 } else {
-                    if (dest->descr_cmd[dest->descr_cmd.size() - 1]->getType() == descr_lineto) {
-                        PathDescrLineTo* nLine = dynamic_cast<PathDescrLineTo*>(dest->descr_cmd[dest->descr_cmd.size() - 1]);
-                        nLine->p = pos+l*biss; // relocate to bisector
-                    } else {
-                        dest->LineTo (pos+l*biss);
-                    }
-                    if (nType != descr_lineto)
-                        dest->LineTo (pos+width*enNor);
+                    dest->LineTo (pos+l*biss);
+                    dest->LineTo (pos+width*enNor);
                 }
             } else { // Bevel join
                 dest->LineTo (pos + width*enNor);
@@ -1447,7 +1426,7 @@ Path::RecStdArcTo (outline_callback_data * data, double tol, double width,
 	{
 		Geom::Point  tms(data->x1,data->y1),tme(data->x2,data->y2);
 		ArcAngles (tms,tme, data->d.a.rx,
-				   data->d.a.ry, data->d.a.angle*M_PI/180.0, data->d.a.large, !data->d.a.clock,
+				   data->d.a.ry, data->d.a.angle, data->d.a.large, !data->d.a.clock,
 				   sang, eang);
 	}
 	double scal = eang - sang;
@@ -1481,7 +1460,7 @@ Path::RecStdArcTo (outline_callback_data * data, double tol, double width,
 	}
 	const Geom::Point diff = req - chk;
 	const double err = (dot(diff,diff));
-	if (err <= tol)  // tolerance is given as a quadratic value, no need to use tol*tol here
+	if (err <= tol * tol)
 	{
 		int n_d = data->dest->CubicTo (enPos + width*enNor,
 									   stGue*scal*stTgt,

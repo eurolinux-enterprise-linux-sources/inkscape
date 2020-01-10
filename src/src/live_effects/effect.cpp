@@ -1,67 +1,18 @@
+#define INKSCAPE_LIVEPATHEFFECT_CPP
+
 /*
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
- *   Abhishek Sharma
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-//#define LPE_ENABLE_TEST_EFFECTS //uncomment for toy effects
+//#define LPE_ENABLE_TEST_EFFECTS
+
+#include "live_effects/effect.h"
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
-
-// include effects:
-#include "live_effects/lpe-patternalongpath.h"
-#include "live_effects/effect.h"
-#include "live_effects/lpe-angle_bisector.h"
-#include "live_effects/lpe-attach-path.h"
-#include "live_effects/lpe-bendpath.h"
-#include "live_effects/lpe-bounding-box.h"
-#include "live_effects/lpe-bspline.h"
-#include "live_effects/lpe-circle_3pts.h"
-#include "live_effects/lpe-circle_with_radius.h"
-#include "live_effects/lpe-clone-original.h"
-#include "live_effects/lpe-constructgrid.h"
-#include "live_effects/lpe-copy_rotate.h"
-#include "live_effects/lpe-curvestitch.h"
-#include "live_effects/lpe-dynastroke.h"
-#include "live_effects/lpe-ellipse_5pts.h"
-#include "live_effects/lpe-envelope.h"
-#include "live_effects/lpe-extrude.h"
-#include "live_effects/lpe-fill-between-many.h"
-#include "live_effects/lpe-fill-between-strokes.h"
-#include "live_effects/lpe-fillet-chamfer.h"
-#include "live_effects/lpe-gears.h"
-#include "live_effects/lpe-interpolate.h"
-#include "live_effects/lpe-interpolate_points.h"
-#include "live_effects/lpe-jointype.h"
-#include "live_effects/lpe-knot.h"
-#include "live_effects/lpe-lattice2.h"
-#include "live_effects/lpe-lattice.h"
-#include "live_effects/lpe-line_segment.h"
-#include "live_effects/lpe-mirror_symmetry.h"
-#include "live_effects/lpe-offset.h"
-#include "live_effects/lpe-parallel.h"
-#include "live_effects/lpe-path_length.h"
-#include "live_effects/lpe-perp_bisector.h"
-#include "live_effects/lpe-perspective-envelope.h"
-#include "live_effects/lpe-perspective_path.h"
-#include "live_effects/lpe-powerstroke.h"
-#include "live_effects/lpe-recursiveskeleton.h"
-#include "live_effects/lpe-roughen.h"
-#include "live_effects/lpe-rough-hatches.h"
-#include "live_effects/lpe-ruler.h"
-#include "live_effects/lpe-show_handles.h"
-#include "live_effects/lpe-simplify.h"
-#include "live_effects/lpe-sketch.h"
-#include "live_effects/lpe-spiro.h"
-#include "live_effects/lpe-tangent_to_curve.h"
-#include "live_effects/lpe-transform_2pts.h"
-#include "live_effects/lpe-taperstroke.h"
-#include "live_effects/lpe-test-doEffect-stack.h"
-#include "live_effects/lpe-text_label.h"
-#include "live_effects/lpe-vonkoch.h"
 
 #include "xml/node-event-vector.h"
 #include "sp-object.h"
@@ -73,21 +24,57 @@
 #include "document-private.h"
 #include "xml/document.h"
 #include <glibmm/i18n.h>
-#include "ui/tools/pen-tool.h"
-#include "ui/tools/node-tool.h"
-#include "ui/tools-switch.h"
+#include "pen-context.h"
+#include "tools-switch.h"
+#include "message-stack.h"
+#include "desktop.h"
 #include "knotholder.h"
 #include "sp-lpe-item.h"
 #include "live_effects/lpeobject.h"
 #include "live_effects/parameter/parameter.h"
 #include <glibmm/ustring.h>
 #include "display/curve.h"
+#include <gtkmm.h>
 
 #include <exception>
 
 #include <2geom/sbasis-to-bezier.h>
-#include <2geom/affine.h>
+#include <2geom/matrix.h>
 #include <2geom/pathvector.h>
+
+// include effects:
+#include "live_effects/lpe-patternalongpath.h"
+#include "live_effects/lpe-bendpath.h"
+#include "live_effects/lpe-sketch.h"
+#include "live_effects/lpe-vonkoch.h"
+#include "live_effects/lpe-knot.h"
+#include "live_effects/lpe-rough-hatches.h"
+#include "live_effects/lpe-dynastroke.h"
+#include "live_effects/lpe-test-doEffect-stack.h"
+#include "live_effects/lpe-gears.h"
+#include "live_effects/lpe-curvestitch.h"
+#include "live_effects/lpe-circle_with_radius.h"
+#include "live_effects/lpe-perspective_path.h"
+#include "live_effects/lpe-spiro.h"
+#include "live_effects/lpe-lattice.h"
+#include "live_effects/lpe-envelope.h"
+#include "live_effects/lpe-constructgrid.h"
+#include "live_effects/lpe-perp_bisector.h"
+#include "live_effects/lpe-tangent_to_curve.h"
+#include "live_effects/lpe-mirror_symmetry.h"
+#include "live_effects/lpe-circle_3pts.h"
+#include "live_effects/lpe-angle_bisector.h"
+#include "live_effects/lpe-parallel.h"
+#include "live_effects/lpe-copy_rotate.h"
+#include "live_effects/lpe-offset.h"
+#include "live_effects/lpe-ruler.h"
+#include "live_effects/lpe-boolops.h"
+#include "live_effects/lpe-interpolate.h"
+#include "live_effects/lpe-text_label.h"
+#include "live_effects/lpe-path_length.h"
+#include "live_effects/lpe-line_segment.h"
+#include "live_effects/lpe-recursiveskeleton.h"
+#include "live_effects/lpe-extrude.h"
 
 
 namespace Inkscape {
@@ -99,24 +86,27 @@ const Util::EnumData<EffectType> LPETypeData[] = {
 #ifdef LPE_ENABLE_TEST_EFFECTS
     {DOEFFECTSTACK_TEST,    N_("doEffect stack test"),     "doeffectstacktest"},
     {ANGLE_BISECTOR,        N_("Angle bisector"),          "angle_bisector"},
+    // TRANSLATORS: boolean operations
+    {BOOLOPS,               N_("Boolops"),                 "boolops"},
     {CIRCLE_WITH_RADIUS,    N_("Circle (by center and radius)"),   "circle_with_radius"},
     {CIRCLE_3PTS,           N_("Circle by 3 points"),      "circle_3pts"},
     {DYNASTROKE,            N_("Dynamic stroke"),          "dynastroke"},
     {EXTRUDE,               N_("Extrude"),                 "extrude"},
     {LATTICE,               N_("Lattice Deformation"),     "lattice"},
     {LINE_SEGMENT,          N_("Line Segment"),            "line_segment"},
+    {MIRROR_SYMMETRY,       N_("Mirror symmetry"),         "mirror_symmetry"},
     {OFFSET,                N_("Offset"),                  "offset"},
     {PARALLEL,              N_("Parallel"),                "parallel"},
     {PATH_LENGTH,           N_("Path length"),             "path_length"},
     {PERP_BISECTOR,         N_("Perpendicular bisector"),  "perp_bisector"},
     {PERSPECTIVE_PATH,      N_("Perspective path"),        "perspective_path"},
+    {COPY_ROTATE,           N_("Rotate copies"),           "copy_rotate"},
     {RECURSIVE_SKELETON,    N_("Recursive skeleton"),      "recursive_skeleton"},
     {TANGENT_TO_CURVE,      N_("Tangent to curve"),        "tangent_to_curve"},
     {TEXT_LABEL,            N_("Text label"),              "text_label"},
-    {FILLET_CHAMFER,        N_("Fillet/Chamfer"),          "fillet-chamfer"},
 #endif
 /* 0.46 */
-    {BEND_PATH,             N_("Bend"),                    "bend_path"},
+    {BEND_PATH,             N_("Bend"),                     "bend_path"},
     {GEARS,                 N_("Gears"),                   "gears"},
     {PATTERN_ALONG_PATH,    N_("Pattern Along Path"),      "skeletal"},   // for historic reasons, this effect is called skeletal(strokes) in Inkscape:SVG
     {CURVE_STITCH,          N_("Stitch Sub-Paths"),        "curvestitching"},
@@ -130,28 +120,6 @@ const Util::EnumData<EffectType> LPETypeData[] = {
     {ROUGH_HATCHES,         N_("Hatches (rough)"),         "rough_hatches"},
     {SKETCH,                N_("Sketch"),                  "sketch"},
     {RULER,                 N_("Ruler"),                   "ruler"},
-/* 0.91 */
-    {POWERSTROKE,           N_("Power stroke"),            "powerstroke"},
-    {CLONE_ORIGINAL,        N_("Clone original path"),     "clone_original"},
-/* 0.92 */
-    {SIMPLIFY,              N_("Simplify"),                "simplify"},
-    {LATTICE2,              N_("Lattice Deformation 2"),   "lattice2"},
-    {PERSPECTIVE_ENVELOPE,  N_("Perspective/Envelope"),    "perspective-envelope"},
-    {INTERPOLATE_POINTS,    N_("Interpolate points"),      "interpolate_points"},
-    {TRANSFORM_2PTS,        N_("Transform by 2 points"),   "transform_2pts"},
-    {SHOW_HANDLES,          N_("Show handles"),            "show_handles"},
-    {ROUGHEN,               N_("Roughen"),                 "roughen"},
-    {BSPLINE,               N_("BSpline"),                 "bspline"},
-    {JOIN_TYPE,             N_("Join type"),               "join_type"},
-    {TAPER_STROKE,          N_("Taper stroke"),            "taper_stroke"},
-    {MIRROR_SYMMETRY,       N_("Mirror symmetry"),         "mirror_symmetry"},
-    {COPY_ROTATE,           N_("Rotate copies"),           "copy_rotate"},
-/* Ponyscape -> Inkscape 0.92*/
-    {ATTACH_PATH,           N_("Attach path"),             "attach_path"},
-    {FILL_BETWEEN_STROKES,  N_("Fill between strokes"),    "fill_between_strokes"},
-    {FILL_BETWEEN_MANY,     N_("Fill between many"),       "fill_between_many"},
-    {ELLIPSE_5PTS,          N_("Ellipse by 5 points"),     "ellipse_5pts"},
-    {BOUNDING_BOX,          N_("Bounding Box"),            "bounding_box"},
 };
 const Util::EnumDataConverter<EffectType> LPETypeConverter(LPETypeData, sizeof(LPETypeData)/sizeof(*LPETypeData));
 
@@ -242,11 +210,11 @@ Effect::New(EffectType lpenr, LivePathEffectObject *lpeobj)
         case RULER:
             neweffect = static_cast<Effect*> ( new LPERuler(lpeobj) );
             break;
+        case BOOLOPS:
+            neweffect = static_cast<Effect*> ( new LPEBoolops(lpeobj) );
+            break;
         case INTERPOLATE:
             neweffect = static_cast<Effect*> ( new LPEInterpolate(lpeobj) );
-            break;
-        case INTERPOLATE_POINTS:
-            neweffect = static_cast<Effect*> ( new LPEInterpolatePoints(lpeobj) );
             break;
         case TEXT_LABEL:
             neweffect = static_cast<Effect*> ( new LPETextLabel(lpeobj) );
@@ -260,9 +228,6 @@ Effect::New(EffectType lpenr, LivePathEffectObject *lpeobj)
         case DOEFFECTSTACK_TEST:
             neweffect = static_cast<Effect*> ( new LPEdoEffectStackTest(lpeobj) );
             break;
-        case BSPLINE:
-            neweffect = static_cast<Effect*> ( new LPEBSpline(lpeobj) );
-            break;
         case DYNASTROKE:
             neweffect = static_cast<Effect*> ( new LPEDynastroke(lpeobj) );
             break;
@@ -272,80 +237,33 @@ Effect::New(EffectType lpenr, LivePathEffectObject *lpeobj)
         case EXTRUDE:
             neweffect = static_cast<Effect*> ( new LPEExtrude(lpeobj) );
             break;
-        case POWERSTROKE:
-            neweffect = static_cast<Effect*> ( new LPEPowerStroke(lpeobj) );
-            break;
-        case CLONE_ORIGINAL:
-            neweffect = static_cast<Effect*> ( new LPECloneOriginal(lpeobj) );
-            break;
-        case ATTACH_PATH:
-            neweffect = static_cast<Effect*> ( new LPEAttachPath(lpeobj) );
-            break;
-        case FILL_BETWEEN_STROKES:
-            neweffect = static_cast<Effect*> ( new LPEFillBetweenStrokes(lpeobj) );
-            break;
-        case FILL_BETWEEN_MANY:
-            neweffect = static_cast<Effect*> ( new LPEFillBetweenMany(lpeobj) );
-            break;
-        case ELLIPSE_5PTS:
-            neweffect = static_cast<Effect*> ( new LPEEllipse5Pts(lpeobj) );
-            break;
-        case BOUNDING_BOX:
-            neweffect = static_cast<Effect*> ( new LPEBoundingBox(lpeobj) );
-            break;
-        case JOIN_TYPE:
-            neweffect = static_cast<Effect*> ( new LPEJoinType(lpeobj) );
-            break;
-        case TAPER_STROKE:
-            neweffect = static_cast<Effect*> ( new LPETaperStroke(lpeobj) );
-            break;
-        case SIMPLIFY:
-            neweffect = static_cast<Effect*> ( new LPESimplify(lpeobj) );
-            break;
-        case LATTICE2:
-            neweffect = static_cast<Effect*> ( new LPELattice2(lpeobj) );
-            break;
-        case PERSPECTIVE_ENVELOPE:
-            neweffect = static_cast<Effect*> ( new LPEPerspectiveEnvelope(lpeobj) );
-            break;
-        case FILLET_CHAMFER:
-            neweffect = static_cast<Effect*> ( new LPEFilletChamfer(lpeobj) );
-            break;
-        case ROUGHEN:
-            neweffect = static_cast<Effect*> ( new LPERoughen(lpeobj) );
-            break;
-        case SHOW_HANDLES:
-            neweffect = static_cast<Effect*> ( new LPEShowHandles(lpeobj) );
-            break;
-        case TRANSFORM_2PTS:
-            neweffect = static_cast<Effect*> ( new LPETransform2Pts(lpeobj) );
-            break;
         default:
-            g_warning("LivePathEffect::Effect::New called with invalid patheffect type (%d)", lpenr);
+            g_warning("LivePathEffect::Effect::New   called with invalid patheffect type (%d)", lpenr);
             neweffect = NULL;
             break;
     }
 
     if (neweffect) {
-        neweffect->readallParameters(lpeobj->getRepr());
+        neweffect->readallParameters(SP_OBJECT_REPR(lpeobj));
     }
 
     return neweffect;
 }
 
-void Effect::createAndApply(const char* name, SPDocument *doc, SPItem *item)
+void
+Effect::createAndApply(const char* name, SPDocument *doc, SPItem *item)
 {
     // Path effect definition
-    Inkscape::XML::Document *xml_doc = doc->getReprDoc();
+    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(doc);
     Inkscape::XML::Node *repr = xml_doc->createElement("inkscape:path-effect");
     repr->setAttribute("effect", name);
 
-    doc->getDefs()->getRepr()->addChild(repr, NULL); // adds to <defs> and assigns the 'id' attribute
+    SP_OBJECT_REPR(SP_DOCUMENT_DEFS(doc))->addChild(repr, NULL); // adds to <defs> and assigns the 'id' attribute
     const gchar * repr_id = repr->attribute("id");
     Inkscape::GC::release(repr);
 
     gchar *href = g_strdup_printf("#%s", repr_id);
-    SP_LPE_ITEM(item)->addPathEffect(href, true);
+    sp_lpe_item_add_path_effect(SP_LPE_ITEM(item), href, true);
     g_free(href);
 }
 
@@ -356,22 +274,16 @@ Effect::createAndApply(EffectType type, SPDocument *doc, SPItem *item)
 }
 
 Effect::Effect(LivePathEffectObject *lpeobject)
-    : apply_to_clippath_and_mask(false),
-      _provides_knotholder_entities(false),
-      oncanvasedit_it(0),
+    : oncanvasedit_it(0),
       is_visible(_("Is visible?"), _("If unchecked, the effect remains applied to the object but is temporarily disabled on canvas"), "is_visible", &wr, this, true),
       show_orig_path(false),
       lpeobj(lpeobject),
       concatenate_before_pwd2(false),
-      sp_lpe_item(NULL),
-      current_zoom(1),
-      sp_curve(NULL),
       provides_own_flash_paths(true), // is automatically set to false if providesOwnFlashPaths() is not overridden
       is_ready(false) // is automatically set to false if providesOwnFlashPaths() is not overridden
 {
     registerParameter( dynamic_cast<Parameter *>(&is_visible) );
     is_visible.widget_is_visible = false;
-    current_zoom = 0.0;
 }
 
 Effect::~Effect()
@@ -379,7 +291,7 @@ Effect::~Effect()
 }
 
 Glib::ustring
-Effect::getName() const
+Effect::getName()
 {
     if (lpeobj->effecttype_set && LPETypeConverter.is_valid_id(lpeobj->effecttype) )
         return Glib::ustring( _(LPETypeConverter.get_label(lpeobj->effecttype).c_str()) );
@@ -388,7 +300,7 @@ Effect::getName() const
 }
 
 EffectType
-Effect::effectType() const {
+Effect::effectType() {
     return lpeobj->effecttype;
 }
 
@@ -396,83 +308,17 @@ Effect::effectType() const {
  * Is performed a single time when the effect is freshly applied to a path
  */
 void
-Effect::doOnApply (SPLPEItem const*/*lpeitem*/)
+Effect::doOnApply (SPLPEItem */*lpeitem*/)
 {
-}
-
-void
-Effect::setSelectedNodePoints(std::vector<Geom::Point> sNP)
-{
-    selectedNodesPoints = sNP;
-}
-
-void
-Effect::setCurrentZoom(double cZ)
-{
-    current_zoom = cZ;
-}
-
-bool
-Effect::isNodePointSelected(Geom::Point const &nodePoint) const
-{
-    if (selectedNodesPoints.size() > 0) {
-        using Geom::X;
-        using Geom::Y; 
-        for (std::vector<Geom::Point>::const_iterator i = selectedNodesPoints.begin();
-                i != selectedNodesPoints.end(); ++i) {
-            Geom::Point p = *i;
-            Geom::Affine transformCoordinate = sp_lpe_item->i2dt_affine();
-            Geom::Point p2(nodePoint[X],nodePoint[Y]);
-            p2 *= transformCoordinate;
-            if (Geom::are_near(p, p2, 0.01)) {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 /**
  * Is performed each time before the effect is updated.
  */
 void
-Effect::doBeforeEffect (SPLPEItem const*/*lpeitem*/)
+Effect::doBeforeEffect (SPLPEItem */*lpeitem*/)
 {
     //Do nothing for simple effects
-}
-
-void Effect::doAfterEffect (SPLPEItem const* /*lpeitem*/)
-{
-}
-
-void Effect::doOnRemove (SPLPEItem const* /*lpeitem*/)
-{
-}
-
-//secret impl methods (shhhh!)
-void Effect::doOnApply_impl(SPLPEItem const* lpeitem)
-{
-    sp_lpe_item = const_cast<SPLPEItem *>(lpeitem);
-    /*sp_curve = SP_SHAPE(sp_lpe_item)->getCurve();
-    pathvector_before_effect = sp_curve->get_pathvector();*/
-    doOnApply(lpeitem);
-}
-
-void Effect::doBeforeEffect_impl(SPLPEItem const* lpeitem)
-{
-    sp_lpe_item = const_cast<SPLPEItem *>(lpeitem);
-    //printf("(SPLPEITEM*) %p\n", sp_lpe_item);
-    SPShape * shape = dynamic_cast<SPShape *>(sp_lpe_item);
-    if(shape){
-        sp_curve = shape->getCurve();
-        pathvector_before_effect = sp_curve->get_pathvector();
-    }
-    doBeforeEffect(lpeitem);
-    if (apply_to_clippath_and_mask && SP_IS_GROUP(sp_lpe_item)) {
-        sp_lpe_item->apply_to_clippath(sp_lpe_item);
-        sp_lpe_item->apply_to_mask(sp_lpe_item);
-    }
-    update_helperpath();
 }
 
 /**
@@ -484,13 +330,13 @@ void
 Effect::doAcceptPathPreparations(SPLPEItem *lpeitem)
 {
     // switch to pen context
-    SPDesktop *desktop = SP_ACTIVE_DESKTOP; // TODO: Is there a better method to find the item's desktop?
+    SPDesktop *desktop = inkscape_active_desktop(); // TODO: Is there a better method to find the item's desktop?
     if (!tools_isactive(desktop, TOOLS_FREEHAND_PEN)) {
         tools_switch(desktop, TOOLS_FREEHAND_PEN);
     }
 
-    Inkscape::UI::Tools::ToolBase *ec = desktop->event_context;
-    Inkscape::UI::Tools::PenTool *pc = SP_PEN_CONTEXT(ec);
+    SPEventContext *ec = desktop->event_context;
+    SPPenContext *pc = SP_PEN_CONTEXT(ec);
     pc->expecting_clicks_for_LPE = this->acceptsNumClicks();
     pc->waiting_LPE = this;
     pc->waiting_item = lpeitem;
@@ -515,7 +361,7 @@ Effect::writeParamsToSVG() {
  * your LPE. But don't forget to call the parent method so that is_ready is set to true!
  */
 void
-Effect::acceptParamPath (SPPath const*/*param_path*/) {
+Effect::acceptParamPath (SPPath */*param_path*/) {
     setReady();
 }
 
@@ -525,24 +371,24 @@ Effect::acceptParamPath (SPPath const*/*param_path*/) {
 void
 Effect::doEffect (SPCurve * curve)
 {
-    Geom::PathVector orig_pathv = curve->get_pathvector();
+    std::vector<Geom::Path> orig_pathv = curve->get_pathvector();
 
-    Geom::PathVector result_pathv = doEffect_path(orig_pathv);
+    std::vector<Geom::Path> result_pathv = doEffect_path(orig_pathv);
 
     curve->set_pathvector(result_pathv);
 }
 
-Geom::PathVector
-Effect::doEffect_path (Geom::PathVector const & path_in)
+std::vector<Geom::Path>
+Effect::doEffect_path (std::vector<Geom::Path> const & path_in)
 {
-    Geom::PathVector path_out;
+    std::vector<Geom::Path> path_out;
 
     if ( !concatenate_before_pwd2 ) {
         // default behavior
         for (unsigned int i=0; i < path_in.size(); i++) {
             Geom::Piecewise<Geom::D2<Geom::SBasis> > pwd2_in = path_in[i].toPwSb();
             Geom::Piecewise<Geom::D2<Geom::SBasis> > pwd2_out = doEffect_pwd2(pwd2_in);
-            Geom::PathVector path = Geom::path_from_piecewise( pwd2_out, LPE_CONVERSION_TOLERANCE);
+            std::vector<Geom::Path> path = Geom::path_from_piecewise( pwd2_out, LPE_CONVERSION_TOLERANCE);
             // add the output path vector to the already accumulated vector:
             for (unsigned int j=0; j < path.size(); j++) {
                 path_out.push_back(path[j]);
@@ -569,7 +415,7 @@ Effect::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in)
 }
 
 void
-Effect::readallParameters(Inkscape::XML::Node const* repr)
+Effect::readallParameters(Inkscape::XML::Node * repr)
 {
     std::vector<Parameter *>::iterator it = param_vector.begin();
     while (it != param_vector.end()) {
@@ -586,7 +432,7 @@ Effect::readallParameters(Inkscape::XML::Node const* repr)
             param->param_set_default();
         }
 
-        ++it;
+        it++;
     }
 }
 
@@ -614,6 +460,12 @@ Effect::registerParameter(Parameter * param)
     param_vector.push_back(param);
 }
 
+// TODO: should we provide a way to alter the handle's appearance?
+void
+Effect::registerKnotHolderHandle(KnotHolderEntity* entity, const char* descr)
+{
+    kh_entity_vector.push_back(std::make_pair(entity, descr));
+}
 
 /**
  * Add all registered LPE knotholder handles to the knotholder
@@ -631,21 +483,49 @@ Effect::addHandles(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item) {
     }
 }
 
+void
+Effect::addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item) {
+    // TODO: The entities in kh_entity_vector are already instantiated during the call
+    //       to registerKnotHolderHandle(), but they are recreated here. Also, we must not
+    //       delete them when the knotholder is destroyed, whence the clumsy function
+    //       isDeletable(). If we could create entities of different classes dynamically,
+    //       this would be much nicer. How to do this?
+    std::vector<std::pair<KnotHolderEntity*, const char*> >::iterator i;
+    for (i = kh_entity_vector.begin(); i != kh_entity_vector.end(); ++i) {
+        KnotHolderEntity *entity = i->first;
+        const char *descr = i->second;
+
+        entity->create(desktop, item, knotholder, descr);
+        knotholder->add(entity);
+    }
+}
+
 /**
- * Return a vector of PathVectors which contain all canvas indicators for this effect.
- * This is the function called by external code to get all canvas indicators (effect and its parameters)
- * lpeitem = the item onto which this effect is applied
- * @todo change return type to one pathvector, add all paths to one pathvector instead of maintaining a vector of pathvectors
+ * Return a vector of PathVectors which contain all helperpaths that should be drawn by the effect.
+ * This is the function called by external code like SPLPEItem.
  */
 std::vector<Geom::PathVector>
-Effect::getCanvasIndicators(SPLPEItem const* lpeitem)
+Effect::getHelperPaths(SPLPEItem *lpeitem)
 {
     std::vector<Geom::PathVector> hp_vec;
 
-    // add indicators provided by the effect itself
+    if (!SP_IS_SHAPE(lpeitem)) {
+//        g_print ("How to handle helperpaths for non-shapes?\n"); // non-shapes are for example SPGroups.
+        return hp_vec;
+    }
+
+    // TODO: we can probably optimize this by using a lot more references
+    //       rather than copying PathVectors all over the place
+    if (show_orig_path) {
+        // add original path to helperpaths
+        SPCurve* curve = sp_shape_get_curve (SP_SHAPE(lpeitem));
+        hp_vec.push_back(curve->get_pathvector());
+    }
+
+    // add other helperpaths provided by the effect itself
     addCanvasIndicators(lpeitem, hp_vec);
 
-    // add indicators provided by the effect's parameters
+    // add helperpaths provided by the effect's parameters
     for (std::vector<Parameter *>::iterator p = param_vector.begin(); p != param_vector.end(); ++p) {
         (*p)->addCanvasIndicators(lpeitem, hp_vec);
     }
@@ -654,26 +534,11 @@ Effect::getCanvasIndicators(SPLPEItem const* lpeitem)
 }
 
 /**
- * Call to a method on nodetool to update the helper path from the effect
- */
-void
-Effect::update_helperpath() {
-    using namespace Inkscape::UI;
-    SPDesktop *desktop = SP_ACTIVE_DESKTOP;
-    if (desktop) {
-        if (tools_isactive(desktop, TOOLS_NODES)) {
-            Inkscape::UI::Tools::NodeTool *nt = static_cast<Inkscape::UI::Tools::NodeTool*>(desktop->event_context);
-            nt->update_helperpath();
-        }
-    }
-}
-
-/**
  * Add possible canvas indicators (i.e., helperpaths other than the original path) to \a hp_vec
  * This function should be overwritten by derived effects if they want to provide their own helperpaths.
  */
 void
-Effect::addCanvasIndicators(SPLPEItem const*/*lpeitem*/, std::vector<Geom::PathVector> &/*hp_vec*/)
+Effect::addCanvasIndicators(SPLPEItem */*lpeitem*/, std::vector<Geom::PathVector> &/*hp_vec*/)
 {
 }
 
@@ -682,7 +547,7 @@ Effect::addCanvasIndicators(SPLPEItem const*/*lpeitem*/, std::vector<Geom::PathV
  * This *creates* a new widget, management of deletion should be done by the caller
  */
 Gtk::Widget *
-Effect::newWidget()
+Effect::newWidget(Gtk::Tooltips * tooltips)
 {
     // use manage here, because after deletion of Effect object, others might still be pointing to this widget.
     Gtk::VBox * vbox = Gtk::manage( new Gtk::VBox() );
@@ -693,37 +558,34 @@ Effect::newWidget()
     while (it != param_vector.end()) {
         if ((*it)->widget_is_visible) {
             Parameter * param = *it;
-            Gtk::Widget * widg = param->param_newWidget();
+            Gtk::Widget * widg = param->param_newWidget(tooltips);
             Glib::ustring * tip = param->param_getTooltip();
             if (widg) {
                 vbox->pack_start(*widg, true, true, 2);
-                if (tip) {
-                    widg->set_tooltip_text(*tip);
-                } else {
-                    widg->set_tooltip_text("");
-                    widg->set_has_tooltip(false);
+                if (tip != NULL) {
+                    tooltips->set_tip(*widg, *tip);
                 }
             }
         }
 
-        ++it;
+        it++;
     }
 
     return dynamic_cast<Gtk::Widget *>(vbox);
 }
 
 
-Inkscape::XML::Node *Effect::getRepr()
+Inkscape::XML::Node *
+Effect::getRepr()
 {
-    return lpeobj->getRepr();
+    return SP_OBJECT_REPR(lpeobj);
 }
 
-SPDocument *Effect::getSPDoc()
+SPDocument *
+Effect::getSPDoc()
 {
-    if (lpeobj->document == NULL) {
-        g_message("Effect::getSPDoc() returns NULL");
-    }
-    return lpeobj->document;
+    if (SP_OBJECT_DOCUMENT(lpeobj) == NULL) g_message("Effect::getSPDoc() returns NULL");
+    return SP_OBJECT_DOCUMENT(lpeobj);
 }
 
 Parameter *
@@ -731,7 +593,6 @@ Effect::getParameter(const char * key)
 {
     Glib::ustring stringkey(key);
 
-    if (param_vector.empty()) return NULL;
     std::vector<Parameter *>::iterator it = param_vector.begin();
     while (it != param_vector.end()) {
         Parameter * param = *it;
@@ -739,7 +600,7 @@ Effect::getParameter(const char * key)
             return param;
         }
 
-        ++it;
+        it++;
     }
 
     return NULL;
@@ -793,7 +654,7 @@ Effect::editNextParamOncanvas(SPItem * item, SPDesktop * desktop)
 * The nice thing about this is that this function can use knowledge of the original path and set things accordingly for example to the size or origin of the original path!
 */
 void
-Effect::resetDefaults(SPItem const* /*item*/)
+Effect::resetDefaults(SPItem * /*item*/)
 {
     std::vector<Inkscape::LivePathEffect::Parameter *>::iterator p;
     for (p = param_vector.begin(); p != param_vector.end(); ++p) {
@@ -803,25 +664,24 @@ Effect::resetDefaults(SPItem const* /*item*/)
 }
 
 void
-Effect::transform_multiply(Geom::Affine const& postmul, bool set)
+Effect::transform_multiply(Geom::Matrix const& postmul, bool set)
 {
     // cycle through all parameters. Most parameters will not need transformation, but path and point params do.
-    for (std::vector<Parameter *>::iterator it = param_vector.begin(); it != param_vector.end(); ++it) {
+    for (std::vector<Parameter *>::iterator it = param_vector.begin(); it != param_vector.end(); it++) {
         Parameter * param = *it;
         param->param_transform_multiply(postmul, set);
     }
 }
 
 bool
-Effect::providesKnotholder() const
+Effect::providesKnotholder()
 {
     // does the effect actively provide any knotholder entities of its own?
-    if (_provides_knotholder_entities) {
+    if (kh_entity_vector.size() > 0)
         return true;
-    }
 
     // otherwise: are there any parameters that have knotholderentities?
-    for (std::vector<Parameter *>::const_iterator p = param_vector.begin(); p != param_vector.end(); ++p) {
+    for (std::vector<Parameter *>::iterator p = param_vector.begin(); p != param_vector.end(); ++p) {
         if ((*p)->providesKnotHolderEntities()) {
             return true;
         }

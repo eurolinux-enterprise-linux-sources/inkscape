@@ -1,4 +1,4 @@
-/*
+/** \file
  * Provides a class that can contain active TemporaryItem's on a desktop
  * Code inspired by message-stack.cpp
  *
@@ -10,8 +10,9 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "display/canvas-temporary-item.h"
 #include "display/canvas-temporary-item-list.h"
+
+#include "display/canvas-temporary-item.h"
 
 namespace Inkscape {
 namespace Display {
@@ -34,7 +35,7 @@ TemporaryItemList::~TemporaryItemList()
 
 /* Note that TemporaryItem or TemporaryItemList is responsible for deletion and such, so this return pointer can safely be ignored. */
 TemporaryItem *
-TemporaryItemList::add_item(SPCanvasItem *item, unsigned int lifetime)
+TemporaryItemList::add_item(SPCanvasItem *item, guint lifetime)
 {
     // beware of strange things happening due to very short timeouts
     TemporaryItem * tempitem = new TemporaryItem(item, lifetime);

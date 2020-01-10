@@ -13,6 +13,7 @@
 
 #include <pango/pango.h>
 
+#include <libnrtype/nrtype-forward.h>
 #include "libnrtype/boundary-type.h"
 
 // miscanellous but useful data for a given text: chunking into logical pieces
@@ -23,7 +24,6 @@ struct text_boundary;
 struct one_glyph;
 struct one_box;
 struct one_para;
-class font_instance;
 
 class text_wrapper {
 public:
@@ -136,4 +136,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

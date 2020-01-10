@@ -1,6 +1,5 @@
-/**
- * @file
- * Floating dialog implementation.
+/** @file
+ * @brief Floating dialog implementation.
  */
 /* Author:
  *   Gustav Broberg <broberg@kth.se>
@@ -10,22 +9,18 @@
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
-#include <gtkmm/dialog.h>
 #include <gtkmm/stock.h>
-#include <glibmm/main.h>
 #include <gtk/gtk.h>
 
 #include "floating-behavior.h"
 #include "dialog.h"
 
+#include "application/application.h"
+#include "application/editor.h"
 #include "inkscape.h"
 #include "desktop.h"
-#include "ui/dialog-events.h"
-#include "ui/interface.h"
+#include "dialogs/dialog-events.h"
+#include "interface.h"
 #include "preferences.h"
 #include "verbs.h"
 
@@ -37,34 +32,39 @@ namespace Behavior {
 FloatingBehavior::FloatingBehavior(Dialog &dialog) :
     Behavior(dialog),
     _d (new Gtk::Dialog(_dialog._title))
+#if GTK_VERSION_GE(2, 12)
     ,_dialog_active(_d->property_is_active())
     ,_steps(0)
     ,_trans_focus(Inkscape::Preferences::get()->getDoubleLimited("/dialogs/transparency/on-focus", 0.95, 0.0, 1.0))
     ,_trans_blur(Inkscape::Preferences::get()->getDoubleLimited("/dialogs/transparency/on-blur", 0.50, 0.0, 1.0))
     ,_trans_time(Inkscape::Preferences::get()->getIntLimited("/dialogs/transparency/animate-time", 100, 0, 5000))
+#endif
 {
     hide();
+    _d->set_has_separator(false);
 
     signal_delete_event().connect(sigc::mem_fun(_dialog, &Inkscape::UI::Dialog::Dialog::_onDeleteEvent));
 
     sp_transientize(GTK_WIDGET(_d->gobj()));
     _dialog.retransientize_suppress = false;
 
+#if GTK_VERSION_GE(2, 12)
     _focus_event();
     _dialog_active.signal_changed().connect(sigc::mem_fun(this, &FloatingBehavior::_focus_event));
+#endif
 
 }
 
-/**
- * A function called when the window gets focus.
- *
- * This function gets called on a focus event.  It figures out how much
- * time is required for a transition, and the number of steps that'll take,
- * and sets up the _trans_timer function to do the work.  If the transition
- * time is set to 0 ms it just calls _trans_timer once with _steps equal to
- * zero so that the transition happens instantaneously.  This occurs on
- * windows as opacity changes cause flicker there.
- */
+#if GTK_VERSION_GE(2, 12)
+/** \brief  A function called when the window gets focus
+
+    This function gets called on a focus event.  It figures out how much
+    time is required for a transition, and the number of steps that'll take,
+    and sets up the _trans_timer function to do the work.  If the transition
+    time is set to 0 ms it just calls _trans_timer once with _steps equal to
+    zero so that the transition happens instantaneously.  This occurs on
+    windows as opacity changes cause flicker there.
+*/
 void FloatingBehavior::_focus_event (void)
 {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
@@ -91,14 +91,13 @@ void FloatingBehavior::_focus_event (void)
     return;
 }
 
-/**
- * Move the opacity of a window towards our goal.
- *
- * This is a timer function that is set up by _focus_event to slightly
- * move the opacity of the window along in an animated fashion.  It moves
- * the opacity half way to the goal until it runs out of steps, and then
- * it just forces the goal.
- */
+/** \brief  Move the opacity of a window towards our goal
+
+    This is a timer function that is set up by _focus_event to slightly
+    move the opacity of the window along in an animated fashion.  It moves
+    the opacity half way to the goal until it runs out of steps, and then
+    it just forces the goal.
+*/
 bool FloatingBehavior::_trans_timer (void) {
     // printf("Go go gadget timer: %d\n", _steps);
     if (_steps == 0) {
@@ -112,7 +111,7 @@ bool FloatingBehavior::_trans_timer (void) {
     }
 
     float goal, current;
-    current = _d->get_opacity();
+    goal = current = _d->get_opacity();
 
     if (_dialog_active.get_value()) {
         goal = _trans_focus;
@@ -124,6 +123,8 @@ bool FloatingBehavior::_trans_timer (void) {
     _steps--;
     return true;
 }
+
+#endif
 
 FloatingBehavior::~FloatingBehavior()
 {
@@ -139,13 +140,7 @@ FloatingBehavior::create(Dialog &dialog)
 
 inline FloatingBehavior::operator Gtk::Widget &()                          { return *_d; }
 inline GtkWidget *FloatingBehavior::gobj()                                { return GTK_WIDGET(_d->gobj()); }
-inline Gtk::Box* FloatingBehavior::get_vbox()                            { 
-#if WITH_GTKMM_3_0
-    return _d->get_content_area();
-#else
-    return _d->get_vbox();
-#endif
-}
+inline Gtk::VBox* FloatingBehavior::get_vbox()                            { return _d->get_vbox(); }
 inline void FloatingBehavior::present()                                   { _d->present(); }
 inline void FloatingBehavior::hide()                                      { _d->hide(); }
 inline void FloatingBehavior::show()                                      { _d->show(); }
@@ -154,14 +149,7 @@ inline void FloatingBehavior::resize(int width, int height)               { _d->
 inline void FloatingBehavior::move(int x, int y)                          { _d->move(x, y); }
 inline void FloatingBehavior::set_position(Gtk::WindowPosition position)  { _d->set_position(position); }
 inline void FloatingBehavior::set_size_request(int width, int height)     { _d->set_size_request(width, height); }
-inline void FloatingBehavior::size_request(Gtk::Requisition &requisition) {
-#if WITH_GTKMM_3_0
-	Gtk::Requisition requisition_natural;
-	_d->get_preferred_size(requisition, requisition_natural); 
-#else
-	requisition = _d->size_request(); 
-#endif
-}
+inline void FloatingBehavior::size_request(Gtk::Requisition &requisition) { _d->size_request(requisition); }
 inline void FloatingBehavior::get_position(int &x, int &y)                { _d->get_position(x, y); }
 inline void FloatingBehavior::get_size(int &width, int &height)           { _d->get_size(width, height); }
 inline void FloatingBehavior::set_title(Glib::ustring title)              { _d->set_title(title); }
@@ -234,7 +222,7 @@ FloatingBehavior::onDesktopActivated (SPDesktop *desktop)
     }
 
     // we're done, allow next retransientizing not sooner than after 120 msec
-    g_timeout_add (120, (GSourceFunc) sp_retransientize_again, (gpointer) _d);
+    gtk_timeout_add (120, (GtkFunction) sp_retransientize_again, (gpointer) _d);
 }
 
 
@@ -252,4 +240,4 @@ FloatingBehavior::onDesktopActivated (SPDesktop *desktop)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

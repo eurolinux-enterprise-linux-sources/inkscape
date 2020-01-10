@@ -1,3 +1,4 @@
+#define INKSCAPE_LPE_CIRCLE_3PTS_CPP
 /** \file
  * LPE "Circle through 3 points" implementation
  */
@@ -16,8 +17,6 @@
 
 // You might need to include other 2geom files. You can add them here:
 #include <2geom/path.h>
-#include <2geom/circle.h>
-#include <2geom/path-sink.h>
 
 namespace Inkscape {
 namespace LivePathEffect {
@@ -31,7 +30,25 @@ LPECircle3Pts::~LPECircle3Pts()
 {
 }
 
-static void _circle3(Geom::Point const &A, Geom::Point const &B, Geom::Point const &C, Geom::PathVector &path_out) {
+static void _circle(Geom::Point center, double radius, std::vector<Geom::Path> &path_out) {
+    using namespace Geom;
+
+    Geom::Path pb;
+
+    D2<SBasis> B;
+    Linear bo = Linear(0, 2 * M_PI);
+
+    B[0] = cos(bo,4);
+    B[1] = sin(bo,4);
+
+    B = B * radius + center;
+
+    pb.append(SBasisCurve(B));
+
+    path_out.push_back(pb);
+}
+
+static void _circle3(Geom::Point const &A, Geom::Point const &B, Geom::Point const &C, std::vector<Geom::Path> &path_out) {
     using namespace Geom;
 
     Point D = (A + B)/2;
@@ -47,14 +64,13 @@ static void _circle3(Geom::Point const &A, Geom::Point const &B, Geom::Point con
     Point M = D + v * lambda;
     double radius = L2(M - A);
 
-    Geom::Circle c(M, radius);
-    path_out = Geom::Path(c);
+    _circle(M, radius, path_out);
 }
 
-Geom::PathVector
-LPECircle3Pts::doEffect_path (Geom::PathVector const & path_in)
+std::vector<Geom::Path>
+LPECircle3Pts::doEffect_path (std::vector<Geom::Path> const & path_in)
 {
-    Geom::PathVector path_out = Geom::PathVector();
+    std::vector<Geom::Path> path_out = std::vector<Geom::Path>();
 
     // we assume that the path has >= 3 nodes
     Geom::Point A = path_in[0].initialPoint();

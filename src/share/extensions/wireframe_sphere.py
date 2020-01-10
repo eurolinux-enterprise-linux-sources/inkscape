@@ -45,7 +45,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ######VERSION HISTORY#####
     Ver.       Date                       Notes
@@ -54,19 +54,19 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
                         Hidden lines of latitude still not properly calculated.
                         Prolate and oblate spheroids not considered.
 '''
-# standard library
-from math import *
-# local library
-import inkex
-import simplestyle
-from simpletransform import computePointInNode
 
+import inkex, simplestyle
+
+import gettext
+_ = gettext.gettext
+
+from math import *
 
 #SVG OUTPUT FUNCTIONS ================================================
-def draw_SVG_ellipse((rx, ry), (cx, cy), width, parent, start_end=(0,2*pi),transform='' ):
+def draw_SVG_ellipse((rx, ry), (cx, cy), parent, start_end=(0,2*pi),transform='' ):
 
     style = {   'stroke'        : '#000000',
-                'stroke-width'  : str(width),
+                'stroke-width'  : '1',
                 'fill'          : 'none'            }
     circ_attribs = {'style':simplestyle.formatStyle(style),
         inkex.addNS('cx','sodipodi')        :str(cx),
@@ -120,16 +120,14 @@ class Wireframe_Sphere(inkex.Effect):
             else:
                 flip = '' #no flip
 
-            so.RADIUS     = self.unittouu(str(so.RADIUS) + 'px')
             so.TILT       =  abs(so.TILT)*(pi/180)  #Convert to radians
             so.ROT_OFFSET = so.ROT_OFFSET*(pi/180)  #Convert to radians
-            stroke_width  = self.unittouu('1px')
             
             EPSILON = 0.001 #add a tiny value to the ellipse radii, so that if we get a zero radius, the ellipse still shows up as a line
 
             #INKSCAPE GROUP TO CONTAIN EVERYTHING
             
-            centre = tuple(computePointInNode(list(self.view_center), self.current_layer))   #Put in in the centre of the current view
+            centre = self.view_center   #Put in in the centre of the current view
             grp_transform = 'translate' + str( centre ) + flip
             grp_name = 'WireframeSphere'
             grp_attribs = {inkex.addNS('label','inkscape'):grp_name,
@@ -176,7 +174,7 @@ class Wireframe_Sphere(inkex.Effect):
                     
                     #finally, draw the line of longitude
                     #the centre is always at the centre of the sphere
-                    draw_SVG_ellipse( ( minorRad, so.RADIUS ), (0,0), stroke_width, grp_long , start_end,transform)
+                    draw_SVG_ellipse( ( minorRad, so.RADIUS ), (0,0), grp_long , start_end,transform)
                 
             # LINES OF LATITUDE
             if so.NUM_LAT > 0:
@@ -203,21 +201,21 @@ class Wireframe_Sphere(inkex.Effect):
                     if so.HIDE_BACK:
                         if lat_angle > so.TILT:                     #this LoLat is partially or fully visible
                             if lat_angle > pi-so.TILT:               #this LoLat is fully visible
-                                draw_SVG_ellipse((majorRad, minorRad), (cx,cy), stroke_width, grp_lat)
+                                draw_SVG_ellipse((majorRad, minorRad), (cx,cy), grp_lat)
                             else: #this LoLat is partially visible
                                 proportion = -(acos( tan(lat_angle - pi/2)/tan(pi/2 - so.TILT)) )/pi + 1
                                 start_end = ( pi/2 - proportion*pi, pi/2 + proportion*pi ) #make the start and end angles (mirror image around pi/2)
-                                draw_SVG_ellipse((majorRad, minorRad), (cx,cy), stroke_width, grp_lat, start_end)
+                                draw_SVG_ellipse((majorRad, minorRad), (cx,cy), grp_lat, start_end)
                             
                     else: #just draw the full lines of latitude
-                        draw_SVG_ellipse((majorRad, minorRad), (cx,cy), stroke_width, grp_lat)
+                        draw_SVG_ellipse((majorRad, minorRad), (cx,cy), grp_lat)
             
         
             #THE HORIZON CIRCLE
-            draw_SVG_ellipse((so.RADIUS, so.RADIUS), (0,0), stroke_width, grp) #circle, centred on the sphere centre
+            draw_SVG_ellipse((so.RADIUS, so.RADIUS), (0,0), grp) #circle, centred on the sphere centre
             
 if __name__ == '__main__':
     e = Wireframe_Sphere()
     e.affect()
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

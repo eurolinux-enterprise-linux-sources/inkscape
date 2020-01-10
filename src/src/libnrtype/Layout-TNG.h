@@ -14,15 +14,16 @@
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
+#include <libnr/nr-matrix-ops.h>
+#include <libnr/nr-rotate-ops.h>
+#include <libnr/nr-rect.h>
 #include <2geom/d2.h>
-#include <2geom/affine.h>
+#include <2geom/matrix.h>
 #include <glibmm/ustring.h>
 #include <pango/pango-break.h>
 #include <algorithm>
 #include <vector>
 #include <boost/optional.hpp>
-#include <svg/svg-length.h>
-#include "style-enums.h"
 
 #ifdef HAVE_CAIRO_PDF
 namespace Inkscape {
@@ -38,15 +39,15 @@ using Inkscape::Extension::Internal::CairoRenderContext;
 
 class SPStyle;
 class Shape;
-struct SPPrintContext;
+class NRArenaGroup;
+class SPPrintContext;
+class SVGLength;
 class Path;
 class SPCurve;
 class font_instance;
 typedef struct _PangoFontDescription PangoFontDescription;
 
 namespace Inkscape {
-class DrawingGroup;
-
 namespace Text {
 
 /** \brief Generates the layout for either wrapped or non-wrapped text and stores the result
@@ -158,14 +159,8 @@ public:
     both the 'direction' and 'block-progression' CSS attributes. */
     enum Direction {LEFT_TO_RIGHT, RIGHT_TO_LEFT, TOP_TO_BOTTOM, BOTTOM_TO_TOP};
 
-    /** Used to specify orientation of glyphs in vertical text. */
-    enum Orientation {ORIENTATION_UPRIGHT, ORIENTATION_SIDEWAYS};
-
     /** Display alignment for shapes. See appendWrapShape(). */
     enum DisplayAlign {DISPLAY_ALIGN_BEFORE, DISPLAY_ALIGN_CENTER, DISPLAY_ALIGN_AFTER};
-
-    /** lengthAdjust values */
-    enum LengthAdjust {LENGTHADJUST_SPACING, LENGTHADJUST_SPACINGANDGLYPHS};
 
     /** The optional attributes which can be applied to a SVG text or
     related tag. See appendText(). See SVG1.1 section 10.4 for the
@@ -179,8 +174,6 @@ public:
         std::vector<SVGLength> dx;
         std::vector<SVGLength> dy;
         std::vector<SVGLength> rotate;
-        SVGLength textLength;
-        LengthAdjust lengthAdjust;
     };
 
     /** Control codes which can be embedded in the text to be flowed. See
@@ -194,7 +187,7 @@ public:
     /** For expressing paragraph alignment. These values are rotated in the
     case of vertical text, but are not dependent on whether the paragraph is
     rtl or ltr, thus LEFT is always either left or top. */
-    enum Alignment {LEFT, CENTER, RIGHT, FULL, NONE};
+    enum Alignment {LEFT, CENTER, RIGHT, FULL};
 
     /** The CSS spec allows line-height:normal to be whatever the user agent
     thinks will look good. This is our value, as a multiple of font-size. */
@@ -299,43 +292,6 @@ public:
 
     //@}
 
-    // ************************** textLength and friends *************************
-
-    /** Gives the length target of this layout, as given by textLength attribute.
-
-        FIXME: by putting it here we only support @textLength on text and flowRoot, not on any
-        spans inside. For spans, we will need to add markers of start and end of a textLength span
-        into the _input_stream. These spans can nest (SVG 1.1, section 10.5). After a first layout
-        calculation, we would go through the input stream and, for each end of a textLength span,
-        go through its items, choose those where it wasn't yet set by a nested span, calculate
-        their number of characters, divide the length deficit by it, and set set the
-        textLengthMultiplier for those characters only. For now we do this for the entire layout,
-        without dealing with spans.
-    */
-    SVGLength textLength;
-
-    /** How do we meet textLength if specified: by letterspacing or by scaling horizontally */
-    LengthAdjust lengthAdjust;
-
-    /** By how much each character needs to be wider or narrower, using the specified lengthAdjust
-        strategy, for the layout to meet its textLength target. Is set to non-zero after the layout
-        is calculated for the first time, then it is recalculated with each glyph getting its adjustment. */
-    /** This one is used by scaling strategies: each glyph width is multiplied by this */
-    double textLengthMultiplier;
-    /** This one is used by letterspacing strategy: to each glyph width, this is added */
-    double textLengthIncrement;
-
-    /** Get the actual spacing increment if it's due with the current values of above stuff, otherwise 0 */
-    double getTextLengthIncrementDue() const;
-    /** Get the actual scale multiplier if it's due with the current values of above stuff, otherwise 1 */
-    double getTextLengthMultiplierDue() const;
-
-    /** Get actual length of layout, by summing span lengths. For one-line non-flowed text, just
-        the width; for multiline non-flowed, sum of lengths of all lines; for flowed text, sum of
-        scanline widths for all non-last lines plus text width of last line. */
-    double getActualLength() const;
-
-
     // ************************** doing the actual flowing *************************
 
     /** \name Processing
@@ -373,7 +329,7 @@ public:
      \param in_arena  The arena to add the glyphs group to
      \param paintbox  The current rendering tile
     */
-    void show(DrawingGroup *in_arena, Geom::OptRect const &paintbox) const;
+    void show(NRArenaGroup *in_arena, NRRect const *paintbox) const;
 
     /** Calculates the smallest rectangle completely enclosing all the
     glyphs.
@@ -381,7 +337,7 @@ public:
       \param transform     The transform to be applied to the entire object
                            prior to calculating its bounds.
     */
-    Geom::OptRect bounds(Geom::Affine const &transform, int start = -1, int length = -1) const;
+    void getBoundingBox(NRRect *bounding_box, Geom::Matrix const &transform, int start = -1, int length = -1) const;
 
     /** Sends all the glyphs to the given print context.
      \param ctx   I have
@@ -390,7 +346,7 @@ public:
      \param bbox  parameters
      \param ctm   do yet
     */
-    void print(SPPrintContext *ctx, Geom::OptRect const &pbox, Geom::OptRect const &dbox, Geom::OptRect const &bbox, Geom::Affine const &ctm) const;
+    void print(SPPrintContext *ctx, NRRect const *pbox, NRRect const *dbox, NRRect const *bbox, Geom::Matrix const &ctm) const;
 
 #ifdef HAVE_CAIRO_PDF    
     /** Renders all the glyphs to the given Cairo rendering context.
@@ -398,9 +354,6 @@ public:
      */
     void showGlyphs(CairoRenderContext *ctx) const;
 #endif
-
-    /** Returns the font family of the indexed span */
-    Glib::ustring getFontFamily(unsigned span_index) const;
 
     /** debug and unit test method. Creates a textual representation of the
     contents of this object. The output is designed to be both human-readable
@@ -427,7 +380,7 @@ public:
     /** Apply the given transform to all the output presently stored in
     this object. This only transforms the glyph positions, The glyphs
     themselves will not be transformed. */
-    void transform(Geom::Affine const &transform);
+    void transform(Geom::Matrix const &transform);
 
     //@}
 
@@ -478,17 +431,16 @@ public:
     iterator getLetterAt(double x, double y) const;
     inline iterator getLetterAt(Geom::Point &point) const;
 
-    /* Returns an iterator pointing to the character in the output which
+    /** Returns an iterator pointing to the character in the output which
     was created from the given input. If the character at the given byte
     offset was removed (soft hyphens, for example) the next character after
     it is returned. If no input was added with the given cookie, end() is
     returned. If more than one input has the same cookie, the first will
     be used regardless of the value of \a text_iterator. If
     \a text_iterator is out of bounds, the first or last character belonging
-    to the given input will be returned accordingly.
+    to the given input will be returned accordingly. */
     iterator sourceToIterator(void *source_cookie, Glib::ustring::const_iterator text_iterator) const;
- */
- 
+
     /** Returns an iterator pointing to the first character in the output
     which was created from the given source. If \a source_cookie is invalid,
     end() is returned. If more than one input has the same cookie, the
@@ -527,7 +479,6 @@ public:
     from a call to appendText() then the optional \a text_iterator
     parameter is set to point to the actual character, otherwise
     \a text_iterator is unaltered. */
-    // TODO FIXME a void* cookie is a very unsafe design, and C++ makes it unnecessary.  
     void getSourceOfCharacter(iterator const &it, void **source_cookie, Glib::ustring::iterator *text_iterator = NULL) const;
 
     /** For latin text, the left side of the character, on the baseline */
@@ -536,8 +487,6 @@ public:
     /** For left aligned text, the leftmost end of the baseline
     For rightmost text, the rightmost... you probably got it by now ;-)*/
     boost::optional<Geom::Point> baselineAnchorPoint() const;
-
-    Geom::Path baseline() const;
 
     /** This is that value to apply to the x,y attributes of tspan role=line
     elements, and hence it takes alignment into account. */
@@ -552,7 +501,7 @@ public:
     \a start to \a end and returns the union of these boxes. The return value
     is a list of zero or more quadrilaterals specified by a group of four
     points for each, thus size() is always a multiple of four. */
-    std::vector<Geom::Point> createSelectionShape(iterator const &it_start, iterator const &it_end, Geom::Affine const &transform) const;
+    std::vector<Geom::Point> createSelectionShape(iterator const &it_start, iterator const &it_end, Geom::Matrix const &transform) const;
 
     /** Returns true if \a it points to a character which is a valid cursor
     position, as defined by Pango. */
@@ -607,72 +556,16 @@ public:
 
     //@}
 
-
-    /**
-     * Keep track of font metrics. Two use cases:
-     * 1. Keep track of ascent, descent, and x-height of an individual font.
-     * 2. Keep track of effective ascent and descent that includes half-leading.
-     *
-     * Note: Leading refers to the "external" leading which is added (subtracted) due to
-     * a computed value of 'line-height' that differs from 'font-size'. "Internal" leading
-     * which is specified inside a font is not used in CSS. The 'font-size' is based on
-     * the font's em size which is 'ascent' + 'descent'.
-     *
-     * This structure was renamed (and modified) from "LineHeight".
-     *
-     * It's useful for this to be public so that ScanlineMaker can use it.
-     */
-    class FontMetrics {
-
-    public:
-        FontMetrics() { reset(); }
-        
-        void reset() {
-            ascent      =  0.8;
-            descent     = -0.2;
-            xheight     =  0.5;
-            ascent_max  =  0.8;
-            descent_max =  0.2;
-        }            
-
-        void set( font_instance *font );
-        
-        // CSS 2.1 dictates that font-size is based on em-size which is defined as ascent + descent
-        inline double emSize() const {return ascent + descent;}
-        // Alternatively name function for use 2.
-        inline double lineSize() const { return ascent + descent; }
-        inline void setZero() {ascent = descent = xheight = ascent_max = descent_max = 0.0;}
-
-        // For scaling for 'font-size'.
-        inline FontMetrics& operator*=(double x) {
-            ascent *= x; descent *= x; xheight *= x; ascent_max *= x; descent_max *= x;
-            return *this;
-        }
-
-        /// Save the larger values of ascent and descent between this and other. Needed for laying
-        /// out a line with mixed font-sizes, fonts, or line spacings.
-        void max(FontMetrics const &other);
-
-        /// Calculate the effective ascent and descent including half "leading".
-        void computeEffective( const double &line_height );
-
-        inline double getTypoAscent()  const {return ascent; }
-        inline double getTypoDescent() const {return descent; }
-        inline double getXHeight()     const {return xheight; }
-        inline double getMaxAscent()   const {return ascent_max; }
-        inline double getMaxDescent()  const {return descent_max; }
-
-        // private:
-        double ascent;      // Typographic ascent.
-        double descent;     // Typographic descent.
-        double xheight;     // Height of 'x' measured from alphabetic baseline.
-        double ascent_max;  // Maximum ascent of all glyphs in font.
-        double descent_max; // Maximum descent of all glyphs in font.
-
-    }; // End FontMetrics
-
-    /** The strut is the minimum value used in calculating line height. */
-    FontMetrics strut;
+    /// it's useful for this to be public so that ScanlineMaker can use it
+    struct LineHeight {
+        double ascent;
+        double descent;
+        double leading;
+        inline double total() const {return ascent + descent + leading;}
+        inline void setZero() {ascent = descent = leading = 0.0;}
+        inline LineHeight& operator*=(double x) {ascent *= x; descent *= x; leading *= x; return *this;}
+        void max(LineHeight const &other);   /// makes this object contain the largest of all three members between this object and other
+    };
 
     /// see _enum_converter()
     struct EnumConversionItem {
@@ -717,16 +610,13 @@ private:
         std::vector<SVGLength> dx;
         std::vector<SVGLength> dy;
         std::vector<SVGLength> rotate;
-        SVGLength textLength;
-        LengthAdjust lengthAdjust;
         
         // a few functions for some of the more complicated style accesses
+        float styleComputeFontSize() const;
         /// The return value must be freed with pango_font_description_free()
         PangoFontDescription *styleGetFontDescription() const;
         font_instance *styleGetFontInstance() const;
         Direction styleGetBlockProgression() const;
-        SPCSSTextOrientation styleGetTextOrientation() const;
-        SPCSSBaseline styleGetDominantBaseline() const;
         Alignment styleGetAlignment(Direction para_direction, bool try_text_align) const;
     };
 
@@ -759,27 +649,7 @@ private:
 
     /** The overall block-progression of the whole flow. */
     inline Direction _blockProgression() const
-        {
-            if(!_input_stream.empty())
-                return static_cast<InputStreamTextSource*>(_input_stream.front())->styleGetBlockProgression();
-            return TOP_TO_BOTTOM;
-        }
-
-    /** The overall text-orientation of the whole flow. */
-    inline  SPCSSTextOrientation _blockTextOrientation() const
-        {
-            if(!_input_stream.empty())
-                return static_cast<InputStreamTextSource*>(_input_stream.front())->styleGetTextOrientation();
-            return SP_CSS_TEXT_ORIENTATION_MIXED;
-        }
-
-    /** The overall text-orientation of the whole flow. */
-    inline  SPCSSBaseline _blockBaseline() const
-        {
-            if(!_input_stream.empty())
-                return static_cast<InputStreamTextSource*>(_input_stream.front())->styleGetDominantBaseline();
-            return SP_CSS_BASELINE_AUTO;
-        }
+        {return static_cast<InputStreamTextSource*>(_input_stream.front())->styleGetBlockProgression();}
 
     /** so that LEFT_TO_RIGHT == RIGHT_TO_LEFT but != TOP_TO_BOTTOM */
     static bool _directions_are_orthogonal(Direction d1, Direction d2);
@@ -822,9 +692,7 @@ private:
         float x;         /// relative to the start of the chunk
         float y;         /// relative to the current line's baseline
         float rotation;  /// absolute, modulo any object transforms, which we don't know about
-        Orientation orientation; /// Orientation of glyph in vertical text
         float width;
-        float vertical_scale; /// to implement lengthAdjust="spacingAndGlyphs" that must scale glyphs only horizontally; instead we change font size and then undo that change vertically only
         inline Span const & span(Layout const *l) const {return l->_spans[l->_characters[in_character].in_span];}
         inline Chunk const & chunk(Layout const *l) const {return l->_chunks[l->_spans[l->_characters[in_character].in_span].in_chunk];}
         inline Line const & line(Layout const *l) const {return l->_lines[l->_chunks[l->_spans[l->_characters[in_character].in_span].in_chunk].in_line];}
@@ -846,10 +714,8 @@ private:
         float font_size;
         float x_start;   /// relative to the start of the chunk
         float x_end;     /// relative to the start of the chunk
-        inline float width() const {return std::abs(x_start - x_end);}
-        FontMetrics line_height;
+        LineHeight line_height;
         double baseline_shift;  /// relative to the line's baseline
-        SPCSSTextOrientation text_orientation;
         Direction direction;     /// See CSS3 section 3.2. Either rtl or ltr
         Direction block_progression;  /// See CSS3 section 3.2. The direction in which lines go.
         unsigned in_input_stream_item;
@@ -880,7 +746,7 @@ private:
 
     /** gets the overall matrix that transforms the given glyph from local
     space to world space. */
-    void _getGlyphTransformMatrix(int glyph_index, Geom::Affine *matrix) const;
+    void _getGlyphTransformMatrix(int glyph_index, Geom::Matrix *matrix) const;
 
     // loads of functions to drill down the object tree, all of them
     // annoyingly similar and all of them requiring predicate functors.
@@ -944,12 +810,7 @@ class Layout::iterator {
 public:
     friend class Layout;
     // this is just so you can create uninitialised iterators - don't actually try to use one
-    iterator() :
-        _parent_layout(NULL),
-        _glyph_index(-1),
-        _char_index(0),
-        _cursor_moving_vertically(false),
-        _x_coordinate(0.0){}
+    iterator() : _parent_layout(NULL) {}
     // no copy constructor required, the default does what we want
     bool operator== (iterator const &other) const
         {return _glyph_index == other._glyph_index && _char_index == other._char_index;}
@@ -1144,7 +1005,7 @@ inline unsigned Layout::paragraphIndex(iterator const &it) const
     {return it._char_index == _characters.size() ? _paragraphs.size() - 1 : _characters[it._char_index].line(this).in_paragraph;}
 
 inline Layout::Alignment Layout::paragraphAlignment(iterator const &it) const
-    {return (_paragraphs.size() == 0) ? NONE : _paragraphs[paragraphIndex(it)].alignment;}
+    {return _paragraphs[paragraphIndex(it)].alignment;}
 
 inline bool Layout::iterator::nextGlyph()
 {
@@ -1201,4 +1062,4 @@ inline bool Layout::iterator::prevCharacter()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

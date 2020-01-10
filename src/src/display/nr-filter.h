@@ -1,5 +1,5 @@
-#ifndef SEEN_NR_FILTER_H
-#define SEEN_NR_FILTER_H
+#ifndef __NR_FILTER_H__
+#define __NR_FILTER_H__
 
 /*
  * SVG filters rendering
@@ -13,27 +13,23 @@
  */
 
 //#include "display/nr-arena-item.h"
-#include <cairo.h>
 #include "display/nr-filter-primitive.h"
 #include "display/nr-filter-types.h"
+#include "libnr/nr-pixblock.h"
+#include "libnr/nr-matrix.h"
+#include "libnr/nr-rect.h"
 #include "svg/svg-length.h"
 #include "sp-filter-units.h"
-#include "inkgc/gc-managed.h"
+#include "gc-managed.h"
+
+struct NRArenaItem;
 
 namespace Inkscape {
-class DrawingContext;
-class DrawingItem;
-
 namespace Filters {
 
-class Filter {
+class Filter : public Inkscape::GC::Managed<> {
 public:
-    /** Given background state from @a bgdc and an intermediate rendering from the surface
-     * backing @a graphic, modify the contents of the surface backing @a graphic to represent
-     * the results of filter rendering. @a bgarea and @a area specify bounding boxes
-     * of both surfaces in world coordinates; Cairo contexts are assumed to be in default state
-     * (0,0 = surface origin, no path, OVER operator) */
-    int render(Inkscape::DrawingItem const *item, DrawingContext &graphic, DrawingContext *bgdc);
+    int render(NRArenaItem const *item, NRPixBlock *pb);
 
     /**
      * Creates a new filter primitive under this filter object.
@@ -96,8 +92,8 @@ public:
      * If any of these parameters does not get set, the default value, as
      * defined in SVG standard, for that parameter is used instead.
      */
-    void set_region(SVGLength const &x, SVGLength const &y,
-                    SVGLength const &width, SVGLength const &height);
+    void set_region(SVGLength &x, SVGLength &y,
+                    SVGLength &width, SVGLength &height);
 
     /**
      * Resets the filter effects region to its default value as defined
@@ -135,7 +131,7 @@ public:
     void set_filter_units(SPFilterUnits unit);
 
     /**
-     * Set the primitiveUnits-property. If not set, the default value of
+     * Set the primitiveUnits-properterty. If not set, the default value of
      * userSpaceOnUse is used. If the parameter value is not a valid
      * enumeration value from SPFilterUnits, no changes to filter state
      * are made.
@@ -149,19 +145,18 @@ public:
      * to be rendered so that after filtering, the original area is
      * drawn correctly.
      */
-    void area_enlarge(Geom::IntRect &area, Inkscape::DrawingItem const *item) const;
+    void area_enlarge(NRRectL &area, NRArenaItem const *item) const;
+    /**
+     * Given an object bounding box, this function enlarges it so that
+     * it contains the filter effect area.
+     */
+    void bbox_enlarge(NRRectL &bbox);
     /**
      * Returns the filter effects area in user coordinate system.
      * The given bounding box should be a bounding box as specified in
      * SVG standard and in user coordinate system.
      */
-    Geom::OptRect filter_effect_area(Geom::OptRect const &bbox);
-
-    // returns cache score factor
-    double complexity(Geom::Affine const &ctm);
-
-    // says whether the filter accesses any of the background images
-    bool uses_background();
+    Geom::Rect filter_effect_area(Geom::Rect const &bbox);
 
     /** Creates a new filter with space for one filter element */
     Filter();
@@ -175,7 +170,9 @@ public:
     virtual ~Filter();
 
 private:
-    std::vector<FilterPrimitive*> _primitive;
+    int _primitive_count;
+    int _primitive_table_size;
+
     /** Amount of image slots used, when this filter was rendered last time */
     int _slot_count;
 
@@ -197,11 +194,14 @@ private:
     SPFilterUnits _filter_units;
     SPFilterUnits _primitive_units;
 
+    FilterPrimitive ** _primitive;
+
     void _create_constructor_table();
+    void _enlarge_primitive_table();
     void _common_init();
     int _resolution_limit(FilterQuality const quality) const;
     std::pair<double,double> _filter_resolution(Geom::Rect const &area,
-                                                Geom::Affine const &trans,
+                                                Geom::Matrix const &trans,
                                                 FilterQuality const q) const;
 };
 
@@ -220,4 +220,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

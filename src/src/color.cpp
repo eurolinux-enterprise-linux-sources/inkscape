@@ -1,4 +1,6 @@
-/*
+#define __SP_COLOR_C__
+
+/** \file
  * Colors.
  *
  * Author:
@@ -12,20 +14,12 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <cmath>
-#include <cstdio>
-
-#define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
-#define MAX(X,Y) ((X) > (Y) ? (X) : (Y))
-
+#include <math.h>
 #include "color.h"
 #include "svg/svg-icc-color.h"
 #include "svg/svg-color.h"
 
 #include "svg/css-ostringstream.h"
-
-#define return_if_fail(x) if (!(x)) { printf("assertion failed: " #x); return; }
-#define return_val_if_fail(x, val) if (!(x)) { printf("assertion failed: " #x); return val; }
 
 using Inkscape::CSSOStringStream;
 using std::vector;
@@ -69,10 +63,6 @@ SPColor::~SPColor()
 
 SPColor& SPColor::operator= (SPColor const& other)
 {
-    if (this == &other){
-        return *this;
-    }
-    
     SVGICCColor* tmp_icc = other.icc ? new SVGICCColor(*other.icc) : 0;
 
     v.c[0] = other.v.c[0];
@@ -92,10 +82,9 @@ SPColor& SPColor::operator= (SPColor const& other)
  */
 bool SPColor::operator == (SPColor const& other) const
 {
-    bool match =
-        (v.c[0] == other.v.c[0]) &&
-        (v.c[1] == other.v.c[1]) &&
-        (v.c[2] == other.v.c[2]);
+    bool match = (v.c[0] != other.v.c[0])
+        && (v.c[1] != other.v.c[1])
+        && (v.c[2] != other.v.c[2]);
 
     match &= profileMatches( icc, other.icc );
 
@@ -108,7 +97,9 @@ bool SPColor::operator == (SPColor const& other) const
  */
 bool SPColor::isClose( SPColor const& other, float epsilon ) const
 {
-    bool match = (fabs((v.c[0]) - (other.v.c[0])) < epsilon)
+    bool match = false;
+
+    match = (fabs((v.c[0]) - (other.v.c[0])) < epsilon)
         && (fabs((v.c[1]) - (other.v.c[1])) < epsilon)
         && (fabs((v.c[2]) - (other.v.c[2])) < epsilon);
 
@@ -126,7 +117,7 @@ static bool profileMatches( SVGICCColor const* first, SVGICCColor const* second 
             && (first->colorProfile == second->colorProfile)
             && (first->colors.size() == second->colors.size());
         if ( match ) {
-            for ( unsigned i = 0; i < first->colors.size(); i++ ) {
+            for ( guint i = 0; i < first->colors.size(); i++ ) {
                 match &= (fabs(first->colors[i] - second->colors[i]) < PROFILE_EPSILON);
             }
         }
@@ -140,12 +131,12 @@ static bool profileMatches( SVGICCColor const* first, SVGICCColor const* second 
  */
 void SPColor::set( float r, float g, float b )
 {
-    return_if_fail(r >= 0.0);
-    return_if_fail(r <= 1.0);
-    return_if_fail(g >= 0.0);
-    return_if_fail(g <= 1.0);
-    return_if_fail(b >= 0.0);
-    return_if_fail(b <= 1.0);
+    g_return_if_fail(r >= 0.0);
+    g_return_if_fail(r <= 1.0);
+    g_return_if_fail(g >= 0.0);
+    g_return_if_fail(g <= 1.0);
+    g_return_if_fail(b >= 0.0);
+    g_return_if_fail(b <= 1.0);
 
     // TODO clear icc if set?
     v.c[0] = r;
@@ -168,9 +159,9 @@ void SPColor::set( guint32 value )
  * Convert SPColor with integer alpha value to 32bit RGBA value.
  * \pre alpha < 256
  */
-guint32 SPColor::toRGBA32( int alpha ) const
+guint32 SPColor::toRGBA32( gint alpha ) const
 {
-    return_val_if_fail (alpha <= 0xff, 0x0);
+    g_return_val_if_fail (alpha <= 0xff, 0x0);
 
     guint32 rgba = SP_RGBA32_U_COMPOSE( SP_COLOR_F_TO_U(v.c[0]),
                                         SP_COLOR_F_TO_U(v.c[1]),
@@ -183,17 +174,19 @@ guint32 SPColor::toRGBA32( int alpha ) const
  * Convert SPColor with float alpha value to 32bit RGBA value.
  * \pre color != NULL && 0 <= alpha <= 1
  */
-guint32 SPColor::toRGBA32( double alpha ) const
+guint32 SPColor::toRGBA32( gdouble alpha ) const
 {
-    return_val_if_fail(alpha >= 0.0, 0x0);
-    return_val_if_fail(alpha <= 1.0, 0x0);
+    g_return_val_if_fail(alpha >= 0.0, 0x0);
+    g_return_val_if_fail(alpha <= 1.0, 0x0);
 
-    return toRGBA32( static_cast<int>(SP_COLOR_F_TO_U(alpha)) );
+    return toRGBA32( static_cast<gint>(SP_COLOR_F_TO_U(alpha)) );
 }
 
 std::string SPColor::toString() const
 {
     CSSOStringStream css;
+
+    std::string result;
     char tmp[64] = {0};
 
     sp_svg_write_color(tmp, sizeof(tmp), toRGBA32(0x0ff));
@@ -223,8 +216,8 @@ std::string SPColor::toString() const
 void
 sp_color_get_rgb_floatv(SPColor const *color, float *rgb)
 {
-    return_if_fail (color != NULL);
-    return_if_fail (rgb != NULL);
+    g_return_if_fail (color != NULL);
+    g_return_if_fail (rgb != NULL);
 
     rgb[0] = color->v.c[0];
     rgb[1] = color->v.c[1];
@@ -238,8 +231,8 @@ sp_color_get_rgb_floatv(SPColor const *color, float *rgb)
 void
 sp_color_get_cmyk_floatv(SPColor const *color, float *cmyk)
 {
-    return_if_fail (color != NULL);
-    return_if_fail (cmyk != NULL);
+    g_return_if_fail (color != NULL);
+    g_return_if_fail (cmyk != NULL);
 
     sp_color_rgb_to_cmyk_floatv( cmyk,
                                  color->v.c[0],
@@ -292,7 +285,7 @@ sp_color_rgb_to_hsv_floatv (float *hsv, float r, float g, float b)
 void
 sp_color_hsv_to_rgb_floatv (float *rgb, float h, float s, float v)
 {
-    double f, w, q, t, d;
+    gdouble f, w, q, t, d;
 
     d = h * 5.99999999;
     f = d - floor (d);
@@ -359,7 +352,7 @@ sp_color_rgb_to_hsl_floatv (float *hsl, float r, float g, float b)
     }
 }
 
-static float
+float
 hue_2_rgb (float v1, float v2, float h)
 {
     if (h < 0) h += 6.0;
@@ -459,4 +452,4 @@ sp_color_cmyk_to_rgb_floatv (float *rgb, float c, float m, float y, float k)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

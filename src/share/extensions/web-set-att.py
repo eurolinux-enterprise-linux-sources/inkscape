@@ -14,11 +14,11 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
-# local library
-import inkwebeffect
-import inkex
+import inkwebeffect, gettext
+
+_ = gettext.gettext
 
 class InkWebTransmitAtt(inkwebeffect.InkWebEffect):
 
@@ -44,10 +44,6 @@ class InkWebTransmitAtt(inkwebeffect.InkWebEffect):
                         action="store", type="string",
                         dest="from_and_to", default="g-to-one",
                         help='Who transmit to Who? "g-to-one" All set the last. "one-to-g" The first set all.')
-        self.OptionParser.add_option("--tab",
-                        action="store", type="string",
-                        dest="tab",
-                        help="The selected UI-tab when OK was pressed")
 
     def effect(self):
       self.ensureInkWebSupport()

@@ -5,8 +5,6 @@
  * Authors:
  *   Ted Gould <ted@gould.cx>
  *   Ulf Erikson <ulferikson@users.sf.net>
- *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 2004-2006 Authors
  *
@@ -27,7 +25,8 @@
 #include "extension/print.h"
 #include "extension/db.h"
 #include "extension/output.h"
-#include "display/drawing.h"
+#include "display/nr-arena.h"
+#include "display/nr-arena-item.h"
 
 #include "display/curve.h"
 #include "display/canvas-bpath.h"
@@ -37,15 +36,15 @@
 #include "sp-shape.h"
 
 #include "io/sys.h"
-#include "document.h"
 
 namespace Inkscape {
 namespace Extension {
 namespace Internal {
 
-bool CairoRendererOutput::check(Inkscape::Extension::Extension * /*module*/)
+bool
+CairoRendererOutput::check (Inkscape::Extension::Extension * module)
 {
-    return true;
+	return TRUE;
 }
 
 static bool
@@ -54,21 +53,21 @@ png_render_document_to_file(SPDocument *doc, gchar const *filename)
     CairoRenderer *renderer;
     CairoRenderContext *ctx;
 
-    doc->ensureUpToDate();
+    sp_document_ensure_up_to_date(doc);
 
 /* Start */
-
-    SPItem *base = doc->getRoot();
-    Inkscape::Drawing drawing;
-    unsigned dkey = SPItem::display_key_new(1);
-    base->invoke_show(drawing, dkey, SP_ITEM_SHOW_DISPLAY);
+    /* Create new arena */
+    SPItem *base = SP_ITEM(sp_document_root(doc));
+    NRArena *arena = NRArena::create();
+    unsigned dkey = sp_item_display_key_new(1);
+    NRArenaItem *root = sp_item_invoke_show(base, arena, dkey, SP_ITEM_SHOW_DISPLAY);
     
     /* Create renderer and context */
     renderer = new CairoRenderer();
     ctx = renderer->createContext();
 
     /* Render document */
-    bool ret = renderer->setupDocument(ctx, doc, TRUE, 0., NULL);
+    bool ret = renderer->setupDocument(ctx, doc, TRUE, NULL);
     if (ret) {
         renderer->renderItem(ctx, base);
         ctx->saveAsPng(filename);
@@ -76,7 +75,9 @@ png_render_document_to_file(SPDocument *doc, gchar const *filename)
     }
     renderer->destroyContext(ctx);
 
-    base->invoke_hide(dkey);
+    /* Release arena */
+    sp_item_invoke_hide(base, dkey);
+    nr_object_unref((NRObject *) arena);
 /* end */
     delete renderer;
 
@@ -90,11 +91,13 @@ png_render_document_to_file(SPDocument *doc, gchar const *filename)
 	\param  doc   Document to be saved
     \param  uri   Filename to save to (probably will end in .png)
 */
-void CairoRendererOutput::save(Inkscape::Extension::Output * /*mod*/, SPDocument *doc, gchar const *filename)
+void
+CairoRendererOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar const *filename)
 {
-    if (!png_render_document_to_file(doc, filename)) {
+    if (!png_render_document_to_file(doc, filename))
         throw Inkscape::Extension::Output::save_failed();
-    }
+
+	return;
 }
 
 /**

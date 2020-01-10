@@ -1,6 +1,11 @@
+#ifndef __SP_ACTION_H__
+#define __SP_ACTION_H__
+
 /** \file
  * Inkscape UI action implementation
- *//*
+ */
+
+/*
  * Author:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *
@@ -9,59 +14,59 @@
  * This code is in public domain
  */
 
-#ifndef SEEN_INKSCAPE_SP_ACTION_H
-#define SEEN_INKSCAPE_SP_ACTION_H
-
-#include "helper/action-context.h"
-#include <sigc++/signal.h>
-#include <glibmm/ustring.h>
-
+/** A macro to get the GType for actions */
 #define SP_TYPE_ACTION (sp_action_get_type())
-#define SP_ACTION(o) (G_TYPE_CHECK_INSTANCE_CAST((o), SP_TYPE_ACTION, SPAction))
-#define SP_ACTION_CLASS(o) (G_TYPE_CHECK_CLASS_CAST((o), SP_TYPE_ACTION, SPActionClass))
-#define SP_IS_ACTION(o) (G_TYPE_CHECK_INSTANCE_TYPE((o), SP_TYPE_ACTION))
+/** A macro to cast and check the cast of changing an object to an action */
+#define SP_ACTION(o) (NR_CHECK_INSTANCE_CAST((o), SP_TYPE_ACTION, SPAction))
+/** A macro to check whether or not something is an action */
+#define SP_IS_ACTION(o) (NR_CHECK_INSTANCE_TYPE((o), SP_TYPE_ACTION))
 
-class SPDesktop;
-class SPDocument;
+#include "helper/helper-forward.h"
+#include "libnr/nr-object.h"
+#include "forward.h"
+
+#include <glibmm/ustring.h>
+//class Inkscape::UI::View::View;
+
 namespace Inkscape {
-
-class Selection;
 class Verb;
-
-namespace UI {
-namespace View {
-class View;
-} // namespace View
-} // namespace UI
 }
+
+
+/** This is a structure that is used to hold all the possible
+    actions that can be taken with an action.  These are the
+    function pointers available. */
+struct SPActionEventVector {
+    NRObjectEventVector object_vector;                                        /**< Parent class */
+    void (* perform)(SPAction *action, void *ldata, void *pdata);             /**< Actually do the action of the event.  Called by sp_perform_action */
+    void (* set_active)(SPAction *action, unsigned active, void *data);       /**< Callback for activation change */
+    void (* set_sensitive)(SPAction *action, unsigned sensitive, void *data); /**< Callback for a change in sensitivity */
+    void (* set_shortcut)(SPAction *action, unsigned shortcut, void *data);   /**< Callback for setting the shortcut for this function */
+    void (* set_name)(SPAction *action, Glib::ustring, void *data);           /**< Callback for setting the name for this function */
+};
 
 /** All the data that is required to be an action.  This
     structure identifies the action and has the data to
 	create menus and toolbars for the action */
-struct SPAction : public GObject {
+struct SPAction : public NRActiveObject {
     unsigned sensitive : 1;  /**< Value to track whether the action is sensitive */
     unsigned active : 1;     /**< Value to track whether the action is active */
-    Inkscape::ActionContext context;  /**< The context (doc/view) to which this action is attached */
+    Inkscape::UI::View::View *view;            /**< The View to which this action is attached */
     gchar *id;               /**< The identifier for the action */
     gchar *name;             /**< Full text name of the action */
     gchar *tip;              /**< A tooltip to describe the action */
     gchar *image;            /**< An image to visually identify the action */
     Inkscape::Verb *verb;    /**< The verb that produced this action */
-    
-    sigc::signal<void> signal_perform;
-    sigc::signal<void, bool> signal_set_sensitive;
-    sigc::signal<void, bool> signal_set_active;
-    sigc::signal<void, Glib::ustring const &> signal_set_name;
 };
 
 /** The action class is the same as its parent. */
 struct SPActionClass {
-    GObjectClass parent_class; /**< Parent Class */
+    NRActiveObjectClass parent_class; /**< Parent Class */
 };
 
-GType sp_action_get_type();
+NRType sp_action_get_type();
 
-SPAction *sp_action_new(Inkscape::ActionContext const &context,
+SPAction *sp_action_new(Inkscape::UI::View::View *view,
 			gchar const *id,
 			gchar const *name,
 			gchar const *tip,
@@ -71,13 +76,11 @@ SPAction *sp_action_new(Inkscape::ActionContext const &context,
 void sp_action_perform(SPAction *action, void *data);
 void sp_action_set_active(SPAction *action, unsigned active);
 void sp_action_set_sensitive(SPAction *action, unsigned sensitive);
-void sp_action_set_name(SPAction *action, Glib::ustring const &name);
-SPDocument *sp_action_get_document(SPAction *action);
-Inkscape::Selection *sp_action_get_selection(SPAction *action);
+void sp_action_set_name (SPAction *action, Glib::ustring);
 Inkscape::UI::View::View *sp_action_get_view(SPAction *action);
-SPDesktop *sp_action_get_desktop(SPAction *action);
 
 #endif
+
 
 /*
   Local Variables:
@@ -88,4 +91,4 @@ SPDesktop *sp_action_get_desktop(SPAction *action);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

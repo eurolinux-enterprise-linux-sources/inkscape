@@ -17,35 +17,39 @@
 
 #include "sp-object.h"
 
-#define SP_FEPOINTLIGHT(obj) (dynamic_cast<SPFePointLight*>((SPObject*)obj))
-#define SP_IS_FEPOINTLIGHT(obj) (dynamic_cast<const SPFePointLight*>((SPObject*)obj) != NULL)
+#define SP_TYPE_FEPOINTLIGHT (sp_fepointlight_get_type())
+#define SP_FEPOINTLIGHT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), SP_TYPE_FEPOINTLIGHT, SPFePointLight))
+#define SP_FEPOINTLIGHT_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), SP_TYPE_FEPOINTLIGHT, SPFePointLightClass))
+#define SP_IS_FEPOINTLIGHT(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), SP_TYPE_FEPOINTLIGHT))
+#define SP_IS_FEPOINTLIGHT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), SP_TYPE_FEPOINTLIGHT))
 
-class SPFePointLight : public SPObject {
-public:
-	SPFePointLight();
-	virtual ~SPFePointLight();
+/* Distant light class */
+
+
+class SPFePointLight;
+class SPFePointLightClass;
+
+struct SPFePointLight : public SPObject {
 
     /** x coordinate of the light source */
-    float x; 
-    unsigned int x_set : 1;
+    gfloat x; 
+    guint x_set : 1;
     /** y coordinate of the light source */
-    float y; 
-    unsigned int y_set : 1;
+    gfloat y; 
+    guint y_set : 1;
     /** z coordinate of the light source */
-    float z; 
-    unsigned int z_set : 1;
+    gfloat z; 
+    guint z_set : 1;
 
-protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-
-	virtual void set(unsigned int key, char const* value);
-
-	virtual void update(SPCtx* ctx, unsigned int flags);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
+    //other fields
 };
 
+struct SPFePointLightClass {
+    SPObjectClass parent_class;
+};
+
+GType
+sp_fepointlight_get_type();
 #endif /* !SP_FEPOINTLIGHT_H_SEEN */
 
 /*
@@ -57,4 +61,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

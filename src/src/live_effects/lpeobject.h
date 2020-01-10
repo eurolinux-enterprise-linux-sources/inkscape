@@ -15,21 +15,24 @@
 namespace Inkscape {
     namespace XML {
         class Node;
-        struct Document;
+        class Document;
     }
     namespace LivePathEffect {
         class Effect;
     }
 }
 
-#define LIVEPATHEFFECT(obj) ((LivePathEffectObject*)obj)
-#define IS_LIVEPATHEFFECT(obj) (dynamic_cast<const LivePathEffectObject*>((SPObject*)obj))
+#define TYPE_LIVEPATHEFFECT  (LivePathEffectObject::livepatheffect_get_type())
+#define LIVEPATHEFFECT(o)    (G_TYPE_CHECK_INSTANCE_CAST((o), TYPE_LIVEPATHEFFECT, LivePathEffectObject))
+#define IS_LIVEPATHEFFECT(o) (G_TYPE_CHECK_INSTANCE_TYPE((o), TYPE_LIVEPATHEFFECT))
+
+/// The LivePathEffect vtable.
+struct LivePathEffectObjectClass {
+    SPObjectClass parent_class;
+};
 
 class LivePathEffectObject : public SPObject {
 public:
-	LivePathEffectObject();
-	virtual ~LivePathEffectObject();
-
     Inkscape::LivePathEffect::EffectType effecttype;
 
     bool effecttype_set;
@@ -39,18 +42,22 @@ public:
     /* Note that the returned pointer can be NULL in a valid LivePathEffectObject contained in a valid list of lpeobjects in an lpeitem!
      * So one should always check whether the returned value is NULL or not */
     Inkscape::LivePathEffect::Effect * get_lpe() { return lpe; };
-    Inkscape::LivePathEffect::Effect const * get_lpe() const { return lpe; };
 
+private:
     Inkscape::LivePathEffect::Effect *lpe; // this can be NULL in a valid LivePathEffectObject
 
-protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-
-	virtual void set(unsigned int key, char const* value);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
+    /* C-style class functions: */
+public:
+    static GType livepatheffect_get_type();
+private:
+    static void livepatheffect_class_init(LivePathEffectObjectClass *klass);
+    static void livepatheffect_init(LivePathEffectObject *stop);
+    static void livepatheffect_build(SPObject *object, SPDocument *document, Inkscape::XML::Node *repr);
+    static void livepatheffect_release(SPObject *object);
+    static void livepatheffect_set(SPObject *object, unsigned key, gchar const *value);
+    static Inkscape::XML::Node *livepatheffect_write(SPObject *object, Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags);
 };
+
 
 #endif
 
@@ -63,4 +70,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

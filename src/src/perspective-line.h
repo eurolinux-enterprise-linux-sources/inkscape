@@ -13,6 +13,7 @@
 #define SEEN_PERSPECTIVE_LINE_H
 
 #include "line-geometry.h"
+#include <glib.h>
 
 class SPDesktop;
 

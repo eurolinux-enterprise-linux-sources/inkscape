@@ -7,22 +7,19 @@
  * This file was created based on sp-use-reference.h
  *
  * Copyright (C) 2007 Gail Banaszkiewicz
- *   Abhishek Sharma
  *
  * Released under GNU GPL, read the file 'COPYING' for more information.
  */
 
-#include <cstddef>
+#include <forward.h>
+#include <uri-references.h>
+#include <stddef.h>
 #include <sigc++/sigc++.h>
-
-#include "sp-item.h"
-#include "uri-references.h"
 
 #include "util/share.h"
 #include "xml/node-observer.h"
 #include "xml/subtree.h"
 
-typedef unsigned int GQuark;
 
 class SPTRefReference : public Inkscape::URIReference,
                         public Inkscape::XML::NodeObserver {
@@ -39,7 +36,7 @@ public:
     }
 
     SPItem *getObject() const {
-        return static_cast<SPItem *>(URIReference::getObject());
+        return (SPItem *)URIReference::getObject();
     }
    
     void updateObserver();

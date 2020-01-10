@@ -1,4 +1,6 @@
-/*
+/**
+ * \brief Simplified management of enumerations of svg items with UI labels
+ *
  * Authors:
  *   Nicholas Bishop <nicholasbishop@gmail.com>
  *   Johan Engelen <j.b.c.engelen@ewi.utwente.nl>
@@ -7,6 +9,16 @@
  *
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
+
+/* IMPORTANT
+ *  When initializing the EnumData struct, you cannot use _(...) to translate strings.
+ * Instead, one must use N_(...) and do the translation every time the string is retreived.
+ *
+ * Note that get_id_from_key and get_id_from_label return 0 if it cannot find an entry for that key string
+ * Note that get_label and get_key return an empty string when the requested id is not in the list.
+ */
+
+
 #ifndef INKSCAPE_UTIL_ENUMS_H
 #define INKSCAPE_UTIL_ENUMS_H
 
@@ -15,12 +27,6 @@
 namespace Inkscape {
 namespace Util {
 
-/**
- * Simplified management of enumerations of svg items with UI labels.
- * IMPORTANT:
- *  When initializing the EnumData struct, you cannot use _(...) to translate strings.
- * Instead, one must use N_(...) and do the translation every time the string is retreived.
- */
 template<typename E>
 struct EnumData
 {
@@ -31,12 +37,6 @@ struct EnumData
 
 const Glib::ustring empty_string("");
 
-/**
- * Simplified management of enumerations of svg items with UI labels.
- *
- * @note that get_id_from_key and get_id_from_label return 0 if it cannot find an entry for that key string.
- * @note that get_label and get_key return an empty string when the requested id is not in the list.
- */
 template<typename E> class EnumDataConverter
 {
 public:
@@ -130,4 +130,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

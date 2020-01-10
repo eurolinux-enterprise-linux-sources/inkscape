@@ -1,4 +1,14 @@
-/**
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#ifdef ENABLE_SVG_FONTS
+#ifndef __SP_GLYPH_H__
+#define __SP_GLYPH_H__
+
+/*
+ * SVG <glyph> element implementation
+ *
  * Authors:
  *    Felipe C. da S. Sanches <juca@members.fsf.org>
  *
@@ -7,13 +17,13 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifndef SEEN_SP_GLYPH_H
-#define SEEN_SP_GLYPH_H
-
 #include "sp-object.h"
 
-#define SP_GLYPH(obj) (dynamic_cast<SPGlyph*>((SPObject*)obj))
-#define SP_IS_GLYPH(obj) (dynamic_cast<const SPGlyph*>((SPObject*)obj) != NULL)
+#define SP_TYPE_GLYPH (sp_glyph_get_type ())
+#define SP_GLYPH(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_GLYPH, SPGlyph))
+#define SP_GLYPH_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_GLYPH, SPGlyphClass))
+#define SP_IS_GLYPH(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_GLYPH))
+#define SP_IS_GLYPH_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_GLYPH))
 
 enum glyphArabicForm {
     GLYPH_ARABIC_FORM_INITIAL,
@@ -28,16 +38,7 @@ enum glyphOrientation {
     GLYPH_ORIENTATION_BOTH
 };
 
-/*
- * SVG <glyph> element
- */
-
-class SPGlyph : public SPObject {
-public:
-    SPGlyph();
-    virtual ~SPGlyph() {}
-
-    // FIXME encapsulation
+struct SPGlyph : public SPObject {
     Glib::ustring unicode;
     Glib::ustring glyph_name;
     char* d;
@@ -48,25 +49,13 @@ public:
     double vert_origin_x;
     double vert_origin_y;
     double vert_adv_y;
-
-protected:
-    virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-    virtual void release();
-    virtual void set(unsigned int key, const char* value);
-    virtual void update(SPCtx* ctx, unsigned int flags);
-    virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
-
 };
 
-#endif // !SEEN_SP_GLYPH_H
+struct SPGlyphClass {
+	SPObjectClass parent_class;
+};
 
-/*
-  Local Variables:
-  mode:c++
-  c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
-  indent-tabs-mode:nil
-  fill-column:99
-  End:
-*/
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :
+GType sp_glyph_get_type (void);
+
+#endif //#ifndef __SP_GLYPH_H__
+#endif //#ifdef ENABLE_SVG_FONTS

@@ -1,14 +1,17 @@
+#define INKSCAPE_LIVEPATHEFFECT_PARAMETER_RANDOM_CPP
+
 /*
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "ui/widget/registered-widget.h"
 #include "live_effects/parameter/random.h"
 #include "live_effects/effect.h"
-#include <glibmm/i18n.h>
 #include "svg/svg.h"
+#include "libnr/nr-values.h"
+#include "ui/widget/registered-widget.h"
+#include <gtkmm.h>
 #include "ui/widget/random.h"
 
 #include "svg/stringstream.h"
@@ -29,8 +32,8 @@ RandomParam::RandomParam( const Glib::ustring& label, const Glib::ustring& tip,
 {
     defvalue = default_value;
     value = defvalue;
-    min = -Geom::infinity();
-    max = Geom::infinity();
+    min = -NR_HUGE;
+    max = NR_HUGE;
     integer = false;
 
     defseed = default_seed;
@@ -113,7 +116,7 @@ RandomParam::resetRandomizer()
 
 
 Gtk::Widget *
-RandomParam::param_newWidget()
+RandomParam::param_newWidget(Gtk::Tooltips * /*tooltips*/)
 {
     Inkscape::UI::Widget::RegisteredRandom* regrandom = Gtk::manage(
         new Inkscape::UI::Widget::RegisteredRandom( param_label,

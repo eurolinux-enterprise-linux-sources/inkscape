@@ -8,11 +8,11 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "prefdialog.h"
 #include "document.h"
 #include "implementation/implementation.h"
 #include "output.h"
 
+#include "prefdialog.h"
 
 /* Inkscape::Extension::Output */
 
@@ -46,11 +46,11 @@ Output::Output (Inkscape::XML::Node * in_repr, Implementation::Implementation * 
     if (repr != NULL) {
         Inkscape::XML::Node * child_repr;
 
-        child_repr = repr->firstChild();
+        child_repr = sp_repr_children(repr);
 
         while (child_repr != NULL) {
             if (!strcmp(child_repr->name(), INKSCAPE_EXTENSION_NS "output")) {
-                child_repr = child_repr->firstChild();
+                child_repr = sp_repr_children(child_repr);
                 while (child_repr != NULL) {
                     char const * chname = child_repr->name();
 					if (!strncmp(chname, INKSCAPE_EXTENSION_NS_NC, strlen(INKSCAPE_EXTENSION_NS_NC))) {
@@ -60,33 +60,33 @@ Output::Output (Inkscape::XML::Node * in_repr, Implementation::Implementation * 
                         chname++;
                     if (!strcmp(chname, "extension")) {
                         g_free (extension);
-                        extension = g_strdup(child_repr->firstChild()->content());
+                        extension = g_strdup(sp_repr_children(child_repr)->content());
                     }
                     if (!strcmp(chname, "mimetype")) {
                         g_free (mimetype);
-                        mimetype = g_strdup(child_repr->firstChild()->content());
+                        mimetype = g_strdup(sp_repr_children(child_repr)->content());
                     }
                     if (!strcmp(chname, "filetypename")) {
                         g_free (filetypename);
-                        filetypename = g_strdup(child_repr->firstChild()->content());
+                        filetypename = g_strdup(sp_repr_children(child_repr)->content());
                     }
                     if (!strcmp(chname, "filetypetooltip")) {
                         g_free (filetypetooltip);
-                        filetypetooltip = g_strdup(child_repr->firstChild()->content());
+                        filetypetooltip = g_strdup(sp_repr_children(child_repr)->content());
                     }
                     if (!strcmp(chname, "dataloss")) {
-                        if (!strcmp(child_repr->firstChild()->content(), "false")) {
+                        if (!strcmp(sp_repr_children(child_repr)->content(), "false")) {
 							dataloss = FALSE;
 						}
 					}
 
-                    child_repr = child_repr->next();
+                    child_repr = sp_repr_next(child_repr);
                 }
 
                 break;
             }
 
-            child_repr = child_repr->next();
+            child_repr = sp_repr_next(child_repr);
         }
 
     }
@@ -192,7 +192,8 @@ Output::prefs (void)
 
     delete dialog;
 
-    return (response == Gtk::RESPONSE_OK);
+    if (response == Gtk::RESPONSE_OK) return true;
+    return false;
 }
 
 /**

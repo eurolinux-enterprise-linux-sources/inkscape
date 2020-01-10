@@ -12,26 +12,25 @@
  *
  * Copyright (C) 2007 Authors
  *
- * Released under GNU GPL v2+, read the file 'COPYING' for more information
+ * Released under GNU GPL v2.x, read the file 'COPYING' for more information
  */
+
+#include <glib.h>
 
 namespace Inkscape {
 
-class ActionContext;
-
 class CmdLineAction {
     bool _isVerb;
-    char * _arg;
+    gchar * _arg;
 
     static std::list <CmdLineAction *> _list;
 
 public:
-    CmdLineAction (bool isVerb, char const * arg);
+    CmdLineAction (bool isVerb, gchar const * arg);
     virtual ~CmdLineAction ();
 
-    void doIt (ActionContext const & context);
-    /** Return true if any actions were performed */
-    static bool doList (ActionContext const & context);
+    void doIt (Inkscape::UI::View::View * view);
+    static void doList (Inkscape::UI::View::View * view);
     static bool idle (void);
 };
 

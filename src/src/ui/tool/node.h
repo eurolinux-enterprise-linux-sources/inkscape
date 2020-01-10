@@ -3,7 +3,6 @@
  */
 /* Authors:
  *   Krzysztof Kosiński <tweenk.pl@gmail.com>
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2009 Authors
  * Released under GNU GPL, read the file 'COPYING' for more information
@@ -12,28 +11,20 @@
 #ifndef SEEN_UI_TOOL_NODE_H
 #define SEEN_UI_TOOL_NODE_H
 
-#if HAVE_CONFIG_H
- #include "config.h"
-#endif
-
+#include <glib.h>
 #include <iterator>
 #include <iosfwd>
 #include <stdexcept>
 #include <cstddef>
-
-#if __cplusplus >= 201103L
-#include <functional>
-#else
 #include <tr1/functional>
-#endif
-
-#include <boost/enable_shared_from_this.hpp>
+#include <boost/utility.hpp>
 #include <boost/shared_ptr.hpp>
-#include "ui/tool/selectable-control-point.h"
+#include <boost/optional.hpp>
+#include <boost/operators.hpp>
 #include "snapped-point.h"
+#include "ui/tool/selectable-control-point.h"
 #include "ui/tool/node-types.h"
 
-struct SPCtrlLine;
 
 namespace Inkscape {
 namespace UI {
@@ -41,16 +32,11 @@ template <typename> class NodeIterator;
 }
 }
 
-/*
-#if HAVE_TR1_UNORDERED_SET
 namespace std {
 namespace tr1 {
 template <typename N> struct hash< Inkscape::UI::NodeIterator<N> >;
 }
 }
-#endif
-#endif
-*/
 
 namespace Inkscape {
 namespace UI {
@@ -96,11 +82,10 @@ struct NodeSharedData {
 
 class Handle : public ControlPoint {
 public:
-
     virtual ~Handle();
-    inline Geom::Point relativePos() const;
-    inline double length() const;
-    bool isDegenerate() const { return _degenerate; } // True if the handle is retracted, i.e. has zero length.
+    inline Geom::Point relativePos();
+    inline double length();
+    bool isDegenerate() { return _degenerate; }
 
     virtual void setVisible(bool);
     virtual void move(Geom::Point const &p);
@@ -113,164 +98,79 @@ public:
     void setDirection(Geom::Point const &dir);
     Node *parent() { return _parent; }
     Handle *other();
-    Handle const *other() const;
 
     static char const *handle_type_to_localized_string(NodeType type);
-
 protected:
-
     Handle(NodeSharedData const &data, Geom::Point const &initial_pos, Node *parent);
-    virtual void handle_2button_press();
-    virtual bool _eventHandler(Inkscape::UI::Tools::ToolBase *event_context, GdkEvent *event);
-    virtual void dragged(Geom::Point &new_pos, GdkEventMotion *event);
-    virtual bool grabbed(GdkEventMotion *event);
-    virtual void ungrabbed(GdkEventButton *event);
-    virtual bool clicked(GdkEventButton *event);
 
-    virtual Glib::ustring _getTip(unsigned state) const;
-    virtual Glib::ustring _getDragTip(GdkEventMotion *event) const;
-    virtual bool _hasDragTips() const { return true; }
+    virtual bool _eventHandler(SPEventContext *event_context, GdkEvent *event);
+    virtual void dragged(Geom::Point &, GdkEventMotion *);
+    virtual bool grabbed(GdkEventMotion *);
+    virtual void ungrabbed(GdkEventButton *);
+    virtual bool clicked(GdkEventButton *);
 
+    virtual Glib::ustring _getTip(unsigned state);
+    virtual Glib::ustring _getDragTip(GdkEventMotion *event);
+    virtual bool _hasDragTips() { return true; }
 private:
-
     inline PathManipulator &_pm();
-    inline PathManipulator &_pm() const;
     Node *_parent; // the handle's lifetime does not extend beyond that of the parent node,
     // so a naked pointer is OK and allows setting it during Node's construction
-    SPCtrlLine *_handle_line;
-    bool _degenerate; // True if the handle is retracted, i.e. has zero length. This is used often internally so it makes sense to cache this
+    SPCanvasItem *_handle_line;
+    bool _degenerate; // this is used often internally so it makes sense to cache this
 
-    /**
-     * Control point of a cubic Bezier curve in a path.
-     *
-     * Handle keeps the node type invariant only for the opposite handle of the same node.
-     * Keeping the invariant on node moves is left to the %Node class.
-     */
     static Geom::Point _saved_other_pos;
-
     static double _saved_length;
     static bool _drag_out;
-    static ColorSet _handle_colors;
     friend class Node;
 };
 
 class Node : ListNode, public SelectableControlPoint {
 public:
-
-    /**
-     * Curve endpoint in an editable path.
-     *
-     * The method move() keeps node type invariants during translations.
-     */
     Node(NodeSharedData const &data, Geom::Point const &pos);
-
     virtual void move(Geom::Point const &p);
-    virtual void transform(Geom::Affine const &m);
-    virtual Geom::Rect bounds() const;
+    virtual void transform(Geom::Matrix const &m);
+    virtual Geom::Rect bounds();
 
-    NodeType type() const { return _type; }
-
-    /**
-     * Sets the node type and optionally restores the invariants associated with the given type.
-     * @param type The type to set.
-     * @param update_handles Whether to restore invariants associated with the given type.
-     *                       Passing false is useful e.g. wen initially creating the path,
-     *                       and when making cusp nodes during some node algorithms.
-     *                       Pass true when used in response to an UI node type button.
-     */
+    NodeType type() { return _type; }
     void setType(NodeType type, bool update_handles = true);
-
     void showHandles(bool v);
-
-    void updateHandles();
-
-
-    /**
-     * Pick the best type for this node, based on the position of its handles.
-     * This is what assigns types to nodes created using the pen tool.
-     */
     void pickBestType(); // automatically determine the type from handle positions
-
-    bool isDegenerate() const { return _front.isDegenerate() && _back.isDegenerate(); }
-    bool isEndNode() const;
+    bool isDegenerate() { return _front.isDegenerate() && _back.isDegenerate(); }
+    bool isEndNode();
     Handle *front() { return &_front; }
     Handle *back()  { return &_back;  }
-
-    /**
-     * Gets the handle that faces the given adjacent node.
-     * Will abort with error if the given node is not adjacent.
-     */
     Handle *handleToward(Node *to);
-
-    /**
-     * Gets the node in the direction of the given handle.
-     * Will abort with error if the handle doesn't belong to this node.
-     */
     Node *nodeToward(Handle *h);
-
-    /**
-     * Gets the handle that goes in the direction opposite to the given adjacent node.
-     * Will abort with error if the given node is not adjacent.
-     */
     Handle *handleAwayFrom(Node *to);
-
-    /**
-     * Gets the node in the direction opposite to the given handle.
-     * Will abort with error if the handle doesn't belong to this node.
-     */
     Node *nodeAwayFrom(Handle *h);
-
     NodeList &nodeList() { return *(static_cast<ListNode*>(this)->ln_list); }
-    NodeList &nodeList() const { return *(static_cast<ListNode const*>(this)->ln_list); }
-
-    /**
-     * Move the node to the bottom of its canvas group.
-     * Useful for node break, to ensure that the selected nodes are above the unselected ones.
-     */
     void sink();
 
     static NodeType parse_nodetype(char x);
     static char const *node_type_to_localized_string(NodeType type);
-
     // temporarily public
-    /** Customized event handler to catch scroll events needed for selection grow/shrink. */
-    virtual bool _eventHandler(Inkscape::UI::Tools::ToolBase *event_context, GdkEvent *event);
-
-    Inkscape::SnapCandidatePoint snapCandidatePoint();
-
+    virtual bool _eventHandler(SPEventContext *event_context, GdkEvent *event);
 protected:
-
-    virtual void dragged(Geom::Point &new_pos, GdkEventMotion *event);
-    virtual bool grabbed(GdkEventMotion *event);
-    virtual bool clicked(GdkEventButton *event);
+    virtual void dragged(Geom::Point &, GdkEventMotion *);
+    virtual bool grabbed(GdkEventMotion *);
+    virtual bool clicked(GdkEventButton *);
 
     virtual void _setState(State state);
-    virtual Glib::ustring _getTip(unsigned state) const;
-    virtual Glib::ustring _getDragTip(GdkEventMotion *event) const;
-    virtual bool _hasDragTips() const { return true; }
-
+    virtual Glib::ustring _getTip(unsigned state);
+    virtual Glib::ustring _getDragTip(GdkEventMotion *event);
+    virtual bool _hasDragTips() { return true; }
 private:
-
     Node(Node const &);
     void _fixNeighbors(Geom::Point const &old_pos, Geom::Point const &new_pos);
     void _updateAutoHandles();
-
-    /**
-     * Select or deselect a node in this node's subpath based on its path distance from this node.
-     * @param dir If negative, shrink selection by one node; if positive, grow by one node.
-     */
     void _linearGrow(int dir);
-
     Node *_next();
-    Node const *_next() const;
     Node *_prev();
-    Node const *_prev() const;
-    Inkscape::SnapSourceType _snapSourceType() const;
-    Inkscape::SnapTargetType _snapTargetType() const;
+    Inkscape::SnapSourceType _snapSourceType();
+    Inkscape::SnapTargetType _snapTargetType();
     inline PathManipulator &_pm();
-    inline PathManipulator &_pm() const;
-
-    /** Determine whether two nodes are joined by a linear segment. */
+    static SPCtrlShapeType _node_type_to_shape(NodeType type);
     static bool _is_line_segment(Node *first, Node *second);
 
     // Handles are always present, but are not visible if they coincide with the node
@@ -280,8 +180,6 @@ private:
     Handle _back; ///< Node handle in the forward direction of the path
     NodeType _type; ///< Type of node - cusp, smooth...
     bool _handles_shown;
-    static ColorSet node_colors;
-
     friend class Handle;
     friend class NodeList;
     friend class NodeIterator<Node>;
@@ -327,14 +225,14 @@ public:
     // default copy, default assign
 
     self &operator++() {
-        _node = (_node?_node->ln_next:NULL);
+        _node = _node->ln_next;
         return *this;
     }
     self &operator--() {
-        _node = (_node?_node->ln_prev:NULL);
+        _node = _node->ln_prev;
         return *this;
     }
-    bool operator==(self const &other) const { if(&other){return _node == other._node;} else{return false;} }
+    bool operator==(self const &other) const { return _node == other._node; }
     N &operator*() const { return *static_cast<N*>(_node); }
     inline operator bool() const; // define after NodeList
     /// Get a pointer to the underlying node. Equivalent to <code>&*i</code>.
@@ -374,15 +272,7 @@ public:
     typedef NodeIterator<value_type const> const_iterator;
 
     // TODO Lame. Make this private and make SubpathList a factory
-    /**
-     * An editable list of nodes representing a subpath.
-     *
-     * It can optionally be cyclic to represent a closed path.
-     * The list has iterators that act like plain node iterators, but can also be used
-     * to obtain shared pointers to nodes.
-     */
     NodeList(SubpathList &_list);
-
     ~NodeList();
 
     // iterators
@@ -397,28 +287,15 @@ public:
 
     // extra node-specific methods
     bool closed();
-
-    /**
-     * A subpath is degenerate if it has no segments - either one node in an open path
-     * or no nodes in a closed path.
-     */
     bool degenerate();
-
     void setClosed(bool c) { _closed = c; }
     iterator before(double t, double *fracpart = NULL);
-    iterator before(Geom::PathTime const &pvp);
     const_iterator before(double t, double *fracpart = NULL) const {
         return const_iterator(before(t, fracpart)._node);
     }
-    const_iterator before(Geom::PathTime const &pvp) const {
-        return const_iterator(before(pvp)._node);
-    }
 
     // list operations
-
-    /** insert a node before pos. */
     iterator insert(iterator pos, Node *x);
-
     template <class InputIterator>
     void insert(iterator pos, InputIterator first, InputIterator last) {
         for (; first != last; ++first) insert(pos, *first);
@@ -466,10 +343,7 @@ private:
     friend class NodeIterator<Node const>;
 };
 
-/**
- * List of node lists. Represents an editable path.
- * Editable path composed of one or more subpaths.
- */
+/** List of node lists. Represents an editable path. */
 class SubpathList : public std::list< boost::shared_ptr<NodeList> > {
 public:
     typedef std::list< boost::shared_ptr<NodeList> > list_type;
@@ -488,26 +362,19 @@ private:
 
 
 // define inline Handle funcs after definition of Node
-inline Geom::Point Handle::relativePos() const {
+inline Geom::Point Handle::relativePos() {
     return position() - _parent->position();
 }
 inline void Handle::setRelativePos(Geom::Point const &p) {
     setPosition(_parent->position() + p);
 }
-inline double Handle::length() const {
+inline double Handle::length() {
     return relativePos().length();
 }
 inline PathManipulator &Handle::_pm() {
     return _parent->_pm();
 }
-inline PathManipulator &Handle::_pm() const {
-    return _parent->_pm();
-}
 inline PathManipulator &Node::_pm() {
-    return nodeList().subpathList().pm();
-}
-
-inline PathManipulator &Node::_pm() const {
     return nodeList().subpathList().pm();
 }
 
@@ -543,4 +410,4 @@ NodeIterator<N> &NodeIterator<N>::retreat() {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

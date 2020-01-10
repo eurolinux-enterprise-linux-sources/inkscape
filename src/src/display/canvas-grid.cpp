@@ -1,10 +1,8 @@
 /** @file
- * Cartesian grid implementation.
+ * @brief Cartesian grid implementation
  */
-/* Copyright (C) Johan Engelen 2006-2007 <johan@shouraizou.nl>
+/* Copyright (C) Johan Engelen 2006-2011 <johan@shouraizou.nl>
  * Copyright (C) Lauris Kaplinski 2000
- *   Abhishek Sharma
- *   Jon A. Cruz <jon@joncruz.org>
  */
 
 /* As a general comment, I am not exactly proud of how things are done.
@@ -13,46 +11,28 @@
  * Don't be shy to correct things.
  */
 
-#if HAVE_CONFIG_H
-# include "config.h"
-#endif
+#define INKSCAPE_CANVAS_GRID_C
 
-#include <gtkmm/box.h>
-#include <gtkmm/label.h>
-
-#if WITH_GTKMM_3_0
-# include <gtkmm/grid.h>
-#else
-# include <gtkmm/table.h>
-#endif
-
-#include <glibmm/i18n.h>
-
-#include "ui/widget/registered-widget.h"
-#include "desktop.h"
 #include "sp-canvas-util.h"
-#include "helper/mathfns.h"
-
-#include "display/cairo-utils.h"
-#include "display/canvas-axonomgrid.h"
-#include "display/canvas-grid.h"
-#include "display/sp-canvas-group.h"
-#include "document.h"
-#include "util/units.h"
-#include "inkscape.h"
-#include "preferences.h"
-#include "sp-namedview.h"
-#include "sp-object.h"
-#include "sp-root.h"
+#include "util/mathfns.h"
+#include "display-forward.h"
+#include <libnr/nr-pixops.h>
+#include "desktop-handles.h"
+#include "helper/units.h"
 #include "svg/svg-color.h"
 #include "svg/stringstream.h"
-#include "helper/mathfns.h"
 #include "xml/node-event-vector.h"
-#include "verbs.h"
-#include "display/sp-canvas.h"
+#include "sp-object.h"
 
-using Inkscape::DocumentUndo;
-using Inkscape::Util::unit_table;
+#include "sp-namedview.h"
+#include "inkscape.h"
+#include "desktop.h"
+
+#include "../document.h"
+#include "preferences.h"
+
+#include "canvas-grid.h"
+#include "canvas-axonomgrid.h"
 
 namespace Inkscape {
 
@@ -68,17 +48,48 @@ static gchar const *const grid_svgname[] = {
 
 // ##########################################################
 // Grid CanvasItem
-static void grid_canvasitem_destroy(SPCanvasItem *object);
-static void grid_canvasitem_update (SPCanvasItem *item, Geom::Affine const &affine, unsigned int flags);
+static void grid_canvasitem_class_init (GridCanvasItemClass *klass);
+static void grid_canvasitem_init (GridCanvasItem *grid);
+static void grid_canvasitem_destroy (GtkObject *object);
+
+static void grid_canvasitem_update (SPCanvasItem *item, Geom::Matrix const &affine, unsigned int flags);
 static void grid_canvasitem_render (SPCanvasItem *item, SPCanvasBuf *buf);
 
-G_DEFINE_TYPE(GridCanvasItem, grid_canvasitem, SP_TYPE_CANVAS_ITEM);
+static SPCanvasItemClass * parent_class;
 
-static void grid_canvasitem_class_init(GridCanvasItemClass *klass)
+GtkType
+grid_canvasitem_get_type (void)
 {
-    SPCanvasItemClass *item_class = (SPCanvasItemClass *) klass;
+    static GtkType grid_canvasitem_type = 0;
 
-    item_class->destroy = grid_canvasitem_destroy;
+    if (!grid_canvasitem_type) {
+        GtkTypeInfo grid_canvasitem_info = {
+            (gchar *)"GridCanvasItem",
+            sizeof (GridCanvasItem),
+            sizeof (GridCanvasItemClass),
+            (GtkClassInitFunc) grid_canvasitem_class_init,
+            (GtkObjectInitFunc) grid_canvasitem_init,
+            NULL, NULL,
+            (GtkClassInitFunc) NULL
+        };
+        grid_canvasitem_type = gtk_type_unique (sp_canvas_item_get_type (), &grid_canvasitem_info);
+    }
+    return grid_canvasitem_type;
+}
+
+static void
+grid_canvasitem_class_init (GridCanvasItemClass *klass)
+{
+    GtkObjectClass *object_class;
+    SPCanvasItemClass *item_class;
+
+    object_class = (GtkObjectClass *) klass;
+    item_class = (SPCanvasItemClass *) klass;
+
+    parent_class = (SPCanvasItemClass*)gtk_type_class (sp_canvas_item_get_type ());
+
+    object_class->destroy = grid_canvasitem_destroy;
+
     item_class->update = grid_canvasitem_update;
     item_class->render = grid_canvasitem_render;
 }
@@ -89,13 +100,14 @@ grid_canvasitem_init (GridCanvasItem *griditem)
     griditem->grid = NULL;
 }
 
-static void grid_canvasitem_destroy(SPCanvasItem *object)
+static void
+grid_canvasitem_destroy (GtkObject *object)
 {
     g_return_if_fail (object != NULL);
     g_return_if_fail (INKSCAPE_IS_GRID_CANVASITEM (object));
 
-    if (SP_CANVAS_ITEM_CLASS(grid_canvasitem_parent_class)->destroy)
-        (* SP_CANVAS_ITEM_CLASS(grid_canvasitem_parent_class)->destroy) (object);
+    if (GTK_OBJECT_CLASS (parent_class)->destroy)
+        (* GTK_OBJECT_CLASS (parent_class)->destroy) (object);
 }
 
 /**
@@ -112,18 +124,19 @@ grid_canvasitem_render (SPCanvasItem * item, SPCanvasBuf * buf)
 }
 
 static void
-grid_canvasitem_update (SPCanvasItem *item, Geom::Affine const &affine, unsigned int flags)
+grid_canvasitem_update (SPCanvasItem *item, Geom::Matrix const &affine, unsigned int flags)
 {
     GridCanvasItem *gridcanvasitem = INKSCAPE_GRID_CANVASITEM (item);
 
-    if (SP_CANVAS_ITEM_CLASS(grid_canvasitem_parent_class)->update)
-        SP_CANVAS_ITEM_CLASS(grid_canvasitem_parent_class)->update(item, affine, flags);
+    if (parent_class->update)
+        (* parent_class->update) (item, affine, flags);
 
     if (gridcanvasitem->grid) {
         gridcanvasitem->grid->Update(affine, flags);
 
-        item->canvas->requestRedraw(-1000000, -1000000,
-                                    1000000, 1000000);
+        sp_canvas_request_redraw (item->canvas,
+                         -1000000, -1000000,
+                         1000000, 1000000);
 
         item->x1 = item->y1 = -1000000;
         item->x2 = item->y2 = 1000000;
@@ -144,7 +157,7 @@ grid_canvasitem_update (SPCanvasItem *item, Geom::Affine const &affine, unsigned
     };
 
 CanvasGrid::CanvasGrid(SPNamedView * nv, Inkscape::XML::Node * in_repr, SPDocument *in_doc, GridType type)
-    : visible(true), gridtype(type), legacy(false), pixel(false)
+    : visible(true), gridtype(type)
 {
     repr = in_repr;
     doc = in_doc;
@@ -163,25 +176,25 @@ CanvasGrid::~CanvasGrid()
     }
 
     while (canvasitems) {
-        sp_canvas_item_destroy(SP_CANVAS_ITEM(canvasitems->data));
+        gtk_object_destroy(GTK_OBJECT(canvasitems->data));
         canvasitems = g_slist_remove(canvasitems, canvasitems->data);
     }
 }
 
 const char *
-CanvasGrid::getName() const
+CanvasGrid::getName()
 {
     return _(grid_name[gridtype]);
 }
 
 const char *
-CanvasGrid::getSVGName() const
+CanvasGrid::getSVGName()
 {
     return grid_svgname[gridtype];
 }
 
 GridType
-CanvasGrid::getGridType() const
+CanvasGrid::getGridType()
 {
     return gridtype;
 }
@@ -235,7 +248,7 @@ CanvasGrid::writeNewGridToRepr(Inkscape::XML::Node * repr, SPDocument * doc, Gri
 
     // first create the child xml node, then hook it to repr. This order is important, to not set off listeners to repr before the new node is complete.
 
-    Inkscape::XML::Document *xml_doc = doc->getReprDoc();
+    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(doc);
     Inkscape::XML::Node *newnode;
     newnode = xml_doc->createElement("inkscape:grid");
     newnode->setAttribute("type", getSVGName(gridtype));
@@ -243,7 +256,7 @@ CanvasGrid::writeNewGridToRepr(Inkscape::XML::Node * repr, SPDocument * doc, Gri
     repr->appendChild(newnode);
     Inkscape::GC::release(newnode);
 
-    DocumentUndo::done(doc, SP_VERB_DIALOG_NAMEDVIEW, _("Create new grid"));
+    sp_document_done(doc, SP_VERB_DIALOG_NAMEDVIEW, _("Create new grid"));
 }
 
 /*
@@ -260,9 +273,9 @@ CanvasGrid::NewGrid(SPNamedView * nv, Inkscape::XML::Node * repr, SPDocument * d
 
     switch (gridtype) {
         case GRID_RECTANGULAR:
-            return dynamic_cast<CanvasGrid*>(new CanvasXYGrid(nv, repr, doc));
+            return (CanvasGrid*) new CanvasXYGrid(nv, repr, doc);
         case GRID_AXONOMETRIC:
-            return dynamic_cast<CanvasGrid*>(new CanvasAxonomGrid(nv, repr, doc));
+            return (CanvasGrid*) new CanvasAxonomGrid(nv, repr, doc);
     }
 
     return NULL;
@@ -281,16 +294,16 @@ CanvasGrid::createCanvasItem(SPDesktop * desktop)
 
     // check if there is already a canvasitem on this desktop linking to this grid
     for (GSList *l = canvasitems; l != NULL; l = l->next) {
-        if ( desktop->getGridGroup() == SP_CANVAS_GROUP(SP_CANVAS_ITEM(l->data)->parent) ) {
+        if ( sp_desktop_gridgroup(desktop) == SP_CANVAS_GROUP(SP_CANVAS_ITEM(l->data)->parent) ) {
             return NULL;
         }
     }
 
-    GridCanvasItem * item = INKSCAPE_GRID_CANVASITEM( sp_canvas_item_new(desktop->getGridGroup(), INKSCAPE_TYPE_GRID_CANVASITEM, NULL) );
+    GridCanvasItem * item = INKSCAPE_GRID_CANVASITEM( sp_canvas_item_new(sp_desktop_gridgroup(desktop), INKSCAPE_TYPE_GRID_CANVASITEM, NULL) );
     item->grid = this;
     sp_canvas_item_show(SP_CANVAS_ITEM(item));
 
-    g_object_ref(item);    // since we're keeping a link to this item, we need to bump up the ref count
+    gtk_object_ref(GTK_OBJECT(item));    // since we're keeping a link to this item, we need to bump up the ref count
     canvasitems = g_slist_prepend(canvasitems, item);
 
     return item;
@@ -336,13 +349,12 @@ CanvasGrid::newWidget()
     _rcb_enabled->setSlaveWidgets(slaves);
 
     // set widget values
-    _wr.setUpdating (true);
     _rcb_visible->setActive(visible);
     if (snapper != NULL) {
         _rcb_enabled->setActive(snapper->getEnabled());
         _rcb_snap_visible_only->setActive(snapper->getSnapVisibleOnly());
     }
-    _wr.setUpdating (false);
+
     return dynamic_cast<Gtk::Widget *> (vbox);
 }
 
@@ -352,10 +364,10 @@ CanvasGrid::on_repr_attr_changed(Inkscape::XML::Node *repr, gchar const *key, gc
     if (!data)
         return;
 
-    (static_cast<CanvasGrid*>(data))->onReprAttrChanged(repr, key, oldval, newval, is_interactive);
+    ((CanvasGrid*) data)->onReprAttrChanged(repr, key, oldval, newval, is_interactive);
 }
 
-bool CanvasGrid::isEnabled() const
+bool CanvasGrid::isEnabled()
 {
     if (snapper == NULL) {
        return false;
@@ -364,25 +376,20 @@ bool CanvasGrid::isEnabled() const
     return snapper->getEnabled();
 }
 
-// Used to shift origin when page size changed to fit drawing.
 void CanvasGrid::setOrigin(Geom::Point const &origin_px)
 {
-    SPRoot *root = doc->getRoot();
-    double scale_x = 1.0;
-    double scale_y = 1.0;
-    if( root->viewBox_set ) {
-        scale_x = root->viewBox.width()  / root->width.computed;
-        scale_y = root->viewBox.height() / root->height.computed;
-    }
-
-    // Write out in 'user-units'
     Inkscape::SVGOStringStream os_x, os_y;
-    os_x << origin_px[Geom::X] * scale_x;
-    os_y << origin_px[Geom::Y] * scale_y;
+    gdouble val;
+ 
+    val = origin_px[Geom::X];
+    val = sp_pixels_get_units (val, *gridunit);
+    os_x << val << sp_unit_get_abbreviation(gridunit);
+    val = origin_px[Geom::Y];
+    val = sp_pixels_get_units (val, *gridunit);
+    os_y << val << sp_unit_get_abbreviation(gridunit);
     repr->setAttribute("originx", os_x.str().c_str());
     repr->setAttribute("originy", os_y.str().c_str());
 }
-
 
 // ##########################################################
 //   CanvasXYGrid
@@ -400,60 +407,29 @@ void CanvasGrid::setOrigin(Geom::Point const &origin_px)
 **/
 #define SPACE_SIZE_X 15
 #define SPACE_SIZE_Y 10
-#if WITH_GTKMM_3_0
-static inline void attach_all(Gtk::Grid &table, Gtk::Widget const *const arr[], unsigned size, int start = 0)
-#else
-static inline void attach_all(Gtk::Table &table, Gtk::Widget const *const arr[], unsigned size, int start = 0)
-#endif
+static inline void
+attach_all(Gtk::Table &table, Gtk::Widget const *const arr[], unsigned size, int start = 0)
 {
     for (unsigned i=0, r=start; i<size/sizeof(Gtk::Widget*); i+=2) {
         if (arr[i] && arr[i+1]) {
-#if WITH_GTKMM_3_0
-            (const_cast<Gtk::Widget&>(*arr[i])).set_hexpand();
-            (const_cast<Gtk::Widget&>(*arr[i])).set_valign(Gtk::ALIGN_CENTER);
-            table.attach(const_cast<Gtk::Widget&>(*arr[i]),   1, r, 1, 1);
-
-            (const_cast<Gtk::Widget&>(*arr[i+1])).set_hexpand();
-            (const_cast<Gtk::Widget&>(*arr[i+1])).set_valign(Gtk::ALIGN_CENTER);
-            table.attach(const_cast<Gtk::Widget&>(*arr[i+1]), 2, r, 1, 1);
-#else
             table.attach (const_cast<Gtk::Widget&>(*arr[i]),   1, 2, r, r+1,
                           Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
             table.attach (const_cast<Gtk::Widget&>(*arr[i+1]), 2, 3, r, r+1,
                           Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
-#endif
         } else {
             if (arr[i+1]) {
-#if WITH_GTKMM_3_0
-                (const_cast<Gtk::Widget&>(*arr[i+1])).set_hexpand();
-                (const_cast<Gtk::Widget&>(*arr[i+1])).set_valign(Gtk::ALIGN_CENTER);
-                table.attach(const_cast<Gtk::Widget&>(*arr[i+1]), 1, r, 2, 1);
-#else
                 table.attach (const_cast<Gtk::Widget&>(*arr[i+1]), 1, 3, r, r+1,
                               Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
-#endif
             } else if (arr[i]) {
                 Gtk::Label& label = reinterpret_cast<Gtk::Label&> (const_cast<Gtk::Widget&>(*arr[i]));
                 label.set_alignment (0.0);
-#if WITH_GTKMM_3_0
-                label.set_hexpand();
-                label.set_valign(Gtk::ALIGN_CENTER);
-                table.attach(label, 0, r, 3, 1);
-#else
                 table.attach (label, 0, 3, r, r+1,
                               Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
-#endif
             } else {
-                Gtk::HBox *space = Gtk::manage (new Gtk::HBox);
+                Gtk::HBox *space = manage (new Gtk::HBox);
                 space->set_size_request (SPACE_SIZE_X, SPACE_SIZE_Y);
-#if WITH_GTKMM_3_0
-                space->set_halign(Gtk::ALIGN_CENTER);
-                space->set_valign(Gtk::ALIGN_CENTER);
-                table.attach(*space, 0, r, 1, 1);
-#else
                 table.attach (*space, 0, 1, r, r+1,
                               (Gtk::AttachOptions)0, (Gtk::AttachOptions)0,0,0);
-#endif
             }
         }
         ++r;
@@ -464,17 +440,16 @@ CanvasXYGrid::CanvasXYGrid (SPNamedView * nv, Inkscape::XML::Node * in_repr, SPD
     : CanvasGrid(nv, in_repr, in_doc, GRID_RECTANGULAR)
 {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    gridunit = unit_table.getUnit(prefs->getString("/options/grids/xy/units"));
-    if (!gridunit) {
-        gridunit = unit_table.getUnit("px");
-    }
-    origin[Geom::X] = Inkscape::Util::Quantity::convert(prefs->getDouble("/options/grids/xy/origin_x", 0.0), gridunit, "px");
-    origin[Geom::Y] = Inkscape::Util::Quantity::convert(prefs->getDouble("/options/grids/xy/origin_y", 0.0), gridunit, "px");
+    gridunit = sp_unit_get_by_abbreviation( prefs->getString("/options/grids/xy/units").data() );
+    if (!gridunit)
+        gridunit = &sp_unit_get_by_id(SP_UNIT_PX);
+    origin[Geom::X] = sp_units_get_pixels(prefs->getDouble("/options/grids/xy/origin_x", 0.0), *gridunit);
+    origin[Geom::Y] = sp_units_get_pixels(prefs->getDouble("/options/grids/xy/origin_y", 0.0), *gridunit);
     color = prefs->getInt("/options/grids/xy/color", 0x0000ff20);
     empcolor = prefs->getInt("/options/grids/xy/empcolor", 0x0000ff40);
     empspacing = prefs->getInt("/options/grids/xy/empspacing", 5);
-    spacing[Geom::X] = Inkscape::Util::Quantity::convert(prefs->getDouble("/options/grids/xy/spacing_x", 0.0), gridunit, "px");
-    spacing[Geom::Y] = Inkscape::Util::Quantity::convert(prefs->getDouble("/options/grids/xy/spacing_y", 0.0), gridunit, "px");
+    spacing[Geom::X] = sp_units_get_pixels(prefs->getDouble("/options/grids/xy/spacing_x", 0.0), *gridunit);
+    spacing[Geom::Y] = sp_units_get_pixels(prefs->getDouble("/options/grids/xy/spacing_y", 0.0), *gridunit);
     render_dotted = prefs->getBool("/options/grids/xy/dotted", false);
 
     snapper = new CanvasXYGridSnapper(this, &namedview->snap_manager, 0);
@@ -485,6 +460,64 @@ CanvasXYGrid::CanvasXYGrid (SPNamedView * nv, Inkscape::XML::Node * in_repr, SPD
 CanvasXYGrid::~CanvasXYGrid ()
 {
    if (snapper) delete snapper;
+}
+
+
+/* fixme: Collect all these length parsing methods and think common sane API */
+
+static gboolean
+sp_nv_read_length(gchar const *str, guint base, gdouble *val, SPUnit const **unit)
+{
+    if (!str) {
+        return FALSE;
+    }
+
+    gchar *u;
+    gdouble v = g_ascii_strtod(str, &u);
+    if (!u) {
+        return FALSE;
+    }
+    while (isspace(*u)) {
+        u += 1;
+    }
+
+    if (!*u) {
+        /* No unit specified - keep default */
+        *val = v;
+        return TRUE;
+    }
+
+    if (base & SP_UNIT_DEVICE) {
+        if (u[0] && u[1] && !isalnum(u[2]) && !strncmp(u, "px", 2)) {
+            *unit = &sp_unit_get_by_id(SP_UNIT_PX);
+            *val = v;
+            return TRUE;
+        }
+    }
+
+    if (base & SP_UNIT_ABSOLUTE) {
+        if (!strncmp(u, "pt", 2)) {
+            *unit = &sp_unit_get_by_id(SP_UNIT_PT);
+        } else if (!strncmp(u, "mm", 2)) {
+            *unit = &sp_unit_get_by_id(SP_UNIT_MM);
+        } else if (!strncmp(u, "cm", 2)) {
+            *unit = &sp_unit_get_by_id(SP_UNIT_CM);
+        } else if (!strncmp(u, "m", 1)) {
+            *unit = &sp_unit_get_by_id(SP_UNIT_M);
+        } else if (!strncmp(u, "in", 2)) {
+            *unit = &sp_unit_get_by_id(SP_UNIT_IN);
+        } else if (!strncmp(u, "ft", 2)) {
+            *unit = &sp_unit_get_by_id(SP_UNIT_FT);
+        } else if (!strncmp(u, "pc", 2)) {
+            *unit = &sp_unit_get_by_id(SP_UNIT_PC);
+        } else {
+            return FALSE;
+        }
+        *val = v;
+        return TRUE;
+    }
+
+    return FALSE;
 }
 
 static gboolean sp_nv_read_opacity(gchar const *str, guint32 *color)
@@ -504,6 +537,33 @@ static gboolean sp_nv_read_opacity(gchar const *str, guint32 *color)
 
     return TRUE;
 }
+
+/** If the passed scalar is invalid (<=0), then set the widget and the scalar
+    to use the given old value.
+
+    @param oldVal Old value to use if the new one is invalid.
+    @param pTarget The scalar to validate.
+    @param widget Widget associated with the scalar.
+*/
+static void validateScalar(double oldVal,
+                           double* pTarget)
+{
+    // Avoid nullness.
+    if ( pTarget == NULL )
+        return;
+
+    // Invalid new value?
+    if ( *pTarget <= 0 ) {
+        // If the old value is somehow invalid as well, then default to 1.
+        if ( oldVal <= 0 )
+            oldVal = 1;
+
+        // Reset the scalar and associated widget to the old value.
+        *pTarget = oldVal;
+    } //if
+
+} //validateScalar
+
 
 /** If the passed int is invalid (<=0), then set the widget and the int
     to use the given old value.
@@ -534,102 +594,30 @@ static void validateInt(gint oldVal,
 void
 CanvasXYGrid::readRepr()
 {
-    SPRoot *root = doc->getRoot();
-    double scale_x = 1.0;
-    double scale_y = 1.0;
-    if( root->viewBox_set ) {
-        scale_x = root->width.computed  / root->viewBox.width();
-        scale_y = root->height.computed / root->viewBox.height();
-        if (Geom::are_near(scale_x / scale_y, 1.0, Geom::EPSILON)) {
-            // scaling is uniform, try to reduce numerical error
-            scale_x = (scale_x + scale_y)/2.0;
-            double scale_none = Inkscape::Util::Quantity::convert(1, doc->getDisplayUnit(), "px");
-            if (Geom::are_near(scale_x / scale_none, 1.0, Geom::EPSILON))
-                scale_x = scale_none; // objects are same size, reduce numerical error
-            scale_y = scale_x;
-        }
-    }
-
     gchar const *value;
-
     if ( (value = repr->attribute("originx")) ) {
-
-        Inkscape::Util::Quantity q = unit_table.parseQuantity(value);
-
-        if( q.unit->type == UNIT_TYPE_LINEAR ) {
-            // Legacy grid not in 'user units'
-            origin[Geom::X] = q.value("px");
-            legacy = true;
-            if (q.unit->abbr == "px" ) {
-                pixel = true;
-            }
-        } else {
-            // Grid in 'user units'
-            origin[Geom::X] = q.quantity * scale_x;
-        }
+        sp_nv_read_length(value, SP_UNIT_ABSOLUTE | SP_UNIT_DEVICE, &origin[Geom::X], &gridunit);
+        origin[Geom::X] = sp_units_get_pixels(origin[Geom::X], *(gridunit));
     }
 
     if ( (value = repr->attribute("originy")) ) {
-
-        Inkscape::Util::Quantity q = unit_table.parseQuantity(value);
-
-        if( q.unit->type == UNIT_TYPE_LINEAR ) {
-            // Legacy grid not in 'user units'
-            origin[Geom::Y] = q.value("px");
-            legacy = true;
-            if (q.unit->abbr == "px" ) {
-                pixel = true;
-            }
-        } else {
-            // Grid in 'user units'
-            origin[Geom::Y] = q.quantity * scale_y;
-        }
+        sp_nv_read_length(value, SP_UNIT_ABSOLUTE | SP_UNIT_DEVICE, &origin[Geom::Y], &gridunit);
+        origin[Geom::Y] = sp_units_get_pixels(origin[Geom::Y], *(gridunit));
     }
 
     if ( (value = repr->attribute("spacingx")) ) {
+        double oldVal = spacing[Geom::X];
+        sp_nv_read_length(value, SP_UNIT_ABSOLUTE | SP_UNIT_DEVICE, &spacing[Geom::X], &gridunit);
+        validateScalar( oldVal, &spacing[Geom::X]);
+        spacing[Geom::X] = sp_units_get_pixels(spacing[Geom::X], *(gridunit));
 
-        // Ensure a valid default value
-        if( spacing[Geom::X] <= 0.0 )
-            spacing[Geom::X] = 1.0;
-
-        Inkscape::Util::Quantity q = unit_table.parseQuantity(value);
-        // Ensure a valid new value
-        if( q.quantity > 0 ) {
-            if( q.unit->type == UNIT_TYPE_LINEAR ) {
-                // Legacy grid not in 'user units'
-                spacing[Geom::X] = q.value("px");
-                legacy = true;
-                if (q.unit->abbr == "px" ) {
-                    pixel = true;
-                }
-            } else {
-                // Grid in 'user units'
-                spacing[Geom::X] = q.quantity * scale_x;
-            }
-        }
     }
-
     if ( (value = repr->attribute("spacingy")) ) {
+        double oldVal = spacing[Geom::Y];
+        sp_nv_read_length(value, SP_UNIT_ABSOLUTE | SP_UNIT_DEVICE, &spacing[Geom::Y], &gridunit);
+        validateScalar( oldVal, &spacing[Geom::Y]);
+        spacing[Geom::Y] = sp_units_get_pixels(spacing[Geom::Y], *(gridunit));
 
-        // Ensure a valid default value
-        if( spacing[Geom::Y] <= 0.0 )
-            spacing[Geom::Y] = 1.0;
-
-        Inkscape::Util::Quantity q = unit_table.parseQuantity(value);
-        // Ensure a valid new value
-        if( q.quantity > 0 ) {
-            if( q.unit->type == UNIT_TYPE_LINEAR ) {
-                // Legacy grid not in 'user units'
-                spacing[Geom::Y] = q.value("px");
-                legacy = true;
-                if (q.unit->abbr == "px" ) {
-                    pixel = true;
-                }
-            } else {
-                // Grid in 'user units'
-                spacing[Geom::Y] = q.quantity * scale_y;
-            }
-        }
     }
 
     if ( (value = repr->attribute("color")) ) {
@@ -671,10 +659,6 @@ CanvasXYGrid::readRepr()
         snapper->setSnapVisibleOnly(strcmp(value,"false") != 0 && strcmp(value, "0") != 0);
     }
 
-    if ( (value = repr->attribute("units")) ) {
-        gridunit = unit_table.getUnit(value); // Display unit identifier in grid menu
-    }
-
     for (GSList *l = canvasitems; l != NULL; l = l->next) {
         sp_canvas_item_request_update ( SP_CANVAS_ITEM(l->data) );
     }
@@ -700,33 +684,22 @@ CanvasXYGrid::onReprAttrChanged(Inkscape::XML::Node */*repr*/, gchar const */*ke
 Gtk::Widget *
 CanvasXYGrid::newSpecificWidget()
 {
-#if WITH_GTKMM_3_0
-    Gtk::Grid * table = Gtk::manage( new Gtk::Grid() );
-    table->set_row_spacing(2);
-    table->set_column_spacing(2);
-#else
     Gtk::Table * table = Gtk::manage( new Gtk::Table(1,1) );
-    table->set_spacings(2);
-#endif
 
     Inkscape::UI::Widget::RegisteredUnitMenu *_rumg = Gtk::manage( new Inkscape::UI::Widget::RegisteredUnitMenu(
             _("Grid _units:"), "units", _wr, repr, doc) );
     Inkscape::UI::Widget::RegisteredScalarUnit *_rsu_ox = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalarUnit(
-            _("_Origin X:"), _("X coordinate of grid origin"), "originx",
-            *_rumg, _wr, repr, doc, Inkscape::UI::Widget::RSU_x) );
+            _("_Origin X:"), _("X coordinate of grid origin"), "originx", *_rumg, _wr, repr, doc) );
     Inkscape::UI::Widget::RegisteredScalarUnit *_rsu_oy = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalarUnit(
-            _("O_rigin Y:"), _("Y coordinate of grid origin"), "originy",
-            *_rumg, _wr, repr, doc, Inkscape::UI::Widget::RSU_y) );
+            _("O_rigin Y:"), _("Y coordinate of grid origin"), "originy", *_rumg, _wr, repr, doc) );
     Inkscape::UI::Widget::RegisteredScalarUnit *_rsu_sx = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalarUnit(
-            _("Spacing _X:"), _("Distance between vertical grid lines"), "spacingx",
-            *_rumg, _wr, repr, doc, Inkscape::UI::Widget::RSU_x) );
+            _("Spacing _X:"), _("Distance between vertical grid lines"), "spacingx", *_rumg, _wr, repr, doc) );
     Inkscape::UI::Widget::RegisteredScalarUnit *_rsu_sy = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalarUnit(
-            _("Spacing _Y:"), _("Distance between horizontal grid lines"), "spacingy",
-            *_rumg, _wr, repr, doc, Inkscape::UI::Widget::RSU_y) );
+            _("Spacing _Y:"), _("Distance between horizontal grid lines"), "spacingy", *_rumg, _wr, repr, doc) );
 
     Inkscape::UI::Widget::RegisteredColorPicker *_rcp_gcol = Gtk::manage(
         new Inkscape::UI::Widget::RegisteredColorPicker(
-            _("Minor grid line _color:"), _("Minor grid line color"), _("Color of the minor grid lines"),
+            _("Grid line _color:"), _("Grid line color"), _("Color of grid lines"),
             "color", "opacity", _wr, repr, doc));
 
     Inkscape::UI::Widget::RegisteredColorPicker *_rcp_gmcol = Gtk::manage(
@@ -738,24 +711,27 @@ CanvasXYGrid::newSpecificWidget()
     Inkscape::UI::Widget::RegisteredSuffixedInteger *_rsi = Gtk::manage( new Inkscape::UI::Widget::RegisteredSuffixedInteger(
             _("_Major grid line every:"), "", _("lines"), "empspacing", _wr, repr, doc) );
 
-    _wr.setUpdating (true);
+    table->set_spacings(2);
 
-    _rsu_ox->setDigits(5);
+_wr.setUpdating (true);
+
+    _rsu_ox->setDigits(4);
     _rsu_ox->setIncrements(0.1, 1.0);
 
-    _rsu_oy->setDigits(5);
+    _rsu_oy->setDigits(4);
     _rsu_oy->setIncrements(0.1, 1.0);
 
-    _rsu_sx->setDigits(5);
+    _rsu_sx->setDigits(4);
     _rsu_sx->setIncrements(0.1, 1.0);
 
-    _rsu_sy->setDigits(5);
+    _rsu_sy->setDigits(4);
     _rsu_sy->setIncrements(0.1, 1.0);
 
     Inkscape::UI::Widget::RegisteredCheckButton * _rcb_dotted = Gtk::manage(
                 new Inkscape::UI::Widget::RegisteredCheckButton( _("_Show dots instead of lines"),
                        _("If set, displays dots at gridpoints instead of gridlines"),
                         "dotted", _wr, false, repr, doc) );
+_wr.setUpdating (false);
 
     Gtk::Widget const *const widget_array[] = {
         0,                  _rumg,
@@ -773,20 +749,20 @@ CanvasXYGrid::newSpecificWidget()
     attach_all (*table, widget_array, sizeof(widget_array));
 
     // set widget values
-    _rumg->setUnit (gridunit->abbr);
+    _rumg->setUnit (gridunit);
 
     gdouble val;
     val = origin[Geom::X];
-    val = Inkscape::Util::Quantity::convert(val, "px", gridunit);
+    val = sp_pixels_get_units (val, *(gridunit));
     _rsu_ox->setValue (val);
     val = origin[Geom::Y];
-    val = Inkscape::Util::Quantity::convert(val, "px", gridunit);
+    val = sp_pixels_get_units (val, *(gridunit));
     _rsu_oy->setValue (val);
     val = spacing[Geom::X];
-    double gridx = Inkscape::Util::Quantity::convert(val, "px", gridunit);
+    double gridx = sp_pixels_get_units (val, *(gridunit));
     _rsu_sx->setValue (gridx);
     val = spacing[Geom::Y];
-    double gridy = Inkscape::Util::Quantity::convert(val, "px", gridunit);
+    double gridy = sp_pixels_get_units (val, *(gridunit));
     _rsu_sy->setValue (gridy);
 
     _rcp_gcol->setRgba32 (color);
@@ -794,13 +770,6 @@ CanvasXYGrid::newSpecificWidget()
     _rsi->setValue (empspacing);
 
     _rcb_dotted->setActive(render_dotted);
-
-    _wr.setUpdating (false);
-
-    _rsu_ox->setProgrammatically = false;
-    _rsu_oy->setProgrammatically = false;
-    _rsu_sx->setProgrammatically = false;
-    _rsu_sy->setProgrammatically = false;
 
     return table;
 }
@@ -822,20 +791,20 @@ CanvasXYGrid::updateWidgets()
         _rcb_enabled.setActive(snapper->getEnabled());
     }
 
-    _rumg.setUnit (gridunit->abbr);
+    _rumg.setUnit (gridunit);
 
     gdouble val;
     val = origin[Geom::X];
-    val = Inkscape::Quantity::convert(val, "px", *gridunit);
+    val = sp_pixels_get_units (val, *(gridunit));
     _rsu_ox.setValue (val);
     val = origin[Geom::Y];
-    val = Inkscape::Quantity::convert(val, "px", *gridunit);
+    val = sp_pixels_get_units (val, *(gridunit));
     _rsu_oy.setValue (val);
     val = spacing[Geom::X];
-    double gridx = Inkscape::Quantity::convert(val, "px", *gridunit);
+    double gridx = sp_pixels_get_units (val, *(gridunit));
     _rsu_sx.setValue (gridx);
     val = spacing[Geom::Y];
-    double gridy = Inkscape::Quantity::convert(val, "px", *gridunit);
+    double gridy = sp_pixels_get_units (val, *(gridunit));
     _rsu_sy.setValue (gridy);
 
     _rcp_gcol.setRgba32 (color);
@@ -850,26 +819,10 @@ CanvasXYGrid::updateWidgets()
 */
 }
 
-// For correcting old SVG Inkscape files
-void
-CanvasXYGrid::Scale (Geom::Scale const &scale ) {
-    origin *= scale;
-    spacing *= scale;
 
-    // Write out in 'user-units'
-    Inkscape::SVGOStringStream os_x, os_y, ss_x, ss_y;
-    os_x << origin[Geom::X];
-    os_y << origin[Geom::Y];
-    ss_x << spacing[Geom::X];
-    ss_y << spacing[Geom::Y];
-    repr->setAttribute("originx",  os_x.str().c_str());
-    repr->setAttribute("originy",  os_y.str().c_str());
-    repr->setAttribute("spacingx", ss_x.str().c_str());
-    repr->setAttribute("spacingy", ss_y.str().c_str());
-}
 
 void
-CanvasXYGrid::Update (Geom::Affine const &affine, unsigned int /*flags*/)
+CanvasXYGrid::Update (Geom::Matrix const &affine, unsigned int /*flags*/)
 {
     ow = origin * affine;
     sw = spacing * affine;
@@ -897,48 +850,76 @@ CanvasXYGrid::Update (Geom::Affine const &affine, unsigned int /*flags*/)
 static void
 grid_hline (SPCanvasBuf *buf, gint y, gint xs, gint xe, guint32 rgba)
 {
-    if ((y < buf->rect.top()) || (y >= buf->rect.bottom()))
-        return;
-
-    cairo_move_to(buf->ct, 0.5 + xs, 0.5 + y);
-    cairo_line_to(buf->ct, 0.5 + xe, 0.5 + y);
-    ink_cairo_set_source_rgba32(buf->ct, rgba);
-    cairo_stroke(buf->ct);
+    if ((y >= buf->rect.y0) && (y < buf->rect.y1)) {
+        guint r, g, b, a;
+        gint x0, x1, x;
+        guchar *p;
+        r = NR_RGBA32_R (rgba);
+        g = NR_RGBA32_G (rgba);
+        b = NR_RGBA32_B (rgba);
+        a = NR_RGBA32_A (rgba);
+        x0 = MAX (buf->rect.x0, xs);
+        x1 = MIN (buf->rect.x1, xe + 1);
+        p = buf->buf + (y - buf->rect.y0) * buf->buf_rowstride + (x0 - buf->rect.x0) * 4;
+        for (x = x0; x < x1; x++) {
+            p[0] = NR_COMPOSEN11_1111 (r, a, p[0]);
+            p[1] = NR_COMPOSEN11_1111 (g, a, p[1]);
+            p[2] = NR_COMPOSEN11_1111 (b, a, p[2]);
+            p += 4;
+        }
+    }
 }
 
 static void
 grid_vline (SPCanvasBuf *buf, gint x, gint ys, gint ye, guint32 rgba)
 {
-    if ((x < buf->rect.left()) || (x >= buf->rect.right()))
-        return;
-
-    cairo_move_to(buf->ct, 0.5 + x, 0.5 + ys);
-    cairo_line_to(buf->ct, 0.5 + x, 0.5 + ye);
-    ink_cairo_set_source_rgba32(buf->ct, rgba);
-    cairo_stroke(buf->ct);
+    if ((x >= buf->rect.x0) && (x < buf->rect.x1)) {
+        guint r, g, b, a;
+        gint y0, y1, y;
+        guchar *p;
+        r = NR_RGBA32_R(rgba);
+        g = NR_RGBA32_G (rgba);
+        b = NR_RGBA32_B (rgba);
+        a = NR_RGBA32_A (rgba);
+        y0 = MAX (buf->rect.y0, ys);
+        y1 = MIN (buf->rect.y1, ye + 1);
+        p = buf->buf + (y0 - buf->rect.y0) * buf->buf_rowstride + (x - buf->rect.x0) * 4;
+        for (y = y0; y < y1; y++) {
+            p[0] = NR_COMPOSEN11_1111 (r, a, p[0]);
+            p[1] = NR_COMPOSEN11_1111 (g, a, p[1]);
+            p[2] = NR_COMPOSEN11_1111 (b, a, p[2]);
+            p += buf->buf_rowstride;
+        }
+    }
 }
 
 static void
 grid_dot (SPCanvasBuf *buf, gint x, gint y, guint32 rgba)
 {
-    if ( (y < buf->rect.top()) || (y >= buf->rect.bottom())
-         || (x < buf->rect.left()) || (x >= buf->rect.right()) )
-        return;
-
-    cairo_rectangle(buf->ct, x, y, 1, 1);
-    ink_cairo_set_source_rgba32(buf->ct, rgba);
-    cairo_fill(buf->ct);
+    if ( (y >= buf->rect.y0) && (y < buf->rect.y1)
+         && (x >= buf->rect.x0) && (x < buf->rect.x1) ) {
+        guint r, g, b, a;
+        guchar *p;
+        r = NR_RGBA32_R (rgba);
+        g = NR_RGBA32_G (rgba);
+        b = NR_RGBA32_B (rgba);
+        a = NR_RGBA32_A (rgba);
+        p = buf->buf + (y - buf->rect.y0) * buf->buf_rowstride + (x - buf->rect.x0) * 4;
+        p[0] = NR_COMPOSEN11_1111 (r, a, p[0]);
+        p[1] = NR_COMPOSEN11_1111 (g, a, p[1]);
+        p[2] = NR_COMPOSEN11_1111 (b, a, p[2]);
+    }
 }
 
 void
 CanvasXYGrid::Render (SPCanvasBuf *buf)
 {
-    gdouble const sxg = floor ((buf->rect.left() - ow[Geom::X]) / sw[Geom::X]) * sw[Geom::X] + ow[Geom::X];
-    gint const  xlinestart = round((sxg - ow[Geom::X]) / sw[Geom::X]);
-    gdouble const syg = floor ((buf->rect.top() - ow[Geom::Y]) / sw[Geom::Y]) * sw[Geom::Y] + ow[Geom::Y];
-    gint const  ylinestart = round((syg - ow[Geom::Y]) / sw[Geom::Y]);
+    gdouble const sxg = floor ((buf->rect.x0 - ow[Geom::X]) / sw[Geom::X]) * sw[Geom::X] + ow[Geom::X];
+    gint const  xlinestart = (gint) Inkscape::round((sxg - ow[Geom::X]) / sw[Geom::X]);
+    gdouble const syg = floor ((buf->rect.y0 - ow[Geom::Y]) / sw[Geom::Y]) * sw[Geom::Y] + ow[Geom::Y];
+    gint const  ylinestart = (gint) Inkscape::round((syg - ow[Geom::Y]) / sw[Geom::Y]);
 
-    // no_emphasize_when_zoomedout determines color (minor or major) when only major grid lines/dots shown.
+    //set correct coloring, depending preference (when zoomed out, always major coloring or minor coloring)
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     guint32 _empcolor;
     bool no_emp_when_zoomed_out = prefs->getBool("/options/grids/no_emphasize_when_zoomedout", false);
@@ -948,72 +929,49 @@ CanvasXYGrid::Render (SPCanvasBuf *buf)
         _empcolor = empcolor;
     }
 
-    cairo_save(buf->ct);
-    cairo_translate(buf->ct, -buf->rect.left(), -buf->rect.top());
-    cairo_set_line_width(buf->ct, 1.0);
-    cairo_set_line_cap(buf->ct, CAIRO_LINE_CAP_SQUARE);
-
     if (!render_dotted) {
-        // Line grid
         gint ylinenum;
         gdouble y;
-        for (y = syg, ylinenum = ylinestart; y < buf->rect.bottom(); y += sw[Geom::Y], ylinenum++) {
-            gint const y0 = round(y);
+        for (y = syg, ylinenum = ylinestart; y < buf->rect.y1; y += sw[Geom::Y], ylinenum++) {
+            gint const y0 = (gint) Inkscape::round(y);
             if (!scaled[Geom::Y] && (ylinenum % empspacing) != 0) {
-                grid_hline (buf, y0, buf->rect.left(), buf->rect.right() - 1, color);
+                grid_hline (buf, y0, buf->rect.x0, buf->rect.x1 - 1, color);
             } else {
-                grid_hline (buf, y0, buf->rect.left(), buf->rect.right() - 1, _empcolor);
+                grid_hline (buf, y0, buf->rect.x0, buf->rect.x1 - 1, _empcolor);
             }
         }
 
         gint xlinenum;
         gdouble x;
-        for (x = sxg, xlinenum = xlinestart; x < buf->rect.right(); x += sw[Geom::X], xlinenum++) {
-            gint const ix = round(x);
+        for (x = sxg, xlinenum = xlinestart; x < buf->rect.x1; x += sw[Geom::X], xlinenum++) {
+            gint const ix = (gint) Inkscape::round(x);
             if (!scaled[Geom::X] && (xlinenum % empspacing) != 0) {
-                grid_vline (buf, ix, buf->rect.top(), buf->rect.bottom(), color);
+                grid_vline (buf, ix, buf->rect.y0, buf->rect.y1, color);
             } else {
-                grid_vline (buf, ix, buf->rect.top(), buf->rect.bottom(), _empcolor);
+                grid_vline (buf, ix, buf->rect.y0, buf->rect.y1, _empcolor);
             }
         }
     } else {
-        // Dotted grid
         gint ylinenum;
         gdouble y;
-
-        // alpha needs to be larger than in the line case to maintain a similar visual impact but
-        // setting it to the maximal value makes the dots dominant in some cases. Solution,
-        // increase the alpha by a factor of 4. This then allows some user adjustment.
-        guint32 _empdot = (_empcolor & 0xff) << 2;
-        if (_empdot > 0xff)
-            _empdot = 0xff;
-        _empdot += (_empcolor & 0xffffff00);
-
-        guint32 _colordot = (color & 0xff) << 2;
-        if (_colordot > 0xff)
-            _colordot = 0xff;
-        _colordot += (color & 0xffffff00);
-
-        for (y = syg, ylinenum = ylinestart; y < buf->rect.bottom(); y += sw[Geom::Y], ylinenum++) {
-            gint const iy = round(y);
+        for (y = syg, ylinenum = ylinestart; y < buf->rect.y1; y += sw[Geom::Y], ylinenum++) {
+            gint const iy = (gint) Inkscape::round(y);
 
             gint xlinenum;
             gdouble x;
-            for (x = sxg, xlinenum = xlinestart; x < buf->rect.right(); x += sw[Geom::X], xlinenum++) {
-                gint const ix = round(x);
+            for (x = sxg, xlinenum = xlinestart; x < buf->rect.x1; x += sw[Geom::X], xlinenum++) {
+                gint const ix = (gint) Inkscape::round(x);
                 if ( (!scaled[Geom::X] && (xlinenum % empspacing) != 0)
                      || (!scaled[Geom::Y] && (ylinenum % empspacing) != 0)
                      || ((scaled[Geom::X] || scaled[Geom::Y]) && no_emp_when_zoomed_out) )
                 {
-                    // Minor point: dot only
-                    grid_dot (buf, ix, iy, _colordot); // | (guint32)0x000000FF); // put alpha to max value
+                    grid_dot (buf, ix, iy, color | (guint32)0x000000FF); // put alpha to max value
                 } else {
-                    // Major point: small cross
                     gint const pitch = 1;
                     grid_dot (buf, ix-pitch, iy, _empcolor);
                     grid_dot (buf, ix+pitch, iy, _empcolor);
 
-                    grid_dot (buf, ix, iy, _empdot ); // | (guint32)0x000000FF);  // put alpha to max value
+                    grid_dot (buf, ix, iy, _empcolor | (guint32)0x000000FF);  // put alpha to max value
 
                     grid_dot (buf, ix, iy-pitch, _empcolor);
                     grid_dot (buf, ix, iy+pitch, _empcolor);
@@ -1022,7 +980,6 @@ CanvasXYGrid::Render (SPCanvasBuf *buf)
 
         }
     }
-    cairo_restore(buf->ct);
 }
 
 CanvasXYGridSnapper::CanvasXYGridSnapper(CanvasXYGrid *grid, SnapManager *sm, Geom::Coord const d) : LineSnapper(sm, d)
@@ -1074,37 +1031,29 @@ CanvasXYGridSnapper::_getSnapLines(Geom::Point const &p) const
 
         Geom::Coord rounded;
         Geom::Point point_on_line;
-        Geom::Point cvec(0.,0.);
-        cvec[i] = 1.;
 
         rounded = Inkscape::Util::round_to_upper_multiple_plus(p[i], spacing, grid->origin[i]);
         point_on_line = i ? Geom::Point(0, rounded) : Geom::Point(rounded, 0);
-        s.push_back(std::make_pair(cvec, point_on_line));
+        s.push_back(std::make_pair(component_vectors[i], point_on_line));
 
         rounded = Inkscape::Util::round_to_lower_multiple_plus(p[i], spacing, grid->origin[i]);
         point_on_line = i ? Geom::Point(0, rounded) : Geom::Point(rounded, 0);
-        s.push_back(std::make_pair(cvec, point_on_line));
+        s.push_back(std::make_pair(component_vectors[i], point_on_line));
     }
 
     return s;
 }
 
-void CanvasXYGridSnapper::_addSnappedLine(IntermSnapResults &isr, Geom::Point const &snapped_point, Geom::Coord const &snapped_distance,  SnapSourceType const &source, long source_num, Geom::Point const &normal_to_line, Geom::Point const &point_on_line) const
+void CanvasXYGridSnapper::_addSnappedLine(SnappedConstraints &sc, Geom::Point const snapped_point, Geom::Coord const snapped_distance,  SnapSourceType const &source, long source_num, Geom::Point const normal_to_line, Geom::Point const point_on_line) const
 {
     SnappedLine dummy = SnappedLine(snapped_point, snapped_distance, source, source_num, Inkscape::SNAPTARGET_GRID, getSnapperTolerance(), getSnapperAlwaysSnap(), normal_to_line, point_on_line);
-    isr.grid_lines.push_back(dummy);
+    sc.grid_lines.push_back(dummy);
 }
 
-void CanvasXYGridSnapper::_addSnappedPoint(IntermSnapResults &isr, Geom::Point const &snapped_point, Geom::Coord const &snapped_distance, SnapSourceType const &source, long source_num, bool constrained_snap) const
+void CanvasXYGridSnapper::_addSnappedPoint(SnappedConstraints &sc, Geom::Point const snapped_point, Geom::Coord const snapped_distance, SnapSourceType const &source, long source_num, bool constrained_snap) const
 {
     SnappedPoint dummy = SnappedPoint(snapped_point, source, source_num, Inkscape::SNAPTARGET_GRID, snapped_distance, getSnapperTolerance(), getSnapperAlwaysSnap(), constrained_snap, true);
-    isr.points.push_back(dummy);
-}
-
-void CanvasXYGridSnapper::_addSnappedLinePerpendicularly(IntermSnapResults &isr, Geom::Point const &snapped_point, Geom::Coord const &snapped_distance, SnapSourceType const &source, long source_num, bool constrained_snap) const
-{
-    SnappedPoint dummy = SnappedPoint(snapped_point, source, source_num, Inkscape::SNAPTARGET_GRID_PERPENDICULAR, snapped_distance, getSnapperTolerance(), getSnapperAlwaysSnap(), constrained_snap, true);
-    isr.points.push_back(dummy);
+    sc.points.push_back(dummy);
 }
 
 /**
@@ -1112,7 +1061,7 @@ void CanvasXYGridSnapper::_addSnappedLinePerpendicularly(IntermSnapResults &isr,
  */
 bool CanvasXYGridSnapper::ThisSnapperMightSnap() const
 {
-    return _snap_enabled && _snapmanager->snapprefs.isTargetSnappable(Inkscape::SNAPTARGET_GRID);
+    return _snap_enabled && _snapmanager->snapprefs.getSnapToGrids() && _snapmanager->snapprefs.getSnapModeBBoxOrNodes();
 }
 
 } // namespace Inkscape
@@ -1127,4 +1076,4 @@ bool CanvasXYGridSnapper::ThisSnapperMightSnap() const
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

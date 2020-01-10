@@ -1,4 +1,6 @@
-/*
+#define INKSCAPE_HELPER_GEOM_CPP
+
+/**
  * Specific geometry functions for Inkscape, not provided my lib2geom.
  *
  * Author:
@@ -9,21 +11,24 @@
  * Released under GNU GPL
  */
 
-#include <algorithm>
 #include "helper/geom.h"
 #include "helper/geom-curves.h"
 #include <typeinfo>
 #include <2geom/pathvector.h>
 #include <2geom/path.h>
-#include <2geom/curves.h>
+#include <2geom/bezier-curve.h>
+#include <2geom/hvlinesegment.h>
 #include <2geom/transforms.h>
 #include <2geom/rect.h>
 #include <2geom/coord.h>
 #include <2geom/sbasis-to-bezier.h>
-#include <math.h> // for M_PI
+#include <libnr/nr-convert2geom.h>
+#include <glibmm.h>
 
 using Geom::X;
 using Geom::Y;
+
+#define NR_HUGE   1e18
 
 //#################################################################################
 // BOUNDING BOX CALCULATIONS
@@ -35,8 +40,8 @@ cubic_bbox (Geom::Coord x000, Geom::Coord y000, Geom::Coord x001, Geom::Coord y0
 {
     Geom::Coord a, b, c, D;
 
-    bbox[0].expandTo(x111);
-    bbox[1].expandTo(y111);
+    bbox[0].extendTo(x111);
+    bbox[1].extendTo(y111);
 
     // It already contains (x000,y000) and (x111,y111)
     // All points of the Bezier lie in the convex hull of (x000,y000), (x001,y001), (x011,y011) and (x111,y111)
@@ -73,12 +78,12 @@ cubic_bbox (Geom::Coord x000, Geom::Coord y000, Geom::Coord x001, Geom::Coord y0
         if (fabs (a) < Geom::EPSILON) {
             /* s = -c / b */
             if (fabs (b) > Geom::EPSILON) {
-                double s;
+                double s, t, xttt;
                 s = -c / b;
                 if ((s > 0.0) && (s < 1.0)) {
-                    double t = 1.0 - s;
-                    double xttt = s * s * s * x000 + 3 * s * s * t * x001 + 3 * s * t * t * x011 + t * t * t * x111;
-                    bbox[0].expandTo(xttt);
+                    t = 1.0 - s;
+                    xttt = s * s * s * x000 + 3 * s * s * t * x001 + 3 * s * t * t * x011 + t * t * t * x111;
+                    bbox[0].extendTo(xttt);
                 }
             }
         } else {
@@ -92,13 +97,13 @@ cubic_bbox (Geom::Coord x000, Geom::Coord y000, Geom::Coord x001, Geom::Coord y0
                 if ((s > 0.0) && (s < 1.0)) {
                     t = 1.0 - s;
                     xttt = s * s * s * x000 + 3 * s * s * t * x001 + 3 * s * t * t * x011 + t * t * t * x111;
-                    bbox[0].expandTo(xttt);
+                    bbox[0].extendTo(xttt);
                 }
                 s = (-b - d) / (2 * a);
                 if ((s > 0.0) && (s < 1.0)) {
                     t = 1.0 - s;
                     xttt = s * s * s * x000 + 3 * s * s * t * x001 + 3 * s * t * t * x011 + t * t * t * x111;
-                    bbox[0].expandTo(xttt);
+                    bbox[0].extendTo(xttt);
                 }
             }
         }
@@ -112,12 +117,12 @@ cubic_bbox (Geom::Coord x000, Geom::Coord y000, Geom::Coord x001, Geom::Coord y0
         if (fabs (a) < Geom::EPSILON) {
             /* s = -c / b */
             if (fabs (b) > Geom::EPSILON) {
-                double s;
+                double s, t, yttt;
                 s = -c / b;
                 if ((s > 0.0) && (s < 1.0)) {
-                    double t = 1.0 - s;
-                    double yttt = s * s * s * y000 + 3 * s * s * t * y001 + 3 * s * t * t * y011 + t * t * t * y111;
-                    bbox[1].expandTo(yttt);
+                    t = 1.0 - s;
+                    yttt = s * s * s * y000 + 3 * s * s * t * y001 + 3 * s * t * t * y011 + t * t * t * y111;
+                    bbox[1].extendTo(yttt);
                 }
             }
         } else {
@@ -131,13 +136,13 @@ cubic_bbox (Geom::Coord x000, Geom::Coord y000, Geom::Coord x001, Geom::Coord y0
                 if ((s > 0.0) && (s < 1.0)) {
                     t = 1.0 - s;
                     yttt = s * s * s * y000 + 3 * s * s * t * y001 + 3 * s * t * t * y011 + t * t * t * y111;
-                    bbox[1].expandTo(yttt);
+                    bbox[1].extendTo(yttt);
                 }
                 s = (-b - d) / (2 * a);
                 if ((s > 0.0) && (s < 1.0)) {
                     t = 1.0 - s;
                     yttt = s * s * s * y000 + 3 * s * s * t * y001 + 3 * s * t * t * y011 + t * t * t * y111;
-                    bbox[1].expandTo(yttt);
+                    bbox[1].extendTo(yttt);
                 }
             }
         }
@@ -145,14 +150,14 @@ cubic_bbox (Geom::Coord x000, Geom::Coord y000, Geom::Coord x001, Geom::Coord y0
 }
 
 Geom::OptRect
-bounds_fast_transformed(Geom::PathVector const & pv, Geom::Affine const & t)
+bounds_fast_transformed(Geom::PathVector const & pv, Geom::Matrix const & t)
 {
     return bounds_exact_transformed(pv, t); //use this as it is faster for now! :)
 //    return Geom::bounds_fast(pv * t);
 }
 
 Geom::OptRect
-bounds_exact_transformed(Geom::PathVector const & pv, Geom::Affine const & t)
+bounds_exact_transformed(Geom::PathVector const & pv, Geom::Matrix const & t)
 {
     if (pv.empty())
         return Geom::OptRect();
@@ -167,25 +172,24 @@ bounds_exact_transformed(Geom::PathVector const & pv, Geom::Affine const & t)
         for (Geom::Path::const_iterator cit = it->begin(); cit != it->end_open(); ++cit) {
             Geom::Curve const &c = *cit;
 
-            unsigned order = 0;
-            if (Geom::BezierCurve const* b = dynamic_cast<Geom::BezierCurve const*>(&c)) {
-                order = b->order();
+            if( is_straight_curve(c) )
+            {
+                bbox.expandTo( c.finalPoint() * t );
             }
-
-            if (order == 1) { // line segment
-                bbox.expandTo(c.finalPoint() * t);
-
-            // TODO: we can make the case for quadratics faster by degree elevating them to
-            // cubic and then taking the bbox of that.
-
-            } else if (order == 3) { // cubic bezier
-                Geom::CubicBezier const &cubic_bezier = static_cast<Geom::CubicBezier const&>(c);
-                Geom::Point c0 = cubic_bezier[0] * t;
-                Geom::Point c1 = cubic_bezier[1] * t;
-                Geom::Point c2 = cubic_bezier[2] * t;
-                Geom::Point c3 = cubic_bezier[3] * t;
-                cubic_bbox(c0[0], c0[1], c1[0], c1[1], c2[0], c2[1], c3[0], c3[1], bbox);
-            } else {
+            else if(Geom::CubicBezier const *cubic_bezier = dynamic_cast<Geom::CubicBezier const  *>(&c))
+            {
+                Geom::Point c0 = (*cubic_bezier)[0] * t;
+                Geom::Point c1 = (*cubic_bezier)[1] * t;
+                Geom::Point c2 = (*cubic_bezier)[2] * t;
+                Geom::Point c3 = (*cubic_bezier)[3] * t;
+                cubic_bbox( c0[0], c0[1],
+                            c1[0], c1[1],
+                            c2[0], c2[1],
+                            c3[0], c3[1],
+                            bbox );
+            }
+            else
+            {
                 // should handle all not-so-easy curves:
                 Geom::Curve *ctemp = cit->transformed(t);
                 bbox.unionWith( ctemp->boundsExact());
@@ -265,28 +269,29 @@ geom_cubic_bbox_wind_distance (Geom::Coord x000, Geom::Coord y000,
                  Geom::Coord tolerance)
 {
     Geom::Coord x0, y0, x1, y1, len2;
-    int needdist, needwind;
+    int needdist, needwind, needline;
 
     const Geom::Coord Px = pt[X];
     const Geom::Coord Py = pt[Y];
 
     needdist = 0;
     needwind = 0;
+    needline = 0;
 
     if (bbox) cubic_bbox (x000, y000, x001, y001, x011, y011, x111, y111, *bbox);
 
-    x0 = std::min (x000, x001);
-    x0 = std::min (x0, x011);
-    x0 = std::min (x0, x111);
-    y0 = std::min (y000, y001);
-    y0 = std::min (y0, y011);
-    y0 = std::min (y0, y111);
-    x1 = std::max (x000, x001);
-    x1 = std::max (x1, x011);
-    x1 = std::max (x1, x111);
-    y1 = std::max (y000, y001);
-    y1 = std::max (y1, y011);
-    y1 = std::max (y1, y111);
+    x0 = MIN (x000, x001);
+    x0 = MIN (x0, x011);
+    x0 = MIN (x0, x111);
+    y0 = MIN (y000, y001);
+    y0 = MIN (y0, y011);
+    y0 = MIN (y0, y111);
+    x1 = MAX (x000, x001);
+    x1 = MAX (x1, x011);
+    x1 = MAX (x1, x111);
+    y1 = MAX (y000, y001);
+    y1 = MAX (y1, y011);
+    y1 = MAX (y1, y111);
 
     if (best) {
         /* Quickly adjust to endpoints */
@@ -301,6 +306,8 @@ geom_cubic_bbox_wind_distance (Geom::Coord x000, Geom::Coord y000,
             /* fixme: (Lauris) */
             if (((y1 - y0) > 5.0) || ((x1 - x0) > 5.0)) {
                 needdist = 1;
+            } else {
+                needline = 1;
             }
         }
     }
@@ -311,6 +318,8 @@ geom_cubic_bbox_wind_distance (Geom::Coord x000, Geom::Coord y000,
             /* fixme: (Lauris) */
             if (((y1 - y0) > 5.0) || ((x1 - x0) > 5.0)) {
                 needwind = 1;
+            } else {
+                needline = 1;
             }
         }
     }
@@ -339,23 +348,20 @@ geom_cubic_bbox_wind_distance (Geom::Coord x000, Geom::Coord y000,
 
         geom_cubic_bbox_wind_distance (x000, y000, x00t, y00t, x0tt, y0tt, xttt, yttt, pt, NULL, wind, best, tolerance);
         geom_cubic_bbox_wind_distance (xttt, yttt, x1tt, y1tt, x11t, y11t, x111, y111, pt, NULL, wind, best, tolerance);
-    } else {
+    } else if (1 || needline) {
         geom_line_wind_distance (x000, y000, x111, y111, pt, wind, best);
     }
 }
 
 static void
-geom_curve_bbox_wind_distance(Geom::Curve const & c, Geom::Affine const &m,
+geom_curve_bbox_wind_distance(Geom::Curve const & c, Geom::Matrix const &m,
                  Geom::Point const &pt,
                  Geom::Rect *bbox, int *wind, Geom::Coord *dist,
                  Geom::Coord tolerance, Geom::Rect const *viewbox,
                  Geom::Point &p0) // pass p0 through as it represents the last endpoint added (the finalPoint of last curve)
 {
-    unsigned order = 0;
-    if (Geom::BezierCurve const* b = dynamic_cast<Geom::BezierCurve const*>(&c)) {
-        order = b->order();
-    }
-    if (order == 1) {
+    if( is_straight_curve(c) )
+    {
         Geom::Point pe = c.finalPoint() * m;
         if (bbox) {
             bbox->expandTo(pe);
@@ -371,11 +377,10 @@ geom_curve_bbox_wind_distance(Geom::Curve const & c, Geom::Affine const &m,
         }
         p0 = pe;
     }
-    else if (order == 3) {
-        Geom::CubicBezier const& cubic_bezier = static_cast<Geom::CubicBezier const&>(c);
-        Geom::Point p1 = cubic_bezier[1] * m;
-        Geom::Point p2 = cubic_bezier[2] * m;
-        Geom::Point p3 = cubic_bezier[3] * m;
+    else if(Geom::CubicBezier const *cubic_bezier = dynamic_cast<Geom::CubicBezier const  *>(&c)) {
+        Geom::Point p1 = (*cubic_bezier)[1] * m;
+        Geom::Point p2 = (*cubic_bezier)[2] * m;
+        Geom::Point p3 = (*cubic_bezier)[3] * m;
 
         // get approximate bbox from handles (convex hull property of beziers):
         Geom::Rect swept(p0, p3);
@@ -401,7 +406,7 @@ geom_curve_bbox_wind_distance(Geom::Curve const & c, Geom::Affine const &m,
         Geom::Path sbasis_path = Geom::cubicbezierpath_from_sbasis(c.toSBasis(), 0.1);
 
         //recurse to convert the new path resulting from the sbasis to svgd
-        for (Geom::Path::iterator iter = sbasis_path.begin(); iter != sbasis_path.end(); ++iter) {
+        for(Geom::Path::iterator iter = sbasis_path.begin(); iter != sbasis_path.end(); ++iter) {
             geom_curve_bbox_wind_distance(*iter, m, pt, bbox, wind, dist, tolerance, viewbox, p0);
         }
     }
@@ -412,13 +417,13 @@ geom_curve_bbox_wind_distance(Geom::Curve const & c, Geom::Affine const &m,
    Returns bounding box in *bbox if bbox!=NULL.
  */
 void
-pathv_matrix_point_bbox_wind_distance (Geom::PathVector const & pathv, Geom::Affine const &m, Geom::Point const &pt,
+pathv_matrix_point_bbox_wind_distance (Geom::PathVector const & pathv, Geom::Matrix const &m, Geom::Point const &pt,
                          Geom::Rect *bbox, int *wind, Geom::Coord *dist,
                          Geom::Coord tolerance, Geom::Rect const *viewbox)
 {
     if (pathv.empty()) {
         if (wind) *wind = 0;
-        if (dist) *dist = Geom::infinity();
+        if (dist) *dist = NR_HUGE;
         return;
     }
 
@@ -467,388 +472,65 @@ pathv_to_linear_and_cubic_beziers( Geom::PathVector const &pathv )
 
     for (Geom::PathVector::const_iterator pit = pathv.begin(); pit != pathv.end(); ++pit) {
         output.push_back( Geom::Path() );
-        output.back().setStitching(true);
-        output.back().start( pit->initialPoint() );
-
-        for (Geom::Path::const_iterator cit = pit->begin(); cit != pit->end_open(); ++cit) {
-            if (is_straight_curve(*cit)) {
-                Geom::LineSegment l(cit->initialPoint(), cit->finalPoint());
-                output.back().append(l);
-            } else {
-                Geom::BezierCurve const *curve = dynamic_cast<Geom::BezierCurve const *>(&*cit);
-                if (curve && curve->order() == 3) {
-                    Geom::CubicBezier b((*curve)[0], (*curve)[1], (*curve)[2], (*curve)[3]);
-                    output.back().append(b);
-                } else {
-                    // convert all other curve types to cubicbeziers
-                    Geom::Path cubicbezier_path = Geom::cubicbezierpath_from_sbasis(cit->toSBasis(), 0.1);
-                    cubicbezier_path.close(false);
-                    output.back().append(cubicbezier_path);
-                }
-            }
-        }
-        
-        output.back().close( pit->closed() );
-    }
-    
-    return output;
-}
-
-/*
- * Converts all segments in all paths to Geom::LineSegment.  There is an intermediate
- * stage where some may be converted to beziers.  maxdisp is the maximum displacement from
- * the line segment to the bezier curve; ** maxdisp is not used at this moment **.
- *
- * This is NOT a terribly fast method, but it should give a solution close to the one with the
- * fewest points.
- */
-Geom::PathVector
-pathv_to_linear( Geom::PathVector const &pathv, double /*maxdisp*/)
-{
-    Geom::PathVector output;
-    Geom::PathVector tmppath = pathv_to_linear_and_cubic_beziers(pathv);
-    
-    // Now all path segments are either already lines, or they are beziers.
-
-    for (Geom::PathVector::const_iterator pit = tmppath.begin(); pit != tmppath.end(); ++pit) {
-        output.push_back( Geom::Path() );
         output.back().start( pit->initialPoint() );
         output.back().close( pit->closed() );
 
         for (Geom::Path::const_iterator cit = pit->begin(); cit != pit->end_open(); ++cit) {
-            if (is_straight_curve(*cit)) {
-                Geom::LineSegment ls(cit->initialPoint(), cit->finalPoint());
-                output.back().append(ls);
-            } 
-            else { /* all others must be Bezier curves */
-                Geom::BezierCurve const *curve = dynamic_cast<Geom::BezierCurve const *>(&*cit);
-                std::vector<Geom::Point> bzrpoints = curve->controlPoints();
-                Geom::Point A = bzrpoints[0];
-                Geom::Point B = bzrpoints[1];
-                Geom::Point C = bzrpoints[2];
-                Geom::Point D = bzrpoints[3];
-                std::vector<Geom::Point> pointlist;
-                pointlist.push_back(A);
-                recursive_bezier4(
-                   A[X], A[Y], 
-                   B[X], B[Y], 
-                   C[X], C[Y], 
-                   D[X], D[Y],
-                   pointlist, 
-                   0);
-                pointlist.push_back(D);
-                Geom::Point r1 = pointlist[0];
-                for (unsigned int i=1; i<pointlist.size();i++){
-                   Geom::Point prev_r1 = r1;
-                   r1 = pointlist[i];
-                   Geom::LineSegment ls(prev_r1, r1);
-                   output.back().append(ls);
-                }
-                pointlist.clear();
-           }
+            if( dynamic_cast<Geom::CubicBezier const*>(&*cit) || 
+                is_straight_curve(*cit) )
+            {
+                output.back().append(*cit);
+            }
+            else {
+                // convert all other curve types to cubicbeziers
+                Geom::Path cubicbezier_path = Geom::cubicbezierpath_from_sbasis(cit->toSBasis(), 0.1);
+                output.back().append(cubicbezier_path);
+            }
         }
     }
     
     return output;
 }
 
-/*
- * Converts all segments in all paths to Geom Cubic bezier.
- * This is used in lattice2 LPE, maybe is better move the function to the effect
- * But maybe could be usable by others, so i put here.
- * The straight curve part is needed as it for the effect to work apropiately
+
+/**
+ * rounds all corners of the rectangle 'outwards', i.e. x0 and y0 are floored, x1 and y1 are ceiled.
  */
-Geom::PathVector
-pathv_to_cubicbezier( Geom::PathVector const &pathv)
-{
-    Geom::PathVector output;
-    double cubicGap = 0.01;
-    for (Geom::PathVector::const_iterator pit = pathv.begin(); pit != pathv.end(); ++pit) {
-        output.push_back( Geom::Path() );
-        output.back().start( pit->initialPoint() );
-        output.back().close( pit->closed() );
-        bool end_open = false;
-        if (pit->closed()) {
-            const Geom::Curve &closingline = pit->back_closed();
-            if (!are_near(closingline.initialPoint(), closingline.finalPoint())) {
-                end_open = true;
-            }
-        }
-        Geom::Path pitCubic = (Geom::Path)(*pit);
-        if(end_open && pit->closed()){
-            pitCubic.close(false);
-            pitCubic.appendNew<Geom::LineSegment>( pitCubic.initialPoint() );
-            pitCubic.close(true);
-        }
-        for (Geom::Path::iterator cit = pitCubic.begin(); cit != pitCubic.end_open(); ++cit) {
-            if (is_straight_curve(*cit)) {
-                Geom::CubicBezier b(cit->initialPoint(), cit->pointAt(0.3334) + Geom::Point(cubicGap,cubicGap), cit->finalPoint(), cit->finalPoint());
-                output.back().append(b);
-            } else {
-                Geom::BezierCurve const *curve = dynamic_cast<Geom::BezierCurve const *>(&*cit);
-                if (curve && curve->order() == 3) {
-                    Geom::CubicBezier b((*curve)[0], (*curve)[1], (*curve)[2], (*curve)[3]);
-                    output.back().append(b);
-                } else {
-                    // convert all other curve types to cubicbeziers
-                    Geom::Path cubicbezier_path = Geom::cubicbezierpath_from_sbasis(cit->toSBasis(), 0.1);
-                    output.back().append(cubicbezier_path);
-                }
-            }
-        }
+void round_rectangle_outwards(Geom::Rect & rect) {
+    Geom::Interval ints[2];
+    for (int i=0; i < 2; i++) {
+        ints[i] = Geom::Interval(std::floor(rect[i][0]), std::ceil(rect[i][1]));
     }
-
-    return output;
+    rect = Geom::Rect(ints[0], ints[1]);
 }
 
-// The next routine is modified from curv4_div::recursive_bezier from file agg_curves.cpp
-//----------------------------------------------------------------------------
-// Anti-Grain Geometry (AGG) - Version 2.5
-// A high quality rendering engine for C++
-// Copyright (C) 2002-2006 Maxim Shemanarev
-// Contact: mcseem@antigrain.com
-//          mcseemagg@yahoo.com
-//          http://antigrain.com
-// 
-// AGG is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either version 2
-// of the License, or (at your option) any later version.
-// 
-// AGG is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-// 
-// You should have received a copy of the GNU General Public License
-// along with AGG; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, 
-// MA 02110-1301, USA.
-//----------------------------------------------------------------------------
-void
-recursive_bezier4(const double x1, const double y1, 
-                  const double x2, const double y2, 
-                  const double x3, const double y3, 
-                  const double x4, const double y4,
-                  std::vector<Geom::Point> &m_points,
-                  int level)
-    {
-        // some of these should be parameters, but do it this way for now.
-        const double curve_collinearity_epsilon              = 1e-30;
-        const double curve_angle_tolerance_epsilon           = 0.01;
-        double       m_cusp_limit                            = 0.0;
-        double       m_angle_tolerance                       = 0.0;
-        double       m_approximation_scale                   = 1.0;
-        double       m_distance_tolerance_square = 0.5 / m_approximation_scale;
-        m_distance_tolerance_square *= m_distance_tolerance_square;
-        enum curve_recursion_limit_e { curve_recursion_limit = 32 };
-#define calc_sq_distance(A,B,C,D) ((A-C)*(A-C) + (B-D)*(B-D))
 
-        if(level > curve_recursion_limit) 
-        {
-            return;
-        }
+namespace Geom {
 
-
-        // Calculate all the mid-points of the line segments
-        //----------------------
-        double x12   = (x1 + x2) / 2;
-        double y12   = (y1 + y2) / 2;
-        double x23   = (x2 + x3) / 2;
-        double y23   = (y2 + y3) / 2;
-        double x34   = (x3 + x4) / 2;
-        double y34   = (y3 + y4) / 2;
-        double x123  = (x12 + x23) / 2;
-        double y123  = (y12 + y23) / 2;
-        double x234  = (x23 + x34) / 2;
-        double y234  = (y23 + y34) / 2;
-        double x1234 = (x123 + x234) / 2;
-        double y1234 = (y123 + y234) / 2;
-
-
-        // Try to approximate the full cubic curve by a single straight line
-        //------------------
-        double dx = x4-x1;
-        double dy = y4-y1;
-
-        double d2 = fabs(((x2 - x4) * dy - (y2 - y4) * dx));
-        double d3 = fabs(((x3 - x4) * dy - (y3 - y4) * dx));
-        double da1, da2, k;
-
-        switch((int(d2 > curve_collinearity_epsilon) << 1) +
-                int(d3 > curve_collinearity_epsilon))
-        {
-        case 0:
-            // All collinear OR p1==p4
-            //----------------------
-            k = dx*dx + dy*dy;
-            if(k == 0)
-            {
-                d2 = calc_sq_distance(x1, y1, x2, y2);
-                d3 = calc_sq_distance(x4, y4, x3, y3);
-            }
-            else
-            {
-                k   = 1 / k;
-                da1 = x2 - x1;
-                da2 = y2 - y1;
-                d2  = k * (da1*dx + da2*dy);
-                da1 = x3 - x1;
-                da2 = y3 - y1;
-                d3  = k * (da1*dx + da2*dy);
-                if(d2 > 0 && d2 < 1 && d3 > 0 && d3 < 1)
-                {
-                    // Simple collinear case, 1---2---3---4
-                    // We can leave just two endpoints
-                    return;
-                }
-                     if(d2 <= 0) d2 = calc_sq_distance(x2, y2, x1, y1);
-                else if(d2 >= 1) d2 = calc_sq_distance(x2, y2, x4, y4);
-                else             d2 = calc_sq_distance(x2, y2, x1 + d2*dx, y1 + d2*dy);
-
-                     if(d3 <= 0) d3 = calc_sq_distance(x3, y3, x1, y1);
-                else if(d3 >= 1) d3 = calc_sq_distance(x3, y3, x4, y4);
-                else             d3 = calc_sq_distance(x3, y3, x1 + d3*dx, y1 + d3*dy);
-            }
-            if(d2 > d3)
-            {
-                if(d2 < m_distance_tolerance_square)
-                {
-                    m_points.push_back(Geom::Point(x2, y2));
-                    return;
-                }
-            }
-            else
-            {
-                if(d3 < m_distance_tolerance_square)
-                {
-                    m_points.push_back(Geom::Point(x3, y3));
-                    return;
-                }
-            }
-            break;
-
-        case 1:
-            // p1,p2,p4 are collinear, p3 is significant
-            //----------------------
-            if(d3 * d3 <= m_distance_tolerance_square * (dx*dx + dy*dy))
-            {
-                if(m_angle_tolerance < curve_angle_tolerance_epsilon)
-                {
-                    m_points.push_back(Geom::Point(x23, y23));
-                    return;
-                }
-
-                // Angle Condition
-                //----------------------
-                da1 = fabs(atan2(y4 - y3, x4 - x3) - atan2(y3 - y2, x3 - x2));
-                if(da1 >= M_PI) da1 = 2*M_PI - da1;
-
-                if(da1 < m_angle_tolerance)
-                {
-                    m_points.push_back(Geom::Point(x2, y2));
-                    m_points.push_back(Geom::Point(x3, y3));
-                    return;
-                }
-
-                if(m_cusp_limit != 0.0)
-                {
-                    if(da1 > m_cusp_limit)
-                    {
-                        m_points.push_back(Geom::Point(x3, y3));
-                        return;
-                    }
-                }
-            }
-            break;
-
-        case 2:
-            // p1,p3,p4 are collinear, p2 is significant
-            //----------------------
-            if(d2 * d2 <= m_distance_tolerance_square * (dx*dx + dy*dy))
-            {
-                if(m_angle_tolerance < curve_angle_tolerance_epsilon)
-                {
-                    m_points.push_back(Geom::Point(x23, y23));
-                    return;
-                }
-
-                // Angle Condition
-                //----------------------
-                da1 = fabs(atan2(y3 - y2, x3 - x2) - atan2(y2 - y1, x2 - x1));
-                if(da1 >= M_PI) da1 = 2*M_PI - da1;
-
-                if(da1 < m_angle_tolerance)
-                {
-                    m_points.push_back(Geom::Point(x2, y2));
-                    m_points.push_back(Geom::Point(x3, y3));
-                    return;
-                }
-
-                if(m_cusp_limit != 0.0)
-                {
-                    if(da1 > m_cusp_limit)
-                    {
-                        m_points.push_back(Geom::Point(x2, y2));
-                        return;
-                    }
-                }
-            }
-            break;
-
-        case 3: 
-            // Regular case
-            //-----------------
-            if((d2 + d3)*(d2 + d3) <= m_distance_tolerance_square * (dx*dx + dy*dy))
-            {
-                // If the curvature doesn't exceed the distance_tolerance value
-                // we tend to finish subdivisions.
-                //----------------------
-                if(m_angle_tolerance < curve_angle_tolerance_epsilon)
-                {
-                    m_points.push_back(Geom::Point(x23, y23));
-                    return;
-                }
-
-                // Angle & Cusp Condition
-                //----------------------
-                k   = atan2(y3 - y2, x3 - x2);
-                da1 = fabs(k - atan2(y2 - y1, x2 - x1));
-                da2 = fabs(atan2(y4 - y3, x4 - x3) - k);
-                if(da1 >= M_PI) da1 = 2*M_PI - da1;
-                if(da2 >= M_PI) da2 = 2*M_PI - da2;
-
-                if(da1 + da2 < m_angle_tolerance)
-                {
-                    // Finally we can stop the recursion
-                    //----------------------
-                    m_points.push_back(Geom::Point(x23, y23));
-                    return;
-                }
-
-                if(m_cusp_limit != 0.0)
-                {
-                    if(da1 > m_cusp_limit)
-                    {
-                        m_points.push_back(Geom::Point(x2, y2));
-                        return;
-                    }
-
-                    if(da2 > m_cusp_limit)
-                    {
-                        m_points.push_back(Geom::Point(x3, y3));
-                        return;
-                    }
-                }
-            }
-            break;
-        }
-
-        // Continue subdivision
-        //----------------------
-        recursive_bezier4(x1, y1, x12, y12, x123, y123, x1234, y1234, m_points, level + 1); 
-        recursive_bezier4(x1234, y1234, x234, y234, x34, y34, x4, y4, m_points, level + 1); 
+bool transform_equalp(Geom::Matrix const &m0, Geom::Matrix const &m1, Geom::Coord const epsilon) {
+    return
+        NR_DF_TEST_CLOSE(m0[0], m1[0], epsilon) &&
+        NR_DF_TEST_CLOSE(m0[1], m1[1], epsilon) &&
+        NR_DF_TEST_CLOSE(m0[2], m1[2], epsilon) &&
+        NR_DF_TEST_CLOSE(m0[3], m1[3], epsilon);
 }
+
+
+bool translate_equalp(Geom::Matrix const &m0, Geom::Matrix const &m1, Geom::Coord const epsilon) {
+    return NR_DF_TEST_CLOSE(m0[4], m1[4], epsilon) && NR_DF_TEST_CLOSE(m0[5], m1[5], epsilon);
+}
+
+
+bool matrix_equalp(Geom::Matrix const &m0, Geom::Matrix const &m1, Geom::Coord const epsilon) {
+    return transform_equalp(m0, m1, epsilon) && translate_equalp(m0, m1, epsilon);
+}
+
+} //end namespace Geom
+/*
+The following predefined objects are for reference
+and comparison.
+*/
+Geom::Matrix GEOM_MATRIX_IDENTITY = Geom::identity();
 
 /*
   Local Variables:
@@ -859,4 +541,4 @@ recursive_bezier4(const double x1, const double y1,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

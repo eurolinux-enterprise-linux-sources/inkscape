@@ -1,4 +1,7 @@
-/*
+/** \file 
+ *
+ * \brief Helperclass for Gtk::Entry widgets
+ *
  * Authors:
  *   Johan Engelen <goejendaagh@zonnet.nl>
  *
@@ -10,19 +13,16 @@
 #ifndef INKSCAPE_UI_WIDGET_ENTRY__H
 #define INKSCAPE_UI_WIDGET_ENTRY__H
 
+#include <gtkmm/entry.h>
+#include <gtkmm/tooltips.h>
+#include <gtkmm/label.h>
+#include <gtkmm/box.h>
 #include "labelled.h"
-
-namespace Gtk {
-class Entry;
-}
 
 namespace Inkscape {
 namespace UI {
 namespace Widget {
 
-/**
- * Helperclass for Gtk::Entry widgets.
- */
 class Entry : public Labelled
 {
 public:

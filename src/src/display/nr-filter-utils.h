@@ -1,11 +1,9 @@
-#ifndef SEEN_NR_FILTER_UTILS_H
-#define SEEN_NR_FILTER_UTILS_H
+#ifndef __NR_FILTER_UTILS_H__
+#define __NR_FILTER_UTILS_H__
 
-/**
- * @file
- * Definition of functions needed by several filters.
- */
-/*
+/** \file
+ * filter utils. Definition of functions needed by several filters.
+ *
  * Authors:
  *   Jean-Rene Reinhard <jr@komite.net>
  *
@@ -26,6 +24,7 @@ namespace Filters {
  * \return 0 if the value is smaller than 0, 255 if it is greater 255, else v
  * \param v the value to clamp
  */
+__attribute__ ((const))
 inline int clamp(int const val) {
     if (val < 0) return 0;
     if (val > 255) return 255;
@@ -38,6 +37,7 @@ inline int clamp(int const val) {
  * \return 0 if the value is smaller than 0, 255^3 (16581375) if it is greater than 255^3, else v
  * \param v the value to clamp
  */
+__attribute__ ((const))
 inline int clamp3(int const val) {
     if (val < 0) return 0;
     if (val > 16581375) return 16581375;
@@ -57,6 +57,7 @@ inline int clamp3(int const val) {
  * \param val the value to clamp
  * \param alpha the maximum value to clamp to
  */
+__attribute__ ((const))
 inline int clamp_alpha(int const val, int const alpha) {
     if (val < 0) return 0;
     if (val > alpha) return alpha;
@@ -81,4 +82,4 @@ inline int clamp_alpha(int const val, int const alpha) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -7,14 +7,11 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "extension/extension-forward.h"
 #include "extension/implementation/implementation.h"
 
 namespace Inkscape {
 namespace Extension {
-
-class Effect;
-class Extension;
-
 namespace Internal {
 
 /** \brief  Implementation class of the GIMP gradient plugin.  This mostly

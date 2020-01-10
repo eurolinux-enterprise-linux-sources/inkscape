@@ -1,6 +1,7 @@
-/** @file
- * @brief Piecewise function class
- *//*
+/**
+ * \file
+ * \brief Piecewise function class
+ *
  * Copyright 2007 Michael Sloan <mgsloan@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -28,28 +29,25 @@
  *
  */
 
-#ifndef LIB2GEOM_SEEN_PIECEWISE_H
-#define LIB2GEOM_SEEN_PIECEWISE_H
+#ifndef SEEN_GEOM_PW_SB_H
+#define SEEN_GEOM_PW_SB_H
 
+#include <2geom/sbasis.h>
 #include <vector>
 #include <map>
-#include <utility>
-#include <boost/concept_check.hpp>
-#include <2geom/concepts.h>
-#include <2geom/math-utils.h>
-#include <2geom/sbasis.h>
 
+#include <2geom/concepts.h>
+#include <2geom/isnan.h>
+#include <boost/concept_check.hpp>
 
 namespace Geom {
 /**
- * @brief Function defined as discrete pieces.
- *
+ * %Piecewise function class.
  * The Piecewise class manages a sequence of elements of a type as segments and
  * the ’cuts’ between them. These cuts are time values which separate the pieces.
  * This function representation allows for more interesting functions, as it provides
  * a viable output for operations such as inversion, which may require multiple
  * SBasis to properly invert the original.
- *
  * As for technical details, while the actual SBasis segments begin on the ﬁrst
  * cut and end on the last, the function is deﬁned throughout all inputs by ex-
  * tending the ﬁrst and last segments. The exact switching between segments is
@@ -64,8 +62,6 @@ namespace Geom {
  *      s_n,& c_n <= t
  *      \end{array}\right.
  * \f]
- *
- * @ingroup Fragments
  */
 template <typename T>
 class Piecewise {
@@ -96,8 +92,8 @@ class Piecewise {
 
     inline void reserve(unsigned i) { segs.reserve(i); cuts.reserve(i + 1); }
 
-    inline T const& operator[](unsigned i) const { return segs[i]; }
-    inline T&       operator[](unsigned i)       { return segs[i]; }
+    inline T operator[](unsigned i) const { return segs[i]; }
+    inline T &operator[](unsigned i) { return segs[i]; }
     inline output_type operator()(double t) const { return valueAt(t); }
     inline output_type valueAt(double t) const {
         unsigned n = segN(t);
@@ -143,13 +139,6 @@ class Piecewise {
         push_seg(s);
         push_cut(to);
     }
-#ifdef CPP11
-    inline void push(T &&s, double to) {
-        assert(cuts.size() - segs.size() == 1);
-        push_seg(s);
-        push_cut(to);
-    }
-#endif
     //Convenience/implementation hiding function to add cuts.
     inline void push_cut(double c) {
         ASSERT_INVARIANTS(cuts.empty() || c > cuts.back());
@@ -157,9 +146,6 @@ class Piecewise {
     }
     //Convenience/implementation hiding function to add segments.
     inline void push_seg(const T &s) { segs.push_back(s); }
-#ifdef CPP11
-    inline void push_seg(T &&s) { segs.emplace_back(s); }
-#endif
 
     /**Returns the segment index which corresponds to a 'global' piecewise time.
      * Also takes optional low/high parameters to expedite the search for the segment.
@@ -222,7 +208,7 @@ class Piecewise {
     inline void setDomain(Interval dom) {
         if(empty()) return;
         /* dom can not be empty
-        if(dom.empty()) {
+        if(dom.isEmpty()) {
             cuts.clear(); segs.clear();
             return;
         }*/
@@ -279,11 +265,6 @@ class Piecewise {
 
 };
 
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
 template<typename T>
 inline typename FragmentConcept<T>::BoundsType bounds_fast(const Piecewise<T> &f) {
     boost::function_requires<FragmentConcept<T> >();
@@ -295,11 +276,6 @@ inline typename FragmentConcept<T>::BoundsType bounds_fast(const Piecewise<T> &f
     return ret;
 }
 
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
 template<typename T>
 inline typename FragmentConcept<T>::BoundsType bounds_exact(const Piecewise<T> &f) {
     boost::function_requires<FragmentConcept<T> >();
@@ -311,11 +287,6 @@ inline typename FragmentConcept<T>::BoundsType bounds_exact(const Piecewise<T> &
     return ret;
 }
 
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
 template<typename T>
 inline typename FragmentConcept<T>::BoundsType bounds_local(const Piecewise<T> &f, const OptInterval &_m) {
     boost::function_requires<FragmentConcept<T> >();
@@ -337,10 +308,7 @@ inline typename FragmentConcept<T>::BoundsType bounds_local(const Piecewise<T> &
     return ret;
 }
 
-/**
- *  Returns a portion of a piece of a Piecewise<T>, given the piece's index and a to/from time.
- *  \relates Piecewise
- */
+//returns a portion of a piece of a Piecewise<T>, given the piece's index and a to/from time.
 template<typename T>
 T elem_portion(const Piecewise<T> &a, unsigned i, double from, double to) {
     assert(i < a.size());
@@ -356,8 +324,6 @@ T elem_portion(const Piecewise<T> &a, unsigned i, double from, double to) {
  * Piecewise<T> ac = a.partition(b.cuts);
  * Piecewise<T> bc = b.partition(a.cuts);
  * //ac.cuts should be equivalent to bc.cuts
- *
- * \relates Piecewise
  */
 template<typename T>
 Piecewise<T> partition(const Piecewise<T> &pw, std::vector<double> const &c) {
@@ -423,9 +389,8 @@ Piecewise<T> partition(const Piecewise<T> &pw, std::vector<double> const &c) {
     return ret;
 }
 
-/**
- *  Returns a Piecewise<T> with a defined domain of [min(from, to), max(from, to)].
- *  \relates Piecewise
+/**Piecewise<T> portion(const Piecewise<T> &pw, double from, double to);
+ * Returns a Piecewise<T> with a defined domain of [min(from, to), max(from, to)].
  */
 template<typename T>
 Piecewise<T> portion(const Piecewise<T> &pw, double from, double to) {
@@ -459,11 +424,6 @@ Piecewise<T> portion(const Piecewise<T> &pw, double from, double to) {
 }
 
 //TODO: seems like these should be mutating
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> remove_short_cuts(Piecewise<T> const &f, double tol) {
     if(f.empty()) return f;
@@ -479,11 +439,6 @@ Piecewise<T> remove_short_cuts(Piecewise<T> const &f, double tol) {
 }
 
 //TODO: seems like these should be mutating
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> remove_short_cuts_extending(Piecewise<T> const &f, double tol) {
     if(f.empty()) return f;
@@ -500,11 +455,6 @@ Piecewise<T> remove_short_cuts_extending(Piecewise<T> const &f, double tol) {
     return ret;
 }
 
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
 template<typename T>
 std::vector<double> roots(const Piecewise<T> &pw) {
     std::vector<double> ret;
@@ -517,11 +467,6 @@ std::vector<double> roots(const Piecewise<T> &pw) {
 }
 
 //IMPL: OffsetableConcept
-/**
- *  ...
- *  \return \f$ a + b = \f$
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> operator+(Piecewise<T> const &a, typename T::output_type b) {
     boost::function_requires<OffsetableConcept<T> >();
@@ -566,11 +511,6 @@ Piecewise<T>& operator-=(Piecewise<T>& a, typename T::output_type b) {
 }
 
 //IMPL: ScalableConcept
-/**
- *  ...
- *  \return \f$ -a = \f$
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> operator-(Piecewise<T> const &a) {
     boost::function_requires<ScalableConcept<T> >();
@@ -582,11 +522,6 @@ Piecewise<T> operator-(Piecewise<T> const &a) {
         ret.push_seg(- a[i]);
     return ret;
 }
-/**
- *  ...
- *  \return \f$ a * b = \f$
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> operator*(Piecewise<T> const &a, double b) {
     boost::function_requires<ScalableConcept<T> >();
@@ -600,11 +535,6 @@ Piecewise<T> operator*(Piecewise<T> const &a, double b) {
         ret.push_seg(a[i] * b);
     return ret;
 }
-/**
- *  ...
- *  \return \f$ a * b = \f$
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> operator*(Piecewise<T> const &a, T b) {
     boost::function_requires<ScalableConcept<T> >();
@@ -618,11 +548,6 @@ Piecewise<T> operator*(Piecewise<T> const &a, T b) {
         ret.push_seg(a[i] * b);
     return ret;
 }
-/**
- *  ...
- *  \return \f$ a / b = \f$
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> operator/(Piecewise<T> const &a, double b) {
     boost::function_requires<ScalableConcept<T> >();
@@ -657,11 +582,6 @@ Piecewise<T>& operator/=(Piecewise<T>& a, double b) {
 }
 
 //IMPL: AddableConcept
-/**
- *  ...
- *  \return \f$ a + b = \f$
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> operator+(Piecewise<T> const &a, Piecewise<T> const &b) {
     boost::function_requires<AddableConcept<T> >();
@@ -675,11 +595,6 @@ Piecewise<T> operator+(Piecewise<T> const &a, Piecewise<T> const &b) {
         ret.push_seg(pa[i] + pb[i]);
     return ret;
 }
-/**
- *  ...
- *  \return \f$ a - b = \f$
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> operator-(Piecewise<T> const &a, Piecewise<T> const &b) {
     boost::function_requires<AddableConcept<T> >();
@@ -704,11 +619,6 @@ inline Piecewise<T>& operator-=(Piecewise<T> &a, Piecewise<T> const &b) {
     return a;
 }
 
-/**
- *  ...
- *  \return \f$ a \cdot b = \f$
- *  \relates Piecewise
- */
 template<typename T1,typename T2>
 Piecewise<T2> operator*(Piecewise<T1> const &a, Piecewise<T2> const &b) {
     //function_requires<MultiplicableConcept<T1> >();
@@ -725,11 +635,6 @@ Piecewise<T2> operator*(Piecewise<T1> const &a, Piecewise<T2> const &b) {
     return ret;
 }
 
-/**
- *  ...
- *  \return \f$ a \cdot b \f$
- *  \relates Piecewise
- */
 template<typename T>
 inline Piecewise<T>& operator*=(Piecewise<T> &a, Piecewise<T> const &b) {
     a = a * b;
@@ -756,14 +661,9 @@ int compose_findSegIdx(std::map<double,unsigned>::iterator  const &cut,
                        std::vector<double>  const &levels,
                        SBasis const &g);
 
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
+//TODO: add concept check
 template<typename T>
 Piecewise<T> compose(Piecewise<T> const &f, SBasis const &g){
-    /// \todo add concept check
     Piecewise<T> result;
     if (f.empty()) return result;
     if (g.isZero()) return Piecewise<T>(f(0));
@@ -797,27 +697,19 @@ Piecewise<T> compose(Piecewise<T> const &f, SBasis const &g){
         double t0=(*cut).first;
         double t1=(*next).first;
 
-        if (!are_near(t0,t1,EPSILON*EPSILON)) { // prevent adding cuts that are extremely close together and that may cause trouble with rounding e.g. when reversing the path
-            SBasis sub_g=compose(g, Linear(t0,t1));
-            sub_g=compose(Linear(-f.cuts[idx]/(f.cuts[idx+1]-f.cuts[idx]),
-                                 (1-f.cuts[idx])/(f.cuts[idx+1]-f.cuts[idx])),sub_g);
-            result.push(compose(f[idx],sub_g),t1);
-        }
-
+        SBasis sub_g=compose(g, Linear(t0,t1));
+        sub_g=compose(Linear(-f.cuts[idx]/(f.cuts[idx+1]-f.cuts[idx]),
+                             (1-f.cuts[idx])/(f.cuts[idx+1]-f.cuts[idx])),sub_g);
+        result.push(compose(f[idx],sub_g),t1);
         cut++;
         next++;
     }
     return(result);
 }
 
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
+//TODO: add concept check for following composition functions
 template<typename T>
 Piecewise<T> compose(Piecewise<T> const &f, Piecewise<SBasis> const &g){
-/// \todo add concept check
   Piecewise<T> result;
   for(unsigned i = 0; i < g.segs.size(); i++){
       Piecewise<T> fgi=compose(f, g.segs[i]);
@@ -829,7 +721,6 @@ Piecewise<T> compose(Piecewise<T> const &f, Piecewise<SBasis> const &g){
 
 /*
 Piecewise<D2<SBasis> > compose(D2<SBasis2d> const &sb2d, Piecewise<D2<SBasis> > const &pwd2sb){
-/// \todo add concept check
   Piecewise<D2<SBasis> > result;
   result.push_cut(0.);
   for(unsigned i = 0; i < pwd2sb.size(); i++){
@@ -838,26 +729,11 @@ Piecewise<D2<SBasis> > compose(D2<SBasis2d> const &sb2d, Piecewise<D2<SBasis> > 
   return result;
 }*/
 
-/** Compose an SBasis with the inverse of another.
- * WARNING: It's up to the user to check that the second SBasis is indeed
- * invertible (i.e. strictly increasing or decreasing).
- *  \return \f$ f \cdot g^{-1} \f$
- *  \relates Piecewise
- */
-Piecewise<SBasis> pw_compose_inverse(SBasis const &f, SBasis const &g, unsigned order, double zero);
-
-
-
 template <typename T>
 Piecewise<T> Piecewise<T>::operator()(SBasis f){return compose((*this),f);}
 template <typename T>
 Piecewise<T> Piecewise<T>::operator()(Piecewise<SBasis>f){return compose((*this),f);}
 
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> integral(Piecewise<T> const &a) {
     Piecewise<T> result;
@@ -872,11 +748,6 @@ Piecewise<T> integral(Piecewise<T> const &a) {
     return result;
 }
 
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> derivative(Piecewise<T> const &a) {
     Piecewise<T> result;
@@ -892,19 +763,6 @@ std::vector<double> roots(Piecewise<SBasis> const &f);
 
 std::vector<std::vector<double> >multi_roots(Piecewise<SBasis> const &f, std::vector<double> const &values);
 
-//TODO: implement level_sets directly for pwsb instead of sb (and derive it fo sb).
-//It should be faster than the reverse as the algorithm may jump over full cut intervals.
-std::vector<Interval> level_set(Piecewise<SBasis> const &f, Interval const &level, double tol=1e-5);
-std::vector<Interval> level_set(Piecewise<SBasis> const &f, double v, double vtol, double tol=1e-5);
-//std::vector<Interval> level_sets(Piecewise<SBasis> const &f, std::vector<Interval> const &levels, double tol=1e-5);
-//std::vector<Interval> level_sets(Piecewise<SBasis> const &f, std::vector<double> &v, double vtol, double tol=1e-5);
-
-
-/**
- *  ...
- *  \return ...
- *  \relates Piecewise
- */
 template<typename T>
 Piecewise<T> reverse(Piecewise<T> const &f) {
     Piecewise<T> ret = Piecewise<T>();
@@ -936,7 +794,7 @@ Piecewise<T> lerp(double t, Piecewise<T> const &a, Piecewise<T> b) {
 }
 
 }
-#endif //LIB2GEOM_SEEN_PIECEWISE_H
+#endif //SEEN_GEOM_PW_SB_H
 /*
   Local Variables:
   mode:c++
@@ -946,4 +804,4 @@ Piecewise<T> lerp(double t, Piecewise<T> const &a, Piecewise<T> b) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

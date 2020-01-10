@@ -5,10 +5,8 @@
 /*
  * Authors:
  *   MenTaLguY <mental@rydia.net>
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2004 MenTaLguY
- * Copyright (C) 2011 Jon A. Cruz
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -16,13 +14,11 @@
 #ifndef SEEN_INKSCAPE_MESSAGE_STACK_H
 #define SEEN_INKSCAPE_MESSAGE_STACK_H
 
-#include <cstdarg>
-#include <cstddef>
-#include <glib.h> // G_GNUC_PRINTF is the only thing worth having from here
-#include <glibmm/ustring.h>
+#include <stddef.h>
 #include <sigc++/sigc++.h>
-
-#include "inkgc/gc-managed.h"
+#include <glib.h>
+#include <stdarg.h>
+#include "gc-managed.h"
 #include "gc-finalized.h"
 #include "gc-anchored.h"
 #include "message.h"
@@ -62,14 +58,14 @@ public:
     /** @brief returns the text of the message currently at the top of
       *        the stack
       */
-    char const *currentMessage() {
+    gchar const *currentMessage() {
         return _messages ? _messages->message : NULL;
     }
 
     /** @brief connects to the "changed" signal which is emitted whenever
       *        the topmost message on the stack changes.
       */
-    sigc::connection connectChanged(sigc::slot<void, MessageType, char const *> slot)
+    sigc::connection connectChanged(sigc::slot<void, MessageType, gchar const *> slot)
     {
         return _changed_signal.connect(slot);
     }
@@ -81,7 +77,7 @@ public:
       *
       * @return the id of the pushed message
       */
-    MessageId push(MessageType type, char const *message);
+    MessageId push(MessageType type, gchar const *message);
 
     /** @brief pushes a message onto the stack using printf-like formatting
       *
@@ -90,7 +86,7 @@ public:
       *
       * @return the id of the pushed message
       */
-    MessageId pushF(MessageType type, char const *format, ...) G_GNUC_PRINTF(3,4);
+    MessageId pushF(MessageType type, gchar const *format, ...) G_GNUC_PRINTF(3,4);
 
     /** @brief pushes a message onto the stack using printf-like formatting,
       *        using a stdarg argument list
@@ -101,7 +97,7 @@ public:
       *
       * @return the id of the pushed message
       */
-    MessageId pushVF(MessageType type, char const *format, va_list args);
+    MessageId pushVF(MessageType type, gchar const *format, va_list args);
 
     /** @brief removes a message from the stack, given its id
       *
@@ -112,26 +108,14 @@ public:
       */
     void cancel(MessageId id);
 
-    /**
-     * Temporarily pushes a message onto the stack.
-     *
-     * @param type the message type
-     * @param message the message text
-     *
-     * @return the id of the pushed message
-     */
-    MessageId flash(MessageType type, char const *message);
-
-    /**
-     * Temporarily pushes a message onto the stack.
-     *
-     * @param type the message type
-     * @param message the message text
-     *
-     * @return the id of the pushed message
-     */
-    MessageId flash(MessageType type, Glib::ustring const &message);
-
+    /** @brief temporarily pushes a message onto the stack
+      *
+      * @param type the message type
+      * @param message the message text
+      *
+      * @return the id of the pushed message
+      */
+    MessageId flash(MessageType type, gchar const *message);
 
     /** @brief temporarily pushes a message onto the stack using
       *        printf-like formatting
@@ -141,7 +125,7 @@ public:
       *
       * @return the id of the pushed message
       */
-    MessageId flashF(MessageType type, char const *format, ...) G_GNUC_PRINTF(3,4);
+    MessageId flashF(MessageType type, gchar const *format, ...) G_GNUC_PRINTF(3,4);
 
     /** @brief temporarily pushes a message onto the stack using
       *        printf-like formatting, using a stdarg argument list
@@ -152,7 +136,7 @@ public:
       *
       * @return the id of the pushed message
       */
-    MessageId flashVF(MessageType type, char const *format, va_list args);
+    MessageId flashVF(MessageType type, gchar const *format, va_list args);
 
 private:
     struct Message {
@@ -168,13 +152,13 @@ private:
     void operator=(MessageStack const &); // no assign
 
     /// pushes a message onto the stack with an optional timeout
-    MessageId _push(MessageType type, unsigned int lifetime, char const *message);
+    MessageId _push(MessageType type, guint lifetime, gchar const *message);
 
     Message *_discard(Message *m); ///< frees a message struct and returns the next such struct in the list
     void _emitChanged(); ///< emits the "changed" signal
-    static int _timeout(void* data); ///< callback to expire flashed messages
+    static gboolean _timeout(gpointer data); ///< callback to expire flashed messages
 
-    sigc::signal<void, MessageType, char const *> _changed_signal;
+    sigc::signal<void, MessageType, gchar const *> _changed_signal;
     Message *_messages; ///< the stack of messages as a linked list
     MessageId _next_id; ///< the next message id to assign
 };
@@ -191,4 +175,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

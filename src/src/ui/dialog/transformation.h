@@ -12,15 +12,20 @@
 #define INKSCAPE_UI_DIALOG_TRANSFORMATION_H
 
 
+
 #include <gtkmm/notebook.h>
 #include <glibmm/i18n.h>
 
+
+
 #include "ui/widget/panel.h"
+#include "application/application.h"
 #include "ui/widget/notebook-page.h"
 #include "ui/widget/scalar-unit.h"
 #include "ui/widget/imageicon.h"
 #include "ui/widget/button.h"
-#include "ui/dialog/desktop-tracker.h"
+
+
 
 
 namespace Inkscape {
@@ -28,36 +33,15 @@ namespace UI {
 namespace Dialog {
 
 
-/**
- * Transformation dialog.
- * 
- * The transformation dialog allows to modify Inkscape objects.
- * 5 transformation operations are currently possible: move, scale,
- * rotate, skew and matrix. 
- */
+
+
 class Transformation : public UI::Widget::Panel
 {
 
 public:
 
     /**
-     * Constructor for Transformation.
-     * 
-     * This does the initialization
-     * and layout of the dialog used for transforming SVG objects.  It
-     * consists of 5 pages for the 5 operations it handles:
-     * 'Move' allows x,y translation of SVG objects
-     * 'Scale' allows linear resizing of SVG objects
-     * 'Rotate' allows rotating SVG objects by a degree
-     * 'Skew' allows skewing SVG objects
-     * 'Matrix' allows applying a generic affine transform on SVG objects,
-     *     with the user specifying the 6 degrees of freedom manually.
-     *
-     * The dialog is implemented as a Gtk::Notebook with five pages.
-     * The pages are implemented using Inkscape's NotebookPage which
-     * is used to help make sure all of Inkscape's notebooks follow
-     * the same style.  We then populate the pages with our widgets,
-     * we use the ScalarUnit class for this.
+     * Create a new transform
      */
     Transformation();
 
@@ -145,17 +129,10 @@ protected:
     UI::Widget::Scalar            _scalar_transform_e;
     UI::Widget::Scalar            _scalar_transform_f;
 
-    Gtk::RadioButton         _counterclockwise_rotate;
-    Gtk::RadioButton         _clockwise_rotate;
-
     UI::Widget::CheckButton  _check_move_relative;
     UI::Widget::CheckButton  _check_scale_proportional;
     UI::Widget::CheckButton  _check_apply_separately;
     UI::Widget::CheckButton  _check_replace_matrix;
-
-    SPDesktop *_desktop;
-    DesktopTracker _deskTrack;
-    sigc::connection _desktopChangeConn;
 
     /**
      * Layout the GUI components, and prepare for use
@@ -169,11 +146,13 @@ protected:
     virtual void _apply();
     void presentPage(PageType page);
 
-#if WITH_GTKMM_3_0
-    void onSwitchPage(Gtk::Widget *page, guint pagenum);
-#else
-    void onSwitchPage(GtkNotebookPage *page, guint pagenum);
-#endif
+    void onSelectionChanged(Inkscape::NSApplication::Application *inkscape,
+                            Inkscape::Selection *selection);
+    void onSelectionModified(Inkscape::NSApplication::Application *inkscape,
+                             Inkscape::Selection *selection,
+                             int unsigned flags);
+    void onSwitchPage(GtkNotebookPage *page,
+                    guint pagenum);
 
     /**
      * Callbacks for when a user changes values on the panels
@@ -183,8 +162,6 @@ protected:
     void onScaleXValueChanged();
     void onScaleYValueChanged();
     void onRotateValueChanged();
-    void onRotateCounterclockwiseClicked();
-    void onRotateClockwiseClicked();
     void onSkewValueChanged();
     void onTransformValueChanged();
     void onReplaceMatrixToggled();
@@ -215,8 +192,6 @@ protected:
     void applyPageSkew(Inkscape::Selection *);
     void applyPageTransform(Inkscape::Selection *);
 
-    void setTargetDesktop(SPDesktop* desktop);
-
 private:
 
     /**
@@ -232,9 +207,6 @@ private:
     Gtk::Button *applyButton;
     Gtk::Button *resetButton;
     Gtk::Button *cancelButton;
-
-    sigc::connection _selChangeConn;
-    sigc::connection _selModifyConn;
 };
 
 
@@ -260,4 +232,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

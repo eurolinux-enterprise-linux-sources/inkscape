@@ -49,15 +49,15 @@ public:
     LPEVonKoch(LivePathEffectObject *lpeobject);
     virtual ~LPEVonKoch();
 
-    virtual Geom::PathVector doEffect_path (Geom::PathVector const & path_in);
+    virtual std::vector<Geom::Path> doEffect_path (std::vector<Geom::Path> const & path_in);
 
-    virtual void resetDefaults(SPItem const* item);
+    virtual void resetDefaults(SPItem * item);
 
-    virtual void doBeforeEffect(SPLPEItem const* item);
+    virtual void doBeforeEffect(SPLPEItem * item);
 
     //Usefull??
     //    protected: 
-    //virtual void addCanvasIndicators(SPLPEItem const *lpeitem, std::vector<Geom::PathVector> &hp_vec); 
+    //virtual void addCanvasIndicators(SPLPEItem *lpeitem, std::vector<Geom::PathVector> &hp_vec); 
 
 private:
     ScalarParam  nbgenerations;

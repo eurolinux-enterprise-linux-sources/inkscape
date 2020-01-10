@@ -15,15 +15,21 @@
 # include "config.h"
 #endif
 
-#include <fstream>
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <glibmm/fileutils.h>
+
 #include <glibmm/ustring.h>
 #include <gtk/gtk.h>
 
 #include "preferences.h"
 #include "sys.h"
+
+#ifdef WIN32
+// For now to get at is_os_wide().
+#include "extension/internal/win32.h"
+using Inkscape::Extension::Internal::PrintWin32;
+#endif // WIN32
 
 //#define INK_DUMP_FILENAME_CONV 1
 #undef INK_DUMP_FILENAME_CONV
@@ -116,10 +122,7 @@ FILE *Inkscape::IO::fopen_utf8name( char const *utf8name, char const *mode )
     }
 #else
     Glib::ustring how( mode );
-    if ( how.find("b") == Glib::ustring::npos )
-    {
-        how.append("b");
-    }
+    how.append("b");
     DEBUG_MESSAGE( dumpOne, "   calling is_os_wide()       ( '%s', '%s' )[%d]", utf8name, mode, (counter++) );
 
     fp = g_fopen(utf8name, how.c_str());
@@ -229,11 +232,9 @@ bool Inkscape::IO::file_is_writable( char const *utf8name)
             filename = g_filename_from_utf8 ( utf8name, -1, NULL, NULL, NULL );
         }
         if ( filename ) {
-            GStatBuf st;
-            if (g_file_test (filename, G_FILE_TEST_EXISTS)){ 
-                if (g_lstat (filename, &st) == 0) {
-                    success = ((st.st_mode & S_IWRITE) != 0);
-                }
+            struct stat st;
+            if(g_lstat (filename, &st) == 0) {
+                success = ((st.st_mode & S_IWRITE) != 0);
             }
             g_free(filename);
             filename = NULL;
@@ -243,40 +244,6 @@ bool Inkscape::IO::file_is_writable( char const *utf8name)
     }
 
     return success;
-}
-
-/**Checks if directory of file exists, useful
- * because inkscape doesn't create directories.*/
-bool Inkscape::IO::file_directory_exists( char const *utf8name ){
-    bool exists = true;
-
-    if ( utf8name) {
-        gchar *filename = NULL;
-        if (utf8name && !g_utf8_validate(utf8name, -1, NULL)) {
-            /* FIXME: Trying to guess whether or not a filename is already in utf8 is unreliable.
-               If any callers pass non-utf8 data (e.g. using g_get_home_dir), then change caller to
-               use simple g_file_test.  Then add g_return_val_if_fail(g_utf_validate(...), false)
-               to beginning of this function. */
-            filename = g_strdup(utf8name);
-            // Looks like g_get_home_dir isn't safe.
-            //g_warning("invalid UTF-8 detected internally. HUNT IT DOWN AND KILL IT!!!");
-        } else {
-            filename = g_filename_from_utf8 ( utf8name, -1, NULL, NULL, NULL );
-        }
-        if ( filename ) {
-            gchar *dirname = g_path_get_dirname(filename);
-            exists = Inkscape::IO::file_test( dirname, G_FILE_TEST_EXISTS);
-            g_free(filename);
-            g_free(dirname);
-            filename = NULL;
-            dirname = NULL;
-        } else {
-            g_warning( "Unable to convert filename in IO:file_test" );
-        }
-    }
-
-    return exists;
-
 }
 
 /** Wrapper around g_dir_open, but taking a utf8name as first argument. */
@@ -393,15 +360,6 @@ gchar* Inkscape::IO::sanitizeString( gchar const * str )
         }
     }
     return result;
-}
-
-/* 
- * Returns the file extension of a path/filename
- */
-Glib::ustring Inkscape::IO::get_file_extension(Glib::ustring path)
-{
-    Glib::ustring::size_type period_location = path.find_last_of(".");
-    return path.substr(period_location);
 }
 
 /*

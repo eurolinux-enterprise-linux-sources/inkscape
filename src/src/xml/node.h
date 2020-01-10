@@ -18,18 +18,13 @@
 #ifndef SEEN_INKSCAPE_XML_NODE_H
 #define SEEN_INKSCAPE_XML_NODE_H
 
-#include <glibmm/ustring.h>
+#include <glib.h>
 #include "gc-anchored.h"
 #include "util/list.h"
+#include "xml/xml-forward.h"
 
 namespace Inkscape {
 namespace XML {
-
-struct AttributeRecord;
-struct Document;
-class  Event;
-class  NodeObserver;
-struct NodeEventVector;
 
 /**
  * @brief Enumeration containing all supported node types.
@@ -99,7 +94,7 @@ public:
      *
      * @return Name for element nodes, NULL for others
      */
-    virtual char const *name() const=0;
+    virtual gchar const *name() const=0;
     /**
      * @brief Get the integer code corresponding to the node's name
      * @return GQuark code corresponding to the name
@@ -130,7 +125,7 @@ public:
      *
      * @return The node's content
      */
-    virtual char const *content() const=0;
+    virtual gchar const *content() const=0;
     
     /**
      * @brief Get the string representation of a node's attribute
@@ -143,7 +138,7 @@ public:
      *
      * @param key The name of the node's attribute
      */
-    virtual char const *attribute(char const *key) const=0;
+    virtual gchar const *attribute(gchar const *key) const=0;
     
     /**
      * @brief Get a list of the node's attributes
@@ -167,7 +162,7 @@ public:
      * @param partial_name The string to match against all attributes
      * @return true if there is such an attribute, false otherwise
      */
-    virtual bool matchAttributeName(char const *partial_name) const=0;
+    virtual bool matchAttributeName(gchar const *partial_name) const=0;
 
     /*@}*/
     
@@ -192,9 +187,8 @@ public:
      *
      * @param value The node's new content
      */
-    virtual void setContent(char const *value)=0;
+    virtual void setContent(gchar const *value)=0;
     
-    //@{
     /**
      * @brief Change an attribute of this node
      *
@@ -204,20 +198,8 @@ public:
      * @param value The new value of the attribute
      * @param is_interactive Ignored
      */
-    virtual void setAttribute(char const *key, char const *value, bool is_interactive=false)=0;
-
-    void setAttribute(char const *key, Glib::ustring const &value, bool is_interactive=false)
-    {
-        setAttribute(key, value.empty() ? NULL : value.c_str(), is_interactive);
-    }
-
-    void setAttribute(Glib::ustring const &key, Glib::ustring const &value, bool is_interactive=false)
-    {
-        setAttribute( key.empty()   ? NULL : key.c_str(),
-                      value.empty() ? NULL : value.c_str(), is_interactive);
-    }
-    //@}
-
+    virtual void setAttribute(gchar const *key, gchar const *value, bool is_interactive=false)=0;
+    
     /**
      * @brief Directly set the integer GQuark code for the name of the node
      *
@@ -398,7 +380,7 @@ public:
      * @param src The node to merge into this node
      * @param key The attribute to use as the identity attribute
      */
-    virtual void mergeFrom(Node const *src, char const *key)=0;
+    virtual void mergeFrom(Node const *src, gchar const *key)=0;
     
     /*@}*/
 
@@ -469,8 +451,6 @@ public:
      * @deprecated Use synthesizeEvents(NodeObserver &) instead
      */
     virtual void synthesizeEvents(NodeEventVector const *vector, void *data)=0;
-
-    virtual void recursivePrintTree(unsigned level)=0;
     
     /*@}*/
 
@@ -491,4 +471,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

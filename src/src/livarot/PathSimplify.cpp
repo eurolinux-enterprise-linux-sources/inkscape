@@ -7,7 +7,7 @@
  */
 
 #include <glib.h>
-#include <2geom/affine.h>
+#include <libnr/nr-point-matrix-ops.h>
 #include "livarot/Path.h"
 #include "livarot/path-description.h"
 
@@ -67,14 +67,13 @@ void Path::Simplify(double treshhold)
 }
 
 
-#if 0
 // dichomtomic method to get distance to curve approximation
 // a real polynomial solver would get the minimum more efficiently, but since the polynom
 // would likely be of degree >= 5, that would imply using some generic solver, liek using the sturm metod
-static double RecDistanceToCubic(Geom::Point const &iS, Geom::Point const &isD,
-                                 Geom::Point const &iE, Geom::Point const &ieD,
-                                 Geom::Point &pt, double current, int lev, double st, double et)
-{
+double RecDistanceToCubic(Geom::Point const &iS, Geom::Point const &isD, 
+                          Geom::Point const &iE, Geom::Point const &ieD,
+                          Geom::Point &pt, double current, int lev, double st, double et)
+{	
     if ( lev <= 0 ) {
         return current;
     }
@@ -115,9 +114,9 @@ static double RecDistanceToCubic(Geom::Point const &iS, Geom::Point const &isD,
     
     return current;
 }
-#endif
 
-static double DistanceToCubic(Geom::Point const &start, PathDescrCubicTo res, Geom::Point &pt)
+
+double DistanceToCubic(Geom::Point const &start, PathDescrCubicTo res, Geom::Point &pt)
 {
     Geom::Point const sp = pt - start;
     Geom::Point const ep = pt - res.p;
@@ -128,7 +127,7 @@ static double DistanceToCubic(Geom::Point const &start, PathDescrCubicTo res, Ge
     }
     
     Geom::Point seg = res.p - start;
-    nnle = Geom::cross(sp, seg);
+    nnle = NR::cross(seg, sp);
     nnle *= nnle;
     nnle /= Geom::dot(seg, seg);
     if ( nnle < nle ) {
@@ -253,7 +252,7 @@ bool Path::FitCubic(Geom::Point const &start, PathDescrCubicTo &res,
     Geom::Point const end = res.p;
     
     // la matrice tNN
-    Geom::Affine M(0, 0, 0, 0, 0, 0);
+    Geom::Matrix M(0, 0, 0, 0, 0, 0);
     for (int i = 1; i < nbPt - 1; i++) {
         M[0] += N13(tk[i]) * N13(tk[i]);
         M[1] += N23(tk[i]) * N13(tk[i]);
@@ -268,7 +267,7 @@ bool Path::FitCubic(Geom::Point const &start, PathDescrCubicTo &res,
         return false;
     }
     
-    Geom::Affine const iM = M.inverse();
+    Geom::Matrix const iM = M.inverse();
     M = iM;
   
     // phase 1: abcisses
@@ -1396,4 +1395,4 @@ void Path::FlushPendingAddition(Path *dest, PathDescr *lastAddition,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

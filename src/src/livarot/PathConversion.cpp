@@ -6,11 +6,12 @@
  *
  */
 
-#include <glib.h>
-#include <2geom/transforms.h>
 #include "Path.h"
 #include "Shape.h"
 #include "livarot/path-description.h"
+
+#include <libnr/nr-matrix.h>
+#include <2geom/transforms.h>
 
 /*
  * path description -> polyline
@@ -119,11 +120,14 @@ void Path::ConvertWithBackData(double treshhold)
 
                 if ( nbInterm >= 1 ) {
                     Geom::Point bx = curX;
-                    Geom::Point dx = nData->p;
-                    Geom::Point cx = 2 * bx - dx;
+                    Geom::Point cx = curX;
+                    Geom::Point dx = curX;
 
+                    dx = nData->p;
                     ip++;
                     nData = dynamic_cast<PathDescrIntermBezierTo *>(descr_cmd[ip]);
+
+                    cx = 2 * bx - dx;
 
                     for (int k = 0; k < nbInterm - 1; k++) {
                         bx = cx;
@@ -320,11 +324,14 @@ void Path::Convert(double treshhold)
                     RecBezierTo(midX, curX, nextX, treshhold, 8);
                 } else if ( nbInterm > 1 ) {
                     Geom::Point bx = curX;
-                    Geom::Point dx = nData->p;
-                    Geom::Point cx = 2 * bx - dx;
+                    Geom::Point cx = curX;
+                    Geom::Point dx = curX;
 
+                    dx = nData->p;
                     ip++;
                     nData = dynamic_cast<PathDescrIntermBezierTo *>(descr_cmd[ip]);
+
+                    cx = 2 * bx - dx;
 
                     for (int k = 0; k < nbInterm - 1; k++) {
                         bx = cx;
@@ -395,6 +402,282 @@ void Path::Convert(double treshhold)
         curX = nextX;
     }
 }
+
+#define POINT_RELATION_TO_AREA(pt, area) ((pt)[0] < (area)->x0 ? 1 : ((pt)[0] > (area)->x1 ? 2 : ((pt)[1] < (area)->y0 ? 3 : ((pt)[1] > (area)->y1 ? 4 : 0))))
+
+void Path::Convert(NRRectL *area, double treshhold)
+{
+    if ( descr_flags & descr_adding_bezier ) {
+        CancelBezier();
+    }
+
+    if ( descr_flags & descr_doing_subpath ) {
+        CloseSubpath();
+    }
+
+    SetBackData(false);
+    ResetPoints();
+    if ( descr_cmd.empty() ) {
+        return;
+    }
+
+    Geom::Point curX;
+    int curP = 1;
+    int lastMoveTo = 0;
+    short last_point_relation = 0;
+    short curent_point_relation = 0;
+    bool last_start_elimination = false;
+    bool start_elimination = false;
+    bool replace = false;
+
+    // first point
+    {
+        int const firstTyp = descr_cmd[0]->getType();
+        if ( firstTyp == descr_moveto ) {
+            curX = dynamic_cast<PathDescrMoveTo *>(descr_cmd[0])->p;
+        } else {
+            curP = 0;
+            curX[0] = curX[1] = 0;
+        }
+
+        last_point_relation = POINT_RELATION_TO_AREA(curX, area);
+        lastMoveTo = AddPoint(curX, true);
+    }
+    descr_cmd[0]->associated = lastMoveTo;
+
+    // process nodes one by one
+    while ( curP < int(descr_cmd.size()) ) {
+
+        int const nType = descr_cmd[curP]->getType();
+        Geom::Point nextX;
+
+        switch (nType) {
+            case descr_forced: {
+                descr_cmd[curP]->associated = AddForcedPoint(curX);
+                last_point_relation = 0;
+                curP++;
+                break;
+            }
+
+            case descr_moveto: {
+                PathDescrMoveTo *nData = dynamic_cast<PathDescrMoveTo *>(descr_cmd[curP]);
+                nextX = nData->p;
+                lastMoveTo = AddPoint(nextX, true);
+                descr_cmd[curP]->associated = lastMoveTo;
+
+                last_point_relation = POINT_RELATION_TO_AREA(nextX, area);
+                start_elimination = false;
+
+                curP++;
+                break;
+            }
+
+            case descr_close: {
+                nextX = pts[lastMoveTo].p;
+                descr_cmd[curP]->associated = AddPoint(nextX, false);
+                if ( descr_cmd[curP]->associated < 0 ) {
+                    if ( curP == 0 ) {
+                        descr_cmd[curP]->associated = 0;
+                    } else {
+                        descr_cmd[curP]->associated = descr_cmd[curP - 1]->associated;
+                    }
+                }
+                if ( descr_cmd[curP]->associated > 0 ) {
+                    pts[descr_cmd[curP]->associated].closed = true;
+                }
+                last_point_relation = 0;
+                curP++;
+                break;
+            }
+
+            case descr_lineto: {
+                PathDescrLineTo *nData = dynamic_cast<PathDescrLineTo *>(descr_cmd[curP]);
+                nextX = nData->p;
+                curent_point_relation = POINT_RELATION_TO_AREA(nextX, area);
+                replace = false;
+                last_start_elimination = start_elimination;
+                if (curent_point_relation > 0 && curent_point_relation == last_point_relation) {
+                    if (!start_elimination) {
+                        start_elimination = true;
+                    } else {
+                        replace = true;
+                        descr_cmd[curP]->associated = ReplacePoint(nextX);
+                    }
+                } else {
+                    start_elimination = false;
+                }
+
+                if (!replace) {
+                    descr_cmd[curP]->associated = AddPoint(nextX, false);
+                }
+
+                if ( descr_cmd[curP]->associated < 0 ) {
+                    // point is not added as position is equal to the last added
+                    start_elimination = last_start_elimination;
+                    if ( curP == 0 ) {
+                        descr_cmd[curP]->associated = 0;
+                    } else {
+                        descr_cmd[curP]->associated = descr_cmd[curP - 1]->associated;
+                    }
+                }
+                last_point_relation = curent_point_relation;
+                curP++;
+                break;
+            }
+
+            case descr_cubicto: {
+                PathDescrCubicTo *nData = dynamic_cast<PathDescrCubicTo *>(descr_cmd[curP]);
+                nextX = nData->p;
+
+                curent_point_relation = POINT_RELATION_TO_AREA(nextX, area);
+                replace = false;
+                last_start_elimination = start_elimination;
+                if (curent_point_relation > 0 && curent_point_relation == last_point_relation &&
+                    curent_point_relation == POINT_RELATION_TO_AREA(curX + (nData->start), area) &&
+                    curent_point_relation == POINT_RELATION_TO_AREA(nextX + (nData->end), area))
+                {
+                    if (!start_elimination) {
+                        start_elimination = true;
+                    } else {
+                        replace = true;
+                        descr_cmd[curP]->associated = ReplacePoint(nextX);
+                    }
+                } else {
+                    start_elimination = false;
+                }
+
+                if (!replace) {
+                    RecCubicTo(curX, nData->start, nextX, nData->end, treshhold, 8);
+                    descr_cmd[curP]->associated = AddPoint(nextX,false);
+                }
+
+                if ( descr_cmd[curP]->associated < 0 ) {
+                    // point is not added as position is equal to the last added
+                    start_elimination = last_start_elimination;
+                    if ( curP == 0 ) {
+                        descr_cmd[curP]->associated = 0;
+                    } else {
+                        descr_cmd[curP]->associated = descr_cmd[curP - 1]->associated;
+                    }
+                }
+                last_point_relation = curent_point_relation;
+                curP++;
+                break;
+            }
+
+            case descr_arcto: {
+                PathDescrArcTo *nData = dynamic_cast<PathDescrArcTo *>(descr_cmd[curP]);
+                nextX = nData->p;
+                DoArc(curX, nextX, nData->rx, nData->ry, nData->angle, nData->large, nData->clockwise, treshhold);
+                descr_cmd[curP]->associated = AddPoint(nextX, false);
+                if ( descr_cmd[curP]->associated < 0 ) {
+                    if ( curP == 0 ) {
+                        descr_cmd[curP]->associated = 0;
+                    } else {
+                        descr_cmd[curP]->associated = descr_cmd[curP - 1]->associated;
+                    }
+                }
+                last_point_relation = 0;
+
+                curP++;
+                break;
+            }
+
+            case descr_bezierto: {
+                PathDescrBezierTo *nBData = dynamic_cast<PathDescrBezierTo *>(descr_cmd[curP]);
+                int nbInterm = nBData->nb;
+                nextX = nBData->p;
+                int curBD = curP;
+
+                curP++;
+                int ip = curP;
+                PathDescrIntermBezierTo *nData = dynamic_cast<PathDescrIntermBezierTo *>(descr_cmd[ip]);
+
+                if ( nbInterm == 1 ) {
+                    Geom::Point const midX = nData->p;
+                    RecBezierTo(midX, curX, nextX, treshhold, 8);
+                } else if ( nbInterm > 1 ) {
+                    Geom::Point bx = curX;
+                    Geom::Point cx = curX;
+                    Geom::Point dx = curX;
+
+                    dx = nData->p;
+                    ip++;
+                    nData = dynamic_cast<PathDescrIntermBezierTo *>(descr_cmd[ip]);
+
+                    cx = 2 * bx - dx;
+
+                    for (int k = 0; k < nbInterm - 1; k++) {
+                        bx = cx;
+                        cx = dx;
+
+                        dx = nData->p;
+                        ip++;
+                        nData = dynamic_cast<PathDescrIntermBezierTo *>(descr_cmd[ip]);
+
+                        Geom::Point stx = (bx + cx) / 2;
+                        if ( k > 0 ) {
+                            descr_cmd[ip - 2]->associated = AddPoint(stx, false);
+                            if ( descr_cmd[ip - 2]->associated < 0 ) {
+                                if ( curP == 0 ) {
+                                    descr_cmd[ip - 2]->associated = 0;
+                                } else {
+                                    descr_cmd[ip - 2]->associated = descr_cmd[ip - 3]->associated;
+                                }
+                            }
+                        }
+
+                        {
+                            Geom::Point const mx = (cx + dx) / 2;
+                            RecBezierTo(cx, stx, mx, treshhold, 8);
+                        }
+                    }
+
+                    {
+                        bx = cx;
+                        cx = dx;
+
+                        dx = nextX;
+                        dx = 2 * dx - cx;
+
+                        Geom::Point stx = (bx + cx) / 2;
+
+                        descr_cmd[ip - 1]->associated = AddPoint(stx, false);
+                        if ( descr_cmd[ip - 1]->associated < 0 ) {
+                            if ( curP == 0 ) {
+                                descr_cmd[ip - 1]->associated = 0;
+                            } else {
+                                descr_cmd[ip - 1]->associated = descr_cmd[ip - 2]->associated;
+                            }
+                        }
+
+                        {
+                            Geom::Point mx = (cx + dx) / 2;
+                            RecBezierTo(cx, stx, mx, treshhold, 8);
+                        }
+                    }
+                }
+
+                descr_cmd[curBD]->associated = AddPoint(nextX, false);
+                if ( descr_cmd[curBD]->associated < 0 ) {
+                    if ( curP == 0 ) {
+                        descr_cmd[curBD]->associated = 0;
+                    } else {
+                        descr_cmd[curBD]->associated = descr_cmd[curBD - 1]->associated;
+                    }
+                }
+
+                last_point_relation = 0;
+
+                curP += nbInterm;
+                break;
+            }
+        }
+
+        curX = nextX;
+    }
+}
+
 
 void Path::ConvertEvenLines(double treshhold)
 {
@@ -559,11 +842,14 @@ void Path::ConvertEvenLines(double treshhold)
                     RecBezierTo(midX, curX, nextX, treshhold, 8, 4 * treshhold);
                 } else if ( nbInterm > 1 ) {
                     Geom::Point bx = curX;
-                    Geom::Point dx = nData->p;
-                    Geom::Point cx = 2 * bx - dx;
+                    Geom::Point cx = curX;
+                    Geom::Point dx = curX;
 
+                    dx = nData->p;
                     ip++;
                     nData = dynamic_cast<PathDescrIntermBezierTo *>(descr_cmd[ip]);
+
+                    cx = 2 * bx - dx;
 
                     for (int k = 0; k < nbInterm - 1; k++) {
                         bx = cx;
@@ -716,7 +1002,7 @@ static void ArcAnglesAndCenter(Geom::Point const &iS, Geom::Point const &iE,
 {
     Geom::Point se = iE - iS;
     Geom::Point ca(cos(angle), sin(angle));
-    Geom::Point cse(dot(ca, se), cross(ca, se));
+    Geom::Point cse(dot(se, ca), cross(se, ca));
     cse[0] /= rx;
     cse[1] /= ry;
     double const lensq = dot(cse,cse);
@@ -753,8 +1039,8 @@ static void ArcAnglesAndCenter(Geom::Point const &iS, Geom::Point const &iE,
     csd[1] *= ry;
     ca[1] = -ca[1]; // because it's the inverse rotation
 
-    dr[0] = dot(ca, csd);
-    dr[1] = cross(ca, csd);
+    dr[0] = dot(csd, ca);
+    dr[1] = cross(csd, ca);
 
     ca[1] = -ca[1];
 
@@ -813,14 +1099,13 @@ void Path::DoArc(Geom::Point const &iS, Geom::Point const &iE,
     double sang;
     double eang;
     Geom::Point dr_temp;
-    ArcAnglesAndCenter(iS, iE, rx, ry, angle*M_PI/180.0, large, wise, sang, eang, dr_temp);
+    ArcAnglesAndCenter(iS, iE, rx, ry, angle, large, wise, sang, eang, dr_temp);
     Geom::Point dr = dr_temp;
     /* TODO: This isn't as good numerically as treating iS and iE as primary.  E.g. consider
        the case of low curvature (i.e. very large radius). */
 
     Geom::Scale const ar(rx, ry);
-    Geom::Rotate cb(sang);
-    Geom::Rotate cbangle(angle*M_PI/180.0);
+    Geom::Rotate cb( angle + sang );
     if (wise) {
 
         double const incr = -0.1;
@@ -830,7 +1115,7 @@ void Path::DoArc(Geom::Point const &iS, Geom::Point const &iE,
         Geom::Rotate const omega(incr);
         for (double b = sang + incr ; b > eang ; b += incr) {
             cb = omega * cb;
-            AddPoint( cb.vector() * ar * cbangle + dr );
+            AddPoint( cb.vector() * ar + dr );
         }
 
     } else {
@@ -842,7 +1127,7 @@ void Path::DoArc(Geom::Point const &iS, Geom::Point const &iE,
         Geom::Rotate const omega(incr);
         for (double b = sang + incr ; b < eang ; b += incr) {
             cb = omega * cb;
-            AddPoint( cb.vector() * ar * cbangle + dr);
+            AddPoint( cb.vector() * ar + dr);
         }
     }
 }
@@ -957,14 +1242,13 @@ void Path::DoArc(Geom::Point const &iS, Geom::Point const &iE,
     double sang;
     double eang;
     Geom::Point dr_temp;
-    ArcAnglesAndCenter(iS, iE, rx, ry, angle*M_PI/180.0, large, wise, sang, eang, dr_temp);
+    ArcAnglesAndCenter(iS, iE, rx, ry, angle, large, wise, sang, eang, dr_temp);
     Geom::Point dr = dr_temp;
     /* TODO: This isn't as good numerically as treating iS and iE as primary.  E.g. consider
        the case of low curvature (i.e. very large radius). */
 
     Geom::Scale const ar(rx, ry);
-    Geom::Rotate cb(sang);
-    Geom::Rotate cbangle(angle*M_PI/180.0);
+    Geom::Rotate cb(angle + sang);
     if (wise) {
 
         double const incr = -0.1;
@@ -974,7 +1258,7 @@ void Path::DoArc(Geom::Point const &iS, Geom::Point const &iE,
         Geom::Rotate const omega(incr);
         for (double b = sang + incr; b > eang; b += incr) {
             cb = omega * cb;
-            AddPoint(cb.vector() * ar * cbangle + dr, piece, (sang - b) / (sang - eang));
+            AddPoint(cb.vector() * ar + dr, piece, (sang - b) / (sang - eang));
         }
 
     } else {
@@ -986,7 +1270,7 @@ void Path::DoArc(Geom::Point const &iS, Geom::Point const &iE,
         Geom::Rotate const omega(incr);
         for (double b = sang + incr ; b < eang ; b += incr) {
             cb = omega * cb;
-            AddPoint(cb.vector() * ar * cbangle + dr, piece, (b - sang) / (eang - sang));
+            AddPoint(cb.vector() * ar + dr, piece, (b - sang) / (eang - sang));
         }
     }
 }
@@ -1076,14 +1360,13 @@ void Path::DoArc(Geom::Point const &iS, Geom::Point const &iE,
     double sang;
     double eang;
     Geom::Point dr_temp;
-    ArcAnglesAndCenter(iS, iE, rx, ry, angle*M_PI/180.0, large, wise, sang, eang, dr_temp);
+    ArcAnglesAndCenter(iS, iE, rx, ry, angle, large, wise, sang, eang, dr_temp);
     Geom::Point dr = dr_temp;
     /* TODO: This isn't as good numerically as treating iS and iE as primary.  E.g. consider
        the case of low curvature (i.e. very large radius). */
 
     Geom::Scale const ar(rx, ry);
-    Geom::Rotate cb(sang);
-    Geom::Rotate cbangle(angle*M_PI/180.0);
+    Geom::Rotate cb(angle + sang);
     if (wise) {
 
         double const incr = -0.1;
@@ -1093,7 +1376,7 @@ void Path::DoArc(Geom::Point const &iS, Geom::Point const &iE,
         Geom::Rotate const omega(incr);
         for (double b = sang + incr; b > eang ;b += incr) {
             cb = omega * cb;
-            AddPoint(cb.vector() * ar * cbangle + dr, piece, (sang - b) / (sang - eang));
+            AddPoint(cb.vector() * ar + dr, piece, (sang - b) / (sang - eang));
         }
 
     } else {
@@ -1104,7 +1387,7 @@ void Path::DoArc(Geom::Point const &iS, Geom::Point const &iE,
         Geom::Rotate const omega(incr);
         for (double b = sang + incr ; b < eang ; b += incr) {
             cb = omega * cb;
-            AddPoint(cb.vector() * ar * cbangle + dr, piece, (b - sang) / (eang - sang));
+            AddPoint(cb.vector() * ar + dr, piece, (b - sang) / (eang - sang));
         }
     }
 }

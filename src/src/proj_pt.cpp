@@ -1,4 +1,6 @@
-/**
+#define __PROJ_PT_C__
+
+/*
  * 3x4 transformation matrix to map points from projective 3-space into the projective plane
  *
  * Authors:
@@ -9,14 +11,12 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glib.h>
-
 #include "proj_pt.h"
 #include "svg/stringstream.h"
 
 namespace Proj {
 
-Pt2::Pt2(const char *coord_str) {
+Pt2::Pt2(const gchar *coord_str) {
     if (!coord_str) {
         pt[0] = 0.0;
         pt[1] = 0.0;
@@ -24,7 +24,7 @@ Pt2::Pt2(const char *coord_str) {
         g_warning ("Coordinate string is empty. Creating default Pt2\n");
         return;
     }
-    char **coords = g_strsplit(coord_str, ":", 0);
+    gchar **coords = g_strsplit(coord_str, ":", 0);
     if (coords[0] == NULL || coords[1] == NULL || coords[2] == NULL) {
         g_strfreev (coords);
         g_warning ("Malformed coordinate string.\n");
@@ -34,7 +34,6 @@ Pt2::Pt2(const char *coord_str) {
     pt[0] = g_ascii_strtod(coords[0], NULL);
     pt[1] = g_ascii_strtod(coords[1], NULL);
     pt[2] = g_ascii_strtod(coords[2], NULL);
-    g_strfreev (coords);
 }
 
 void
@@ -49,12 +48,12 @@ Pt2::normalize() {
 Geom::Point
 Pt2::affine() {
   if (fabs(pt[2]) < epsilon) {
-    return Geom::Point (Geom::infinity(), Geom::infinity());
+    return Geom::Point (NR_HUGE, NR_HUGE);
   }
   return Geom::Point (pt[0]/pt[2], pt[1]/pt[2]);
 }
 
-char *
+gchar *
 Pt2::coord_string() {
     Inkscape::SVGOStringStream os;
     os << pt[0] << " : "
@@ -63,7 +62,7 @@ Pt2::coord_string() {
     return g_strdup(os.str().c_str());
 }
 
-Pt3::Pt3(const char *coord_str) {
+Pt3::Pt3(const gchar *coord_str) {
     if (!coord_str) {
         pt[0] = 0.0;
         pt[1] = 0.0;
@@ -72,7 +71,7 @@ Pt3::Pt3(const char *coord_str) {
         g_warning ("Coordinate string is empty. Creating default Pt2\n");
         return;
     }
-    char **coords = g_strsplit(coord_str, ":", 0);
+    gchar **coords = g_strsplit(coord_str, ":", 0);
     if (coords[0] == NULL || coords[1] == NULL ||
         coords[2] == NULL || coords[3] == NULL) {
         g_strfreev (coords);
@@ -96,7 +95,7 @@ Pt3::normalize() {
     pt[3] = 1.0;
 }
 
-char *
+gchar *
 Pt3::coord_string() {
     Inkscape::SVGOStringStream os;
     os << pt[0] << " : "
@@ -117,4 +116,4 @@ Pt3::coord_string() {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

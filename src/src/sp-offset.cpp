@@ -1,3 +1,5 @@
+#define __SP_OFFSET_C__
+
 /** \file
  * Implementation of <path sodipodi:type="inkscape:offset">.
  */
@@ -6,7 +8,6 @@
  * Authors: (of the sp-spiral.c upon which this file was constructed):
  *   Mitsuru Oka <oka326@parkcity.ne.jp>
  *   Lauris Kaplinski <lauris@kaplinski.com>
- *   Abhishek Sharma
  *
  * Copyright (C) 1999-2002 Lauris Kaplinski
  * Copyright (C) 2000-2001 Ximian, Inc.
@@ -36,7 +37,7 @@
 #include "sp-use-reference.h"
 #include "uri.h"
 
-#include <2geom/affine.h>
+#include <libnr/nr-matrix-fns.h>
 #include <2geom/pathvector.h>
 
 #include "xml/repr.h"
@@ -68,12 +69,29 @@ class SPDocument;
  * radius (look in object-edit).
  */
 
+static void sp_offset_class_init (SPOffsetClass * klass);
+static void sp_offset_init (SPOffset * offset);
+static void sp_offset_finalize(GObject *obj);
+
+static void sp_offset_build (SPObject * object, SPDocument * document,
+                             Inkscape::XML::Node * repr);
+static Inkscape::XML::Node *sp_offset_write (SPObject * object, Inkscape::XML::Document *doc, Inkscape::XML::Node * repr,
+                                guint flags);
+static void sp_offset_set (SPObject * object, unsigned int key,
+                           const gchar * value);
+static void sp_offset_update (SPObject * object, SPCtx * ctx, guint flags);
+static void sp_offset_release (SPObject * object);
+
+static gchar *sp_offset_description (SPItem * item);
+static void sp_offset_snappoints(SPItem const *item, std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs);
+static void sp_offset_set_shape (SPShape * shape);
+
 static void refresh_offset_source(SPOffset* offset);
 
 static void sp_offset_start_listening(SPOffset *offset,SPObject* to);
 static void sp_offset_quit_listening(SPOffset *offset);
 static void sp_offset_href_changed(SPObject *old_ref, SPObject *ref, SPOffset *offset);
-static void sp_offset_move_compensate(Geom::Affine const *mp, SPItem *original, SPOffset *self);
+static void sp_offset_move_compensate(Geom::Matrix const *mp, SPItem *original, SPOffset *self);
 static void sp_offset_delete_self(SPObject *deleted, SPOffset *self);
 static void sp_offset_source_modified (SPObject *iSource, guint flags, SPItem *item);
 
@@ -83,88 +101,166 @@ static void sp_offset_source_modified (SPObject *iSource, guint flags, SPItem *i
 // fast is not mathematically correct, because computing the offset of a single
 // cubic bezier patch is not trivial; in particular, there are problems with holes
 // reappearing in offset when the radius becomes too large
-//TODO: need fix for bug: #384688 with fix released in r.14156
-//but reverted because bug #1507049 seems has more priority.
-static bool   use_slow_but_correct_offset_method = false;
+static bool   use_slow_but_correct_offset_method=false;
 
-SPOffset::SPOffset() : SPShape() {
-    this->rad = 1.0;
-    this->original = NULL;
-    this->originalPath = NULL;
-    this->knotSet = false;
-    this->sourceDirty=false;
-    this->isUpdating=false;
+
+// nothing special here, same for every class in sodipodi/inkscape
+static SPShapeClass *parent_class;
+
+/**
+ * Register SPOffset class and return its type number.
+ */
+GType
+sp_offset_get_type (void)
+{
+    static GType offset_type = 0;
+
+    if (!offset_type)
+    {
+        GTypeInfo offset_info = {
+            sizeof (SPOffsetClass),
+            NULL,			/* base_init */
+            NULL,			/* base_finalize */
+            (GClassInitFunc) sp_offset_class_init,
+            NULL,			/* class_finalize */
+            NULL,			/* class_data */
+            sizeof (SPOffset),
+            16,			/* n_preallocs */
+            (GInstanceInitFunc) sp_offset_init,
+            NULL,			/* value_table */
+        };
+        offset_type =
+            g_type_register_static (SP_TYPE_SHAPE, "SPOffset", &offset_info,
+                                    (GTypeFlags) 0);
+    }
+    return offset_type;
+}
+
+/**
+ * SPOffset vtable initialization.
+ */
+static void
+sp_offset_class_init(SPOffsetClass *klass)
+{
+    GObjectClass  *gobject_class = (GObjectClass *) klass;
+    SPObjectClass *sp_object_class = (SPObjectClass *) klass;
+    SPItemClass   *item_class = (SPItemClass *) klass;
+    SPShapeClass  *shape_class = (SPShapeClass *) klass;
+
+    parent_class = (SPShapeClass *) g_type_class_ref (SP_TYPE_SHAPE);
+
+    gobject_class->finalize = sp_offset_finalize;
+
+    sp_object_class->build = sp_offset_build;
+    sp_object_class->write = sp_offset_write;
+    sp_object_class->set = sp_offset_set;
+    sp_object_class->update = sp_offset_update;
+    sp_object_class->release = sp_offset_release;
+
+    item_class->description = sp_offset_description;
+    item_class->snappoints = sp_offset_snappoints;
+
+    shape_class->set_shape = sp_offset_set_shape;
+}
+
+/**
+ * Callback for SPOffset object initialization.
+ */
+static void
+sp_offset_init(SPOffset *offset)
+{
+    offset->rad = 1.0;
+    offset->original = NULL;
+    offset->originalPath = NULL;
+    offset->knotSet = false;
+    offset->sourceDirty=false;
+    offset->isUpdating=false;
     // init various connections
-    this->sourceHref = NULL;
-    this->sourceRepr = NULL;
-    this->sourceObject = NULL;
-
+    offset->sourceHref = NULL;
+    offset->sourceRepr = NULL;
+    offset->sourceObject = NULL;
+    new (&offset->_modified_connection) sigc::connection();
+    new (&offset->_delete_connection) sigc::connection();
+    new (&offset->_changed_connection) sigc::connection();
+    new (&offset->_transformed_connection) sigc::connection();
     // set up the uri reference
-    this->sourceRef = new SPUseReference(this);
-    this->_changed_connection = this->sourceRef->changedSignal().connect(sigc::bind(sigc::ptr_fun(sp_offset_href_changed), this));
+    offset->sourceRef = new SPUseReference(SP_OBJECT(offset));
+    offset->_changed_connection = offset->sourceRef->changedSignal().connect(sigc::bind(sigc::ptr_fun(sp_offset_href_changed), offset));
 }
 
-SPOffset::~SPOffset() {
-    delete this->sourceRef;
+/**
+ * Callback for SPOffset finalization.
+ */
+static void
+sp_offset_finalize(GObject *obj)
+{
+    SPOffset *offset = (SPOffset *) obj;
 
-    this->_modified_connection.disconnect();
-    this->_delete_connection.disconnect();
-    this->_changed_connection.disconnect();
-    this->_transformed_connection.disconnect();
+    delete offset->sourceRef;
+
+    offset->_modified_connection.disconnect();
+    offset->_modified_connection.~connection();
+    offset->_delete_connection.disconnect();
+    offset->_delete_connection.~connection();
+    offset->_changed_connection.disconnect();
+    offset->_changed_connection.~connection();
+    offset->_transformed_connection.disconnect();
+    offset->_transformed_connection.~connection();
 }
 
-void SPOffset::build(SPDocument *document, Inkscape::XML::Node *repr) {
-    SPShape::build(document, repr);
+/**
+ * Virtual build: set offset attributes from corresponding repr.
+ */
+static void
+sp_offset_build(SPObject *object, SPDocument *document, Inkscape::XML::Node *repr)
+{
+    if (((SPObjectClass *) parent_class)->build)
+        ((SPObjectClass *) parent_class)->build (object, document, repr);
 
-    //XML Tree being used directly here while it shouldn't be.
-    if (this->getRepr()->attribute("inkscape:radius")) {
-        this->readAttr( "inkscape:radius" );
+    if (object->repr->attribute("inkscape:radius")) {
+        sp_object_read_attr (object, "inkscape:radius");
     } else {
-        //XML Tree being used directly here (as object->getRepr) 
-        //in all the below lines in the block while it shouldn't be.
-        gchar const *oldA = this->getRepr()->attribute("sodipodi:radius");
-        this->getRepr()->setAttribute("inkscape:radius",oldA);
-        this->getRepr()->setAttribute("sodipodi:radius",NULL);
+        gchar const *oldA = object->repr->attribute("sodipodi:radius");
+        object->repr->setAttribute("inkscape:radius",oldA);
+        object->repr->setAttribute("sodipodi:radius",NULL);
 
-        this->readAttr( "inkscape:radius" );
+        sp_object_read_attr (object, "inkscape:radius");
     }
-
-    if (this->getRepr()->attribute("inkscape:original")) {
-        this->readAttr( "inkscape:original" );
+    if (object->repr->attribute("inkscape:original")) {
+        sp_object_read_attr (object, "inkscape:original");
     } else {
-        gchar const *oldA = this->getRepr()->attribute("sodipodi:original");
-        this->getRepr()->setAttribute("inkscape:original",oldA);
-        this->getRepr()->setAttribute("sodipodi:original",NULL);
+        gchar const *oldA = object->repr->attribute("sodipodi:original");
+        object->repr->setAttribute("inkscape:original",oldA);
+        object->repr->setAttribute("sodipodi:original",NULL);
 
-        this->readAttr( "inkscape:original" );
+        sp_object_read_attr (object, "inkscape:original");
     }
-
-    if (this->getRepr()->attribute("xlink:href")) {
-        this->readAttr( "xlink:href" );
+    if (object->repr->attribute("xlink:href")) {
+        sp_object_read_attr(object, "xlink:href");
     } else {
-        gchar const *oldA = this->getRepr()->attribute("inkscape:href");
-
+        gchar const *oldA = object->repr->attribute("inkscape:href");
         if (oldA) {
             size_t lA = strlen(oldA);
             char *nA=(char*)malloc((1+lA+1)*sizeof(char));
-
             memcpy(nA+1,oldA,lA*sizeof(char));
-
             nA[0]='#';
             nA[lA+1]=0;
-
-            this->getRepr()->setAttribute("xlink:href",nA);
-
+            object->repr->setAttribute("xlink:href",nA);
             free(nA);
-
-            this->getRepr()->setAttribute("inkscape:href",NULL);
+            object->repr->setAttribute("inkscape:href",NULL);
         }
-
-        this->readAttr( "xlink:href" );
+        sp_object_read_attr (object, "xlink:href");
     }
 }
 
-Inkscape::XML::Node* SPOffset::write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags) {
+/**
+ * Virtual write: write offset attributes to corresponding repr.
+ */
+static Inkscape::XML::Node *
+sp_offset_write(SPObject *object, Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags)
+{
+    SPOffset *offset = SP_OFFSET (object);
+
     if ((flags & SP_OBJECT_WRITE_BUILD) && !repr) {
         repr = xml_doc->createElement("svg:path");
     }
@@ -175,57 +271,66 @@ Inkscape::XML::Node* SPOffset::write(Inkscape::XML::Document *xml_doc, Inkscape:
          * inkscape:offset="cx cy exp revo rad arg t0"
          */
         repr->setAttribute("sodipodi:type", "inkscape:offset");
-        sp_repr_set_svg_double(repr, "inkscape:radius", this->rad);
-        repr->setAttribute("inkscape:original", this->original);
-        repr->setAttribute("inkscape:href", this->sourceHref);
+        sp_repr_set_svg_double(repr, "inkscape:radius", offset->rad);
+        repr->setAttribute("inkscape:original", offset->original);
+        repr->setAttribute("inkscape:href", offset->sourceHref);
     }
 
 
-    // Make sure the offset has curve
-    SPCurve *curve = SP_SHAPE (this)->getCurve();
-
+    // Make sure the object has curve
+    SPCurve *curve = sp_shape_get_curve (SP_SHAPE (offset));
     if (curve == NULL) {
-        this->set_shape();
+        sp_offset_set_shape (SP_SHAPE (offset));
     }
 
     // write that curve to "d"
-    char *d = sp_svg_write_path (this->_curve->get_pathvector());
+    char *d = sp_svg_write_path (((SPShape *) offset)->curve->get_pathvector());
     repr->setAttribute("d", d);
     g_free (d);
 
-    SPShape::write(xml_doc, repr, flags | SP_SHAPE_WRITE_PATH);
+    if (((SPObjectClass *) (parent_class))->write)
+        ((SPObjectClass *) (parent_class))->write (object, xml_doc, repr,
+                                                   flags | SP_SHAPE_WRITE_PATH);
 
     return repr;
 }
 
-void SPOffset::release() {
-    if (this->original) {
-    	free (this->original);
+/**
+ * Virtual release callback.
+ */
+static void
+sp_offset_release(SPObject *object)
+{
+    SPOffset *offset = (SPOffset *) object;
+
+    if (offset->original) free (offset->original);
+    if (offset->originalPath) delete ((Path *) offset->originalPath);
+    offset->original = NULL;
+    offset->originalPath = NULL;
+
+    sp_offset_quit_listening(offset);
+
+    offset->_changed_connection.disconnect();
+    g_free(offset->sourceHref);
+    offset->sourceHref = NULL;
+    offset->sourceRef->detach();
+
+    if (((SPObjectClass *) parent_class)->release) {
+        ((SPObjectClass *) parent_class)->release (object);
     }
 
-    if (this->originalPath) {
-    	delete ((Path *) this->originalPath);
-    }
-
-    this->original = NULL;
-    this->originalPath = NULL;
-
-    sp_offset_quit_listening(this);
-
-    this->_changed_connection.disconnect();
-
-    g_free(this->sourceHref);
-
-    this->sourceHref = NULL;
-    this->sourceRef->detach();
-
-    SPShape::release();
 }
 
-void SPOffset::set(unsigned int key, const gchar* value) {
-    if ( this->sourceDirty ) {
-    	refresh_offset_source(this);
-    }
+/**
+ * Set callback: the function that is called whenever a change is made to
+ * the description of the object.
+ */
+static void
+sp_offset_set(SPObject *object, unsigned key, gchar const *value)
+{
+    SPOffset *offset = SP_OFFSET (object);
+
+    if ( offset->sourceDirty ) refresh_offset_source(offset);
 
     /* fixme: we should really collect updates */
     switch (key)
@@ -234,114 +339,108 @@ void SPOffset::set(unsigned int key, const gchar* value) {
         case SP_ATTR_SODIPODI_ORIGINAL:
             if (value == NULL) {
             } else {
-                if (this->original) {
-                    free (this->original);
-                    delete ((Path *) this->originalPath);
-
-                    this->original = NULL;
-                    this->originalPath = NULL;
+                if (offset->original) {
+                    free (offset->original);
+                    delete ((Path *) offset->originalPath);
+                    offset->original = NULL;
+                    offset->originalPath = NULL;
                 }
 
-                this->original = strdup (value);
+                offset->original = strdup (value);
 
-                Geom::PathVector pv = sp_svg_read_pathv(this->original);
+                Geom::PathVector pv = sp_svg_read_pathv(offset->original);
+                offset->originalPath = new Path;
+                reinterpret_cast<Path *>(offset->originalPath)->LoadPathVector(pv);
 
-                this->originalPath = new Path;
-                reinterpret_cast<Path *>(this->originalPath)->LoadPathVector(pv);
-
-                this->knotSet = false;
-
-                if ( this->isUpdating == false ) {
-                	this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
-                }
+                offset->knotSet = false;
+                if ( offset->isUpdating == false ) object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
             }
             break;
-
         case SP_ATTR_INKSCAPE_RADIUS:
         case SP_ATTR_SODIPODI_RADIUS:
-            if (!sp_svg_length_read_computed_absolute (value, &this->rad)) {
-                if (fabs (this->rad) < 0.01) {
-                    this->rad = (this->rad < 0) ? -0.01 : 0.01;
-                }
-
-                this->knotSet = false; // knotset=false because it's not set from the context
+            if (!sp_svg_length_read_computed_absolute (value, &offset->rad)) {
+                if (fabs (offset->rad) < 0.01)
+                    offset->rad = (offset->rad < 0) ? -0.01 : 0.01;
+                offset->knotSet = false; // knotset=false because it's not set from the context
             }
-
-            if ( this->isUpdating == false ) {
-            	this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
-            }
+            if ( offset->isUpdating == false ) object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
             break;
-
         case SP_ATTR_INKSCAPE_HREF:
         case SP_ATTR_XLINK_HREF:
             if ( value == NULL ) {
-                sp_offset_quit_listening(this);
-                if ( this->sourceHref ) {
-                	g_free(this->sourceHref);
-                }
-
-                this->sourceHref = NULL;
-                this->sourceRef->detach();
+                sp_offset_quit_listening(offset);
+                if ( offset->sourceHref ) g_free(offset->sourceHref);
+                offset->sourceHref = NULL;
+                offset->sourceRef->detach();
             } else {
-                if ( this->sourceHref && ( strcmp(value, this->sourceHref) == 0 ) ) {
+                if ( offset->sourceHref && ( strcmp(value, offset->sourceHref) == 0 ) ) {
                 } else {
-                    if ( this->sourceHref ) {
-                    	g_free(this->sourceHref);
-                    }
-
-                    this->sourceHref = g_strdup(value);
-
+                    if ( offset->sourceHref ) g_free(offset->sourceHref);
+                    offset->sourceHref = g_strdup(value);
                     try {
-                        this->sourceRef->attach(Inkscape::URI(value));
+                        offset->sourceRef->attach(Inkscape::URI(value));
                     } catch (Inkscape::BadURIException &e) {
                         g_warning("%s", e.what());
-                        this->sourceRef->detach();
+                        offset->sourceRef->detach();
                     }
                 }
             }
             break;
-            
         default:
-            SPShape::set(key, value);
+            if (((SPObjectClass *) parent_class)->set)
+                ((SPObjectClass *) parent_class)->set (object, key, value);
             break;
     }
 }
 
-void SPOffset::update(SPCtx *ctx, guint flags) {
-    this->isUpdating=true; // prevent sp_offset_set from requesting updates
-    
-    if ( this->sourceDirty ) {
-    	refresh_offset_source(this);
-    }
-    
+/**
+ * Update callback: the object has changed, recompute its shape.
+ */
+static void
+sp_offset_update(SPObject *object, SPCtx *ctx, guint flags)
+{
+    SPOffset* offset = SP_OFFSET(object);
+    offset->isUpdating=true; // prevent sp_offset_set from requesting updates
+    if ( offset->sourceDirty ) refresh_offset_source(offset);
     if (flags &
         (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_STYLE_MODIFIED_FLAG |
          SP_OBJECT_VIEWPORT_MODIFIED_FLAG)) {
-    	
-        this->set_shape();
+        sp_shape_set_shape ((SPShape *) object);
     }
-    
-    this->isUpdating=false;
+    offset->isUpdating=false;
 
-    SPShape::update(ctx, flags);
+    if (((SPObjectClass *) parent_class)->update)
+        ((SPObjectClass *) parent_class)->update (object, ctx, flags);
 }
 
-const char* SPOffset::displayName() const {
-    if ( this->sourceHref ) {
-        return _("Linked Offset");
+/**
+ * Returns a textual description of object.
+ */
+static gchar *
+sp_offset_description(SPItem *item)
+{
+    SPOffset *offset = SP_OFFSET (item);
+
+    if ( offset->sourceHref ) {
+        // TRANSLATORS COMMENT: %s is either "outset" or "inset" depending on sign
+        return g_strdup_printf(_("<b>Linked offset</b>, %s by %f pt"),
+                               (offset->rad >= 0)? _("outset") : _("inset"), fabs (offset->rad));
     } else {
-        return _("Dynamic Offset");
+        // TRANSLATORS COMMENT: %s is either "outset" or "inset" depending on sign
+        return g_strdup_printf(_("<b>Dynamic offset</b>, %s by %f pt"),
+                               (offset->rad >= 0)? _("outset") : _("inset"), fabs (offset->rad));
     }
 }
 
-gchar* SPOffset::description() const {
-    // TRANSLATORS COMMENT: %s is either "outset" or "inset" depending on sign
-    return g_strdup_printf(_("%s by %f pt"), (this->rad >= 0) ?
-            _("outset") : _("inset"), fabs (this->rad));
-}
+/**
+ * Compute and set shape's offset.
+ */
+static void
+sp_offset_set_shape(SPShape *shape)
+{
+    SPOffset *offset = SP_OFFSET (shape);
 
-void SPOffset::set_shape() {
-    if ( this->originalPath == NULL ) {
+    if ( offset->originalPath == NULL ) {
         // oops : no path?! (the offset object should do harakiri)
         return;
     }
@@ -350,35 +449,28 @@ void SPOffset::set_shape() {
 #endif
     // au boulot
 
-    if ( fabs(this->rad) < 0.01 ) {
+    if ( fabs(offset->rad) < 0.01 ) {
         // grosso modo: 0
-        // just put the source this as the offseted one, no one will notice
+        // just put the source shape as the offseted one, no one will notice
         // it's also useless to compute the offset with a 0 radius
 
-        //XML Tree being used directly here while it shouldn't be.
-        const char *res_d = this->getRepr()->attribute("inkscape:original");
-
+        const char *res_d = SP_OBJECT(shape)->repr->attribute("inkscape:original");
         if ( res_d ) {
             Geom::PathVector pv = sp_svg_read_pathv(res_d);
             SPCurve *c = new SPCurve(pv);
             g_assert(c != NULL);
-
-            this->setCurveInsync (c, TRUE);
-            this->setCurveBeforeLPE(c);
-
+            sp_shape_set_curve_insync ((SPShape *) offset, c, TRUE);
             c->unref();
         }
-
         return;
     }
 
     // extra paraniac careful check. the preceding if () should take care of this case
-    if (fabs (this->rad) < 0.01) {
-    	this->rad = (this->rad < 0) ? -0.01 : 0.01;
-    }
+    if (fabs (offset->rad) < 0.01)
+        offset->rad = (offset->rad < 0) ? -0.01 : 0.01;
 
     Path *orig = new Path;
-    orig->Copy ((Path *)this->originalPath);
+    orig->Copy ((Path *) offset->originalPath);
 
     if ( use_slow_but_correct_offset_method == false ) {
         // version par outline
@@ -390,14 +482,14 @@ void SPOffset::set_shape() {
 
         // and now: offset
         float o_width;
-        if (this->rad >= 0)
+        if (offset->rad >= 0)
         {
-            o_width = this->rad;
+            o_width = offset->rad;
             orig->OutsideOutline (res, o_width, join_round, butt_straight, 20.0);
         }
         else
         {
-            o_width = -this->rad;
+            o_width = -offset->rad;
             orig->OutsideOutline (res, -o_width, join_round, butt_straight, 20.0);
         }
 
@@ -417,16 +509,13 @@ void SPOffset::set_shape() {
 
         theRes->ConvertToForme (orig, 1, originaux);
 
-        Geom::OptRect bbox = this->desktopVisualBounds();
-
+        SPItem *item = shape;
+        Geom::OptRect bbox = sp_item_bbox_desktop (item);
         if ( bbox ) {
             gdouble size = L2(bbox->dimensions());
-            gdouble const exp = this->transform.descrim();
-
-            if (exp != 0) {
+            gdouble const exp = item->transform.descrim();
+            if (exp != 0)
                 size /= exp;
-            }
-
             orig->Coalesce (size * 0.001);
             //g_print ("coa %g    exp %g    item %p\n", size * 0.001, exp, item);
         }
@@ -457,13 +546,13 @@ void SPOffset::set_shape() {
 
         // and now: offset
         float o_width;
-        if (this->rad >= 0)
+        if (offset->rad >= 0)
         {
-            o_width = this->rad;
+            o_width = offset->rad;
         }
         else
         {
-            o_width = -this->rad;
+            o_width = -offset->rad;
         }
 
         // one has to have a measure of the details
@@ -475,32 +564,24 @@ void SPOffset::set_shape() {
         {
             orig->ConvertWithBackData (0.5*o_width);
         }
-
         orig->Fill (theShape, 0);
         theRes->ConvertToShape (theShape, fill_positive);
-
         Path *originaux[1];
         originaux[0]=orig;
-
         Path *res = new Path;
         theRes->ConvertToForme (res, 1, originaux);
-
         int    nbPart=0;
         Path** parts=res->SubPaths(nbPart,true);
         char   *holes=(char*)malloc(nbPart*sizeof(char));
-
         // we offset contours separately, because we can.
         // this way, we avoid doing a unique big ConvertToShape when dealing with big shapes with lots of holes
         {
             Shape* onePart=new Shape;
             Shape* oneCleanPart=new Shape;
-
             theShape->Reset();
-
             for (int i=0;i<nbPart;i++) {
                 double partSurf=parts[i]->Surface();
                 parts[i]->Convert(1.0);
-
                 {
                     // raffiner si besoin
                     double  bL,bT,bR,bB;
@@ -510,41 +591,29 @@ void SPOffset::set_shape() {
                         parts[i]->Convert(0.02*mesure);
                     }
                 }
-
                 if ( partSurf < 0 ) { // inverse par rapport a la realite
                     // plein
                     holes[i]=0;
                     parts[i]->Fill(oneCleanPart,0);
                     onePart->ConvertToShape(oneCleanPart,fill_positive); // there aren't intersections in that one, but maybe duplicate points and null edges
-                    oneCleanPart->MakeOffset(onePart,this->rad,join_round,20.0);
+                    oneCleanPart->MakeOffset(onePart,offset->rad,join_round,20.0);
                     onePart->ConvertToShape(oneCleanPart,fill_positive);
 
                     onePart->CalcBBox();
                     double  typicalSize=0.5*((onePart->rightX-onePart->leftX)+(onePart->bottomY-onePart->topY));
-
-                    if ( typicalSize < 0.05 ) {
-                    	typicalSize=0.05;
-                    }
-
+                    if ( typicalSize < 0.05 ) typicalSize=0.05;
                     typicalSize*=0.01;
-
-                    if ( typicalSize > 1.0 ) {
-                    	typicalSize=1.0;
-                    }
-
+                    if ( typicalSize > 1.0 ) typicalSize=1.0;
                     onePart->ConvertToForme (parts[i]);
                     parts[i]->ConvertEvenLines (typicalSize);
                     parts[i]->Simplify (typicalSize);
-
                     double nPartSurf=parts[i]->Surface();
-
                     if ( nPartSurf >= 0 ) {
                         // inversion de la surface -> disparait
                         delete parts[i];
                         parts[i]=NULL;
                     } else {
                     }
-
 /*          int  firstP=theShape->nbPt;
             for (int j=0;j<onePart->nbPt;j++) theShape->AddPoint(onePart->pts[j].x);
             for (int j=0;j<onePart->nbAr;j++) theShape->AddEdge(firstP+onePart->aretes[j].st,firstP+onePart->aretes[j].en);*/
@@ -553,28 +622,19 @@ void SPOffset::set_shape() {
                     holes[i]=1;
                     parts[i]->Fill(oneCleanPart,0,false,true,true);
                     onePart->ConvertToShape(oneCleanPart,fill_positive);
-                    oneCleanPart->MakeOffset(onePart,-this->rad,join_round,20.0);
+                    oneCleanPart->MakeOffset(onePart,-offset->rad,join_round,20.0);
                     onePart->ConvertToShape(oneCleanPart,fill_positive);
 //          for (int j=0;j<onePart->nbAr;j++) onePart->Inverse(j); // pas oublier de reinverser
 
                     onePart->CalcBBox();
                     double  typicalSize=0.5*((onePart->rightX-onePart->leftX)+(onePart->bottomY-onePart->topY));
-
-                    if ( typicalSize < 0.05 ) {
-                    	typicalSize=0.05;
-                    }
-
+                    if ( typicalSize < 0.05 ) typicalSize=0.05;
                     typicalSize*=0.01;
-
-                    if ( typicalSize > 1.0 ) {
-                    	typicalSize=1.0;
-                    }
-
+                    if ( typicalSize > 1.0 ) typicalSize=1.0;
                     onePart->ConvertToForme (parts[i]);
                     parts[i]->ConvertEvenLines (typicalSize);
                     parts[i]->Simplify (typicalSize);
                     double nPartSurf=parts[i]->Surface();
-
                     if ( nPartSurf >= 0 ) {
                         // inversion de la surface -> disparait
                         delete parts[i];
@@ -592,14 +652,11 @@ void SPOffset::set_shape() {
             delete onePart;
             delete oneCleanPart;
         }
-
         if ( nbPart > 1 ) {
             theShape->Reset();
-
             for (int i=0;i<nbPart;i++) {
                 if ( parts[i] ) {
                     parts[i]->ConvertWithBackData(1.0);
-
                     if ( holes[i] ) {
                         parts[i]->Fill(theShape,i,true,true,true);
                     } else {
@@ -607,23 +664,12 @@ void SPOffset::set_shape() {
                     }
                 }
             }
-
             theRes->ConvertToShape (theShape, fill_positive);
             theRes->ConvertToForme (orig,nbPart,parts);
-
-            for (int i=0;i<nbPart;i++) {
-            	if ( parts[i] ) {
-            		delete parts[i];
-            	}
-            }
+            for (int i=0;i<nbPart;i++) if ( parts[i] ) delete parts[i];
         } else if ( nbPart == 1 ) {
             orig->Copy(parts[0]);
-
-            for (int i=0;i<nbPart;i++) {
-            	if ( parts[i] ) {
-            		delete parts[i];
-            	}
-            }
+            for (int i=0;i<nbPart;i++) if ( parts[i] ) delete parts[i];
         } else {
             orig->Reset();
         }
@@ -638,21 +684,14 @@ void SPOffset::set_shape() {
       orig->Simplify (1.0 * o_width);
       }*/
 
-        if ( parts ) {
-        	free(parts);
-        }
-
-        if ( holes ) {
-        	free(holes);
-        }
-
+        if ( parts ) free(parts);
+        if ( holes ) free(holes);
         delete res;
         delete theShape;
         delete theRes;
     }
     {
         char *res_d = NULL;
-
         if (orig->descr_cmd.size() <= 1)
         {
             // Aie.... nothing left.
@@ -664,23 +703,26 @@ void SPOffset::set_shape() {
 
             res_d = orig->svg_dump_path ();
         }
-
         delete orig;
 
         Geom::PathVector pv = sp_svg_read_pathv(res_d);
         SPCurve *c = new SPCurve(pv);
         g_assert(c != NULL);
-
-        this->setCurveInsync (c, TRUE);
-        this->setCurveBeforeLPE(c);
+        sp_shape_set_curve_insync ((SPShape *) offset, c, TRUE);
         c->unref();
 
         free (res_d);
     }
 }
 
-void SPOffset::snappoints(std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs) const {
-    SPShape::snappoints(p, snapprefs);
+/**
+ * Virtual snappoints function.
+ */
+static void sp_offset_snappoints(SPItem const *item, std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs)
+{
+    if (((SPItemClass *) parent_class)->snappoints) {
+        ((SPItemClass *) parent_class)->snappoints (item, p, snapprefs);
+    }
 }
 
 
@@ -703,7 +745,7 @@ void SPOffset::snappoints(std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape
  *  dot(A, rot90(B))*dot(C, rot90(B)) == -1.
  *    -- njh
  */
-static bool
+bool
 vectors_are_clockwise (Geom::Point A, Geom::Point B, Geom::Point C)
 {
     using Geom::rot90;
@@ -715,53 +757,31 @@ vectors_are_clockwise (Geom::Point A, Geom::Point B, Geom::Point C)
     double ca_c = dot(C, A);
 
     double ab_a = acos (ab_c);
-
-    if (ab_c <= -1.0) {
+    if (ab_c <= -1.0)
         ab_a = M_PI;
-    }
-
-    if (ab_c >= 1.0) {
+    if (ab_c >= 1.0)
         ab_a = 0;
-    }
-
-    if (ab_s < 0) {
+    if (ab_s < 0)
         ab_a = 2 * M_PI - ab_a;
-    }
-
     double bc_a = acos (bc_c);
-
-    if (bc_c <= -1.0) {
+    if (bc_c <= -1.0)
         bc_a = M_PI;
-    }
-
-    if (bc_c >= 1.0) {
+    if (bc_c >= 1.0)
         bc_a = 0;
-    }
-
-    if (bc_s < 0) {
+    if (bc_s < 0)
         bc_a = 2 * M_PI - bc_a;
-    }
-
     double ca_a = acos (ca_c);
-
-    if (ca_c <= -1.0) {
+    if (ca_c <= -1.0)
         ca_a = M_PI;
-    }
-
-    if (ca_c >= 1.0) {
+    if (ca_c >= 1.0)
         ca_a = 0;
-    }
-
-    if (ca_s < 0) {
+    if (ca_s < 0)
         ca_a = 2 * M_PI - ca_a;
-    }
 
     double lim = 2 * M_PI - ca_a;
 
-    if (ab_a < lim) {
+    if (ab_a < lim)
         return true;
-    }
-
     return false;
 }
 
@@ -776,10 +796,9 @@ vectors_are_clockwise (Geom::Point A, Geom::Point B, Geom::Point C)
 double
 sp_offset_distance_to_original (SPOffset * offset, Geom::Point px)
 {
-    if (offset == NULL || offset->originalPath == NULL || ((Path *) offset->originalPath)->descr_cmd.size() <= 1) {
+    if (offset == NULL || offset->originalPath == NULL
+        || ((Path *) offset->originalPath)->descr_cmd.size() <= 1)
         return 1.0;
-    }
-
     double dist = 1.0;
     Shape *theShape = new Shape;
     Shape *theRes = new Shape;
@@ -808,28 +827,25 @@ sp_offset_distance_to_original (SPOffset * offset, Geom::Point px)
         bool ptSet = false;
         double arDist = -1.0;
         bool arSet = false;
-
         // first get the minimum distance to the points
         for (int i = 0; i < theRes->numberOfPoints(); i++)
         {
             if (theRes->getPoint(i).totalDegree() > 0)
-            {
+        {
                 Geom::Point nx = theRes->getPoint(i).x;
                 Geom::Point nxpx = px-nx;
                 double ndist = sqrt (dot(nxpx,nxpx));
-
                 if (ptSet == false || fabs (ndist) < fabs (ptDist))
                 {
                     // we have a new minimum distance
                     // now we need to wheck if px is inside or outside (for the sign)
-                    nx = px - theRes->getPoint(i).x;
+                    nx = px - to_2geom(theRes->getPoint(i).x);
                     double nlen = sqrt (dot(nx , nx));
                     nx /= nlen;
                     int pb, cb, fb;
                     fb = theRes->getPoint(i).incidentEdge[LAST];
                     pb = theRes->getPoint(i).incidentEdge[LAST];
                     cb = theRes->getPoint(i).incidentEdge[FIRST];
-
                     do
                     {
                         // one angle
@@ -840,12 +856,10 @@ sp_offset_distance_to_original (SPOffset * offset, Geom::Point px)
                         nex = theRes->getEdge(cb).dx;
                         nlen = sqrt (dot(nex , nex));
                         nex /= nlen;
-
                         if (theRes->getEdge(pb).en == i)
                         {
                             prx = -prx;
                         }
-
                         if (theRes->getEdge(cb).en == i)
                         {
                             nex = -nex;
@@ -866,16 +880,13 @@ sp_offset_distance_to_original (SPOffset * offset, Geom::Point px)
                             }
                             break;
                         }
-
                         pb = cb;
                         cb = theRes->NextAt (i, cb);
                     }
-
                     while (cb >= 0 && pb >= 0 && pb != fb);
                 }
             }
         }
-
         // loop over the edges to try to improve the distance
         for (int i = 0; i < theRes->numberOfEdges(); i++)
         {
@@ -883,17 +894,14 @@ sp_offset_distance_to_original (SPOffset * offset, Geom::Point px)
             Geom::Point ex = theRes->getPoint(theRes->getEdge(i).en).x;
             Geom::Point nx = ex - sx;
             double len = sqrt (dot(nx,nx));
-
             if (len > 0.0001)
             {
                 Geom::Point   pxsx=px-sx;
                 double ab = dot(nx,pxsx);
-
                 if (ab > 0 && ab < len * len)
                 {
                     // we're in the zone of influence of the segment
-                    double ndist = (cross(nx, pxsx)) / len;
-
+                    double ndist = (cross(pxsx,nx)) / len;
                     if (arSet == false || fabs (ndist) < fabs (arDist))
                     {
                         arDist = ndist;
@@ -902,22 +910,16 @@ sp_offset_distance_to_original (SPOffset * offset, Geom::Point px)
                 }
             }
         }
-
         if (arSet || ptSet)
         {
-            if (arSet == false) {
+            if (arSet == false)
                 arDist = ptDist;
-            }
-
-            if (ptSet == false) {
+            if (ptSet == false)
                 ptDist = arDist;
-            }
-
-            if (fabs (ptDist) < fabs (arDist)) {
+            if (fabs (ptDist) < fabs (arDist))
                 dist = ptDist;
-            } else {
+            else
                 dist = arDist;
-            }
         }
     }
 
@@ -934,13 +936,11 @@ sp_offset_distance_to_original (SPOffset * offset, Geom::Point px)
  * \return the topmost point on the offset.
  */
 void
-sp_offset_top_point (SPOffset const * offset, Geom::Point *px)
+sp_offset_top_point (SPOffset * offset, Geom::Point *px)
 {
     (*px) = Geom::Point(0, 0);
-
-    if (offset == NULL) {
+    if (offset == NULL)
         return;
-    }
 
     if (offset->knotSet)
     {
@@ -948,20 +948,14 @@ sp_offset_top_point (SPOffset const * offset, Geom::Point *px)
         return;
     }
 
-    SPCurve *curve = SP_SHAPE (offset)->getCurve();
-
+    SPCurve *curve = sp_shape_get_curve (SP_SHAPE (offset));
     if (curve == NULL)
     {
-    	// CPPIFY
-        //offset->set_shape();
-    	const_cast<SPOffset*>(offset)->set_shape();
-
-        curve = SP_SHAPE (offset)->getCurve();
-
+        sp_offset_set_shape (SP_SHAPE (offset));
+        curve = sp_shape_get_curve (SP_SHAPE (offset));
         if (curve == NULL)
             return;
     }
-
     if (curve->is_empty())
     {
         curve->unref();
@@ -990,23 +984,21 @@ sp_offset_top_point (SPOffset const * offset, Geom::Point *px)
 // the listening functions
 static void sp_offset_start_listening(SPOffset *offset,SPObject* to)
 {
-    if ( to == NULL ) {
+    if ( to == NULL )
         return;
-    }
 
     offset->sourceObject = to;
-    offset->sourceRepr = to->getRepr();
+    offset->sourceRepr = SP_OBJECT_REPR(to);
 
-    offset->_delete_connection = to->connectDelete(sigc::bind(sigc::ptr_fun(&sp_offset_delete_self), offset));
+    offset->_delete_connection = SP_OBJECT(to)->connectDelete(sigc::bind(sigc::ptr_fun(&sp_offset_delete_self), offset));
     offset->_transformed_connection = SP_ITEM(to)->connectTransformed(sigc::bind(sigc::ptr_fun(&sp_offset_move_compensate), offset));
-    offset->_modified_connection = to->connectModified(sigc::bind<2>(sigc::ptr_fun(&sp_offset_source_modified), offset));
+    offset->_modified_connection = SP_OBJECT(to)->connectModified(sigc::bind<2>(sigc::ptr_fun(&sp_offset_source_modified), offset));
 }
 
 static void sp_offset_quit_listening(SPOffset *offset)
 {
-    if ( offset->sourceObject == NULL ) {
+    if ( offset->sourceObject == NULL )
         return;
-    }
 
     offset->_modified_connection.disconnect();
     offset->_delete_connection.disconnect();
@@ -1020,39 +1012,36 @@ static void
 sp_offset_href_changed(SPObject */*old_ref*/, SPObject */*ref*/, SPOffset *offset)
 {
     sp_offset_quit_listening(offset);
-
     if (offset->sourceRef) {
         SPItem *refobj = offset->sourceRef->getObject();
-
-        if (refobj) {
-        	sp_offset_start_listening(offset,refobj);
-        }
-
+        if (refobj) sp_offset_start_listening(offset,refobj);
         offset->sourceDirty=true;
-        offset->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        SP_OBJECT(offset)->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
     }
 }
 
-static void sp_offset_move_compensate(Geom::Affine const *mp, SPItem */*original*/, SPOffset *self)
+static void
+sp_offset_move_compensate(Geom::Matrix const *mp, SPItem */*original*/, SPOffset *self)
 {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     guint mode = prefs->getInt("/options/clonecompensation/value", SP_CLONE_COMPENSATION_PARALLEL);
 
-    Geom::Affine m(*mp);
+    SPItem *item = SP_ITEM(self);
 
+    Geom::Matrix m(*mp);
     if (!(m.isTranslation()) || mode == SP_CLONE_COMPENSATION_NONE) {
         self->sourceDirty=true;
-        self->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+        item->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
         return;
     }
 
     // calculate the compensation matrix and the advertized movement matrix
-    self->readAttr("transform");
+    sp_object_read_attr(item, "transform");
 
-    Geom::Affine t = self->transform;
-    Geom::Affine offset_move = t.inverse() * m * t;
+    Geom::Matrix t = self->transform;
+    Geom::Matrix offset_move = t.inverse() * m * t;
+    Geom::Matrix advertized_move;
 
-    Geom::Affine advertized_move;
     if (mode == SP_CLONE_COMPENSATION_PARALLEL) {
         offset_move = offset_move.inverse() * m;
         advertized_move = m;
@@ -1063,12 +1052,12 @@ static void sp_offset_move_compensate(Geom::Affine const *mp, SPItem */*original
         g_assert_not_reached();
     }
 
-    self->sourceDirty=true;
+    self->sourceDirty = true;
 
     // commit the compensation
-    self->transform *= offset_move;
-    self->doWriteTransform(self->getRepr(), self->transform, &advertized_move);
-    self->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+    item->transform *= offset_move;
+    sp_item_write_transform(item, SP_OBJECT_REPR(item), item->transform, &advertized_move);
+    SP_OBJECT(item)->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 }
 
 static void
@@ -1080,15 +1069,11 @@ sp_offset_delete_self(SPObject */*deleted*/, SPOffset *offset)
     if (mode == SP_CLONE_ORPHANS_UNLINK) {
         // leave it be. just forget about the source
         sp_offset_quit_listening(offset);
-
-        if ( offset->sourceHref ) {
-        	g_free(offset->sourceHref);
-        }
-
+        if ( offset->sourceHref ) g_free(offset->sourceHref);
         offset->sourceHref = NULL;
         offset->sourceRef->detach();
     } else if (mode == SP_CLONE_ORPHANS_DELETE) {
-        offset->deleteObject();
+        SP_OBJECT(offset)->deleteObject();
     }
 }
 
@@ -1096,8 +1081,7 @@ static void
 sp_offset_source_modified (SPObject */*iSource*/, guint flags, SPItem *item)
 {
     SPOffset *offset = SP_OFFSET(item);
-    offset->sourceDirty=true;
-
+    offset->sourceDirty = true;
     if (flags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG)) {
         offset->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
     }
@@ -1106,47 +1090,35 @@ sp_offset_source_modified (SPObject */*iSource*/, guint flags, SPItem *item)
 static void
 refresh_offset_source(SPOffset* offset)
 {
-    if ( offset == NULL ) {
-    	return;
-    }
-
+    if ( offset == NULL ) return;
     offset->sourceDirty=false;
 
     // le mauvais cas: pas d'attribut d => il faut verifier que c'est une SPShape puis prendre le contour
     // The bad case: no d attribute.  Must check that it's an SPShape and then take the outline.
     SPObject *refobj=offset->sourceObject;
+    if ( refobj == NULL ) return;
+    SPItem *item = SP_ITEM (refobj);
 
-    if ( refobj == NULL ) {
-    	return;
-    }
-
-    SPItem  *item  = SP_ITEM (refobj);
-    SPCurve *curve = NULL;
-
+    SPCurve *curve=NULL;
+    if (!SP_IS_SHAPE (item) && !SP_IS_TEXT (item)) return;
     if (SP_IS_SHAPE (item)) {
-        curve = SP_SHAPE (item)->getCurve ();
+        curve = sp_shape_get_curve (SP_SHAPE (item));
+        if (curve == NULL)
+            return;
     }
-    else if (SP_IS_TEXT (item)) {
+    if (SP_IS_TEXT (item)) {
         curve = SP_TEXT (item)->getNormalizedBpath ();
-    }
-    else {
+        if (curve == NULL)
         return;
     }
-
-    if (curve == NULL) {
-        return;
-    }
-
     Path *orig = new Path;
     orig->LoadPathVector(curve->get_pathvector());
     curve->unref();
 
     if (!item->transform.isIdentity()) {
-        gchar const *t_attr = item->getRepr()->attribute("transform");
-
+        gchar const *t_attr = SP_OBJECT_REPR(item)->attribute("transform");
         if (t_attr) {
-            Geom::Affine t;
-
+            Geom::Matrix t;
             if (sp_svg_transform_read(t_attr, &t)) {
                 orig->Transform(t);
             }
@@ -1165,7 +1137,6 @@ refresh_offset_source(SPOffset* offset)
 
         css = sp_repr_css_attr (offset->sourceRepr , "style");
         val = sp_repr_css_property (css, "fill-rule", NULL);
-
         if (val && strcmp (val, "nonzero") == 0)
         {
             theRes->ConvertToShape (theShape, fill_nonZero);
@@ -1191,9 +1162,7 @@ refresh_offset_source(SPOffset* offset)
         delete res;
         delete orig;
 
-        // TODO fix:
-        //XML Tree being used diectly here while it shouldn't be.
-        offset->getRepr()->setAttribute("inkscape:original", res_d);
+        SP_OBJECT (offset)->repr->setAttribute("inkscape:original", res_d);
 
         free (res_d);
     }
@@ -1204,12 +1173,9 @@ sp_offset_get_source (SPOffset *offset)
 {
     if (offset && offset->sourceRef) {
         SPItem *refobj = offset->sourceRef->getObject();
-
-        if (SP_IS_ITEM (refobj)) {
+        if (SP_IS_ITEM (refobj))
             return (SPItem *) refobj;
-        }
     }
-
     return NULL;
 }
 
@@ -1223,4 +1189,4 @@ sp_offset_get_source (SPOffset *offset)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -1,11 +1,9 @@
-/**
- * @file
- * Interface between Inkscape code (SPItem) and graphlayout functions.
+/** @file
+ * @brief Interface between Inkscape code (SPItem) and graphlayout functions.
  */
 /*
  * Authors:
  *   Tim Dwyer <Tim.Dwyer@infotech.monash.edu.au>
- *   Abhishek Sharma
  *
  * Copyright (C) 2005 Authors
  *
@@ -20,11 +18,11 @@
 #include <cstring>
 #include <cstdlib>
 #include <float.h>
-#include <2geom/transforms.h>
 
 #include "desktop.h"
 #include "inkscape.h"
 #include "sp-namedview.h"
+#include "util/glib-list-iterators.h"
 #include "graphlayout.h"
 #include "sp-path.h"
 #include "sp-item.h"
@@ -87,9 +85,9 @@ struct CheckProgress : TestConvergence {
  * Scans the items list and places those items that are
  * not connectors in filtered
  */
-void filterConnectors(std::vector<SPItem*> const &items, list<SPItem *> &filtered) {
-    for(std::vector<SPItem*>::const_iterator i = items.begin();i !=items.end(); ++i){
-        SPItem *item = *i;
+void filterConnectors(GSList const *const items, list<SPItem *> &filtered) {
+    for(GSList *i=(GSList *)items; i!=NULL; i=i->next) {
+        SPItem *item=SP_ITEM(i->data);
         if(!isConnector(item)) {
             filtered.push_back(item);
         }
@@ -100,11 +98,12 @@ void filterConnectors(std::vector<SPItem*> const &items, list<SPItem *> &filtere
 * connectors between them, and uses graph layout techniques to find
 * a nice layout
 */
-void graphlayout(std::vector<SPItem*> const &items) {
-    if(items.empty()) {
+void graphlayout(GSList const *const items) {
+    if(!items) {
         return;
     }
 
+    using Inkscape::Util::GSListConstIterator;
     list<SPItem *> selected;
     filterConnectors(items,selected);
     if (selected.empty()) return;
@@ -115,7 +114,7 @@ void graphlayout(std::vector<SPItem*> const &items) {
 
     // add the connector spacing to the size of node bounding boxes
     // so that connectors can always be routed between shapes
-    SPDesktop* desktop = SP_ACTIVE_DESKTOP;
+    SPDesktop* desktop = inkscape_active_desktop();
     double spacing = 0;
     if(desktop) spacing = desktop->namedview->connector_spacing+0.1;
 
@@ -127,7 +126,7 @@ void graphlayout(std::vector<SPItem*> const &items) {
          ++i)
     {
         SPItem *u=*i;
-        Geom::OptRect const item_box = u->desktopVisualBounds();
+        Geom::OptRect const item_box(sp_item_bbox_desktop(u));
         if(item_box) {
             Geom::Point ll(item_box->min());
             Geom::Point ur(item_box->max());
@@ -162,11 +161,10 @@ void graphlayout(std::vector<SPItem*> const &items) {
             continue;
         }
         unsigned u=i_iter->second;
-        std::vector<SPItem *> nlist=iu->avoidRef->getAttachedConnectors(Avoid::runningFrom);
+        GSList *nlist=iu->avoidRef->getAttachedConnectors(Avoid::runningFrom);
         list<SPItem *> connectors;
 
-        connectors.insert(connectors.end(), nlist.begin(), nlist.end());
-
+        connectors.insert<GSListConstIterator<SPItem *> >(connectors.end(),nlist,NULL);
         for (list<SPItem *>::iterator j(connectors.begin());
                 j != connectors.end();
                 ++j) {
@@ -194,13 +192,16 @@ void graphlayout(std::vector<SPItem*> const &items) {
                 unsigned v=v_pair->second;
                 //cout << "Edge: (" << u <<","<<v<<")"<<endl;
                 es.push_back(make_pair(u,v));
-                if(conn->style->marker_end.set) {
-                    if(directed && strcmp(conn->style->marker_end.value,"none")) {
+                if(conn->style->marker[SP_MARKER_LOC_END].set) {
+                    if(directed && strcmp(conn->style->marker[SP_MARKER_LOC_END].value,"none")) {
                         scy.push_back(new SimpleConstraint(v, u,
                                     (ideal_connector_length * directed_edge_height_modifier)));
                     }
                 }
             }
+        }
+        if(nlist) {
+            g_slist_free(nlist);
         }
     }
     const unsigned E = es.size();
@@ -228,8 +229,8 @@ void graphlayout(std::vector<SPItem*> const &items) {
             map<string,unsigned>::iterator i=nodelookup.find(u->getId());
             if(i!=nodelookup.end()) {
                 Rectangle* r=rs[i->second];
-                Geom::OptRect item_box = u->desktopVisualBounds();
-                if (item_box) {
+                Geom::OptRect item_box(sp_item_bbox_desktop(u));
+                if(item_box) {
                     Geom::Point const curr(item_box->midpoint());
                     Geom::Point const dest(r->getCentreX(),r->getCentreY());
                     sp_item_move_rel(u, Geom::Translate(dest - curr));
@@ -259,4 +260,4 @@ void graphlayout(std::vector<SPItem*> const &items) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

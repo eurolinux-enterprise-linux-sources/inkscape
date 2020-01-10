@@ -1,4 +1,4 @@
-/*
+/** \file
  * Object hierarchy implementation.
  *
  * Authors:
@@ -9,9 +9,6 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <cstdio>
-#include <cassert>
-
 #include "sp-object.h"
 #include "object-hierarchy.h"
 
@@ -19,6 +16,10 @@
 
 namespace Inkscape {
 
+/**
+ * Create new object hierarchy.
+ * \param top The first entry if non-NULL.
+ */
 ObjectHierarchy::ObjectHierarchy(SPObject *top) {
     if (top) {
         _addBottom(top);
@@ -29,13 +30,19 @@ ObjectHierarchy::~ObjectHierarchy() {
     _clear();
 }
 
+/**
+ * Remove all entries.
+ */
 void ObjectHierarchy::clear() {
     _clear();
     _changed_signal.emit(NULL, NULL);
 }
 
+/**
+ * Trim or expand hierarchy on top such that object becomes top entry.
+ */
 void ObjectHierarchy::setTop(SPObject *object) {
-    if (object == NULL) { printf("Assertion object != NULL failed\n"); return; }
+    g_return_if_fail(object != NULL);
 
     if ( top() == object ) {
         return;
@@ -55,23 +62,34 @@ void ObjectHierarchy::setTop(SPObject *object) {
     _changed_signal.emit(top(), bottom());
 }
 
+/**
+ * Add hierarchy from junior's parent to senior to this
+ * hierarchy's top.
+ */
 void ObjectHierarchy::_addTop(SPObject *senior, SPObject *junior) {
-    assert(junior != NULL);
-    assert(senior != NULL);
+    g_assert(junior != NULL);
+    g_assert(senior != NULL);
 
-    SPObject *object = junior->parent;
+    SPObject *object=SP_OBJECT_PARENT(junior);
     do {
         _addTop(object);
-        object = object->parent;
+        object = SP_OBJECT_PARENT(object);
     } while ( object != senior );
 }
 
+/**
+ * Add object to top of hierarchy.
+ * \pre object!=NULL
+ */
 void ObjectHierarchy::_addTop(SPObject *object) {
-    assert(object != NULL);
+    g_assert(object != NULL);
     _hierarchy.push_back(_attach(object));
     _added_signal.emit(object);
 }
 
+/**
+ * Remove all objects above limit from hierarchy.
+ */
 void ObjectHierarchy::_trimAbove(SPObject *limit) {
     while ( !_hierarchy.empty() && _hierarchy.back().object != limit ) {
         SPObject *object=_hierarchy.back().object;
@@ -84,8 +102,11 @@ void ObjectHierarchy::_trimAbove(SPObject *limit) {
     }
 }
 
+/**
+ * Trim or expand hierarchy at bottom such that object becomes bottom entry.
+ */
 void ObjectHierarchy::setBottom(SPObject *object) {
-    if (object == NULL) { printf("assertion object != NULL failed\n"); return; }
+    g_return_if_fail(object != NULL);
 
     if ( bottom() == object ) {
         return;
@@ -116,6 +137,10 @@ void ObjectHierarchy::setBottom(SPObject *object) {
     _changed_signal.emit(top(), bottom());
 }
 
+/**
+ * Remove all objects under given object.
+ * \param limit If NULL, remove all.
+ */
 void ObjectHierarchy::_trimBelow(SPObject *limit) {
     while ( !_hierarchy.empty() && _hierarchy.front().object != limit ) {
         SPObject *object=_hierarchy.front().object;
@@ -127,26 +152,33 @@ void ObjectHierarchy::_trimBelow(SPObject *limit) {
     }
 }
 
+/**
+ * Add hierarchy from senior to junior to this hierarchy's bottom.
+ */
 void ObjectHierarchy::_addBottom(SPObject *senior, SPObject *junior) {
-    assert(junior != NULL);
-    assert(senior != NULL);
+    g_assert(junior != NULL);
+    g_assert(senior != NULL);
 
     if ( junior != senior ) {
-        _addBottom(senior, junior->parent);
+        _addBottom(senior, SP_OBJECT_PARENT(junior));
         _addBottom(junior);
     }
 }
 
+/**
+ * Add object at bottom of hierarchy.
+ * \pre object!=NULL
+ */
 void ObjectHierarchy::_addBottom(SPObject *object) {
-    assert(object != NULL);
+    g_assert(object != NULL);
     _hierarchy.push_front(_attach(object));
     _added_signal.emit(object);
 }
 
 void ObjectHierarchy::_trim_for_release(SPObject *object) {
     this->_trimBelow(object);
-    assert(!this->_hierarchy.empty());
-    assert(this->_hierarchy.front().object == object);
+    g_assert(!this->_hierarchy.empty());
+    g_assert(this->_hierarchy.front().object == object);
 
     sp_object_ref(object, NULL);
     this->_detach(this->_hierarchy.front());
@@ -182,4 +214,4 @@ void ObjectHierarchy::_detach(ObjectHierarchy::Record &rec) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

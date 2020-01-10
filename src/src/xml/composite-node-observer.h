@@ -15,7 +15,7 @@
 #ifndef SEEN_INKSCAPE_XML_COMPOSITE_NODE_OBSERVER_H
 #define SEEN_INKSCAPE_XML_COMPOSITE_NODE_OBSERVER_H
 
-#include "inkgc/gc-managed.h"
+#include "gc-managed.h"
 #include "xml/node-observer.h"
 #include "util/list-container.h"
 
@@ -23,7 +23,7 @@ namespace Inkscape {
 
 namespace XML {
 
-struct NodeEventVector;
+class NodeEventVector;
 
 /**
  * @brief An observer that relays notifications to multiple other observers
@@ -106,4 +106,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -9,23 +9,11 @@
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
-#if HAVE_CONFIG_H
-# include "config.h"
-#endif
-
-#include <glibmm.h>
 
 #ifdef WIN32
 
-#include "filedialogimpl-gtkmm.h"
- 
-#include "inkgc/gc-core.h"
- // define WINVER high enough so we get the correct OPENFILENAMEW size
-#ifndef WINVER
-#define WINVER 0x0500 
-#endif
+#include "gc-core.h"
 #include <windows.h>
-
 
 namespace Inkscape
 {
@@ -65,7 +53,6 @@ public:
 
     /// Get the path of the current directory
     Glib::ustring getCurrentDirectory();
-
 
 protected:
     /// The dialog type
@@ -142,7 +129,7 @@ public:
 
     /// Shows the file dialog, and blocks until a file
     /// has been selected.
-    /// @return Returns true if the user selected a
+    /// @return Returns true if the the user selected a
     /// file, or false if the user pressed cancel.
     bool show();
 
@@ -161,18 +148,10 @@ public:
     virtual Inkscape::Extension::Extension* getSelectionType()
         { return FileDialogBaseWin32::getSelectionType(); }
 
-
-    /// Add a custom file filter menu item
-    /// @param name - Name of the filter (such as "Javscript")
-    /// @param pattern - File filtering patter (such as "*.js")
-    /// Use the FileDialogType::CUSTOM_TYPE in constructor to not include other file types
-    virtual void addFilterMenu(Glib::ustring name, Glib::ustring pattern);
-
 private:
 
-    /// Create filter menu for this type of dialog
+    /// Create a filter menu for this type of dialog
     void createFilterMenu();
-
 
     /// The handle of the preview pane window
     HWND _preview_wnd;
@@ -238,11 +217,7 @@ private:
     /// This mutex is used to ensure that the worker thread
     /// that calls GetOpenFileName cannot collide with the
     /// main Inkscape thread
-#if GLIB_CHECK_VERSION(2,32,0)
-    Glib::Threads::Mutex *_mutex;
-#else
     Glib::Mutex *_mutex;
-#endif
 
 
     /// The controller function for the thread which calls
@@ -343,7 +318,7 @@ public:
 
     /// Shows the file dialog, and blocks until a file
     /// has been selected.
-    /// @return Returns true if the user selected a
+    /// @return Returns true if the the user selected a
     /// file, or false if the user pressed cancel.
     bool show();
 
@@ -358,8 +333,6 @@ public:
         { return FileDialogBaseWin32::getSelectionType(); }
 
     virtual void setSelectionType( Inkscape::Extension::Extension *key );
-
-    virtual void addFileType(Glib::ustring name, Glib::ustring pattern);
 
 private:
 	/// A handle to the title label and edit box
@@ -395,4 +368,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

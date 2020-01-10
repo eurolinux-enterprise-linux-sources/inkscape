@@ -13,16 +13,12 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glib.h>
+#include <gdk/gdk.h>
+#include <gtk/gtk.h>
 
-class  SPDesktop;
-struct SPDesktopWidget;
-struct SPCanvasItem;
-
-typedef union  _GdkEvent         GdkEvent;
-typedef struct _GdkEventCrossing GdkEventCrossing;
-typedef struct _GdkEventMotion   GdkEventMotion;
-typedef struct _GtkWidget        GtkWidget;
+class SPDesktop;
+class SPDesktopWidget;
+class SPCanvasItem;
 
 /* Item handlers */
 
@@ -55,4 +51,4 @@ gint sp_dt_guide_event (SPCanvasItem *item, GdkEvent *event, gpointer data);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

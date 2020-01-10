@@ -1,5 +1,5 @@
-#ifndef SEEN_NR_FILTER_FLOOD_H
-#define SEEN_NR_FILTER_FLOOD_H
+#ifndef __NR_FILTER_FLOOD_H__
+#define __NR_FILTER_FLOOD_H__
 
 /*
  * feFlood filter primitive renderer
@@ -13,9 +13,9 @@
  */
 
 #include "display/nr-filter-primitive.h"
-
-struct SVGICCColor;
-typedef unsigned int guint32;
+#include "display/nr-filter-slot.h"
+#include "display/nr-filter-units.h"
+#include "svg/svg-color.h"
 
 namespace Inkscape {
 namespace Filters {
@@ -25,16 +25,12 @@ public:
     FilterFlood();
     static FilterPrimitive *create();
     virtual ~FilterFlood();
-
-    virtual void render_cairo(FilterSlot &slot);
-    virtual bool can_handle_affine(Geom::Affine const &);
-    virtual double complexity(Geom::Affine const &ctm);
-    virtual bool uses_background() { return false; }
     
     virtual void set_opacity(double o);
     virtual void set_color(guint32 c);
     virtual void set_icc(SVGICCColor *icc_color);
-
+    virtual int render(FilterSlot &slot, FilterUnits const &units);
+    virtual void area_enlarge(NRRectL &area, Geom::Matrix const &trans);
 private:
     double opacity;
     guint32 color;
@@ -54,4 +50,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

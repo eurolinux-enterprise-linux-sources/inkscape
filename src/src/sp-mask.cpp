@@ -1,10 +1,10 @@
+#define __SP_MASK_C__
+
 /*
  * SVG <mask> implementation
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
- *   Jon A. Cruz <jon@joncruz.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 2003 authors
  *
@@ -13,11 +13,11 @@
 
 #include <cstring>
 #include <string>
-#include <2geom/transforms.h>
 
-#include "display/drawing.h"
-#include "display/drawing-group.h"
-#include "xml/repr.h"
+#include "display/nr-arena.h"
+#include "display/nr-arena-group.h"
+#include "libnr/nr-matrix-ops.h"
+#include <xml/repr.h>
 
 #include "enums.h"
 #include "attributes.h"
@@ -30,179 +30,251 @@
 struct SPMaskView {
 	SPMaskView *next;
 	unsigned int key;
-	Inkscape::DrawingItem *arenaitem;
-	Geom::OptRect bbox;
+	NRArenaItem *arenaitem;
+	NRRect bbox;
 };
 
-SPMaskView *sp_mask_view_new_prepend (SPMaskView *list, unsigned int key, Inkscape::DrawingItem *arenaitem);
+static void sp_mask_class_init (SPMaskClass *klass);
+static void sp_mask_init (SPMask *mask);
+
+static void sp_mask_build (SPObject *object, SPDocument *document, Inkscape::XML::Node *repr);
+static void sp_mask_release (SPObject * object);
+static void sp_mask_set (SPObject *object, unsigned int key, const gchar *value);
+static void sp_mask_child_added (SPObject *object, Inkscape::XML::Node *child, Inkscape::XML::Node *ref);
+static void sp_mask_update (SPObject *object, SPCtx *ctx, guint flags);
+static void sp_mask_modified (SPObject *object, guint flags);
+static Inkscape::XML::Node *sp_mask_write (SPObject *object, Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags);
+
+SPMaskView *sp_mask_view_new_prepend (SPMaskView *list, unsigned int key, NRArenaItem *arenaitem);
 SPMaskView *sp_mask_view_list_remove (SPMaskView *list, SPMaskView *view);
 
-SPMask::SPMask() : SPObjectGroup() {
-	this->maskUnits_set = FALSE;
-	this->maskUnits = SP_CONTENT_UNITS_OBJECTBOUNDINGBOX;
+static SPObjectGroupClass *parent_class;
 
-	this->maskContentUnits_set = FALSE;
-	this->maskContentUnits = SP_CONTENT_UNITS_USERSPACEONUSE;
-
-	this->display = NULL;
+GType
+sp_mask_get_type (void)
+{
+	static GType type = 0;
+	if (!type) {
+		GTypeInfo info = {
+			sizeof (SPMaskClass),
+			NULL, NULL,
+			(GClassInitFunc) sp_mask_class_init,
+			NULL, NULL,
+			sizeof (SPMask),
+			16,
+			(GInstanceInitFunc) sp_mask_init,
+			NULL,	/* value_table */
+		};
+		type = g_type_register_static (SP_TYPE_OBJECTGROUP, "SPMask", &info, (GTypeFlags)0);
+	}
+	return type;
 }
 
-SPMask::~SPMask() {
+static void
+sp_mask_class_init (SPMaskClass *klass)
+{
+	parent_class = (SPObjectGroupClass*) g_type_class_ref (SP_TYPE_OBJECTGROUP);
+
+	SPObjectClass *sp_object_class = (SPObjectClass *) klass;
+	sp_object_class->build = sp_mask_build;
+	sp_object_class->release = sp_mask_release;
+	sp_object_class->set = sp_mask_set;
+	sp_object_class->child_added = sp_mask_child_added;
+	sp_object_class->update = sp_mask_update;
+	sp_object_class->modified = sp_mask_modified;
+	sp_object_class->write = sp_mask_write;
 }
 
-void SPMask::build(SPDocument* doc, Inkscape::XML::Node* repr) {
-	SPObjectGroup::build(doc, repr);
+static void
+sp_mask_init (SPMask *mask)
+{
+	mask->maskUnits_set = FALSE;
+	mask->maskUnits = SP_CONTENT_UNITS_OBJECTBOUNDINGBOX;
 
-	this->readAttr( "maskUnits" );
-	this->readAttr( "maskContentUnits" );
+	mask->maskContentUnits_set = FALSE;
+	mask->maskContentUnits = SP_CONTENT_UNITS_USERSPACEONUSE;
+
+	mask->display = NULL;
+}
+
+static void
+sp_mask_build (SPObject *object, SPDocument *document, Inkscape::XML::Node *repr)
+{
+	if (((SPObjectClass *) parent_class)->build) {
+		((SPObjectClass *) parent_class)->build (object, document, repr);
+	}
+
+	sp_object_read_attr (object, "maskUnits");
+	sp_object_read_attr (object, "maskContentUnits");
 
 	/* Register ourselves */
-	doc->addResource("mask", this);
+	sp_document_add_resource (document, "mask", object);
 }
 
-void SPMask::release() {
-    if (this->document) {
-        // Unregister ourselves
-        this->document->removeResource("mask", this);
-    }
+static void
+sp_mask_release (SPObject * object)
+{
+	if (SP_OBJECT_DOCUMENT (object)) {
+		/* Unregister ourselves */
+		sp_document_remove_resource (SP_OBJECT_DOCUMENT (object), "mask", object);
+	}
 
-    while (this->display) {
-        // We simply unref and let item manage this in handler
-        this->display = sp_mask_view_list_remove(this->display, this->display);
-    }
+	SPMask *cp = SP_MASK (object);
+	while (cp->display) {
+		/* We simply unref and let item manage this in handler */
+		cp->display = sp_mask_view_list_remove (cp->display, cp->display);
+	}
 
-    SPObjectGroup::release();
+	if (((SPObjectClass *) (parent_class))->release) {
+		((SPObjectClass *) parent_class)->release (object);
+	}
 }
 
-void SPMask::set(unsigned int key, const gchar* value) {
+static void
+sp_mask_set (SPObject *object, unsigned int key, const gchar *value)
+{
+	SPMask *mask = SP_MASK (object);
+
 	switch (key) {
 	case SP_ATTR_MASKUNITS:
-		this->maskUnits = SP_CONTENT_UNITS_OBJECTBOUNDINGBOX;
-		this->maskUnits_set = FALSE;
-		
+		mask->maskUnits = SP_CONTENT_UNITS_OBJECTBOUNDINGBOX;
+		mask->maskUnits_set = FALSE;
 		if (value) {
 			if (!strcmp (value, "userSpaceOnUse")) {
-				this->maskUnits = SP_CONTENT_UNITS_USERSPACEONUSE;
-				this->maskUnits_set = TRUE;
+				mask->maskUnits = SP_CONTENT_UNITS_USERSPACEONUSE;
+				mask->maskUnits_set = TRUE;
 			} else if (!strcmp (value, "objectBoundingBox")) {
-				this->maskUnits_set = TRUE;
+				mask->maskUnits_set = TRUE;
 			}
 		}
-		
-		this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+		object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 		break;
 	case SP_ATTR_MASKCONTENTUNITS:
-		this->maskContentUnits = SP_CONTENT_UNITS_USERSPACEONUSE;
-		this->maskContentUnits_set = FALSE;
-		
+		mask->maskContentUnits = SP_CONTENT_UNITS_USERSPACEONUSE;
+		mask->maskContentUnits_set = FALSE;
 		if (value) {
 			if (!strcmp (value, "userSpaceOnUse")) {
-				this->maskContentUnits_set = TRUE;
+				mask->maskContentUnits_set = TRUE;
 			} else if (!strcmp (value, "objectBoundingBox")) {
-				this->maskContentUnits = SP_CONTENT_UNITS_OBJECTBOUNDINGBOX;
-				this->maskContentUnits_set = TRUE;
+				mask->maskContentUnits = SP_CONTENT_UNITS_OBJECTBOUNDINGBOX;
+				mask->maskContentUnits_set = TRUE;
 			}
 		}
-		
-		this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+		object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 		break;
 	default:
-		SPObjectGroup::set(key, value);
+		if (((SPObjectClass *) parent_class)->set)
+			((SPObjectClass *) parent_class)->set (object, key, value);
 		break;
 	}
 }
 
-void SPMask::child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref) {
+static void
+sp_mask_child_added (SPObject *object, Inkscape::XML::Node *child, Inkscape::XML::Node *ref)
+{
 	/* Invoke SPObjectGroup implementation */
-	SPObjectGroup::child_added(child, ref);
+	((SPObjectClass *) (parent_class))->child_added (object, child, ref);
 
 	/* Show new object */
-	SPObject *ochild = this->document->getObjectByRepr(child);
-	
+	SPObject *ochild = SP_OBJECT_DOCUMENT (object)->getObjectByRepr(child);
 	if (SP_IS_ITEM (ochild)) {
-		for (SPMaskView *v = this->display; v != NULL; v = v->next) {
-			Inkscape::DrawingItem *ac = SP_ITEM (ochild)->invoke_show(v->arenaitem->drawing(), v->key, SP_ITEM_REFERENCE_FLAGS);
-			
+		SPMask *cp = SP_MASK (object);
+		for (SPMaskView *v = cp->display; v != NULL; v = v->next) {
+			NRArenaItem *ac = sp_item_invoke_show (SP_ITEM (ochild),
+							       NR_ARENA_ITEM_ARENA (v->arenaitem),
+							       v->key,
+							       SP_ITEM_REFERENCE_FLAGS);
 			if (ac) {
-			    v->arenaitem->prependChild(ac);
+				nr_arena_item_add_child (v->arenaitem, ac, NULL);
 			}
 		}
 	}
 }
 
-
-void SPMask::update(SPCtx* ctx, unsigned int flags) {
-    if (flags & SP_OBJECT_MODIFIED_FLAG) {
-        flags |= SP_OBJECT_PARENT_MODIFIED_FLAG;
-    }
+static void
+sp_mask_update (SPObject *object, SPCtx *ctx, guint flags)
+{
+	if (flags & SP_OBJECT_MODIFIED_FLAG) {
+		flags |= SP_OBJECT_PARENT_MODIFIED_FLAG;
+	}
 	
-    flags &= SP_OBJECT_MODIFIED_CASCADE;
+	flags &= SP_OBJECT_MODIFIED_CASCADE;
 
-    std::vector<SPObject *> children = this->childList(false);
-    for (std::vector<SPObject *>::const_iterator child = children.begin();child != children.end();++child) {
-        sp_object_ref(*child);
-    }
-    
-    
-    for (std::vector<SPObject *>::const_iterator child = children.begin();child != children.end();++child) {
-        if (flags || ((*child)->uflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG))) {
-            (*child)->updateDisplay(ctx, flags);
-        }
-        
-        sp_object_unref(*child);
-    }
+	SPObjectGroup *og = SP_OBJECTGROUP (object);
+	GSList *l = NULL;
+	for (SPObject *child = sp_object_first_child(SP_OBJECT(og)); child != NULL; child = SP_OBJECT_NEXT(child)) {
+		g_object_ref (G_OBJECT (child));
+		l = g_slist_prepend (l, child);
+	}
+	l = g_slist_reverse (l);
+	while (l) {
+		SPObject *child = SP_OBJECT (l->data);
+		l = g_slist_remove (l, child);
+		if (flags || (child->uflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG))) {
+			child->updateDisplay(ctx, flags);
+		}
+		g_object_unref (G_OBJECT (child));
+	}
 
-    for (SPMaskView *v = this->display; v != NULL; v = v->next) {
-        Inkscape::DrawingGroup *g = dynamic_cast<Inkscape::DrawingGroup *>(v->arenaitem);
-        
-        if (this->maskContentUnits == SP_CONTENT_UNITS_OBJECTBOUNDINGBOX && v->bbox) {
-            Geom::Affine t = Geom::Scale(v->bbox->dimensions());
-            t.setTranslation(v->bbox->min());
-            g->setChildTransform(t);
-        } else {
-            g->setChildTransform(Geom::identity());
-        }
-    }
+	SPMask *mask = SP_MASK (object);
+	for (SPMaskView *v = mask->display; v != NULL; v = v->next) {
+		if (mask->maskContentUnits == SP_CONTENT_UNITS_OBJECTBOUNDINGBOX) {
+            Geom::Matrix t(Geom::Scale(v->bbox.x1 - v->bbox.x0, v->bbox.y1 - v->bbox.y0));
+			t[4] = v->bbox.x0;
+			t[5] = v->bbox.y0;
+			nr_arena_group_set_child_transform (NR_ARENA_GROUP (v->arenaitem), &t);
+		} else {
+			nr_arena_group_set_child_transform (NR_ARENA_GROUP (v->arenaitem), NULL);
+		}
+	}
 }
 
-void SPMask::modified(unsigned int flags) {
-    if (flags & SP_OBJECT_MODIFIED_FLAG) {
-        flags |= SP_OBJECT_PARENT_MODIFIED_FLAG;
-    }
+static void
+sp_mask_modified (SPObject *object, guint flags)
+{
+	if (flags & SP_OBJECT_MODIFIED_FLAG) {
+		flags |= SP_OBJECT_PARENT_MODIFIED_FLAG;
+	}
 	
-    flags &= SP_OBJECT_MODIFIED_CASCADE;
+	flags &= SP_OBJECT_MODIFIED_CASCADE;
 
-    std::vector<SPObject *> children = this->childList(false);
-    for (std::vector<SPObject *>::const_iterator child = children.begin();child != children.end();++child) {
-        sp_object_ref(*child);
-    }
-    
-    for (std::vector<SPObject *>::const_iterator child = children.begin();child != children.end();++child) {
-        if (flags || ((*child)->mflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG))) {
-            (*child)->emitModified(flags);
-        }
-        
-        sp_object_unref(*child);
-    }
+	SPObjectGroup *og = SP_OBJECTGROUP (object);
+	GSList *l = NULL;
+	for (SPObject *child = sp_object_first_child(SP_OBJECT(og)); child != NULL; child = SP_OBJECT_NEXT(child)) {
+		g_object_ref (G_OBJECT (child));
+		l = g_slist_prepend (l, child);
+	}
+	l = g_slist_reverse (l);
+	while (l) {
+		SPObject *child = SP_OBJECT (l->data);
+		l = g_slist_remove (l, child);
+		if (flags || (child->mflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG))) {
+			child->emitModified(flags);
+		}
+		g_object_unref (G_OBJECT (child));
+	}
 }
 
-Inkscape::XML::Node* SPMask::write(Inkscape::XML::Document* xml_doc, Inkscape::XML::Node* repr, guint flags) {
+static Inkscape::XML::Node *
+sp_mask_write (SPObject *object, Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags)
+{
 	if ((flags & SP_OBJECT_WRITE_BUILD) && !repr) {
 		repr = xml_doc->createElement("svg:mask");
 	}
 
-	SPObjectGroup::write(xml_doc, repr, flags);
+	if (((SPObjectClass *) (parent_class))->write)
+		((SPObjectClass *) (parent_class))->write (object, xml_doc, repr, flags);
 
 	return repr;
 }
 
 // Create a mask element (using passed elements), add it to <defs>
 const gchar *
-sp_mask_create (std::vector<Inkscape::XML::Node*> &reprs, SPDocument *document, Geom::Affine const* applyTransform)
+sp_mask_create (GSList *reprs, SPDocument *document, Geom::Matrix const* applyTransform)
 {
-    Inkscape::XML::Node *defsrepr = document->getDefs()->getRepr();
+    Inkscape::XML::Node *defsrepr = SP_OBJECT_REPR (SP_DOCUMENT_DEFS (document));
 
-    Inkscape::XML::Document *xml_doc = document->getReprDoc();
+    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(document);
     Inkscape::XML::Node *repr = xml_doc->createElement("svg:mask");
     repr->setAttribute("maskUnits", "userSpaceOnUse");
     
@@ -210,13 +282,14 @@ sp_mask_create (std::vector<Inkscape::XML::Node*> &reprs, SPDocument *document, 
     const gchar *mask_id = repr->attribute("id");
     SPObject *mask_object = document->getObjectById(mask_id);
     
-    for (std::vector<Inkscape::XML::Node*>::const_iterator it = reprs.begin(); it != reprs.end(); ++it) {
-        Inkscape::XML::Node *node = (*it);
+    for (GSList *it = reprs; it != NULL; it = it->next) {
+        Inkscape::XML::Node *node = (Inkscape::XML::Node *)(it->data);
         SPItem *item = SP_ITEM(mask_object->appendChildRepr(node));
         
         if (NULL != applyTransform) {
-            Geom::Affine transform (item->transform * (*applyTransform));
-            item->doWriteTransform(item->getRepr(), transform);
+            Geom::Matrix transform (item->transform);
+            transform *= (*applyTransform);
+            sp_item_write_transform(item, SP_OBJECT_REPR(item), transform);
         }
     }
 
@@ -227,46 +300,53 @@ sp_mask_create (std::vector<Inkscape::XML::Node*> &reprs, SPDocument *document, 
     return mask_id;
 }
 
-Inkscape::DrawingItem *SPMask::sp_mask_show(Inkscape::Drawing &drawing, unsigned int key) {
-	g_return_val_if_fail (this != NULL, NULL);
-	g_return_val_if_fail (SP_IS_MASK (this), NULL);
+NRArenaItem *
+sp_mask_show (SPMask *mask, NRArena *arena, unsigned int key)
+{
+	g_return_val_if_fail (mask != NULL, NULL);
+	g_return_val_if_fail (SP_IS_MASK (mask), NULL);
+	g_return_val_if_fail (arena != NULL, NULL);
+	g_return_val_if_fail (NR_IS_ARENA (arena), NULL);
 
-	Inkscape::DrawingGroup *ai = new Inkscape::DrawingGroup(drawing);
-	this->display = sp_mask_view_new_prepend (this->display, key, ai);
+	NRArenaItem *ai = NRArenaGroup::create(arena);
+	mask->display = sp_mask_view_new_prepend (mask->display, key, ai);
 
-	for ( SPObject *child = this->firstChild() ; child; child = child->getNext() ) {
+	for (SPObject *child = sp_object_first_child(SP_OBJECT(mask)) ; child != NULL; child = SP_OBJECT_NEXT(child)) {
 		if (SP_IS_ITEM (child)) {
-			Inkscape::DrawingItem *ac = SP_ITEM (child)->invoke_show (drawing, key, SP_ITEM_REFERENCE_FLAGS);
-
+			NRArenaItem *ac = sp_item_invoke_show (SP_ITEM (child), arena, key, SP_ITEM_REFERENCE_FLAGS);
 			if (ac) {
-				ai->prependChild(ac);
+				/* The order is not important in mask */
+				nr_arena_item_add_child (ai, ac, NULL);
 			}
 		}
 	}
 
-	if (this->maskContentUnits == SP_CONTENT_UNITS_OBJECTBOUNDINGBOX && this->display->bbox) {
-	    Geom::Affine t = Geom::Scale(this->display->bbox->dimensions());
-	    t.setTranslation(this->display->bbox->min());
-	    ai->setChildTransform(t);
+	if (mask->maskContentUnits == SP_CONTENT_UNITS_OBJECTBOUNDINGBOX) {
+        Geom::Matrix t(Geom::Scale(mask->display->bbox.x1 - mask->display->bbox.x0, mask->display->bbox.y1 - mask->display->bbox.y0));
+		t[4] = mask->display->bbox.x0;
+		t[5] = mask->display->bbox.y0;
+		nr_arena_group_set_child_transform (NR_ARENA_GROUP (ai), &t);
 	}
 
 	return ai;
 }
 
-void SPMask::sp_mask_hide(unsigned int key) {
-	g_return_if_fail (this != NULL);
-	g_return_if_fail (SP_IS_MASK (this));
+void
+sp_mask_hide (SPMask *cp, unsigned int key)
+{
+	g_return_if_fail (cp != NULL);
+	g_return_if_fail (SP_IS_MASK (cp));
 
-	for ( SPObject *child = this->firstChild(); child; child = child->getNext()) {
+	for (SPObject *child = sp_object_first_child(SP_OBJECT(cp)); child != NULL; child = SP_OBJECT_NEXT(child)) {
 		if (SP_IS_ITEM (child)) {
-			SP_ITEM(child)->invoke_hide (key);
+			sp_item_invoke_hide (SP_ITEM (child), key);
 		}
 	}
 
-	for (SPMaskView *v = this->display; v != NULL; v = v->next) {
+	for (SPMaskView *v = cp->display; v != NULL; v = v->next) {
 		if (v->key == key) {
 			/* We simply unref and let item to manage this in handler */
-			this->display = sp_mask_view_list_remove (this->display, v);
+			cp->display = sp_mask_view_list_remove (cp->display, v);
 			return;
 		}
 	}
@@ -274,11 +354,18 @@ void SPMask::sp_mask_hide(unsigned int key) {
 	g_assert_not_reached ();
 }
 
-void SPMask::sp_mask_set_bbox(unsigned int key, Geom::OptRect const &bbox) {
-	for (SPMaskView *v = this->display; v != NULL; v = v->next) {
+void
+sp_mask_set_bbox (SPMask *mask, unsigned int key, NRRect *bbox)
+{
+	for (SPMaskView *v = mask->display; v != NULL; v = v->next) {
 		if (v->key == key) {
-		    v->bbox = bbox;
-		    break;
+			if (!NR_DF_TEST_CLOSE (v->bbox.x0, bbox->x0, NR_EPSILON) ||
+			    !NR_DF_TEST_CLOSE (v->bbox.y0, bbox->y0, NR_EPSILON) ||
+			    !NR_DF_TEST_CLOSE (v->bbox.x1, bbox->x1, NR_EPSILON) ||
+			    !NR_DF_TEST_CLOSE (v->bbox.y1, bbox->y1, NR_EPSILON)) {
+				v->bbox = *bbox;
+			}
+			break;
 		}
 	}
 }
@@ -286,14 +373,15 @@ void SPMask::sp_mask_set_bbox(unsigned int key, Geom::OptRect const &bbox) {
 /* Mask views */
 
 SPMaskView *
-sp_mask_view_new_prepend (SPMaskView *list, unsigned int key, Inkscape::DrawingItem *arenaitem)
+sp_mask_view_new_prepend (SPMaskView *list, unsigned int key, NRArenaItem *arenaitem)
 {
 	SPMaskView *new_mask_view = g_new (SPMaskView, 1);
 
 	new_mask_view->next = list;
 	new_mask_view->key = key;
-	new_mask_view->arenaitem = arenaitem;
-	new_mask_view->bbox = Geom::OptRect();
+	new_mask_view->arenaitem = nr_arena_item_ref(arenaitem);
+	new_mask_view->bbox.x0 = new_mask_view->bbox.x1 = 0.0;
+	new_mask_view->bbox.y0 = new_mask_view->bbox.y1 = 0.0;
 
 	return new_mask_view;
 }
@@ -310,7 +398,7 @@ sp_mask_view_list_remove (SPMaskView *list, SPMaskView *view)
 		prev->next = view->next;
 	}
 
-	delete view->arenaitem;
+	nr_arena_item_unref (view->arenaitem);
 	g_free (view);
 
 	return list;
@@ -325,4 +413,4 @@ sp_mask_view_list_remove (SPMaskView *list, SPMaskView *view)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

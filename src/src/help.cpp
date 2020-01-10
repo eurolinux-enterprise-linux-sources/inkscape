@@ -1,4 +1,6 @@
-/**
+#define __SP_HELP_C__
+
+/*
  * Help/About window
  *
  * Authors:
@@ -14,20 +16,21 @@
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
-
-#include <glibmm.h>
-
-#include "file.h"
-#include "help.h"
 #include "path-prefix.h"
+
+#include "help.h"
+#include "file.h"
+
 #include "ui/dialog/aboutbox.h"
 
-void sp_help_about()
+void
+sp_help_about (void)
 {
     Inkscape::UI::Dialog::AboutBox::show_about();
 }
 
-void sp_help_open_tutorial(GtkMenuItem *, void* data)
+void
+sp_help_open_tutorial(GtkMenuItem *, gpointer data)
 {
     gchar const *name = static_cast<gchar const *>(data);
     gchar *c = g_build_filename(INKSCAPE_TUTORIALSDIR, name, NULL);

@@ -10,7 +10,6 @@
  *
  * Authors:
  *   Bob Jamison <ishmal@inkscape.org>
- *   Abhishek Sharma
  *
  * Copyright (C) 2004-2008 Authors
  *
@@ -30,17 +29,15 @@
 #include <extension/system.h>
 #include <2geom/pathvector.h>
 #include <2geom/rect.h>
-#include <2geom/curves.h>
+#include <2geom/bezier-curve.h>
+#include <2geom/hvlinesegment.h>
 #include "helper/geom.h"
 #include "helper/geom-curves.h"
 #include <io/sys.h>
-#include "sp-root.h"
 
 #include <string>
 #include <stdio.h>
 #include <stdarg.h>
-#include "document.h"
-#include "extension/extension.h"
 
 
 namespace Inkscape
@@ -74,15 +71,16 @@ static void err(const char *fmt, ...)
 
 
 
-static double effective_opacity(SPItem const *item)
+static double
+effective_opacity(SPItem const *item)
 {
-    // TODO investigate this. The early return seems that it would abort early.
-    // Plus is will emit a warning, which may not be proper here.
     double ret = 1.0;
-    for (SPObject const *obj = item; obj; obj = obj->parent) {
-        g_return_val_if_fail(obj->style, ret);
-        ret *= SP_SCALE24_TO_FLOAT(obj->style->opacity.value);
-    }
+    for (SPObject const *obj = item; obj; obj = obj->parent)
+        {
+        SPStyle const *const style = SP_OBJECT_STYLE(obj);
+        g_return_val_if_fail(style, ret);
+        ret *= SP_SCALE24_TO_FLOAT(style->opacity.value);
+        }
     return ret;
 }
 
@@ -94,18 +92,6 @@ static double effective_opacity(SPItem const *item)
 //# OUTPUT FORMATTING
 //########################################################################
 
-PovOutput::PovOutput() :
-    outbuf (),
-    nrNodes (0),
-    nrSegments (0),
-    nrShapes (0),
-    idIndex (0),
-    minx (0),
-    miny (0),
-    maxx (0),
-    maxy (0)
-{
-}
 
 /**
  * We want to control floating output format
@@ -277,9 +263,9 @@ bool PovOutput::doCurve(SPItem *item, const String &id)
         return true;
 
     SPShape *shape = SP_SHAPE(item);
-    if (shape->_curve->is_empty()) {
+    SPCurve *curve = shape->curve;
+    if (curve->is_empty())
         return true;
-    }
 
     nrShapes++;
 
@@ -288,7 +274,7 @@ bool PovOutput::doCurve(SPItem *item, const String &id)
     shapeInfo.color = "";
 
     //Try to get the fill color of the shape
-    SPStyle *style = shape->style;
+    SPStyle *style = SP_OBJECT_STYLE(shape);
     /* fixme: Handle other fill types, even if this means translating gradients to a single
            flat colour. */
     if (style)
@@ -314,8 +300,8 @@ bool PovOutput::doCurve(SPItem *item, const String &id)
     povShapes.push_back(shapeInfo); //passed all tests.  save the info
 
     // convert the path to only lineto's and cubic curveto's:
-    Geom::Affine tf = item->i2dt_affine();
-    Geom::PathVector pathv = pathv_to_linear_and_cubic_beziers( shape->_curve->get_pathvector() * tf );
+    Geom::Matrix tf = sp_item_i2d_affine(item);
+    Geom::PathVector pathv = pathv_to_linear_and_cubic_beziers( curve->get_pathvector() * tf );
 
     /*
      * We need to know the number of segments (NR_CURVETOs/LINETOs, including
@@ -387,7 +373,7 @@ bool PovOutput::doCurve(SPItem *item, const String &id)
                 }
             else if(Geom::CubicBezier const *cubic = dynamic_cast<Geom::CubicBezier const*>(&*cit))
             {
-                std::vector<Geom::Point> points = cubic->controlPoints();
+                std::vector<Geom::Point> points = cubic->points();
                 Geom::Point p0 = points[0];
                 Geom::Point p1 = points[1];
                 Geom::Point p2 = points[2];
@@ -499,11 +485,11 @@ bool PovOutput::doTree(SPDocument *doc)
     miny  =  bignum;
     maxy  = -bignum;
 
-    if (!doTreeRecursive(doc, doc->getRoot()))
+    if (!doTreeRecursive(doc, doc->root))
         return false;
 
     //## Let's make a union of all of the Shapes
-    if (!povShapes.empty())
+    if (povShapes.size()>0)
         {
         String id = "AllShapes";
         char *pfx = (char *)id.c_str();
@@ -651,7 +637,7 @@ void PovOutput::saveDocument(SPDocument *doc, gchar const *filename_utf8)
     if (!f)
         return;
 
-    for (String::iterator iter = outbuf.begin() ; iter!=outbuf.end(); ++iter)
+    for (String::iterator iter = outbuf.begin() ; iter!=outbuf.end(); iter++)
         {
         int ch = *iter;
         fputc(ch, f);
@@ -741,4 +727,4 @@ PovOutput::init()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

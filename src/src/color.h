@@ -1,7 +1,9 @@
-#ifndef SEEN_SP_COLOR_H
-#define SEEN_SP_COLOR_H
+#ifndef __SP_COLOR_H__
+#define __SP_COLOR_H__
 
-/*
+/** \file
+ * Colors.
+ *
  * Author:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   bulia byak <buliabyak@users.sf.net>
@@ -13,8 +15,8 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include <gdk/gdk.h>
 #include <string>
-typedef unsigned int guint32; // uint is guaranteed to hold up to 2^32 − 1
 
 /* Useful composition macros */
 
@@ -46,14 +48,13 @@ struct SPColor {
     SPColor& operator= (SPColor const& other);
 
     bool operator == ( SPColor const& other ) const;
-    bool operator != ( SPColor const& other ) const { return !(*this == other); };
     bool isClose( SPColor const& other, float epsilon ) const;
 
     void set( float r, float g, float b );
     void set( guint32 value );
 
-    guint32 toRGBA32( int alpha ) const;
-    guint32 toRGBA32( double alpha ) const;
+    guint32 toRGBA32( gint alpha ) const;
+    guint32 toRGBA32( gdouble alpha ) const;
 
     std::string toString() const;
 
@@ -81,4 +82,5 @@ void sp_color_rgb_to_cmyk_floatv (float *cmyk, float r, float g, float b);
 void sp_color_cmyk_to_rgb_floatv (float *rgb, float c, float m, float y, float k);
 
 
-#endif // SEEN_SP_COLOR_H
+#endif
+

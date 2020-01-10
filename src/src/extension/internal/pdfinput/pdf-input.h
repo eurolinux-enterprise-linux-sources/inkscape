@@ -1,7 +1,9 @@
-#ifndef SEEN_EXTENSION_INTERNAL_PDFINPUT_H
-#define SEEN_EXTENSION_INTERNAL_PDFINPUT_H
+#ifndef __EXTENSION_INTERNAL_PDFINPUT_H__
+#define __EXTENSION_INTERNAL_PDFINPUT_H__
 
-/*
+ /** \file
+ * PDF import using libpoppler.
+ *
  * Authors:
  *   miklos erdelyi
  *
@@ -16,54 +18,32 @@
 
 #ifdef HAVE_POPPLER
 
-#include <gtkmm/dialog.h>
-
 #include "../../implementation/implementation.h"
 
+#include <gtkmm/dialog.h>
+#include <gtkmm/button.h>
+#include <gtkmm/buttonbox.h>
+#include <gtkmm/label.h>
+#include <gtkmm/spinbutton.h>
+#include <gtkmm/box.h>
+#include <gtkmm/checkbutton.h>
+#include <gtkmm/comboboxtext.h>
+#include <gtkmm/drawingarea.h>
+#include <gtkmm/alignment.h>
+#include <gtkmm/frame.h>
+#include <gtkmm/scale.h>
+#include <glibmm/i18n.h>
+#include <gdk/gdk.h>
+
+#include "PDFDoc.h"
 #ifdef HAVE_POPPLER_CAIRO
-struct _PopplerDocument;
-typedef struct _PopplerDocument            PopplerDocument;
+#include <poppler/glib/poppler-document.h>
 #endif
-
-struct _GdkEventExpose;
-typedef _GdkEventExpose GdkEventExpose;
-
-class Page;
-class PDFDoc;
-
-namespace Gtk {
-  class Alignment;
-  class Button;
-  class CheckButton;
-  class ComboBoxText;
-  class DrawingArea;
-  class Frame;
-  class HBox;
-#if WITH_GTKMM_3_0
-  class Scale;
-#else
-  class HScale;
-#endif
-  class RadioButton;
-  class VBox;
-  class Label;
-}
 
 namespace Inkscape {
-
-namespace UI {
-namespace Widget {
-  class SpinButton;
-  class Frame;
-}
-}
-
 namespace Extension {
 namespace Internal {
 
-/**
- * PDF import using libpoppler.
- */
 class PdfImportDialog : public Gtk::Dialog
 {
 public:
@@ -72,51 +52,34 @@ public:
 
     bool showDialog();
     int getSelectedPage();
-    bool getImportMethod();
     void getImportSettings(Inkscape::XML::Node *prefs);
 
 private:
     void _setPreviewPage(int page);
 
     // Signal handlers
-#if !WITH_GTKMM_3_0
     bool _onExposePreview(GdkEventExpose *event);
-#endif
-
-    bool _onDraw(const Cairo::RefPtr<Cairo::Context>& cr);
     void _onPageNumberChanged();
     void _onToggleCropping();
     void _onPrecisionChanged();
-#ifdef HAVE_POPPLER_CAIRO
-    void _onToggleImport();
-#endif
-    
+
     class Gtk::Button * cancelbutton;
     class Gtk::Button * okbutton;
     class Gtk::Label * _labelSelect;
-    class Inkscape::UI::Widget::SpinButton * _pageNumberSpin;
+    class Gtk::SpinButton * _pageNumberSpin;
     class Gtk::Label * _labelTotalPages;
     class Gtk::HBox * hbox2;
     class Gtk::CheckButton * _cropCheck;
     class Gtk::ComboBoxText * _cropTypeCombo;
     class Gtk::HBox * hbox3;
     class Gtk::VBox * vbox2;
-    class Inkscape::UI::Widget::Frame * _pageSettingsFrame;
+    class Gtk::Alignment * alignment3;
+    class Gtk::Label * _labelPageSettings;
+    class Gtk::Frame * _pageSettingsFrame;
     class Gtk::Label * _labelPrecision;
     class Gtk::Label * _labelPrecisionWarning;
-#ifdef HAVE_POPPLER_CAIRO
-    class Gtk::RadioButton * _importViaPoppler;  // Use poppler_cairo importing
-    class Gtk::Label * _labelViaPoppler;
-    class Gtk::RadioButton * _importViaInternal; // Use native (poppler based) importing
-    class Gtk::Label * _labelViaInternal;
-#endif
-#if WITH_GTKMM_3_0
-    class Gtk::Scale * _fallbackPrecisionSlider;
-    Glib::RefPtr<Gtk::Adjustment> _fallbackPrecisionSlider_adj;
-#else
     class Gtk::HScale * _fallbackPrecisionSlider;
     class Gtk::Adjustment *_fallbackPrecisionSlider_adj;
-#endif
     class Gtk::Label * _labelPrecisionComment;
     class Gtk::HBox * hbox6;
     class Gtk::Label * _labelText;
@@ -125,7 +88,9 @@ private:
     class Gtk::CheckButton * _localFontsCheck;
     class Gtk::CheckButton * _embedImagesCheck;
     class Gtk::VBox * vbox3;
-    class Inkscape::UI::Widget::Frame * _importSettingsFrame;
+    class Gtk::Alignment * alignment4;
+    class Gtk::Label * _labelImportSettings;
+    class Gtk::Frame * _importSettingsFrame;
     class Gtk::VBox * vbox1;
     class Gtk::DrawingArea * _previewArea;
     class Gtk::HBox * hbox1;
@@ -151,18 +116,14 @@ public:
     SPDocument *open( Inkscape::Extension::Input *mod,
                                 const gchar *uri );
     static void         init( void );
-    virtual bool wasCancelled();
-private:
-    bool _cancelled;
+
 };
 
-} // namespace Implementation
-} // namespace Extension
-} // namespace Inkscape
+} } }  /* namespace Inkscape, Extension, Implementation */
 
-#endif // HAVE_POPPLER
+#endif /* HAVE_POPPLER */
 
-#endif // SEEN_EXTENSION_INTERNAL_PDFINPUT_H
+#endif /* __EXTENSION_INTERNAL_PDFINPUT_H__ */
 
 /*
   Local Variables:

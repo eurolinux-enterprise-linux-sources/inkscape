@@ -1,6 +1,5 @@
-/**
- * @file
- * A simple dialog with information about extensions.
+/** @file
+ * @brief A simple dialog with information about extensions
  */
 /* Authors:
  *   Jon A. Cruz
@@ -10,11 +9,11 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "extensions.h"
-#include "extension/extension.h"
+#include <gtk/gtk.h> //for GTK_RESPONSE* types
 #include <gtkmm/scrolledwindow.h>
 
 #include "extension/db.h"
+#include "extensions.h"
 
 
 namespace Inkscape {
@@ -33,6 +32,10 @@ ExtensionsPanel &ExtensionsPanel::getInstance()
 }
 
 
+
+/**
+ * Constructor
+ */
 ExtensionsPanel::ExtensionsPanel() :
         _showAll(false)
 {
@@ -58,7 +61,7 @@ void ExtensionsPanel::set_full(bool full)
 
 void ExtensionsPanel::listCB( Inkscape::Extension::Extension * in_plug, gpointer in_data )
 {
-    ExtensionsPanel * self = static_cast<ExtensionsPanel*>(in_data);
+    ExtensionsPanel * self = (ExtensionsPanel*)in_data;
 
     const char* stateStr;
     Extension::state_t state = in_plug->get_state();
@@ -83,12 +86,19 @@ void ExtensionsPanel::listCB( Inkscape::Extension::Extension * in_plug, gpointer
     }
 
     if ( self->_showAll || in_plug->deactivated() ) {
+//         gchar* line = g_strdup_printf( " extension   %c %c  %s   |%s|%s|",
+//                                        (in_plug->loaded() ? 'X' : '-'),
+//                                        (in_plug->deactivated() ? 'X' : '-'),
+//                                        stateStr, in_plug->get_id(),
+//                                        in_plug->get_name() );
         gchar* line = g_strdup_printf( "%s   %s\n        \"%s\"", stateStr, in_plug->get_name(), in_plug->get_id() );
 
         self->_view.get_buffer()->insert( self->_view.get_buffer()->end(), line );
         self->_view.get_buffer()->insert( self->_view.get_buffer()->end(), "\n" );
-        g_free(line);
+        //g_message( "%s", line );
     }
+
+
 
     return;
 }
@@ -116,4 +126,4 @@ void ExtensionsPanel::rescan()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

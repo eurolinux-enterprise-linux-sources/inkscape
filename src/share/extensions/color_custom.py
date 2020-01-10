@@ -22,7 +22,7 @@ class C(coloreffect.ColorEffect):
             help="The selected UI-tab when OK was pressed")
         self.OptionParser.add_option("--scale",
             action="store", type="string",
-            dest="scale",
+            dest="scale", default="1",
             help="The input (r,g,b) range")
 
     def normalize(self, v):

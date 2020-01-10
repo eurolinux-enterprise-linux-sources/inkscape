@@ -1,9 +1,8 @@
-#include <2geom/bezier.h>
-#include <2geom/point.h>
 #include <2geom/solver.h>
+#include <2geom/point.h>
 #include <algorithm>
 
-namespace Geom {
+namespace  Geom{
 
 /*** Find the zeros of the parametric function in 2d defined by two beziers X(t), Y(t).  The code subdivides until it happy with the linearity of the bezier.  This requires an n^2 subdivision for each step, even when there is only one solution.
  * 
@@ -15,6 +14,13 @@ namespace Geom {
 /*
  *  Forward declarations
  */
+static Geom::Point 
+Bezier(Geom::Point const *V,
+       unsigned degree,
+       double t,
+       Geom::Point *Left,
+       Geom::Point *Right);
+
 unsigned
 crossing_count(Geom::Point const *V, unsigned degree);
 static unsigned 
@@ -62,16 +68,13 @@ find_parametric_bezier_roots(Geom::Point const *w, /* The control points  */
         break;
     }
 
-    /* Otherwise, solve recursively after subdividing control polygon  */
-
-    //Geom::Point Left[degree+1],	/* New left and right  */
-    //    Right[degree+1];	/* control polygons  */
-    std::vector<Geom::Point> Left( degree+1 ), Right(degree+1);
-
-    casteljau_subdivision(0.5, w, Left.data(), Right.data(), degree);
+    // Otherwise, solve recursively after subdividing control polygon
+    std::vector<Geom::Point> Left(degree + 1);    // New left and right
+    std::vector<Geom::Point> Right(degree + 1);   // control polygons
+    Bezier(w, degree, 0.5, &Left[0], &Right[0]);
     total_subs ++;
-    find_parametric_bezier_roots(Left.data(),  degree, solutions, depth+1);
-    find_parametric_bezier_roots(Right.data(), degree, solutions, depth+1);
+    find_parametric_bezier_roots(&Left[0],  degree, solutions, depth + 1);
+    find_parametric_bezier_roots(&Right[0], degree, solutions, depth + 1);
 }
 
 
@@ -120,8 +123,7 @@ control_poly_flat_enough(Geom::Point const *V, /* Control points	*/
 
     const double abSquared = (a * a) + (b * b);
 
-    //double distance[degree]; /* Distances from pts to line */
-    std::vector<double> distance(degree); /* Distances from pts to line */
+    double distance[degree]; /* Distances from pts to line */
     for (unsigned i = 1; i < degree; i++) {
         /* Compute distance from each of the points to that line */
         double & dist(distance[i-1]);
@@ -175,6 +177,40 @@ compute_x_intercept(Geom::Point const *V, /*  Control points	*/
     return (A[Geom::X]*V[0][Geom::Y] - A[Geom::Y]*V[0][Geom::X]) / -A[Geom::Y];
 }
 
+
+/*
+ *  Bezier : 
+ *	Evaluate a Bezier curve at a particular parameter value
+ *      Fill in control points for resulting sub-curves.
+ * 
+ */
+static Geom::Point 
+Bezier(Geom::Point const *V, /* Control pts	*/
+       unsigned degree,	/* Degree of bezier curve */
+       double t,	/* Parameter value */
+       Geom::Point *Left,	/* RETURN left half ctl pts */
+       Geom::Point *Right)	/* RETURN right half ctl pts */
+{
+    Geom::Point Vtemp[degree+1][degree+1];
+
+    /* Copy control points	*/
+    std::copy(V, V+degree+1, Vtemp[0]);
+
+    /* Triangle computation	*/
+    for (unsigned i = 1; i <= degree; i++) {	
+        for (unsigned j = 0; j <= degree - i; j++) {
+            Vtemp[i][j] = lerp(t, Vtemp[i-1][j], Vtemp[i-1][j+1]);
+        }
+    }
+    
+    for (unsigned j = 0; j <= degree; j++)
+        Left[j]  = Vtemp[j][0];
+    for (unsigned j = 0; j <= degree; j++)
+        Right[j] = Vtemp[degree-j][j];
+
+    return (Vtemp[degree][0]);
+}
+
 };
 
 /*
@@ -186,4 +222,4 @@ compute_x_intercept(Geom::Point const *V, /*  Control points	*/
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

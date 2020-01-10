@@ -1,5 +1,5 @@
-#ifndef SEEN_NR_FILTER_GAUSSIAN_H
-#define SEEN_NR_FILTER_GAUSSIAN_H
+#ifndef __NR_FILTER_GAUSSIAN_H__
+#define __NR_FILTER_GAUSSIAN_H__
 
 /*
  * Gaussian blur renderer
@@ -14,8 +14,12 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <2geom/forward.h>
 #include "display/nr-filter-primitive.h"
+#include "display/nr-filter-slot.h"
+#include "display/nr-filter-units.h"
+#include "libnr/nr-pixblock.h"
+#include <2geom/forward.h>
+#include "libnr/nr-rect-l.h"
 
 enum {
     BLUR_QUALITY_BEST = 2,
@@ -34,10 +38,9 @@ public:
     static FilterPrimitive *create();
     virtual ~FilterGaussian();
 
-    virtual void render_cairo(FilterSlot &slot);
-    virtual void area_enlarge(Geom::IntRect &area, Geom::Affine const &m);
-    virtual bool can_handle_affine(Geom::Affine const &m);
-    virtual double complexity(Geom::Affine const &ctm);
+    virtual int render(FilterSlot &slot, FilterUnits const &units);
+    virtual void area_enlarge(NRRectL &area, Geom::Matrix const &m);
+    virtual FilterTraits get_input_traits();
 
     /**
      * Set the standard deviation value for gaussian blur. Deviation along
@@ -78,4 +81,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

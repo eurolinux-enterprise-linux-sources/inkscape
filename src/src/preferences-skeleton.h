@@ -1,9 +1,8 @@
 #ifndef SEEN_PREFERENCES_SKELETON_H
 #define SEEN_PREFERENCES_SKELETON_H
 
-#include "inkscape-version.h"
+#include <inkscape-version.h>
 
-// FIXME why is this here?
 #ifdef N_
 #undef N_
 #endif
@@ -74,7 +73,8 @@ static char const preferences_skeleton[] =
 "  </group>\n"
 "\n"
 "  <group id=\"tools\"\n"
-"         bounding_box=\"0\">\n"
+"         bounding_box=\"0\"\n"
+"         style=\"fill:none;stroke:black;stroke-opacity:1;stroke-width:1px;stroke-linejoin:miter;stroke-linecap:butt;\">\n"
 "    <group id=\"shapes\" style=\"fill-rule:evenodd;\" selcue=\"1\" gradientdrag=\"1\">\n"
 "      <eventcontext id=\"rect\" style=\"fill:blue;\" usecurrent=\"1\"/>\n"
 "      <eventcontext id=\"3dbox\" style=\"stroke:none;stroke-linejoin:round;\" usecurrent=\"1\">\n"
@@ -87,10 +87,10 @@ static char const preferences_skeleton[] =
 "      </eventcontext>\n"
 "      <eventcontext id=\"arc\" style=\"fill:red;\" end=\"0\" start=\"0\" usecurrent=\"1\"/>\n"
 "      <eventcontext id=\"star\" magnitude=\"5\" style=\"fill:yellow;\" usecurrent=\"1\"/>\n"
-"      <eventcontext id=\"spiral\" style=\"fill:none;stroke:black\" expansion=\"1\" usecurrent=\"0\"/>\n"
+"      <eventcontext id=\"spiral\" style=\"fill:none;\" usecurrent=\"0\"/>\n"
 "    </group>\n"
 "    <group id=\"freehand\"\n"
-"         style=\"fill:none;stroke:black;stroke-opacity:1;stroke-linejoin:miter;stroke-linecap:butt;\">\n"
+"         style=\"fill:none;fill-rule:evenodd;stroke:black;stroke-opacity:1;stroke-linejoin:miter;stroke-linecap:butt;\">\n"
 "      <eventcontext id=\"pencil\" tolerance=\"4.0\" selcue=\"1\" style=\"stroke-width:1px;\" usecurrent=\"0\" average_all_sketches=\"1\"/>\n"
 "      <eventcontext id=\"pen\" mode=\"drag\" selcue=\"1\" style=\"stroke-width:1px;\" usecurrent=\"0\"/>\n"
 "    </group>\n"
@@ -106,8 +106,8 @@ static char const preferences_skeleton[] =
 "    <group id=\"cp5\" name=\"" N_("Tracing") "\" width=\"50\" mass=\"0\" wiggle=\"0.0\" angle=\"0.0\" thinning=\"0.0\" tremor=\"0.0\" flatness=\"0\" cap_rounding=\"0.0\" tracebackground=\"1\" usepressure=\"1\" usetilt=\"1\"/>\n"
 "    </group>\n"
 "    </eventcontext>\n"
-"    <eventcontext id=\"eraser\" mode=\"1\" style=\"fill:#ff0000;fill-opacity:1;fill-rule:nonzero;stroke:none;\"\n"
-"                       mass=\"0.02\" drag=\"1\" angle=\"30\" width=\"10\" thinning=\"0.1\" flatness=\"0.0\" cap_rounding=\"1.4\" usecurrent=\"0\"\n"
+"    <eventcontext id=\"eraser\" mode=\"0\" style=\"fill:#ff0000;fill-opacity:1;fill-rule:nonzero;stroke:none;\"\n"
+"                       mass=\"0.02\" drag=\"1\" angle=\"30\" width=\"0.15\" thinning=\"0.1\" flatness=\"0.0\" cap_rounding=\"1.4\" usecurrent=\"0\"\n"
 "                       tracebackground=\"0\" usepressure=\"1\" usetilt=\"0\" selcue=\"1\">\n"
 "    </eventcontext>\n"
 "    <eventcontext id=\"lpetool\" mode=\"drag\" style=\"fill:#ff0000;fill-opacity:1;fill-rule:nonzero;stroke:none;\">\n"
@@ -115,12 +115,11 @@ static char const preferences_skeleton[] =
 "    <eventcontext id=\"text\"  usecurrent=\"0\" gradientdrag=\"1\"\n"
 "                       font_sample=\"AaBbCcIiPpQq12369$\342\202\254\302\242?.;/()\"\n"
 "                       show_sample_in_list=\"1\"\n"
-"                  style=\"fill:black;fill-opacity:1;stroke:none;font-family:sans-serif;font-style:normal;font-weight:normal;font-size:40px;\" selcue=\"1\"/>\n"
+"                  style=\"fill:black;fill-opacity:1;stroke:none;font-family:Sans;font-style:normal;font-weight:normal;font-size:40px;\" selcue=\"1\"/>\n"
 "    <eventcontext id=\"nodes\" selcue=\"1\" gradientdrag=\"1\" highlight_color=\"4278190335\" pathflash_enabled=\"1\" pathflash_unselected=\"0\" pathflash_timeout=\"500\" show_handles=\"1\" show_outline=\"0\" sculpting_profile=\"1\" single_node_transform_handles=\"0\" show_transform_handles=\"0\" live_outline=\"1\" live_objects=\"1\" show_helperpath=\"0\" x=\"0\" y=\"0\" edit_clipping_paths=\"0\" edit_masks=\"0\" />\n"
 "    <eventcontext id=\"tweak\" selcue=\"0\" gradientdrag=\"0\" show_handles=\"0\" width=\"0.2\" force=\"0.2\" fidelity=\"0.5\" usepressure=\"1\" style=\"fill:red;stroke:none;\" usecurrent=\"0\"/>\n"
-"    <eventcontext id=\"spray\" selcue=\"1\" gradientdrag=\"0\" usepressure=\"1\" width=\"15\" population=\"70\" mode=\"1\" rotation_variation=\"0\" scale_variation=\"0\" standard_deviation=\"70\" mean=\"0\"/>\n"
+"    <eventcontext id=\"spray\" usepressure=\"1\" width=\"15\" population=\"70\" mode=\"1\" rotation_variation=\"0\" scale_variation=\"0\" standard_deviation=\"70\" mean=\"0\"/>\n"
 "    <eventcontext id=\"gradient\" selcue=\"1\"/>\n"
-"    <eventcontext id=\"mesh\" selcue=\"1\"/>\n"
 "    <eventcontext id=\"zoom\" selcue=\"1\" gradientdrag=\"0\"/>\n"
 "    <eventcontext id=\"dropper\" selcue=\"1\" gradientdrag=\"1\" pick=\"1\" setalpha=\"1\"/>\n"
 "    <eventcontext id=\"select\" selcue=\"1\" gradientdrag=\"0\"/>\n"
@@ -139,7 +138,6 @@ static char const preferences_skeleton[] =
 "      <dash id=\"dash-1-12\" style=\"stroke-dasharray:1,12\"/>\n"
 "      <dash id=\"dash-1-24\" style=\"stroke-dasharray:1,24\"/>\n"
 "      <dash id=\"dash-1-48\" style=\"stroke-dasharray:1,48\"/>\n"
-"      <dash id=\"dash-empty\" style=\"stroke-dasharray:0 11\"/>\n"
 "      <dash id=\"dash-2-1\" style=\"stroke-dasharray:2,1\"/>\n"
 "      <dash id=\"dash-3-1\" style=\"stroke-dasharray:3,1\"/>\n"
 "      <dash id=\"dash-4-1\" style=\"stroke-dasharray:4,1\"/>\n"
@@ -198,7 +196,7 @@ static char const preferences_skeleton[] =
 "    <group id=\"save_as\" default=\"\" append_extension=\"1\" enable_preview=\"1\" path=\"\" use_current_dir=\"1\"/>\n"
 "    <group id=\"save_copy\" default=\"\" append_extension=\"1\" enable_preview=\"1\" path=\"\"/>\n"
 "    <group id=\"open\" enable_preview=\"1\" path=\"\"/>\n"
-"    <group id=\"import\" enable_preview=\"1\" path=\"\" ask=\"1\" link=\"link\" scale=\"optimizeSpeed\"/>\n"
+"    <group id=\"import\" enable_preview=\"1\" path=\"\"/>\n"
 "    <group id=\"debug\" redirect=\"0\"/>\n"
 "    <group id=\"clonetiler\" />\n"
 "    <group id=\"gridtiler\" />\n"
@@ -216,6 +214,7 @@ static char const preferences_skeleton[] =
 "    <group id=\"input\" />\n"
 "    <group id=\"colorpickerwindow\" />\n"
 "    <group id=\"undo-history\" />\n"
+"    <group id=\"filtereffects\" />\n"
 "    <group id=\"transparency\"\n"
 "       on-focus=\"1.0\"\n"
 "       on-blur=\"0.50\"\n"
@@ -232,7 +231,6 @@ static char const preferences_skeleton[] =
 "  </group>\n"
 "\n"
 "  <group id=\"options\">\n"
-"    <group id=\"renderingcache\" size=\"64\" />"
 "    <group id=\"useoldpdfexporter\" value=\"0\" />"
 "    <group id=\"highlightoriginal\" value=\"1\" />"
 "    <group id=\"relinkclonesonduplicate\" value=\"0\" />"
@@ -240,11 +238,10 @@ static char const preferences_skeleton[] =
 "    <group id=\"trackalt\" value=\"0\" />"
 "    <group id=\"switchonextinput\" value=\"0\" />"
 "    <group id=\"useextinput\" value=\"1\" />"
-"    <group id=\"nudgedistance\" value=\"2px\"/>\n"
+"    <group id=\"nudgedistance\" value=\"2\"/>\n"
 "    <group id=\"rotationsnapsperpi\" value=\"12\"/>\n"
 "    <group id=\"cursortolerance\" value=\"8.0\"/>\n"
 "    <group id=\"dragtolerance\" value=\"4.0\"/>\n"
-"    <group id=\"grabsize\" value=\"3\"/>\n"
 "    <group\n"
 "       id=\"displayprofile\"\n"
 "       enable=\"0\"\n"
@@ -261,14 +258,14 @@ static char const preferences_skeleton[] =
 "       preserveblack=\"0\"\n"
 "       uri=\"\" />\n"
 "    <group id=\"savewindowgeometry\" value=\"1\"/>\n"
-"    <group id=\"defaultoffsetwidth\" value=\"2px\"/>\n"
-"    <group id=\"defaultscale\" value=\"2px\"/>\n"
+"    <group id=\"defaultoffsetwidth\" value=\"2\"/>\n"
+"    <group id=\"defaultscale\" value=\"2\"/>\n"
 "    <group id=\"maxrecentdocuments\" value=\"36\"/>\n"
 "    <group id=\"zoomincrement\" value=\"1.414213562\"/>\n"
 "    <group id=\"zoomcorrection\" value=\"1.0\" unit=\"mm\"/>\n"
 "    <group id=\"keyscroll\" value=\"15\"/>\n"
 "    <group id=\"wheelscroll\" value=\"40\"/>\n"
-"    <group id=\"spacebarpans\" value=\"1\"/>\n"
+"    <group id=\"spacepans\" value=\"0\"/>\n"
 "    <group id=\"wheelzooms\" value=\"0\"/>\n"
 "    <group id=\"transientpolicy\" value=\"1\"/>\n"
 "    <group id=\"scrollingacceleration\" value=\"0.4\"/>\n"
@@ -279,12 +276,10 @@ static char const preferences_skeleton[] =
 "    <group id=\"autoscrollspeed\" value=\"0.7\"/>\n"
 "    <group id=\"autoscrolldistance\" value=\"-10\"/>\n"
 "    <group id=\"simplifythreshold\" value=\"0.002\"/>\n"
-"    <group id=\"bitmapeditor\" value=\"gimp\"/>\n"
+"    <group id=\"bitmapoversample\" value=\"1\"/>\n"
+"    <group id=\"bitmapeditor\" value=\"0\" choices=\"gimp,krita,gpaint,kolourpaint,mtpaint,cinepaint\"/>\n"
 "    <group id=\"bitmapautoreload\" value=\"1\"/>\n"
 "    <group id=\"dialogtype\" value=\"1\"/>\n"
-#ifdef WIN32
-"    <group id=\"desktopintegration\" value=\"1\"/>\n"
-#endif
 "    <group id=\"dock\" "
 "           cancenterdock=\"1\""
 "           dockbarstyle=\"2\""      // GDL_DOCK_BAR_BOTH
@@ -292,9 +287,6 @@ static char const preferences_skeleton[] =
 "    <group id=\"dialogsskiptaskbar\" value=\"1\"/>\n"
 #ifdef WIN32 // FIXME: Temporary Win32 special code to enable transient dialogs
 "    <group id=\"dialogsontopwin32\" value=\"0\"/>\n"
-#endif
-#if !defined(GDK_WINDOWING_QUARTZ) // No maximise for Quartz, see lp:1302627
- "    <group id=\"defaultwindowsize\" value=\"2\" />\n"
 #endif
 "    <group id=\"arenatilescachesize\" value=\"8192\"/>\n"
 "    <group id=\"preservetransform\" value=\"0\"/>\n"
@@ -322,24 +314,7 @@ static char const preferences_skeleton[] =
 "           images=\"4278190335\"" //ff0000ff
 "           clips=\"16711935\"" // 00ff00ff
 "           masks=\"65535\"/>\n" // 0x0000ffff
-"    <group id=\"svgoutput\" "
-"           usenamedcolors=\"0\" "
-"           numericprecision=\"8\" "
-"           minimumexponent=\"-8\" "
-"           inlineattrs=\"0\" "
-"           indent=\"2\" "
-"           pathstring_format=\"2\" "
-"           forcerepeatcommands=\"0\" "
-"           incorrect_attributes_warn=\"1\" "
-"           incorrect_attributes_remove=\"0\" "
-"           incorrect_style_properties_warn=\"1\" "
-"           incorrect_style_properties_remove=\"0\" "
-"           style_defaults_warn=\"1\" "
-"           style_defaults_remove=\"0\" "
-"           check_on_reading=\"0\" "
-"           check_on_editing=\"0\" "
-"           check_on_writing=\"0\" "
-"           sort_attributes=\"0\"/>\n"
+"    <group id=\"svgoutput\" usenamedcolors=\"0\" numericprecision=\"8\" minimumexponent=\"-8\" inlineattrs=\"0\" indent=\"2\" allowrelativecoordinates=\"1\" forcerepeatcommands=\"0\"/>\n"
 "    <group id=\"externalresources\">\n"
 "      <group id=\"xml\" "
 "           allow_net_access=\"0\"/>\n"
@@ -355,8 +330,8 @@ static char const preferences_skeleton[] =
 "             origin_y=\"0.0\"\n"
 "             spacing_x=\"1.0\"\n"
 "             spacing_y=\"1.0\"\n"
-"             color=\"1061158688\"\n"  // 0x3F3FFF20
-"             empcolor=\"1061158720\"\n" // 0x3F3FFF40
+"             color=\"65312\"\n"  // 0x0000FF20
+"             empcolor=\"65344\"\n" // 0x0000FF40
 "             empspacing=\"5\"\n"
 "             dotted=\"0\"/>\n"
 "      <group id=\"axonom\" "
@@ -366,13 +341,15 @@ static char const preferences_skeleton[] =
 "             spacing_y=\"1.0\"\n"
 "             angle_x=\"30.0\"\n"
 "             angle_z=\"30.0\"\n"
-"             color=\"1061158688\"\n"  // 0x3F3FFF20
-"             empcolor=\"1061158720\"\n" // 0x3F3FFF40
+"             color=\"65312\"\n"  // 0x0000FF20
+"             empcolor=\"65344\"\n" // 0x0000FF40
 "             empspacing=\"5\"/>\n"
 "    </group>\n"
 "    <group id=\"workarounds\"\n"
 "           colorsontop=\"0\"\n"
+"           floatallowed=\"0\"\n"
 "           partialdynamic=\"0\"/>\n"
+"    <group id=\"threading\" numthreads=\"1\"/>\n"
 "  </group>\n"
 "\n"
 "  <group id=\"extensions\">"
@@ -479,6 +456,10 @@ static char const preferences_skeleton[] =
 "      </group>\n"
 "    </group>\n"
 "  </group>\n"
+"  <group id = \"whiteboard\">\n"
+"    <group id = \"server\" name = \"jabber.org\" port = \"5222\" username = \"\" ssl = \"0\"/>\n"
+"    <group id = \"room\" name = \"inkboard\" server = \"gristle.org\"/>\n"
+"  </group>\n"
 "  <group id=\"debug\">\n"
 "    <group id=\"latency\" skew=\"1\"/>\n"
 "  </group>\n"
@@ -501,4 +482,4 @@ static char const preferences_skeleton[] =
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

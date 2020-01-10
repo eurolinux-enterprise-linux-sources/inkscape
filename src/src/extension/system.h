@@ -15,19 +15,11 @@
 #ifndef INKSCAPE_EXTENSION_SYSTEM_H__
 #define INKSCAPE_EXTENSION_SYSTEM_H__
 
-#include <glibmm/ustring.h>
-
-class SPDocument;
+#include "document.h"
+#include "extension/extension.h"
 
 namespace Inkscape {
-
 namespace Extension {
-class Extension;
-class Print;
-
-namespace Implementation {
-class Implementation;
-}
 
 /**
  * Used to distinguish between the various invocations of the save dialogs (and thus to determine

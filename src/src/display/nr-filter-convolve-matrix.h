@@ -1,5 +1,5 @@
-#ifndef SEEN_NR_FILTER_CONVOLVE_MATRIX_H
-#define SEEN_NR_FILTER_CONVOLVE_MATRIX_H
+#ifndef __NR_FILTER_CONVOLVE_MATRIX_H__
+#define __NR_FILTER_CONVOLVE_MATRIX_H__
 
 /*
  * feConvolveMatrix filter primitive renderer
@@ -13,12 +13,13 @@
  */
 
 #include "display/nr-filter-primitive.h"
+#include "display/nr-filter-slot.h"
+#include "display/nr-filter-units.h"
+#include "libnr/nr-rect-l.h"
 #include <vector>
 
 namespace Inkscape {
 namespace Filters {
-
-class FilterSlot;
 
 enum FilterConvolveMatrixEdgeMode {
     CONVOLVEMATRIX_EDGEMODE_DUPLICATE,
@@ -33,9 +34,9 @@ public:
     static FilterPrimitive *create();
     virtual ~FilterConvolveMatrix();
 
-    virtual void render_cairo(FilterSlot &slot);
-    virtual void area_enlarge(Geom::IntRect &area, Geom::Affine const &trans);
-    virtual double complexity(Geom::Affine const &ctm);
+    virtual int render(FilterSlot &slot, FilterUnits const &units);
+    virtual void area_enlarge(NRRectL &area, Geom::Matrix const &trans);
+    virtual FilterTraits get_input_traits();
 
     void set_targetY(int coord);
     void set_targetX(int coord);
@@ -48,10 +49,10 @@ public:
     void set_preserveAlpha(bool pa);
 
 private:
-    std::vector<double> kernelMatrix;
+    std::vector<gdouble> kernelMatrix;
     int targetX, targetY;
     int orderX, orderY;
-    double divisor, bias;
+    gdouble divisor, bias;
     int dx, dy, kernelUnitLength;
     FilterConvolveMatrixEdgeMode edgeMode;
     bool preserveAlpha;
@@ -70,4 +71,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

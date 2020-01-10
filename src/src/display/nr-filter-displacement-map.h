@@ -1,5 +1,5 @@
-#ifndef SEEN_NR_FILTER_DISPLACEMENT_MAP_H
-#define SEEN_NR_FILTER_DISPLACEMENT_MAP_H
+#ifndef __NR_FILTER_DISPLACEMENT_MAP_H__
+#define __NR_FILTER_DISPLACEMENT_MAP_H__
 
 /*
  * feDisplacementMap filter primitive renderer
@@ -16,6 +16,7 @@
 #include "display/nr-filter-primitive.h"
 #include "display/nr-filter-slot.h"
 #include "display/nr-filter-units.h"
+#include "libnr/nr-rect-l.h"
 
 namespace Inkscape {
 namespace Filters {
@@ -26,19 +27,19 @@ public:
     static FilterPrimitive *create();
     virtual ~FilterDisplacementMap();
 
-    virtual void render_cairo(FilterSlot &slot);
-    virtual void area_enlarge(Geom::IntRect &area, Geom::Affine const &trans);
-    virtual double complexity(Geom::Affine const &ctm);
-
     virtual void set_input(int slot);
     virtual void set_input(int input, int slot);
     virtual void set_scale(double s);
     virtual void set_channel_selector(int s, FilterDisplacementMapChannelSelector channel);
+    virtual int render(FilterSlot &slot, FilterUnits const &units);
+    virtual void area_enlarge(NRRectL &area, Geom::Matrix const &trans);
+    virtual FilterTraits get_input_traits();
 
 private:
     double scale;
     int _input2;
-    unsigned Xchannel, Ychannel;
+    FilterDisplacementMapChannelSelector Xchannel;
+    FilterDisplacementMapChannelSelector Ychannel;
 };
 
 } /* namespace Filters */
@@ -54,4 +55,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

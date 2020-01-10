@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 simplepath.py
 functions for digesting paths into a simple list structure
@@ -16,7 +17,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 """
 import re, math
@@ -208,4 +209,4 @@ def rotatePath(p, a, cx = 0, cy = 0):
                     params[i + 1] = (r * math.sin(theta)) + cy
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

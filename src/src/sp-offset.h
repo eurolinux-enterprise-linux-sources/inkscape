@@ -1,6 +1,9 @@
-#ifndef SEEN_SP_OFFSET_H
-#define SEEN_SP_OFFSET_H
-/*
+#ifndef __SP_OFFSET_H__
+#define __SP_OFFSET_H__
+
+/** \file
+ * SPOffset class.
+ *
  * Authors:
  *   Mitsuru Oka <oka326@parkcity.ne.jp>
  *   Lauris Kaplinski <lauris@kaplinski.com>
@@ -11,14 +14,19 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <cstddef>
-#include <sigc++/sigc++.h>
-
 #include "sp-shape.h"
 
-#define SP_OFFSET(obj) (dynamic_cast<SPOffset*>((SPObject*)obj))
-#define SP_IS_OFFSET(obj) (dynamic_cast<const SPOffset*>((SPObject*)obj) != NULL)
+#include <stddef.h>
+#include <sigc++/sigc++.h>
 
+#define SP_TYPE_OFFSET            (sp_offset_get_type ())
+#define SP_OFFSET(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_OFFSET, SPOffset))
+#define SP_OFFSET_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_OFFSET, SPOffsetClass))
+#define SP_IS_OFFSET(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_OFFSET))
+#define SP_IS_OFFSET_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_OFFSET))
+
+class SPOffset;
+class SPOffsetClass;
 class SPUseReference;
 
 /**
@@ -49,12 +57,8 @@ class SPUseReference;
  * points, or more precisely one control point, that's enough to define the
  * radius (look in object-edit).
  */
-class SPOffset : public SPShape {
-public:
-	SPOffset();
-	virtual ~SPOffset();
-
-    void *originalPath; ///< will be a livarot Path, just don't declare it here to please the gcc linker FIXME what?
+struct SPOffset : public SPShape {
+    void *originalPath; ///< will be a livarot Path, just don't declare it here to please the gcc linker
     char *original;     ///< SVG description of the source path
     float rad;          ///< offset radius
 
@@ -65,7 +69,7 @@ public:
     bool sourceDirty;
     bool isUpdating;
 
-    char                 *sourceHref;
+    gchar                *sourceHref;
     SPUseReference       *sourceRef;
     Inkscape::XML::Node  *sourceRepr; ///< the repr associated with that id
     SPObject             *sourceObject;
@@ -74,22 +78,20 @@ public:
     sigc::connection _delete_connection;
     sigc::connection _changed_connection;
     sigc::connection _transformed_connection;
-
-	virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
-	virtual void set(unsigned int key, char const* value);
-	virtual void update(SPCtx *ctx, unsigned int flags);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned flags);
-	virtual void release();
-
-	virtual void snappoints(std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs) const;
-        virtual const char* displayName() const;
-	virtual char* description() const;
-
-	virtual void set_shape();
 };
 
+/// The SPOffset vtable.
+struct SPOffsetClass
+{
+  SPShapeClass parent_class;
+};
+
+
+/* Standard Gtk function */
+GType sp_offset_get_type (void);
+
 double sp_offset_distance_to_original (SPOffset * offset, Geom::Point px);
-void sp_offset_top_point (SPOffset const *offset, Geom::Point *px);
+void sp_offset_top_point (SPOffset * offset, Geom::Point *px);
 
 SPItem *sp_offset_get_source (SPOffset *offset);
 
@@ -104,4 +106,4 @@ SPItem *sp_offset_get_source (SPOffset *offset);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

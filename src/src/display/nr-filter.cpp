@@ -1,3 +1,5 @@
+#define __NR_FILTER_CPP__
+
 /*
  * SVG filters rendering
  *
@@ -13,7 +15,6 @@
 #include <cmath>
 #include <cstring>
 #include <string>
-#include <cairo.h>
 
 #include "display/nr-filter.h"
 #include "display/nr-filter-primitive.h"
@@ -28,9 +29,9 @@
 #include "display/nr-filter-component-transfer.h"
 #include "display/nr-filter-diffuselighting.h"
 #include "display/nr-filter-displacement-map.h"
-#include "display/nr-filter-image.h"
 #include "display/nr-filter-flood.h"
 #include "display/nr-filter-gaussian.h"
+#include "display/nr-filter-image.h"
 #include "display/nr-filter-merge.h"
 #include "display/nr-filter-morphology.h"
 #include "display/nr-filter-offset.h"
@@ -38,11 +39,11 @@
 #include "display/nr-filter-tile.h"
 #include "display/nr-filter-turbulence.h"
 
-#include "display/cairo-utils.h"
-#include "display/drawing.h"
-#include "display/drawing-item.h"
-#include "display/drawing-context.h"
-#include <2geom/affine.h>
+#include "display/nr-arena.h"
+#include "display/nr-arena-item.h"
+#include "libnr/nr-pixblock.h"
+#include "libnr/nr-blit.h"
+#include <2geom/matrix.h>
 #include <2geom/rect.h>
 #include "svg/svg-length.h"
 #include "sp-filter-units.h"
@@ -59,14 +60,43 @@ namespace Filters {
 using Geom::X;
 using Geom::Y;
 
+static Geom::OptRect get_item_bbox(NRArenaItem const *item) {
+    Geom::Rect item_bbox;
+    if (item->item_bbox) {
+        item_bbox = *(item->item_bbox);
+    } else {
+        // Bounding box might not exist, so create a dummy one.
+        Geom::Point zero(0, 0);
+        item_bbox = Geom::Rect(zero, zero);
+    }
+    if (item_bbox.min()[X] > item_bbox.max()[X]
+        || item_bbox.min()[Y] > item_bbox.max()[Y])
+    {
+        // In case of negative-size bbox, return an empty OptRect
+        return Geom::OptRect();
+    }
+    return Geom::OptRect(item_bbox);
+}
+
 Filter::Filter()
 {
+    _primitive_count = 0;
+    _primitive_table_size = 1;
+    _primitive = new FilterPrimitive*[1];
+    _primitive[0] = NULL;
+    //_primitive_count = 1;
+    //_primitive[0] = new FilterGaussian;
     _common_init();
 }
 
 Filter::Filter(int n)
 {
-    if (n > 0) _primitive.reserve(n);
+    _primitive_count = 0;
+    _primitive_table_size = (n > 0) ? n : 1;    // we guarantee there is at least 1(one) filter slot
+    _primitive = new FilterPrimitive*[_primitive_table_size];
+    for ( int i = 0 ; i < _primitive_table_size ; i++ ) {
+        _primitive[i] = NULL;
+    }
     _common_init();
 }
 
@@ -95,46 +125,51 @@ void Filter::_common_init() {
 Filter::~Filter()
 {
     clear_primitives();
+    delete[] _primitive;
 }
 
 
-int Filter::render(Inkscape::DrawingItem const *item, DrawingContext &graphic, DrawingContext *bgdc)
+int Filter::render(NRArenaItem const *item, NRPixBlock *pb)
 {
-    if (_primitive.empty()) {
-        // when no primitives are defined, clear source graphic
-        graphic.setSource(0,0,0,0);
-        graphic.setOperator(CAIRO_OPERATOR_SOURCE);
-        graphic.paint();
-        graphic.setOperator(CAIRO_OPERATOR_OVER);
+    if (!_primitive[0]) {
+        // TODO: Should clear the input buffer instead of just returning
+       return 1;
+    }
+
+    FilterQuality const filterquality = (FilterQuality)item->arena->filterquality;
+    int const blurquality = item->arena->blurquality;
+
+    Geom::Matrix trans = item->ctm;
+    FilterSlot slot(_slot_count, item);
+    slot.set_quality(filterquality);
+    slot.set_blurquality(blurquality);
+
+    Geom::Rect item_bbox;
+    {
+        Geom::OptRect maybe_bbox = get_item_bbox(item);
+        if (maybe_bbox.isEmpty()) {
+            // Code below needs a bounding box
+            return 1;
+        }
+        item_bbox = *maybe_bbox;
+    }
+
+    Geom::Rect filter_area = filter_effect_area(item_bbox);
+    if (item_bbox.hasZeroArea()) {
+        // It's no use to try and filter an empty object.
         return 1;
     }
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    item->drawing().setFilterQuality(prefs->getInt("/options/filterquality/value", 0));
-    item->drawing().setBlurQuality(prefs->getInt("/options/blurquality/value", 0));
-    FilterQuality const filterquality = (FilterQuality)item->drawing().filterQuality();
-    int const blurquality = item->drawing().blurQuality();
-
-    Geom::Affine trans = item->ctm();
-
-    Geom::OptRect filter_area = filter_effect_area(item->itemBounds());
-    if (!filter_area) return 1;
 
     FilterUnits units(_filter_units, _primitive_units);
     units.set_ctm(trans);
-    units.set_item_bbox(item->itemBounds());
-    units.set_filter_area(*filter_area);
+    units.set_item_bbox(item_bbox);
+    units.set_filter_area(filter_area);
 
+    // TODO: with filterRes of 0x0 should return an empty image
     std::pair<double,double> resolution
-        = _filter_resolution(*filter_area, trans, filterquality);
-    if (!(resolution.first > 0 && resolution.second > 0)) {
-        // zero resolution - clear source graphic and return
-        graphic.setSource(0,0,0,0);
-        graphic.setOperator(CAIRO_OPERATOR_SOURCE);
-        graphic.paint();
-        graphic.setOperator(CAIRO_OPERATOR_OVER);
-        return 1;
-    }
-
+        = _filter_resolution(filter_area, trans, filterquality);
+    if(!(resolution.first > 0 && resolution.second > 0))
+	return 1;
     units.set_resolution(resolution.first, resolution.second);
     if (_x_pixels > 0) {
         units.set_automatic_resolution(false);
@@ -144,34 +179,47 @@ int Filter::render(Inkscape::DrawingItem const *item, DrawingContext &graphic, D
     }
 
     units.set_paraller(false);
-    Geom::Affine pbtrans = units.get_matrix_display2pb();
-    for (unsigned i = 0 ; i < _primitive.size() ; i++) {
-        if (!_primitive[i]->can_handle_affine(pbtrans)) {
+    for (int i = 0 ; i < _primitive_count ; i++) {
+        if (_primitive[i]->get_input_traits() & TRAIT_PARALLER) {
             units.set_paraller(true);
             break;
         }
     }
 
-    FilterSlot slot(const_cast<Inkscape::DrawingItem*>(item), bgdc, graphic, units);
-    slot.set_quality(filterquality);
-    slot.set_blurquality(blurquality);
+    slot.set_units(units);
 
-    for (unsigned i = 0 ; i < _primitive.size() ; i++) {
-        _primitive[i]->render_cairo(slot);
+    NRPixBlock *in = new NRPixBlock;
+    nr_pixblock_setup_fast(in, pb->mode, pb->area.x0, pb->area.y0,
+                           pb->area.x1, pb->area.y1, true);
+    if (in->size != NR_PIXBLOCK_SIZE_TINY && in->data.px == NULL) {
+        g_warning("Inkscape::Filters::Filter::render: failed to reserve temporary buffer");
+        return 0;
+    }
+    nr_blit_pixblock_pixblock(in, pb);
+    in->empty = FALSE;
+    slot.set(NR_FILTER_SOURCEGRAPHIC, in);
+
+    // Check that we are rendering a non-empty area
+    in = slot.get(NR_FILTER_SOURCEGRAPHIC);
+    if (in->area.x1 - in->area.x0 <= 0 || in->area.y1 - in->area.y0 <= 0) {
+        if (in->area.x1 - in->area.x0 < 0 || in->area.y1 - in->area.y0 < 0) {
+            g_warning("Inkscape::Filters::Filter::render: negative area! (%d, %d) (%d, %d)",
+                      in->area.x0, in->area.y0, in->area.x1, in->area.y1);
+        }
+        return 0;
+    }
+    in = NULL; // in is now handled by FilterSlot, we should not touch it
+
+    for (int i = 0 ; i < _primitive_count ; i++) {
+        _primitive[i]->render(slot, units);
     }
 
-    Geom::Point origin = graphic.targetLogicalBounds().min();
-    cairo_surface_t *result = slot.get_result(_output_slot);
+    slot.get_final(_output_slot, pb);
 
-    // Assume for the moment that we paint the filter in sRGB
-    set_cairo_surface_ci( result, SP_CSS_COLOR_INTERPOLATION_SRGB );
-
-    graphic.setSource(result, origin[Geom::X], origin[Geom::Y]);
-    graphic.setOperator(CAIRO_OPERATOR_SOURCE);
-    graphic.paint();
-    graphic.setOperator(CAIRO_OPERATOR_OVER);
-    cairo_surface_destroy(result);
-
+    // Take note of the amount of used image slots
+    // -> next time this filter is rendered, we can reserve enough slots
+    // immediately
+    _slot_count = slot.get_slot_count();
     return 0;
 }
 
@@ -183,11 +231,10 @@ void Filter::set_primitive_units(SPFilterUnits unit) {
     _primitive_units = unit;
 }
 
-void Filter::area_enlarge(Geom::IntRect &bbox, Inkscape::DrawingItem const *item) const {
-    for (unsigned i = 0 ; i < _primitive.size() ; i++) {
-        if (_primitive[i]) _primitive[i]->area_enlarge(bbox, item->ctm());
+void Filter::area_enlarge(NRRectL &bbox, NRArenaItem const *item) const {
+    for (int i = 0 ; i < _primitive_count ; i++) {
+        if (_primitive[i]) _primitive[i]->area_enlarge(bbox, item->ctm);
     }
-
 /*
   TODO: something. See images at the bottom of filters.svg with medium-low
   filtering quality.
@@ -201,17 +248,17 @@ void Filter::area_enlarge(Geom::IntRect &bbox, Inkscape::DrawingItem const *item
     }
 
     Geom::Rect item_bbox;
-    Geom::OptRect maybe_bbox = item->itemBounds();
-    if (maybe_bbox.empty()) {
+    Geom::OptRect maybe_bbox = get_item_bbox(item);
+    if (maybe_bbox.isEmpty()) {
         // Code below needs a bounding box
         return;
     }
     item_bbox = *maybe_bbox;
 
     std::pair<double,double> res_low
-        = _filter_resolution(item_bbox, item->ctm(), filterquality);
+        = _filter_resolution(item_bbox, item->ctm, filterquality);
     //std::pair<double,double> res_full
-    //    = _filter_resolution(item_bbox, item->ctm(), FILTER_QUALITY_BEST);
+    //    = _filter_resolution(item_bbox, item->ctm, FILTER_QUALITY_BEST);
     double pixels_per_block = fmax(item_bbox.width() / res_low.first,
                                    item_bbox.height() / res_low.second);
     bbox.x0 -= (int)pixels_per_block;
@@ -221,28 +268,40 @@ void Filter::area_enlarge(Geom::IntRect &bbox, Inkscape::DrawingItem const *item
 */
 }
 
-Geom::OptRect Filter::filter_effect_area(Geom::OptRect const &bbox)
+void Filter::bbox_enlarge(NRRectL &bbox) {
+    // Modifying empty bounding boxes confuses rest of the renderer, so
+    // let's not do that.
+    if (bbox.x0 > bbox.x1 || bbox.y0 > bbox.y1) return;
+
+    /* TODO: this is wrong. Should use bounding box in user coordinates
+     * and find its extents in display coordinates. */
+    Geom::Point min(bbox.x0, bbox.y0);
+    Geom::Point max(bbox.x1, bbox.y1);
+    Geom::Rect tmp_bbox(min, max);
+
+    Geom::Rect enlarged = filter_effect_area(tmp_bbox);
+
+    bbox.x0 = (NR::ICoord)enlarged.min()[X];
+    bbox.y0 = (NR::ICoord)enlarged.min()[Y];
+    bbox.x1 = (NR::ICoord)enlarged.max()[X];
+    bbox.y1 = (NR::ICoord)enlarged.max()[Y];
+}
+
+Geom::Rect Filter::filter_effect_area(Geom::Rect const &bbox)
 {
     Geom::Point minp, maxp;
-
+    double len_x = bbox.max()[X] - bbox.min()[X];
+    double len_y = bbox.max()[Y] - bbox.min()[Y];
+    /* TODO: fetch somehow the object ex and em lengths */
+    _region_x.update(12, 6, len_x);
+    _region_y.update(12, 6, len_y);
+    _region_width.update(12, 6, len_x);
+    _region_height.update(12, 6, len_y);
     if (_filter_units == SP_FILTER_UNITS_OBJECTBOUNDINGBOX) {
-
-        double len_x = bbox ? bbox->width() : 0;
-        double len_y = bbox ? bbox->height() : 0;
-        /* TODO: fetch somehow the object ex and em lengths */
-
-        // Update for em, ex, and % values
-        _region_x.update(12, 6, len_x);
-        _region_y.update(12, 6, len_y);
-        _region_width.update(12, 6, len_x);
-        _region_height.update(12, 6, len_y);
-
-        if (!bbox) return Geom::OptRect();
-
         if (_region_x.unit == SVGLength::PERCENT) {
-            minp[X] = bbox->left() + _region_x.computed;
+            minp[X] = bbox.min()[X] + _region_x.computed;
         } else {
-            minp[X] = bbox->left() + _region_x.computed * len_x;
+            minp[X] = bbox.min()[X] + _region_x.computed * len_x;
         }
         if (_region_width.unit == SVGLength::PERCENT) {
             maxp[X] = minp[X] + _region_width.computed;
@@ -251,9 +310,9 @@ Geom::OptRect Filter::filter_effect_area(Geom::OptRect const &bbox)
         }
 
         if (_region_y.unit == SVGLength::PERCENT) {
-            minp[Y] = bbox->top() + _region_y.computed;
+            minp[Y] = bbox.min()[Y] + _region_y.computed;
         } else {
-            minp[Y] = bbox->top() + _region_y.computed * len_y;
+            minp[Y] = bbox.min()[Y] + _region_y.computed * len_y;
         }
         if (_region_height.unit == SVGLength::PERCENT) {
             maxp[Y] = minp[Y] + _region_height.computed;
@@ -261,40 +320,16 @@ Geom::OptRect Filter::filter_effect_area(Geom::OptRect const &bbox)
             maxp[Y] = minp[Y] + _region_height.computed * len_y;
         }
     } else if (_filter_units == SP_FILTER_UNITS_USERSPACEONUSE) {
-        // Region already set in sp-filter.cpp
+        /* TODO: make sure bbox and fe region are in same coordinate system */
         minp[X] = _region_x.computed;
         maxp[X] = minp[X] + _region_width.computed;
         minp[Y] = _region_y.computed;
         maxp[Y] = minp[Y] + _region_height.computed;
     } else {
-        g_warning("Error in Inkscape::Filters::Filter::filter_effect_area: unrecognized value of _filter_units");
+        g_warning("Error in Inkscape::Filters::Filter::bbox_enlarge: unrecognized value of _filter_units");
     }
-
-    Geom::OptRect area(minp, maxp);
-    // std::cout << "Filter::filter_effect_area: area: " << *area << std::endl;
+    Geom::Rect area(minp, maxp);
     return area;
-}
-
-double Filter::complexity(Geom::Affine const &ctm)
-{
-    double factor = 1.0;
-    for (unsigned i = 0 ; i < _primitive.size() ; i++) {
-        if (_primitive[i]) {
-            double f = _primitive[i]->complexity(ctm);
-            factor += (f - 1.0);
-        }
-    }
-    return factor;
-}
-
-bool Filter::uses_background()
-{
-    for (unsigned i = 0 ; i < _primitive.size() ; i++) {
-        if (_primitive[i] && _primitive[i]->uses_background()) {
-            return true;
-        }
-    }
-    return false;
 }
 
 /* Constructor table holds pointers to static methods returning filter
@@ -332,6 +367,27 @@ void Filter::_create_constructor_table()
     created = true;
 }
 
+/** Helper method for enlarging table of filter primitives. When new
+ * primitives are added, but we have no space for them, this function
+ * makes some more space.
+ */
+void Filter::_enlarge_primitive_table() {
+    FilterPrimitive **new_tbl = new FilterPrimitive*[_primitive_table_size * 2];
+    for (int i = 0 ; i < _primitive_count ; i++) {
+        new_tbl[i] = _primitive[i];
+    }
+    _primitive_table_size *= 2;
+    for (int i = _primitive_count ; i < _primitive_table_size ; i++) {
+        new_tbl[i] = NULL;
+    }
+    if(_primitive != NULL) {
+        delete[] _primitive;
+    } else {
+        g_warning("oh oh");
+    }
+    _primitive = new_tbl;
+}
+
 int Filter::add_primitive(FilterPrimitiveType type)
 {
     _create_constructor_table();
@@ -342,8 +398,14 @@ int Filter::add_primitive(FilterPrimitiveType type)
     if (!_constructor[type]) return -1;
     FilterPrimitive *created = _constructor[type]();
 
-    int handle = _primitive.size();
-    _primitive.push_back(created);
+    // If there is no space for new filter primitive, enlarge the table
+    if (_primitive_count >= _primitive_table_size) {
+        _enlarge_primitive_table();
+    }
+
+    _primitive[_primitive_count] = created;
+    int handle = _primitive_count;
+    _primitive_count++;
     return handle;
 }
 
@@ -353,7 +415,8 @@ int Filter::replace_primitive(int target, FilterPrimitiveType type)
 
     // Check that target is valid primitive inside this filter
     if (target < 0) return -1;
-    if (static_cast<unsigned>(target) >= _primitive.size()) return -1;
+    if (target >= _primitive_count) return -1;
+    if (!_primitive[target]) return -1;
 
     // Check that we can create a new filter of specified type
     if (type < 0 || type >= NR_FILTER_ENDPRIMITIVETYPE)
@@ -361,22 +424,27 @@ int Filter::replace_primitive(int target, FilterPrimitiveType type)
     if (!_constructor[type]) return -1;
     FilterPrimitive *created = _constructor[type]();
 
+    // If there is no space for new filter primitive, enlarge the table
+    if (_primitive_count >= _primitive_table_size) {
+        _enlarge_primitive_table();
+    }
+
     delete _primitive[target];
     _primitive[target] = created;
     return target;
 }
 
 FilterPrimitive *Filter::get_primitive(int handle) {
-    if (handle < 0 || handle >= static_cast<int>(_primitive.size())) return NULL;
+    if (handle < 0 || handle >= _primitive_count) return NULL;
     return _primitive[handle];
 }
 
 void Filter::clear_primitives()
 {
-    for (unsigned i = 0 ; i < _primitive.size() ; i++) {
-        delete _primitive[i];
+    for (int i = 0 ; i < _primitive_count ; i++) {
+        if (_primitive[i]) delete _primitive[i];
     }
-    _primitive.clear();
+    _primitive_count = 0;
 }
 
 void Filter::set_x(SVGLength const &length)
@@ -440,7 +508,7 @@ int Filter::_resolution_limit(FilterQuality const quality) const {
 }
 
 std::pair<double,double> Filter::_filter_resolution(
-    Geom::Rect const &area, Geom::Affine const &trans,
+    Geom::Rect const &area, Geom::Matrix const &trans,
     FilterQuality const filterquality) const
 {
     std::pair<double,double> resolution;
@@ -495,4 +563,4 @@ std::pair<double,double> Filter::_filter_resolution(
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

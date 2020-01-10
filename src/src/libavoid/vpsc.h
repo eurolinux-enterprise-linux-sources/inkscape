@@ -181,13 +181,10 @@ public:
     const bool equality;
     bool unsatisfiable;
 };
-
-/**
+/*
  * A block structure defined over the variables such that each block contains
  * 1 or more variables, with the invariant that all constraints inside a block
- * are satisfied by keeping the variables fixed relative to one another.
- *
- * @todo check on this class being copy-n-paste duplicated.
+ * are satisfied by keeping the variables fixed relative to one another
  */
 class Blocks : public std::set<Block*>
 {

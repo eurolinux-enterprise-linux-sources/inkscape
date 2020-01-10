@@ -25,12 +25,23 @@
 
 bool SPUseReference::_acceptObject(SPObject * const obj) const
 {
-	return URIReference::_acceptObject(obj);
+    if (SP_IS_ITEM(obj)) {
+        SPObject * const owner = getOwner();
+        /* Refuse references to us or to an ancestor. */
+        for ( SPObject *iter = owner ; iter ; iter = SP_OBJECT_PARENT(iter) ) {
+            if ( iter == obj ) {
+                return false;
+            }
+        }
+        return true;
+    } else {
+        return false;
+    }
 }
 
 
 static void sp_usepath_href_changed(SPObject *old_ref, SPObject *ref, SPUsePath *offset);
-static void sp_usepath_move_compensate(Geom::Affine const *mp, SPItem *original, SPUsePath *self);
+static void sp_usepath_move_compensate(Geom::Matrix const *mp, SPItem *original, SPUsePath *self);
 static void sp_usepath_delete_self(SPObject *deleted, SPUsePath *offset);
 static void sp_usepath_source_modified(SPObject *iSource, guint flags, SPUsePath *offset);
 
@@ -96,7 +107,7 @@ SPUsePath::start_listening(SPObject* to)
         return;
     }
     sourceObject = to;
-    sourceRepr = to->getRepr();
+    sourceRepr = SP_OBJECT_REPR(to);
     _delete_connection = to->connectDelete(sigc::bind(sigc::ptr_fun(&sp_usepath_delete_self), this));
     _transformed_connection = SP_ITEM(to)->connectTransformed(sigc::bind(sigc::ptr_fun(&sp_usepath_move_compensate), this));
     _modified_connection = to->connectModified(sigc::bind<2>(sigc::ptr_fun(&sp_usepath_source_modified), this));
@@ -124,11 +135,11 @@ sp_usepath_href_changed(SPObject */*old_ref*/, SPObject */*ref*/, SPUsePath *off
         offset->start_listening(refobj);
     }
     offset->sourceDirty=true;
-    offset->owner->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+    SP_OBJECT(offset->owner)->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 }
 
 static void
-sp_usepath_move_compensate(Geom::Affine const *mp, SPItem *original, SPUsePath *self)
+sp_usepath_move_compensate(Geom::Matrix const *mp, SPItem *original, SPUsePath *self)
 {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     guint mode = prefs->getInt("/options/clonecompensation/value", SP_CLONE_COMPENSATION_PARALLEL);
@@ -139,15 +150,15 @@ sp_usepath_move_compensate(Geom::Affine const *mp, SPItem *original, SPUsePath *
 
 // TODO kill naughty naughty #if 0
 #if 0
-    Geom::Affine m(*mp);
+    Geom::Matrix m(*mp);
     if (!(m.is_translation())) {
         return;
     }
-    Geom::Affine const t(item->transform);
-    Geom::Affine clone_move = t.inverse() * m * t;
+    Geom::Matrix const t(item->transform);
+    Geom::Matrix clone_move = t.inverse() * m * t;
 
     // Calculate the compensation matrix and the advertized movement matrix.
-    Geom::Affine advertized_move;
+    Geom::Matrix advertized_move;
     if (mode == SP_CLONE_COMPENSATION_PARALLEL) {
         //clone_move = clone_move.inverse();
         advertized_move.set_identity();
@@ -160,14 +171,14 @@ sp_usepath_move_compensate(Geom::Affine const *mp, SPItem *original, SPUsePath *
 
     // Commit the compensation.
     item->transform *= clone_move;
-    sp_item_write_transform(item, item->getRepr(), item->transform, &advertized_move);
+    sp_item_write_transform(item, SP_OBJECT_REPR(item), item->transform, &advertized_move);
 #else
     (void)mp;
     (void)original;
 #endif
 
     self->sourceDirty = true;
-    item->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+    SP_OBJECT(item)->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 }
 
 static void
@@ -204,26 +215,23 @@ void SPUsePath::refresh_source()
     // [tr: The bad case: no d attribute.  Must check that it's a SPShape and then take the outline.]
     SPObject *refobj = sourceObject;
     if ( refobj == NULL ) return;
-    
     SPItem *item = SP_ITEM(refobj);
+
     SPCurve *curve = NULL;
-
-    if (SP_IS_SHAPE(item))
-    {
-        curve = SP_SHAPE(item)->getCurve();
+    if (!SP_IS_SHAPE(item) && !SP_IS_TEXT(item)) {
+        return;
     }
-    else if (SP_IS_TEXT(item))
-    {
+    if (SP_IS_SHAPE(item)) {
+        curve = sp_shape_get_curve(SP_SHAPE(item));
+        if (curve == NULL)
+            return;
+    }
+    if (SP_IS_TEXT(item)) {
         curve = SP_TEXT(item)->getNormalizedBpath();
+        if (curve == NULL) {
+            return;
+        }
     }
-    else
-    {
-        return;
-    }
-        
-    if (curve == NULL)
-        return;
-
     originalPath = new Path;
     originalPath->LoadPathVector(curve->get_pathvector(), item->transform, true);
     curve->unref();

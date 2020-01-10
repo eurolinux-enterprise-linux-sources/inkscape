@@ -9,7 +9,6 @@
 
 
 #include "color-profile.h"
-#include "cms-system.h"
 
 class ColorProfileTest : public CxxTest::TestSuite
 {
@@ -25,19 +24,19 @@ public:
     {
         if ( _doc )
         {
-            _doc->doUnref();
+            sp_document_unref( _doc );
         }
     }
 
     static void createSuiteSubclass( ColorProfileTest*& dst )
     {
-        Inkscape::ColorProfile *prof = new Inkscape::ColorProfile();
+        Inkscape::ColorProfile *prof = static_cast<Inkscape::ColorProfile *>(g_object_new(COLORPROFILE_TYPE, NULL));
         if ( prof ) {
             if ( prof->rendering_intent == (guint)Inkscape::RENDERING_INTENT_UNKNOWN ) {
                 TS_ASSERT_EQUALS( prof->rendering_intent, (guint)Inkscape::RENDERING_INTENT_UNKNOWN );
                 dst = new ColorProfileTest();
             }
-            delete prof;
+            g_object_unref(prof);
         }
     }
 
@@ -74,17 +73,17 @@ public:
             {"auto2", (guint)Inkscape::RENDERING_INTENT_UNKNOWN},
         };
 
-        Inkscape::ColorProfile *prof = new Inkscape::ColorProfile();
+        Inkscape::ColorProfile *prof = static_cast<Inkscape::ColorProfile *>(g_object_new(COLORPROFILE_TYPE, NULL));
         TS_ASSERT( prof );
         SP_OBJECT(prof)->document = _doc;
 
         for ( size_t i = 0; i < G_N_ELEMENTS( cases ); i++ ) {
             std::string descr(cases[i].attr);
-            SP_OBJECT(prof)->setKeyValue( SP_ATTR_RENDERING_INTENT, cases[i].attr);
+            sp_object_set(SP_OBJECT(prof), SP_ATTR_RENDERING_INTENT, cases[i].attr);
             TSM_ASSERT_EQUALS( descr, prof->rendering_intent, (guint)cases[i].intVal );
         }
 
-        delete prof;
+        g_object_unref(prof);
     }
 
     void testSetLocal()
@@ -94,21 +93,21 @@ public:
             "something",
         };
 
-        Inkscape::ColorProfile *prof = new Inkscape::ColorProfile();
+        Inkscape::ColorProfile *prof = static_cast<Inkscape::ColorProfile *>(g_object_new(COLORPROFILE_TYPE, NULL));
         TS_ASSERT( prof );
         SP_OBJECT(prof)->document = _doc;
 
         for ( size_t i = 0; i < G_N_ELEMENTS( cases ); i++ ) {
-            SP_OBJECT(prof)->setKeyValue( SP_ATTR_LOCAL, cases[i]);
+            sp_object_set(SP_OBJECT(prof), SP_ATTR_LOCAL, cases[i]);
             TS_ASSERT( prof->local );
             if ( prof->local ) {
                 TS_ASSERT_EQUALS( std::string(prof->local), std::string(cases[i]) );
             }
         }
-        SP_OBJECT(prof)->setKeyValue( SP_ATTR_LOCAL, NULL);
+        sp_object_set(SP_OBJECT(prof), SP_ATTR_LOCAL, NULL);
         TS_ASSERT_EQUALS( prof->local, (gchar*)0 );
 
-        delete prof;
+        g_object_unref(prof);
     }
 
     void testSetName()
@@ -118,21 +117,21 @@ public:
             "something",
         };
 
-        Inkscape::ColorProfile *prof = new Inkscape::ColorProfile();
+        Inkscape::ColorProfile *prof = static_cast<Inkscape::ColorProfile *>(g_object_new(COLORPROFILE_TYPE, NULL));
         TS_ASSERT( prof );
         SP_OBJECT(prof)->document = _doc;
 
         for ( size_t i = 0; i < G_N_ELEMENTS( cases ); i++ ) {
-            SP_OBJECT(prof)->setKeyValue( SP_ATTR_NAME, cases[i]);
+            sp_object_set(SP_OBJECT(prof), SP_ATTR_NAME, cases[i]);
             TS_ASSERT( prof->name );
             if ( prof->name ) {
                 TS_ASSERT_EQUALS( std::string(prof->name), std::string(cases[i]) );
             }
         }
-        SP_OBJECT(prof)->setKeyValue( SP_ATTR_NAME, NULL);
+        sp_object_set(SP_OBJECT(prof), SP_ATTR_NAME, NULL);
         TS_ASSERT_EQUALS( prof->name, (gchar*)0 );
 
-        delete prof;
+        g_object_unref(prof);
     }
 };
 
@@ -147,4 +146,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

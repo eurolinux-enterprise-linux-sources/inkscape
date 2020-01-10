@@ -21,7 +21,7 @@ bool SPTRefReference::_acceptObject(SPObject * const obj) const
 {
     SPObject *owner = getOwner();
     if (SP_IS_TREF(owner))
-        return URIReference::_acceptObject(obj);
+        return sp_tref_reference_allowed(SP_TREF(getOwner()), obj);
     else
         return false;
 }
@@ -37,7 +37,7 @@ void SPTRefReference::updateObserver()
             delete subtreeObserved;
         }
 
-        subtreeObserved = new Inkscape::XML::Subtree(*referred->getRepr());
+        subtreeObserved = new Inkscape::XML::Subtree(*SP_OBJECT_REPR(referred));
         subtreeObserved->addObserver(*this);
     }
 }

@@ -1,7 +1,6 @@
 /*
  * Authors:
  *   Ted Gould <ted@gould.cx>
- *   Abhishek Sharma
  *
  * Copyright (C) 2007-2008 Authors
  *
@@ -9,10 +8,6 @@
  */
 
 #include <config.h>
-
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
 
 #include "gtkmm/messagedialog.h"
 
@@ -23,12 +18,13 @@
 #include "selection.h"
 #include "effect.h"
 #include "document.h"
-#include "document-undo.h"
 #include "desktop.h"
 #include "ui/view/view.h"
 #include "sp-namedview.h"
-
+#include "desktop-handles.h"
 #include "display/sp-canvas.h"
+
+#include "util/glib-list-iterators.h"
 
 namespace Inkscape {
 namespace Extension {
@@ -58,12 +54,14 @@ ExecutionEnv::ExecutionEnv (Effect * effect, Inkscape::UI::View::View * doc, Imp
     sp_namedview_document_from_window(desktop);
 
     if (desktop != NULL) {
-    	std::vector<SPItem*> selected = desktop->getSelection()->itemList();
-        for(std::vector<SPItem*>::const_iterator x = selected.begin(); x != selected.end(); ++x){
+        Inkscape::Util::GSListConstIterator<SPItem *> selected =
+             sp_desktop_selection(desktop)->itemList();
+        while ( selected != NULL ) {
             Glib::ustring selected_id;
-            selected_id = (*x)->getId();
+            selected_id = (*selected)->getId();
             _selected.insert(_selected.end(), selected_id);
             //std::cout << "Selected: " << selected_id << std::endl;
+            ++selected;
         }
     }
 
@@ -128,8 +126,8 @@ ExecutionEnv::createWorkingDialog (void) {
     }
 
     SPDesktop *desktop = (SPDesktop *)_doc;
-    GtkWidget *toplevel = gtk_widget_get_toplevel(GTK_WIDGET(desktop->canvas));
-    if (!toplevel || !gtk_widget_is_toplevel (toplevel))
+    GtkWidget *toplevel = gtk_widget_get_toplevel(&(desktop->canvas->widget));
+    if (!toplevel || !GTK_WIDGET_TOPLEVEL (toplevel))
         return;
     Gtk::Window *window = Glib::wrap(GTK_WINDOW(toplevel), false);
 
@@ -142,10 +140,7 @@ ExecutionEnv::createWorkingDialog (void) {
                                true); // modal
     _visibleDialog->signal_response().connect(sigc::mem_fun(this, &ExecutionEnv::workingCanceled));
     g_free(dlgmessage);
-
-    if (!_effect->is_silent()){
-        _visibleDialog->show();
-    }
+    _visibleDialog->show();
 
     return;
 }
@@ -167,14 +162,14 @@ ExecutionEnv::cancel (void) {
 
 void
 ExecutionEnv::undo (void) {
-    DocumentUndo::cancel(_doc->doc());
+    sp_document_cancel(_doc->doc());
     reselect();
     return;
 }
 
 void
 ExecutionEnv::commit (void) {
-    DocumentUndo::done(_doc->doc(), SP_VERB_NONE, _(_effect->get_name()));
+    sp_document_done(_doc->doc(), SP_VERB_NONE, _(_effect->get_name()));
     Effect::set_last_effect(_effect);
     _effect->get_imp()->commitDocument();
     killDocCache();
@@ -192,9 +187,9 @@ ExecutionEnv::reselect (void) {
 
     if (desktop == NULL) { return; }
 
-    Inkscape::Selection * selection = desktop->getSelection();
+    Inkscape::Selection * selection = sp_desktop_selection(desktop);
 
-    for (std::list<Glib::ustring>::iterator i = _selected.begin(); i != _selected.end(); ++i) {
+    for (std::list<Glib::ustring>::iterator i = _selected.begin(); i != _selected.end(); i++) {
         SPObject * obj = doc->getObjectById(i->c_str());
         if (obj != NULL) {
             selection->add(obj);

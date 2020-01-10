@@ -12,30 +12,22 @@ public:
     void testBase()
     {
         char const* cases[][3] = {
-#if defined(WIN32) || defined(__WIN32__)
-            {"\\foo\\bar", "\\foo", "bar"},
-            {"\\foo\\barney", "\\foo\\bar", "\\foo\\barney"},
-            {"\\foo\\bar\\baz", "\\foo\\", "bar\\baz"},
-            {"\\foo\\bar\\baz", "\\", "foo\\bar\\baz"},
-            {"\\foo\\bar\\baz", "\\foo\\qux", "\\foo\\bar\\baz"},
-#else
             {"/foo/bar", "/foo", "bar"},
             {"/foo/barney", "/foo/bar", "/foo/barney"},
             {"/foo/bar/baz", "/foo/", "bar/baz"},
             {"/foo/bar/baz", "/", "foo/bar/baz"},
             {"/foo/bar/baz", "/foo/qux", "/foo/bar/baz"},
-#endif
+            {"/foo", NULL, "/foo"}
         };
 
         for ( size_t i = 0; i < G_N_ELEMENTS(cases); i++ )
         {
-            if ( cases[i][0] && cases[i][1] ) { // std::string can't use null.
-                std::string  result = sp_relative_path_from_path( cases[i][0], cases[i][1] );
-                TS_ASSERT( !result.empty() );
-                if ( !result.empty() )
-                {
-                    TS_ASSERT_EQUALS( result, std::string(cases[i][2]) );
-                }
+            char const* result = sp_relative_path_from_path( cases[i][0], cases[i][1] );
+            TS_ASSERT( result );
+            TS_ASSERT( cases[i][2] );
+            if ( result && cases[i][2] )
+            {
+                TS_ASSERT_EQUALS( std::string(result), std::string(cases[i][2]) );
             }
         }
     }
@@ -53,4 +45,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

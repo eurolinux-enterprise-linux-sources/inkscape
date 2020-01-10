@@ -1,5 +1,5 @@
-#ifndef SEEN_SP_BOX3D_H
-#define SEEN_SP_BOX3D_H
+#ifndef __SP_BOX3D_H__
+#define __SP_BOX3D_H__
 
 /*
  * SVG <box3d> implementation
@@ -7,8 +7,6 @@
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Maximilian Albert <Anhalter42@gmx.de>
- *   Abhishek Sharma
- *   Jon A. Cruz <jon@joncruz.org.
  *
  * Copyright (C) 2007      Authors
  * Copyright (C) 1999-2002 Lauris Kaplinski
@@ -22,18 +20,19 @@
 #include "axis-manip.h"
 
 #define SP_TYPE_BOX3D            (box3d_get_type ())
+#define SP_BOX3D(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_BOX3D, SPBox3D))
+#define SP_BOX3D_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_BOX3D, Box3DClass))
+#define SP_IS_BOX3D(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_BOX3D))
+#define SP_IS_BOX3D_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_BOX3D))
 
+class Box3DSide;
 class Persp3D;
 class Persp3DReference;
 
-class SPBox3D : public SPGroup {
-public:
-	SPBox3D();
-	virtual ~SPBox3D();
+struct SPBox3D : public SPGroup {
+    gint z_orders[6]; // z_orders[i] holds the ID of the face at position #i in the group (from top to bottom)
 
-    int z_orders[6]; // z_orders[i] holds the ID of the face at position #i in the group (from top to bottom)
-
-    char *persp_href;
+    gchar *persp_href;
     Persp3DReference *persp_ref;
 
     Proj::Pt3 orig_corner0;
@@ -44,33 +43,22 @@ public:
 
     Box3D::Axis swapped; // to indicate which coordinates are swapped during dragging
 
-    int my_counter; // for debugging only
-
-    /**
-     * Create a SPBox3D and append it to the parent.
-     */
-    static SPBox3D * createBox3D(SPItem * parent);
-
-	virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
-	virtual void release();
-	virtual void set(unsigned int key, char const* value);
-	virtual void update(SPCtx *ctx, unsigned int flags);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
-
-        virtual const char* display_name();
-	virtual Geom::Affine set_transform(Geom::Affine const &transform);
-    virtual void convert_to_guides() const;
-    virtual const char* displayName() const;
-    virtual char *description() const;
+    gint my_counter; // for debugging only
 };
 
+struct SPBox3DClass {
+    SPGroupClass parent_class;
+};
+
+GType box3d_get_type (void);
+
 void box3d_position_set (SPBox3D *box);
-Proj::Pt3 box3d_get_proj_corner (SPBox3D const *box, unsigned int id);
-Geom::Point box3d_get_corner_screen (SPBox3D const *box, unsigned int id, bool item_coords = true);
+Proj::Pt3 box3d_get_proj_corner (SPBox3D const *box, guint id);
+Geom::Point box3d_get_corner_screen (SPBox3D const *box, guint id, bool item_coords = true);
 Proj::Pt3 box3d_get_proj_center (SPBox3D *box);
 Geom::Point box3d_get_center_screen (SPBox3D *box);
 
-void box3d_set_corner (SPBox3D *box, unsigned int id, Geom::Point const &new_pos, Box3D::Axis movement, bool constrained);
+void box3d_set_corner (SPBox3D *box, guint id, Geom::Point const &new_pos, Box3D::Axis movement, bool constrained);
 void box3d_set_center (SPBox3D *box, Geom::Point const &new_pos, Geom::Point const &old_pos, Box3D::Axis movement, bool constrained);
 void box3d_corners_for_PLs (const SPBox3D * box, Proj::Axis axis, Geom::Point &corner1, Geom::Point &corner2, Geom::Point &corner3, Geom::Point &corner4);
 bool box3d_recompute_z_orders (SPBox3D *box);
@@ -90,7 +78,7 @@ void box3d_switch_perspectives(SPBox3D *box, Persp3D *old_persp, Persp3D *new_pe
 SPGroup *box3d_convert_to_group(SPBox3D *box);
 
 
-#endif // SEEN_SP_BOX3D_H
+#endif /* __SP_BOX3D_H__ */
 
 /*
   Local Variables:
@@ -101,4 +89,4 @@ SPGroup *box3d_convert_to_group(SPBox3D *box);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

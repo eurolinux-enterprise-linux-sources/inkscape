@@ -3,7 +3,6 @@
  *
  * Authors:
  *   MenTaLguY <mental@rydia.net>
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2004 MenTaLguY
  *
@@ -19,8 +18,6 @@
 #include "xml/repr.h"
 #include "util/find-last-if.h"
 #include "layer-fns.h"
-
-// TODO move the documentation comments into the .h file
 
 namespace Inkscape {
 
@@ -39,7 +36,7 @@ SPObject *next_sibling_layer(SPObject *layer) {
     using std::find_if;
 
     return find_if<SPObject::SiblingIterator>(
-        layer->getNext(), NULL, &is_layer
+        SP_OBJECT_NEXT(layer), NULL, &is_layer
     );
 }
 
@@ -51,7 +48,7 @@ SPObject *previous_sibling_layer(SPObject *layer) {
     using Inkscape::Algorithms::find_last_if;
 
     SPObject *sibling(find_last_if<SPObject::SiblingIterator>(
-        layer->parent->firstChild(), layer, &is_layer
+        SP_OBJECT_PARENT(layer)->firstChild(), layer, &is_layer
     ));
 
     return ( sibling != layer ) ? sibling : NULL;
@@ -91,18 +88,16 @@ SPObject *last_child_layer(SPObject *layer) {
 
 SPObject *last_elder_layer(SPObject *root, SPObject *layer) {
     using Inkscape::Algorithms::find_last_if;
-    SPObject *result = 0;
 
     while ( layer != root ) {
         SPObject *sibling(previous_sibling_layer(layer));
         if (sibling) {
-            result = sibling;
-            break;
+            return sibling;
         }
-        layer = layer->parent;
+        layer = SP_OBJECT_PARENT(layer);
     }
 
-    return result;
+    return NULL;
 }
 
 }
@@ -116,21 +111,23 @@ SPObject *next_layer(SPObject *root, SPObject *layer) {
     using std::find_if;
 
     g_return_val_if_fail(layer != NULL, NULL);
-    SPObject *result = 0;
 
-    SPObject *sibling = next_sibling_layer(layer);
+    SPObject *sibling(next_sibling_layer(layer));
     if (sibling) {
         SPObject *descendant(first_descendant_layer(sibling));
         if (descendant) {
-            result = descendant;
+            return descendant;
         } else {
-            result = sibling;
+            return sibling;
         }
-    } else if ( layer->parent != root ) {
-        result = layer->parent;
+    } else {
+        SPObject *parent=SP_OBJECT_PARENT(layer);
+        if ( parent != root ) {
+            return parent;
+        } else {
+            return NULL;
+        }
     }
-
-    return result;
 }
 
 
@@ -143,21 +140,20 @@ SPObject *previous_layer(SPObject *root, SPObject *layer) {
     using Inkscape::Algorithms::find_last_if;
 
     g_return_val_if_fail(layer != NULL, NULL);
-    SPObject *result = 0;
 
-    SPObject *child = last_child_layer(layer);
+    SPObject *child(last_child_layer(layer));
     if (child) {
-        result = child;
+        return child;
     } else if ( layer != root ) {
-        SPObject *sibling = previous_sibling_layer(layer);
+        SPObject *sibling(previous_sibling_layer(layer));
         if (sibling) {
-            result = sibling;
+            return sibling;
         } else {
-            result = last_elder_layer(root, layer->parent);
+            return last_elder_layer(root, SP_OBJECT_PARENT(layer));
         }
     }
 
-    return result;
+    return NULL;
 }
 
 /**
@@ -169,7 +165,7 @@ SPObject *previous_layer(SPObject *root, SPObject *layer) {
  *  \pre \a root should be either \a layer or an ancestor of it
  */
 SPObject *create_layer(SPObject *root, SPObject *layer, LayerRelativePosition position) {
-    SPDocument *document = root->document;
+    SPDocument *document=SP_OBJECT_DOCUMENT(root);
     
     static int layer_suffix=1;
     gchar *id=NULL;
@@ -178,7 +174,7 @@ SPObject *create_layer(SPObject *root, SPObject *layer, LayerRelativePosition po
         id = g_strdup_printf("layer%d", layer_suffix++);
     } while (document->getObjectById(id));
     
-    Inkscape::XML::Document *xml_doc = document->getReprDoc();
+    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(document);
     Inkscape::XML::Node *repr = xml_doc->createElement("svg:g");
     repr->setAttribute("inkscape:groupmode", "layer");
     repr->setAttribute("id", id);
@@ -193,10 +189,10 @@ SPObject *create_layer(SPObject *root, SPObject *layer, LayerRelativePosition po
     }
     
     if ( root == layer ) {
-        root->getRepr()->appendChild(repr);
+        SP_OBJECT_REPR(root)->appendChild(repr);
     } else {
-        Inkscape::XML::Node *layer_repr = layer->getRepr();
-        layer_repr->parent()->addChild(repr, layer_repr);
+        Inkscape::XML::Node *layer_repr=SP_OBJECT_REPR(layer);
+        sp_repr_parent(layer_repr)->addChild(repr, layer_repr);
         
         if ( LPOS_BELOW == position ) {
             SP_ITEM(document->getObjectByRepr(repr))->lowerOne();
@@ -217,4 +213,4 @@ SPObject *create_layer(SPObject *root, SPObject *layer, LayerRelativePosition po
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

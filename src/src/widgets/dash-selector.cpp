@@ -1,6 +1,7 @@
-/**
- * @file
- * Combobox for selecting dash patterns - implementation.
+#define __SP_DASH_SELECTOR_NEW_C__
+
+/** @file
+ * @brief Option menu for selecting dash patterns - implementation
  */
 /* Author:
  *   Lauris Kaplinski <lauris@kaplinski.com>
@@ -12,23 +13,29 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#define DASH_PREVIEW_WIDTH 2
+#define DASH_PREVIEW_LENGTH 80
+
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
 
-#include "dash-selector.h"
-
 #include <cstring>
 #include <string>
+#include <libnr/nr-macros.h>
+#include <gtk/gtk.h>
 #include <glibmm/i18n.h>
-#include <gtkmm/adjustment.h>
-#include <2geom/coord.h>
 
 #include "style.h"
-#include "ui/dialog-events.h"
+#include "dialogs/dialog-events.h"
 #include "preferences.h"
-#include "ui/widget/spinbutton.h"
-#include "display/cairo-utils.h"
+
+#include <gtkmm/optionmenu.h>
+#include <gtkmm/adjustment.h>
+#include <gtkmm/spinbutton.h>
+
+
+#include "dash-selector.h"
 
 gchar const *const SPDashSelector::_prefs_path = "/palette/dashes";
 
@@ -39,59 +46,40 @@ static double dash_4_1[] = {4.0, 1.0, -1.0};
 static double dash_1_2[] = {1.0, 2.0, -1.0};
 static double dash_1_4[] = {1.0, 4.0, -1.0};
 
-static size_t BD_LEN = 7;  // must correspond to the number of entries in the next line
 static double *builtin_dashes[] = {dash_0, dash_1_1, dash_2_1, dash_4_1, dash_1_2, dash_1_4, NULL};
 
 static double **dashes = NULL;
 
-SPDashSelector::SPDashSelector()
-    : preview_width(80),
-      preview_height(16),
-      preview_lineheight(2)
-{
+static void sp_dash_selector_menu_item_image_realize(Gtk::Image *px, double *pattern);
+
+SPDashSelector::SPDashSelector() {
     // TODO: find something more sensible here!!
     init_dashes();
 
-    dash_store = Gtk::ListStore::create(dash_columns);
-    dash_combo.set_model(dash_store);
-    dash_combo.pack_start(image_renderer);
-    dash_combo.set_cell_data_func(image_renderer, sigc::mem_fun(*this, &SPDashSelector::prepareImageRenderer));
-    dash_combo.set_tooltip_text(_("Dash pattern"));
-    dash_combo.show();
-    dash_combo.signal_changed().connect( sigc::mem_fun(*this, &SPDashSelector::on_selection) );
+    Gtk::Tooltips *tt = new Gtk::Tooltips();
 
-    this->pack_start(dash_combo, false, false, 0);
+    dash = new Gtk::OptionMenu();
+    tt->set_tip(*dash, _("Dash pattern"));
+    dash->show();
+    this->pack_start(*dash, false, false, 0);
 
-#if WITH_GTKMM_3_0
-    offset = Gtk::Adjustment::create(0.0, 0.0, 10.0, 0.1, 1.0, 0.0);
-#else
+    Gtk::Menu *m = new Gtk::Menu();
+    m->show();
+    for (int i = 0; dashes[i]; i++) {
+        Gtk::MenuItem *mi = menu_item_new(dashes[i]);
+        mi->show();
+        m->append(*mi);
+    }
+    dash->set_menu(*m);
+
     offset = new Gtk::Adjustment(0.0, 0.0, 10.0, 0.1, 1.0, 0.0);
-#endif
-    offset->signal_value_changed().connect(sigc::mem_fun(*this, &SPDashSelector::offset_value_changed));
-#if WITH_GTKMM_3_0
-    Inkscape::UI::Widget::SpinButton *sb = new Inkscape::UI::Widget::SpinButton(offset, 0.1, 2);
-#else
-    Inkscape::UI::Widget::SpinButton *sb = new Inkscape::UI::Widget::SpinButton(*offset, 0.1, 2);
-#endif
-    sb->set_tooltip_text(_("Pattern offset"));
+    Gtk::SpinButton *sb = new Gtk::SpinButton(*offset, 0.1, 2);
+    tt->set_tip(*sb, _("Pattern offset"));
+
     sp_dialog_defocus_on_enter_cpp(sb);
     sb->show();
-
     this->pack_start(*sb, false, false, 0);
-
-
-    int np=0;
-    while (dashes[np]){ np++;}
-    for (int i = 0; i<np-1; i++) {  // all but the custom one go this way
-        // Add the dashes to the combobox
-        Gtk::TreeModel::Row row = *(dash_store->append());
-        row[dash_columns.dash] = dashes[i];
-        row[dash_columns.pixbuf] = Glib::wrap(sp_dash_to_pixbuf(dashes[i]));
-    }
-    // add the custom one
-    Gtk::TreeModel::Row row = *(dash_store->append());
-    row[dash_columns.dash] = dashes[np-1];
-    row[dash_columns.pixbuf] = Glib::wrap(sp_text_to_pixbuf((char *)"Custom"));
+    offset->signal_value_changed().connect(sigc::mem_fun(*this, &SPDashSelector::offset_value_changed));
 
     this->set_data("pattern", dashes[0]);
 }
@@ -99,37 +87,31 @@ SPDashSelector::SPDashSelector()
 SPDashSelector::~SPDashSelector() {
     // FIXME: for some reason this doesn't get called; does the call to manage() in
     // sp_stroke_style_line_widget_new() not processed correctly?
-#if !WITH_GTKMM_3_0
+    delete dash;
     delete offset;
-#endif
 }
 
-void SPDashSelector::prepareImageRenderer( Gtk::TreeModel::const_iterator const &row ) {
-
-    Glib::RefPtr<Gdk::Pixbuf> pixbuf = (*row)[dash_columns.pixbuf];
-    image_renderer.property_pixbuf() = pixbuf;
-}
-
-void SPDashSelector::init_dashes() {
-
+void
+SPDashSelector::init_dashes() {
     if (!dashes) {
+        
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         std::vector<Glib::ustring> dash_prefs = prefs->getAllDirs(_prefs_path);
         
-        int pos = 0;
         if (!dash_prefs.empty()) {
-            SPStyle style;
-            dashes = g_new (double *, dash_prefs.size() + 2); // +1 for custom slot, +1 for terminator slot
+            int pos = 0;
+            SPStyle *style = sp_style_new (NULL);
+            dashes = g_new (double *, dash_prefs.size() + 1);
             
             for (std::vector<Glib::ustring>::iterator i = dash_prefs.begin(); i != dash_prefs.end(); ++i) {
-                style.readFromPrefs( *i );
+                sp_style_read_from_prefs(style, *i);
                 
-                if (!style.stroke_dasharray.values.empty()) {
-                    dashes[pos] = g_new (double, style.stroke_dasharray.values.size() + 1);
+                if (style->stroke_dash.n_dash > 0) {
+                    dashes[pos] = g_new (double, style->stroke_dash.n_dash + 1);
                     double *d = dashes[pos];
-                    unsigned i = 0;
-                    for (; i < style.stroke_dasharray.values.size(); i++) {
-                        d[i] = style.stroke_dasharray.values[i];
+                    int i = 0;
+                    for (; i < style->stroke_dash.n_dash; i++) {
+                        d[i] = style->stroke_dash.dash[i];
                     }
                     d[i] = -1;
                 } else {
@@ -137,36 +119,24 @@ void SPDashSelector::init_dashes() {
                 }
                 pos += 1;
             }
-        } else {  //  This code may never execute - a new preferences.xml is created for a new user.  Maybe if the user deletes dashes from preferences.xml?
-            dashes = g_new (double *, BD_LEN + 2); // +1 for custom slot, +1 for terminator slot
-            unsigned i;
-            for(i=0;i<BD_LEN;i++) {
-               dashes[i] = builtin_dashes[i];
-            }
-            pos = BD_LEN;
+            dashes[pos] = NULL;
+        } else {
+            dashes = builtin_dashes;
         }
-        // make a place to hold the custom dashes, up to 15 positions long (+ terminator)
-        dashes[pos] = g_new (double, 16);
-        double *d = dashes[pos];
-        int i=0;
-        for(i=0;i<15;i++){ d[i]=i; } // have to put something in there, this is a pattern hopefully nobody would choose
-        d[15]=-1.0;
-        // final terminator
-        dashes[++pos]   = NULL;
     }
 }
 
-void SPDashSelector::set_dash (int ndash, double *dash, double o)
+void
+SPDashSelector::set_dash (int ndash, double *dash, double o)
 {
-    int pos = -1;    // Allows custom patterns to remain unscathed by this.
-    int count = 0;   // will hold the NULL terminator at the end of the dashes list 
+    int pos = 0;
     if (ndash > 0) {
         double delta = 0.0;
         for (int i = 0; i < ndash; i++)
             delta += dash[i];
         delta /= 1000.0;
 
-        for (int i = 0; dashes[i]; i++,count++) {
+        for (int i = 0; dashes[i]; i++) {
             double *pattern = dashes[i];
             int np = 0;
             while (pattern[np] >= 0.0)
@@ -174,8 +144,7 @@ void SPDashSelector::set_dash (int ndash, double *dash, double o)
             if (np == ndash) {
                 int j;
                 for (j = 0; j < ndash; j++) {
-
-                    if (!Geom::are_near(dash[j], pattern[j], delta))
+                    if (!NR_DF_TEST_CLOSE (dash[j], pattern[j], delta))
                         break;
                 }
                 if (j == ndash) {
@@ -185,32 +154,14 @@ void SPDashSelector::set_dash (int ndash, double *dash, double o)
             }
         }
     }
-    else  if(ndash==0) {
-       pos = 0;
-    }
-    if(pos>=0){
-       this->set_data("pattern", dashes[pos]);
-       this->dash_combo.set_active(pos);
-       this->offset->set_value(o);
-       if(pos == 10) {
-           this->offset->set_value(10.0);
-       }
-    }
-    else { // Hit a custom pattern in the SVG, write it into the combobox.
-       count--;  // the one slot for custom patterns
-       double *d = dashes[count];
-       int i=0;
-       for(i=0;i< (ndash > 15 ? 15 : ndash) ;i++) {
-          d[i]=dash[i];
-       } // store the custom pattern
-       d[ndash]=-1.0;  //terminate it
-       this->set_data("pattern", dashes[count]);
-       this->dash_combo.set_active(count);
-       this->offset->set_value(o);  // what does this do????
-    }
+
+    this->set_data("pattern", dashes[pos]);
+    this->dash->set_history(pos);
+    this->offset->set_value(o);
 }
 
-void SPDashSelector::get_dash(int *ndash, double **dash, double *off)
+void
+SPDashSelector::get_dash(int *ndash, double **dash, double *off)
 {
     double *pattern = (double*) this->get_data("pattern");
 
@@ -237,64 +188,152 @@ void SPDashSelector::get_dash(int *ndash, double **dash, double *off)
     }
 }
 
-/**
- * Fill a pixbuf with the dash pattern using standard cairo drawing
- */
-GdkPixbuf* SPDashSelector::sp_dash_to_pixbuf(double *pattern)
+Gtk::MenuItem *
+SPDashSelector::menu_item_new(double *pattern)
 {
-    int n_dashes;
-    for (n_dashes = 0; pattern[n_dashes] >= 0.0; n_dashes ++) ;
+    Gtk::MenuItem *mi = new Gtk::MenuItem();
+    Gtk::Image *px = new Gtk::Image();
 
-    cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, preview_width, preview_height);
-    cairo_t *ct = cairo_create(s);
+    px->show();
+    mi->add(*px);
 
-    cairo_set_line_width (ct, preview_lineheight);
-    cairo_scale (ct, preview_lineheight, 1);
-    //cairo_set_source_rgb (ct, 0, 0, 0);
-    cairo_move_to (ct, 0, preview_height/2);
-    cairo_line_to (ct, preview_width, preview_height/2);
-    cairo_set_dash(ct, pattern, n_dashes, 0);
-    cairo_stroke (ct);
+    mi->set_data("pattern", pattern);
+    mi->set_data("px", px);
+    mi->signal_activate().connect(sigc::bind(sigc::mem_fun(*this, &SPDashSelector::dash_activate), mi));
 
-    cairo_destroy(ct);
-    cairo_surface_flush(s);
+    px->signal_realize().connect(sigc::bind(sigc::ptr_fun(&sp_dash_selector_menu_item_image_realize), px, pattern));
 
-    GdkPixbuf* pixbuf = ink_pixbuf_create_from_cairo_surface(s);
-    return pixbuf;
+    return mi;
 }
 
-/**
- * Fill a pixbuf with a text label using standard cairo drawing
- */
-GdkPixbuf* SPDashSelector::sp_text_to_pixbuf(char *text)
+static bool
+all_even_are_zero (double *pattern, int n)
 {
-    cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, preview_width, preview_height);
-    cairo_t *ct = cairo_create(s);
-
-    cairo_select_font_face (ct, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_set_font_size (ct, 12.0);
-    cairo_set_source_rgb (ct, 0.0, 0.0, 0.0);
-    cairo_move_to (ct, 16.0, 13.0);
-    cairo_show_text (ct, text);
-
-    cairo_stroke (ct);
-
-    cairo_destroy(ct);
-    cairo_surface_flush(s);
-
-    GdkPixbuf* pixbuf = ink_pixbuf_create_from_cairo_surface(s);
-    return pixbuf;
+	for (int i = 0; i < n; i += 2) {
+		if (pattern[i] != 0)
+			return false;
+	}
+	return true;
 }
 
-void SPDashSelector::on_selection ()
+static bool
+all_odd_are_zero (double *pattern, int n)
 {
-    double *pattern = dash_combo.get_active()->get_value(dash_columns.dash);
+	for (int i = 1; i < n; i += 2) {
+		if (pattern[i] != 0)
+			return false;
+	}
+	return true;
+}
+
+static void sp_dash_selector_menu_item_image_realize(Gtk::Image *px, double *pattern) {
+    Glib::RefPtr<Gdk::Pixmap> pixmap = Gdk::Pixmap::create(px->get_window(), DASH_PREVIEW_LENGTH + 4, 16, -1);
+    Glib::RefPtr<Gdk::GC> gc = Gdk::GC::create(pixmap);
+
+    gc->set_rgb_fg_color(Gdk::Color("#ffffff"));
+    pixmap->draw_rectangle(gc, true, 0, 0, DASH_PREVIEW_LENGTH + 4, 16);
+
+    // FIXME: all of the below twibblering is due to the limitations of gdk_gc_set_dashes (only integers, no zeroes).
+    // Perhaps would make sense to rework this with manually drawn dashes.
+
+    // Fill in the integer array of pixel-lengths, for display
+    gint8 pixels_i[64];
+    gdouble pixels_d[64];
+    int n_source_dashes = 0;
+    int n_pixel_dashes = 0;
+
+    signed int i_s, i_p;
+    for (i_s = 0, i_p = 0; pattern[i_s] >= 0.0; i_s ++, i_p ++) {
+        pixels_d[i_p] = 0.0;
+    }
+
+    n_source_dashes = i_s;
+
+    for (i_s = 0, i_p = 0; i_s < n_source_dashes; i_s ++, i_p ++) {
+        // calculate the pixel length corresponding to the current dash
+        gdouble pixels = DASH_PREVIEW_WIDTH * pattern[i_s];
+
+        if (pixels > 0.0)
+            pixels_d [i_p] += pixels;
+        else {
+            if (i_p >= 1) {
+                // dash is zero, skip this element in the array, and set pointer backwards
+                // so the next dash is added to the previous
+                i_p -= 2;
+            } else {
+                // the first dash is zero; bad luck, gdk cannot start pattern with non-stroke, so we
+                // put a 1-pixel stub here (it may turn out not shown, though, see special cases below)
+                pixels_d [i_p] = 1.0;
+            }
+        }
+    }
+
+    n_pixel_dashes = i_p;
+
+    gdouble longest_dash = 0.0;
+
+    // after summation, convert double dash lengths to ints
+    for (i_p = 0; i_p < n_pixel_dashes; i_p ++) {
+        pixels_i [i_p] = (gint8) (pixels_d [i_p] + 0.5);
+        // zero-length dashes are already eliminated, so the <1 dash is short but not zero;
+        // we approximate it with a one-pixel mark
+        if (pixels_i [i_p] < 1)
+            pixels_i [i_p] = 1;
+        if (i_p % 2 == 0) { // it's a dash
+            if (pixels_d [i_p] > longest_dash)
+                longest_dash = pixels_d [i_p];
+        }
+    }
+
+    Gdk::Color color;
+    if (longest_dash > 1e-18 && longest_dash < 0.5) {
+        // fake "shortening" of one-pixel marks by painting them lighter-than-black
+        gint rgb = 0xffff - (gint) (0xffff * longest_dash / 0.5);
+        color.set_rgb(rgb, rgb, rgb);
+        gc->set_rgb_fg_color(color);
+    } else {
+        color.set_rgb(0, 0, 0);
+        gc->set_rgb_fg_color(color);
+    }
+
+    if (n_source_dashes > 0) {
+        // special cases:
+        if (all_even_are_zero (pattern, n_source_dashes)) {
+            ; // do not draw anything, only gaps are non-zero
+        } else if (all_odd_are_zero (pattern, n_source_dashes)) {
+            // draw solid line, only dashes are non-zero
+            gc->set_line_attributes(DASH_PREVIEW_WIDTH,
+                                    Gdk::LINE_SOLID, Gdk::CAP_BUTT,
+                                    Gdk::JOIN_MITER);
+            pixmap->draw_line(gc, 4, 8, DASH_PREVIEW_LENGTH, 8);
+        } else {
+            // regular pattern with both gaps and dashes non-zero
+            gc->set_line_attributes(DASH_PREVIEW_WIDTH, Gdk::LINE_ON_OFF_DASH, Gdk::CAP_BUTT, Gdk::JOIN_MITER);
+            gc->set_dashes(0, pixels_i, n_pixel_dashes);
+            pixmap->draw_line(gc, 4, 8, DASH_PREVIEW_LENGTH, 8);
+        }
+    } else {
+        // no pattern, draw solid line
+        gc->set_line_attributes(DASH_PREVIEW_WIDTH, Gdk::LINE_SOLID, Gdk::CAP_BUTT, Gdk::JOIN_MITER);
+        pixmap->draw_line(gc, 4, 8, DASH_PREVIEW_LENGTH, 8);
+    }
+
+    Glib::RefPtr<Gdk::Bitmap> null_ptr;
+    px->set(pixmap, null_ptr);
+}
+
+void
+SPDashSelector::dash_activate (Gtk::MenuItem *mi)
+{
+    double *pattern = (double*) mi->get_data("pattern");
     this->set_data ("pattern", pattern);
 
     changed_signal.emit();
 }
 
-void SPDashSelector::offset_value_changed()
+
+void
+SPDashSelector::offset_value_changed()
 {
     changed_signal.emit();
 }
@@ -308,4 +347,4 @@ void SPDashSelector::offset_value_changed()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

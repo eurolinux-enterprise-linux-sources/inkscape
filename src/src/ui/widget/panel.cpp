@@ -1,4 +1,6 @@
-/*
+/**
+ * \brief Panel widget
+ *
  * Authors:
  *   Bryce Harrington <bryce@bryceharrington.org>
  *   Jon A. Cruz <jon@joncruz.org>
@@ -15,25 +17,19 @@
 # include <config.h>
 #endif
 
-#include <gtkmm/dialog.h> // for Gtk::RESPONSE_*
-#include <gtkmm/menu.h>
-#include <gtkmm/stock.h>
-#include <gtkmm/radiobutton.h>
-#include <gtkmm/radiomenuitem.h>
-#include <gtkmm/separatormenuitem.h>
-
 #include <glibmm/i18n.h>
+
+#include <gtkmm/dialog.h> // for Gtk::RESPONSE_*
+#include <gtkmm/stock.h>
 
 #include <gtk/gtk.h>
 
 #include "panel.h"
 #include "icon-size.h"
 #include "preferences.h"
-#include "desktop.h"
-
+#include "desktop-handles.h"
 #include "inkscape.h"
 #include "widgets/eek-preview.h"
-#include "ui/previewfillable.h"
 
 namespace Inkscape {
 namespace UI {
@@ -43,8 +39,7 @@ static const int PANEL_SETTING_SIZE = 0;
 static const int PANEL_SETTING_MODE = 1;
 static const int PANEL_SETTING_SHAPE = 2;
 static const int PANEL_SETTING_WRAP = 3;
-static const int PANEL_SETTING_BORDER = 4;
-static const int PANEL_SETTING_NEXTFREE = 5;
+static const int PANEL_SETTING_NEXTFREE = 4;
 
 
 void Panel::prep() {
@@ -58,6 +53,10 @@ void Panel::prep() {
     };
     eek_preview_set_size_mappings( G_N_ELEMENTS(sizes), sizes );
 }
+
+/**
+ *    Construct a Panel
+ */
 
 Panel::Panel(Glib::ustring const &label, gchar const *prefs_path,
              int verb_num, Glib::ustring const &apply_label,
@@ -73,10 +72,6 @@ Panel::Panel(Glib::ustring const &label, gchar const *prefs_path,
     _action_area(0),
     _fillable(0)
 {
-    set_name( "InkscapePanel" );
-#if WITH_GTKMM_3_0
-    set_orientation( Gtk::ORIENTATION_VERTICAL );
-#endif
     _init();
 }
 
@@ -96,9 +91,10 @@ void Panel::_popper(GdkEventButton* event)
 
 void Panel::_init()
 {
-    _anchor = SP_ANCHOR_CENTER;
+    Glib::ustring tmp("<");
+    _anchor = Gtk::ANCHOR_CENTER;
 
-    guint panel_size = 0, panel_mode = 0, panel_ratio = 100, panel_border = 0;
+    guint panel_size = 0, panel_mode = 0, panel_ratio = 100;
     bool panel_wrap = 0;
     if (!_prefs_path.empty()) {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
@@ -106,7 +102,6 @@ void Panel::_init()
         panel_size = prefs->getIntLimited(_prefs_path + "/panel_size", 1, 0, PREVIEW_SIZE_HUGE);
         panel_mode = prefs->getIntLimited(_prefs_path + "/panel_mode", 1, 0, 10);
         panel_ratio = prefs->getIntLimited(_prefs_path + "/panel_ratio", 100, 0, 500 );
-        panel_border = prefs->getIntLimited(_prefs_path + "/panel_border", BORDER_NONE, 0, 2 );
     }
 
     _menu = new Gtk::Menu();
@@ -115,8 +110,8 @@ void Panel::_init()
         Gtk::RadioMenuItem::Group group;
         Glib::ustring one_label(_("List"));
         Glib::ustring two_label(_("Grid"));
-        Gtk::RadioMenuItem *one = Gtk::manage(new Gtk::RadioMenuItem(group, one_label));
-        Gtk::RadioMenuItem *two = Gtk::manage(new Gtk::RadioMenuItem(group, two_label));
+        Gtk::RadioMenuItem *one = manage(new Gtk::RadioMenuItem(group, one_label));
+        Gtk::RadioMenuItem *two = manage(new Gtk::RadioMenuItem(group, two_label));
 
         if (panel_mode == 0) {
             one->set_active(true);
@@ -128,7 +123,7 @@ void Panel::_init()
         _non_horizontal.push_back(one);
         _menu->append(*two);
         _non_horizontal.push_back(two);
-        Gtk::MenuItem* sep = Gtk::manage(new Gtk::SeparatorMenuItem());
+        Gtk::MenuItem* sep = manage(new Gtk::SeparatorMenuItem());
         _menu->append(*sep);
         _non_horizontal.push_back(sep);
         one->signal_activate().connect(sigc::bind<int, int>(sigc::mem_fun(*this, &Panel::_bounceCall), PANEL_SETTING_MODE, 0));
@@ -136,25 +131,30 @@ void Panel::_init()
     }
 
     {
-        Glib::ustring heightItemLabel(C_("Swatches", "Size"));
+        //TRANSLATORS: only translate "string" in "context|string".
+        // For more details, see http://developer.gnome.org/doc/API/2.0/glib/glib-I18N.html#Q-:CAPS
+        Glib::ustring heightItemLabel(Q_("swatches|Size"));
 
         //TRANSLATORS: Indicates size of colour swatches
         const gchar *heightLabels[] = {
-            NC_("Swatches height", "Tiny"),
-            NC_("Swatches height", "Small"),
-            NC_("Swatches height", "Medium"),
-            NC_("Swatches height", "Large"),
-            NC_("Swatches height", "Huge")
+            N_("tiny"),
+            N_("small"),
+            //TRANSLATORS: only translate "string" in "context|string".
+            // For more details, see http://developer.gnome.org/doc/API/2.0/glib/glib-I18N.html#Q-:CAPS
+            // "medium" indicates size of colour swatches
+            N_("swatchesHeight|medium"),
+            N_("large"),
+            N_("huge")
         };
 
-        Gtk::MenuItem *sizeItem = Gtk::manage(new Gtk::MenuItem(heightItemLabel));
-        Gtk::Menu *sizeMenu = Gtk::manage(new Gtk::Menu());
+        Gtk::MenuItem *sizeItem = manage(new Gtk::MenuItem(heightItemLabel));
+        Gtk::Menu *sizeMenu = manage(new Gtk::Menu());
         sizeItem->set_submenu(*sizeMenu);
 
         Gtk::RadioMenuItem::Group heightGroup;
         for (unsigned int i = 0; i < G_N_ELEMENTS(heightLabels); i++) {
-            Glib::ustring _label(g_dpgettext2(NULL, "Swatches height", heightLabels[i]));
-            Gtk::RadioMenuItem* _item = Gtk::manage(new Gtk::RadioMenuItem(heightGroup, _label));
+            Glib::ustring _label(Q_(heightLabels[i]));
+            Gtk::RadioMenuItem* _item = manage(new Gtk::RadioMenuItem(heightGroup, _label));
             sizeMenu->append(*_item);
             if (i == panel_size) {
                 _item->set_active(true);
@@ -166,19 +166,24 @@ void Panel::_init()
     }
 
     {
-        Glib::ustring widthItemLabel(C_("Swatches", "Width"));
+        //TRANSLATORS: only translate "string" in "context|string".
+        // For more details, see http://developer.gnome.org/doc/API/2.0/glib/glib-I18N.html#Q-:CAPS
+        Glib::ustring widthItemLabel(Q_("swatches|Width"));
 
         //TRANSLATORS: Indicates width of colour swatches
         const gchar *widthLabels[] = {
-            NC_("Swatches width", "Narrower"),
-            NC_("Swatches width", "Narrow"),
-            NC_("Swatches width", "Medium"),
-            NC_("Swatches width", "Wide"),
-            NC_("Swatches width", "Wider")
+            N_("narrower"),
+            N_("narrow"),
+            //TRANSLATORS: only translate "string" in "context|string".
+            // For more details, see http://developer.gnome.org/doc/API/2.0/glib/glib-I18N.html#Q-:CAPS
+            // "medium" indicates width of colour swatches
+            N_("swatchesWidth|medium"),
+            N_("wide"),
+            N_("wider")
         };
 
-        Gtk::MenuItem *item = Gtk::manage( new Gtk::MenuItem(widthItemLabel));
-        Gtk::Menu *type_menu = Gtk::manage(new Gtk::Menu());
+        Gtk::MenuItem *item = manage( new Gtk::MenuItem(widthItemLabel));
+        Gtk::Menu *type_menu = manage(new Gtk::Menu());
         item->set_submenu(*type_menu);
         _menu->append(*item);
 
@@ -193,8 +198,8 @@ void Panel::_init()
             }
         }
         for ( guint i = 0; i < G_N_ELEMENTS(widthLabels); ++i ) {
-            Glib::ustring _label(g_dpgettext2(NULL, "Swatches width", widthLabels[i]));
-            Gtk::RadioMenuItem *_item = Gtk::manage(new Gtk::RadioMenuItem(widthGroup, _label));
+            Glib::ustring _label(Q_(widthLabels[i]));
+            Gtk::RadioMenuItem *_item = manage(new Gtk::RadioMenuItem(widthGroup, _label));
             type_menu->append(*_item);
             if ( i <= hot_index ) {
                 _item->set_active(true);
@@ -204,45 +209,11 @@ void Panel::_init()
     }
 
     {
-        Glib::ustring widthItemLabel(C_("Swatches", "Border"));
-
-        //TRANSLATORS: Indicates border of colour swatches
-        const gchar *widthLabels[] = {
-            NC_("Swatches border", "None"),
-            NC_("Swatches border", "Solid"),
-            NC_("Swatches border", "Wide"),
-        };
-
-        Gtk::MenuItem *item = Gtk::manage( new Gtk::MenuItem(widthItemLabel));
-        Gtk::Menu *type_menu = Gtk::manage(new Gtk::Menu());
-        item->set_submenu(*type_menu);
-        _menu->append(*item);
-
-        Gtk::RadioMenuItem::Group widthGroup;
-
-        guint values[] = {0, 1, 2};
-        guint hot_index = 0;
-        for ( guint i = 0; i < G_N_ELEMENTS(widthLabels); ++i ) {
-            // Assume all values are in increasing order
-            if ( values[i] <= panel_border ) {
-                hot_index = i;
-            }
-        }
-        for ( guint i = 0; i < G_N_ELEMENTS(widthLabels); ++i ) {
-            Glib::ustring _label(g_dpgettext2(NULL, "Swatches border", widthLabels[i]));
-            Gtk::RadioMenuItem *_item = Gtk::manage(new Gtk::RadioMenuItem(widthGroup, _label));
-            type_menu->append(*_item);
-            if ( i <= hot_index ) {
-                _item->set_active(true);
-            }
-            _item->signal_activate().connect(sigc::bind<int, int>(sigc::mem_fun(*this, &Panel::_bounceCall), PANEL_SETTING_BORDER, values[i]));
-        }
-    }
-
-    {
-        //TRANSLATORS: "Wrap" indicates how colour swatches are displayed
-        Glib::ustring wrap_label(C_("Swatches","Wrap"));
-        Gtk::CheckMenuItem *check = Gtk::manage(new Gtk::CheckMenuItem(wrap_label));
+        //TRANSLATORS: only translate "string" in "context|string".
+        // For more details, see http://developer.gnome.org/doc/API/2.0/glib/glib-I18N.html#Q-:CAPS
+        // "Wrap" indicates how colour swatches are displayed
+        Glib::ustring wrap_label(Q_("swatches|Wrap"));
+        Gtk::CheckMenuItem *check = manage(new Gtk::CheckMenuItem(wrap_label));
         check->set_active(panel_wrap);
         _menu->append(*check);
         _non_vertical.push_back(check);
@@ -251,7 +222,7 @@ void Panel::_init()
     }
 
     Gtk::SeparatorMenuItem *sep;
-    sep = Gtk::manage(new Gtk::SeparatorMenuItem());
+    sep = manage(new Gtk::SeparatorMenuItem());
     _menu->append(*sep);
 
     _menu->show_all_children();
@@ -284,11 +255,8 @@ void Panel::_init()
 
     pack_start(_top_bar, false, false);
 
-    Gtk::HBox* boxy = Gtk::manage(new Gtk::HBox());
-    boxy->set_name( "PanelBoxY" );
-    _contents.set_name( "PanelContents" );
-    _right_bar.set_name( "PanelRightBar" );
-    _top_bar.set_name( "PanelTopBar" );
+    Gtk::HBox* boxy = manage(new Gtk::HBox());
+
     boxy->pack_start(_contents, true, true);
     boxy->pack_start(_right_bar, false, true);
 
@@ -296,7 +264,7 @@ void Panel::_init()
 
     signalResponse().connect(sigc::mem_fun(*this, &Panel::_handleResponse));
 
-    signalActivateDesktop().connect(sigc::mem_fun(*this, &Panel::setDesktop));
+    signalActivateDesktop().connect(sigc::hide<0>(sigc::mem_fun(*this, &Panel::setDesktop)));
 
     show_all_children();
 
@@ -304,7 +272,6 @@ void Panel::_init()
     _bounceCall(PANEL_SETTING_MODE, panel_mode);
     _bounceCall(PANEL_SETTING_SHAPE, panel_ratio);
     _bounceCall(PANEL_SETTING_WRAP, panel_wrap);
-    _bounceCall(PANEL_SETTING_BORDER, panel_border);
 }
 
 void Panel::setLabel(Glib::ustring const &label)
@@ -318,13 +285,13 @@ void Panel::setLabel(Glib::ustring const &label)
     _tab_title.set_label(_label);
 }
 
-void Panel::setOrientation(SPAnchorType how)
+void Panel::setOrientation(Gtk::AnchorType how)
 {
     if (_anchor != how) {
         _anchor = how;
         switch (_anchor) {
-            case SP_ANCHOR_NORTH:
-            case SP_ANCHOR_SOUTH:
+            case Gtk::ANCHOR_NORTH:
+            case Gtk::ANCHOR_SOUTH:
             {
                 if (_menu_desired) {
                     _menu_popper.reference();
@@ -369,7 +336,7 @@ void Panel::present()
 
 void Panel::restorePanelPrefs()
 {
-    guint panel_size = 0, panel_mode = 0, panel_ratio = 100, panel_border = 0;
+    guint panel_size = 0, panel_mode = 0, panel_ratio = 100;
     bool panel_wrap = 0;
     if (!_prefs_path.empty()) {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
@@ -377,21 +344,21 @@ void Panel::restorePanelPrefs()
         panel_size = prefs->getIntLimited(_prefs_path + "/panel_size", 1, 0, PREVIEW_SIZE_HUGE);
         panel_mode = prefs->getIntLimited(_prefs_path + "/panel_mode", 1, 0, 10);
         panel_ratio = prefs->getIntLimited(_prefs_path + "/panel_ratio", 000, 0, 500 );
-        panel_border = prefs->getIntLimited(_prefs_path + "/panel_border", BORDER_NONE, 0, 2 );
     }
     _bounceCall(PANEL_SETTING_SIZE, panel_size);
     _bounceCall(PANEL_SETTING_MODE, panel_mode);
     _bounceCall(PANEL_SETTING_SHAPE, panel_ratio);
     _bounceCall(PANEL_SETTING_WRAP, panel_wrap);
-    _bounceCall(PANEL_SETTING_BORDER, panel_border);
 }
 
-sigc::signal<void, int> &Panel::signalResponse()
+sigc::signal<void, int> &
+Panel::signalResponse()
 {
     return _signal_response;
 }
 
-sigc::signal<void> &Panel::signalPresent()
+sigc::signal<void> &
+Panel::signalPresent()
 {
     return _signal_present;
 }
@@ -408,32 +375,30 @@ void Panel::_bounceCall(int i, int j)
         if (_fillable) {
             ViewType curr_type = _fillable->getPreviewType();
             guint curr_ratio = _fillable->getPreviewRatio();
-            ::BorderStyle curr_border = _fillable->getPreviewBorder();
-
             switch (j) {
             case 0:
             {
-                _fillable->setStyle(::PREVIEW_SIZE_TINY, curr_type, curr_ratio, curr_border);
+                _fillable->setStyle(::PREVIEW_SIZE_TINY, curr_type, curr_ratio);
             }
             break;
             case 1:
             {
-                _fillable->setStyle(::PREVIEW_SIZE_SMALL, curr_type, curr_ratio, curr_border);
+                _fillable->setStyle(::PREVIEW_SIZE_SMALL, curr_type, curr_ratio);
             }
             break;
             case 2:
             {
-                _fillable->setStyle(::PREVIEW_SIZE_MEDIUM, curr_type, curr_ratio, curr_border);
+                _fillable->setStyle(::PREVIEW_SIZE_MEDIUM, curr_type, curr_ratio);
             }
             break;
             case 3:
             {
-                _fillable->setStyle(::PREVIEW_SIZE_BIG, curr_type, curr_ratio, curr_border);
+                _fillable->setStyle(::PREVIEW_SIZE_BIG, curr_type, curr_ratio);
             }
             break;
             case 4:
             {
-                _fillable->setStyle(::PREVIEW_SIZE_HUGE, curr_type, curr_ratio, curr_border);
+                _fillable->setStyle(::PREVIEW_SIZE_HUGE, curr_type, curr_ratio);
             }
             break;
             default:
@@ -449,16 +414,15 @@ void Panel::_bounceCall(int i, int j)
         if (_fillable) {
             ::PreviewSize curr_size = _fillable->getPreviewSize();
             guint curr_ratio = _fillable->getPreviewRatio();
-            ::BorderStyle curr_border = _fillable->getPreviewBorder();
             switch (j) {
             case 0:
             {
-                _fillable->setStyle(curr_size, VIEW_TYPE_LIST, curr_ratio, curr_border);
+                _fillable->setStyle(curr_size, VIEW_TYPE_LIST, curr_ratio);
             }
             break;
             case 1:
             {
-                _fillable->setStyle(curr_size, VIEW_TYPE_GRID, curr_ratio, curr_border);
+                _fillable->setStyle(curr_size, VIEW_TYPE_GRID, curr_ratio);
             }
             break;
             default:
@@ -474,40 +438,7 @@ void Panel::_bounceCall(int i, int j)
         if ( _fillable ) {
             ViewType curr_type = _fillable->getPreviewType();
             ::PreviewSize curr_size = _fillable->getPreviewSize();
-            ::BorderStyle curr_border = _fillable->getPreviewBorder();
-
-            _fillable->setStyle(curr_size, curr_type, j, curr_border);
-        }
-        break;
-    case PANEL_SETTING_BORDER:
-        if (!_prefs_path.empty()) {
-            Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-            prefs->setInt(_prefs_path + "/panel_border", j);
-        }
-        if ( _fillable ) {
-            ::PreviewSize curr_size = _fillable->getPreviewSize();
-            ViewType curr_type = _fillable->getPreviewType();
-            guint curr_ratio = _fillable->getPreviewRatio();
-
-            switch (j) {
-            case 0:
-            {
-                _fillable->setStyle(curr_size, curr_type, curr_ratio, BORDER_NONE);
-            }
-            break;
-            case 1:
-            {
-                _fillable->setStyle(curr_size, curr_type, curr_ratio, BORDER_SOLID);
-            }
-            break;
-            case 2:
-            {
-                _fillable->setStyle(curr_size, curr_type, curr_ratio, BORDER_WIDE);
-            }
-            break;
-            default:
-                break;
-            }
+            _fillable->setStyle(curr_size, curr_type, j);
         }
         break;
     case PANEL_SETTING_WRAP:
@@ -567,7 +498,6 @@ void Panel::_regItem(Gtk::MenuItem* item, int group, int id)
     _menu->append(*item);
     item->signal_activate().connect(sigc::bind<int, int>(sigc::mem_fun(*this, &Panel::_bounceCall), group + PANEL_SETTING_NEXTFREE, id));
     item->show();
-
 }
 
 void Panel::_handleAction(int /*set_id*/, int /*item_id*/)
@@ -575,45 +505,39 @@ void Panel::_handleAction(int /*set_id*/, int /*item_id*/)
 // for subclasses to override
 }
 
-void Panel::_apply()
+void
+Panel::_apply()
 {
     g_warning("Apply button clicked for panel [Panel::_apply()]");
 }
 
-Gtk::Button *Panel::addResponseButton(const Glib::ustring &button_text, int response_id, bool pack_start)
+Gtk::Button *
+Panel::addResponseButton(const Glib::ustring &button_text, int response_id)
 {
     Gtk::Button *button = new Gtk::Button(button_text);
-    _addResponseButton(button, response_id, pack_start);
+    _addResponseButton(button, response_id);
     return button;
 }
 
-Gtk::Button *Panel::addResponseButton(const Gtk::StockID &stock_id, int response_id, bool pack_start)
+Gtk::Button *
+Panel::addResponseButton(const Gtk::StockID &stock_id, int response_id)
 {
     Gtk::Button *button = new Gtk::Button(stock_id);
-    _addResponseButton(button, response_id, pack_start);
+    _addResponseButton(button, response_id);
     return button;
 }
 
-void Panel::_addResponseButton(Gtk::Button *button, int response_id, bool pack_start)
+void
+Panel::_addResponseButton(Gtk::Button *button, int response_id)
 {
     // Create a button box for the response buttons if it's the first button to be added
     if (!_action_area) {
-#if WITH_GTKMM_3_0
-        _action_area = new Gtk::ButtonBox();
-        _action_area->set_layout(Gtk::BUTTONBOX_END);
-        _action_area->set_spacing(6);
-#else
         _action_area = new Gtk::HButtonBox(Gtk::BUTTONBOX_END, 6);
-#endif
         _action_area->set_border_width(4);
         pack_end(*_action_area, Gtk::PACK_SHRINK, 0);
     }
 
     _action_area->pack_end(*button);
-
-    if (pack_start) {
-        _action_area->set_child_secondary( *button , true);
-    }
 
     if (response_id != 0) {
         // Re-emit clicked signals as response signals
@@ -622,7 +546,8 @@ void Panel::_addResponseButton(Gtk::Button *button, int response_id, bool pack_s
     }
 }
 
-void Panel::setDefaultResponse(int response_id)
+void
+Panel::setDefaultResponse(int response_id)
 {
     ResponseMap::iterator widget_found;
     widget_found = _response_map.find(response_id);
@@ -634,7 +559,8 @@ void Panel::setDefaultResponse(int response_id)
     }
 }
 
-void Panel::setResponseSensitive(int response_id, bool setting)
+void
+Panel::setResponseSensitive(int response_id, bool setting)
 {
     if (_response_map[response_id])
         _response_map[response_id]->set_sensitive(setting);
@@ -646,19 +572,20 @@ Panel::signalDocumentReplaced()
     return _signal_document_replaced;
 }
 
-sigc::signal<void, SPDesktop *> &
+sigc::signal<void, Inkscape::Application *, SPDesktop *> &
 Panel::signalActivateDesktop()
 {
     return _signal_activate_desktop;
 }
 
-sigc::signal<void, SPDesktop *> &
+sigc::signal<void, Inkscape::Application *, SPDesktop *> &
 Panel::signalDeactiveDesktop()
 {
     return _signal_deactive_desktop;
 }
 
-void Panel::_handleResponse(int response_id)
+void
+Panel::_handleResponse(int response_id)
 {
     switch (response_id) {
         case Gtk::RESPONSE_APPLY: {
@@ -670,7 +597,7 @@ void Panel::_handleResponse(int response_id)
 
 Inkscape::Selection *Panel::_getSelection()
 {
-    return _desktop->getSelection();
+    return sp_desktop_selection(_desktop);
 }
 
 } // namespace Widget
@@ -686,4 +613,4 @@ Inkscape::Selection *Panel::_getSelection()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

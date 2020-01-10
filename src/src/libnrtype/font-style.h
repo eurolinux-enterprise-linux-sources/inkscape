@@ -1,17 +1,15 @@
 #ifndef SEEN_LIBNRTYPE_FONT_STYLE_H
 #define SEEN_LIBNRTYPE_FONT_STYLE_H
 
-#include <2geom/affine.h>
+#include <2geom/matrix.h>
 #include <livarot/LivarotDefs.h>
+#include <livarot/livarot-forward.h>
 
 // structure that holds data describing how to render glyphs of a font
 
-class Path;
-class Shape;
-
 // Different raster styles.
 struct font_style {
-    Geom::Affine  transform; // the ctm. contains the font-size
+    Geom::Matrix  transform; // the ctm. contains the font-size
     bool          vertical;  // should be rendered vertically or not? 
 		                // good font support would take the glyph alternates for vertical mode, when present
     double        stroke_width; // if 0, the glyph is filled; otherwise stroked

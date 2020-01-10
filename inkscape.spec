@@ -1,12 +1,25 @@
 Name:           inkscape
-Version:        0.92.2
-Release:        2%{?dist}
+Version:        0.48.4
+Release:        10%{?dist}
 Summary:        Vector-based drawing program using SVG
 
 Group:          Applications/Productivity
 License:        GPLv2+
 URL:            http://inkscape.sourceforge.net/
 Source0:        http://downloads.sourceforge.net/inkscape/%{name}-%{version}.tar.bz2
+Patch0:         inkscape-0.48.2-types.patch
+#Patch4:         inkscape-0.48.2-glib.patch
+#Patch5:         inkscape-0.48.2-png.patch
+#Patch6:         inkscape-0.48.2-png-write.patch
+#Patch7:         inkscape-0.48.2-gcc47.patch
+#Patch8:         inkscape-0.48.2-poppler_020.patch
+#Patch9:         inkscape-0.48.3.1-hugexml.patch
+Patch10:        inkscape-0.48.4-spuriouscomma.h
+Patch11:        inkscape-0.48.4-spsvg-remove.path
+
+%if 0%{?fedora} && 0%{?fedora} < 18
+%define desktop_vendor fedora
+%endif
 
 BuildRequires:  atk-devel
 BuildRequires:  desktop-file-utils
@@ -15,6 +28,7 @@ BuildRequires:  gc-devel >= 6.4
 BuildRequires:  gettext
 BuildRequires:  gtkmm24-devel >= 2.8.0
 BuildRequires:  gtkspell-devel
+BuildRequires:  gnome-vfs2-devel >= 2.0
 BuildRequires:  libpng-devel >= 1.2
 BuildRequires:  libxml2-devel >= 2.6.11
 BuildRequires:  libxslt-devel >= 1.0.15
@@ -27,7 +41,7 @@ BuildRequires:  python-devel
 BuildRequires:  poppler-glib-devel
 BuildRequires:  boost-devel
 BuildRequires:  gsl-devel
-BuildRequires:  libwpg-devel >= 0.3.0
+BuildRequires:  libwpg-devel
 BuildRequires:  ImageMagick-c++-devel
 BuildRequires:  perl(XML::Parser)
 BuildRequires:  perl(ExtUtils::Embed)
@@ -35,7 +49,6 @@ BuildRequires:  intltool
 BuildRequires:  popt-devel
 # We detect new poppler in inkscape-0.48.2-poppler_020.patch
 BuildRequires:  automake 
-BuildRequires:  cmake
 
 # Disable all for now. TODO: Be smarter
 %if 0
@@ -96,7 +109,6 @@ Summary:        Viewing program for SVG files
 Group:          Applications/Productivity
 # the package requires libperl.so, so it also has to require this:
 Requires:  perl(:MODULE_COMPAT_%(eval "`%{__perl} -V:version`"; echo $version))
-Requires:  inkscape = %{version}-%{release}
 
 %description view
 Viewer for files in W3C standard Scalable Vector Graphics (SVG) file
@@ -115,6 +127,15 @@ graphics in W3C standard Scalable Vector Graphics (SVG) file format.
 
 %prep
 %setup -q
+%patch0 -p1 -b .types
+#%patch4 -p1 -b .glib
+#%patch5 -p0 -b .png
+#%patch6 -p0 -b .png-write
+#%patch7 -p0 -b .gcc47
+#%patch8 -p1 -b .poppler_020
+#%patch9 -p0 -b .hugexml
+%patch10 -p0 -b .spuriouscomma
+%patch11 -p1 -b .spsvg
 
 # https://bugs.launchpad.net/inkscape/+bug/314381
 # A couple of files have executable bits set,
@@ -126,26 +147,27 @@ find share/extensions -name '*.py' | xargs chmod -x
 # Fix end of line encodings
 dos2unix -k -q share/extensions/*.py
 
+autoreconf -i
+
 
 %build
-# --disable-strict-build is needed due to gtkmm using a deprecated glibmm
-# method: https://lists.fedoraproject.org/pipermail/devel/2015-July/212652.html
-# If upstream gtkmm fixes https://bugzilla.gnome.org/show_bug.cgi?id=752797
-# this can be removed.
-export RPM_OPT_FLAGS="$RPM_OPT_FLAGS -std=c++11 -fno-strict-overflow"
 export CFLAGS="$RPM_OPT_FLAGS -fno-strict-aliasing"
 export CXXFLAGS="$RPM_OPT_FLAGS -fno-strict-aliasing"
 
-cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -DWITH_GNOME_VFS:BOOL=OFF .
+%configure                      \
+        --with-python           \
+        --with-perl             \
+        --with-gnome-vfs        \
+        --with-xft              \
+        --enable-lcms           \
+        --enable-poppler-cairo 
 
 make %{?_smp_mflags}
 
 
 %install
 rm -rf $RPM_BUILD_ROOT
-make install VERBOSE=1 DESTDIR=$RPM_BUILD_ROOT
-sed -i 's/Drawing Shortcut Group/X-Drawing Shortcut Group/g' $RPM_BUILD_ROOT%{_datadir}/applications/%{name}.desktop
-find $RPM_BUILD_ROOT -type f -name 'lib*.a' | xargs rm -f
+make install DESTDIR=$RPM_BUILD_ROOT
 
 desktop-file-install --vendor="%{?desktop_vendor}" --delete-original  \
         --dir $RPM_BUILD_ROOT%{_datadir}/applications   \
@@ -184,9 +206,7 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/inkscape
 %dir %{_datadir}/inkscape
-%{_datadir}/inkscape/attributes
-%{_datadir}/inkscape/branding
-%{_datadir}/inkscape/symbols
+%{_datadir}/inkscape/clipart
 %{_datadir}/inkscape/extensions
 %{_datadir}/inkscape/filters
 %{_datadir}/inkscape/fonts
@@ -201,9 +221,8 @@ fi
 %{_datadir}/inkscape/ui
 %{_datadir}/applications/*inkscape.desktop
 %{_datadir}/icons/hicolor/*/*/inkscape*
-%dir %{_prefix}/lib/inkscape
-%{_prefix}/lib/inkscape/lib*.so
 %{_mandir}/*/*gz
+%{_mandir}/*/*/*gz
 %exclude %{_mandir}/man1/inkview.1*
 %doc AUTHORS COPYING ChangeLog NEWS README
 
@@ -223,21 +242,6 @@ fi
 
 
 %changelog
-* Thu Aug 24 2017 Jan Horak <jhorak@redhat.com> - 0.92.2-2
-- Rebase to version 0.92.2
-
-* Fri Apr  1 2016 Jan Horak <jhorak@redhat.com> - 0.91-2
-- Rebase to version 0.91
-
-* Tue Jul 21 2015 Jan Horak <jhorak@redhat.com> - 0.48.4-15
-- Building without gnome-vfs
-
-* Thu May  7 2015 Jan Horak <jhorak@redhat.com> - 0.48.4-13
-- Added patch to support newer poppler
-
-* Thu Apr 30 2015 Jan Horak <jhorak@redhat.com> - 0.48.4-11
-- Fix for libwpg rebase
-
 * Fri Feb 28 2014 Jan Horak <jhorak@redhat.com> - 0.48.4-10
 - Get rid of SpSVG extension - rhbz#1023508
 

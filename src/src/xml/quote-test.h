@@ -7,7 +7,10 @@
 #include <cstring>
 #include <functional>
 
-#include "quote.h"
+/* mental disclaims all responsibility for this evil idea for testing
+   static functions.  The main disadvantages are that we retain any
+   #define's and `using' directives of the included file. */
+#include "quote.cpp"
 
 class XmlQuoteTest : public CxxTest::TestSuite
 {
@@ -76,4 +79,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

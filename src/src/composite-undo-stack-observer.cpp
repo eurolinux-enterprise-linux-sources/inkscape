@@ -1,4 +1,6 @@
-/*
+/**
+ * Aggregates undo stack observers for convenient management and triggering in SPDocument
+ *
  * Heavily inspired by Inkscape::XML::CompositeNodeObserver.
  *
  * Authors:
@@ -137,22 +139,16 @@ CompositeUndoStackObserver::_unlock()
 	if (!--this->_iterating) {
 		// Remove marked observers
 		UndoObserverRecordList::iterator i = this->_active.begin();
-		for(; i != this->_active.begin(); ) {
+		for(; i != this->_active.begin(); i++) {
 			if (i->to_remove) {
-				i = this->_active.erase(i);
-			}
-			else{
-				++i;
+				this->_active.erase(i);
 			}
 		}
 
 		i = this->_pending.begin();
-		for(; i != this->_pending.begin(); ) {
+		for(; i != this->_pending.begin(); i++) {
 			if (i->to_remove) {
-				i = this->_active.erase(i);
-			}
-			else {
-				++i;
+				this->_active.erase(i);
 			}
 		}
 

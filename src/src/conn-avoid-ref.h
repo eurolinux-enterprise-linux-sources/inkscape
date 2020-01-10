@@ -13,13 +13,14 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <2geom/point.h>
+#include <glib.h>
 #include <stddef.h>
 #include <sigc++/connection.h>
 
-class  SPDesktop;
-class SPObject;
-class  SPItem;
+struct SPDesktop;
+struct SPItem;
+struct ConnectionPoint;
+typedef std::map<int, ConnectionPoint> IdConnectionPointMap;
 namespace Avoid { class ShapeRef; }
 
 class SPAvoidRef {
@@ -30,18 +31,26 @@ public:
     // libavoid's internal representation of the item.
     Avoid::ShapeRef *shapeRef;
 
-    void setAvoid(char const *value);
-    void handleSettingChange(void);
+    // Used for holding connection points for item
+    IdConnectionPointMap connection_points;
 
-    Geom::Point getConnectionPointPos(void);
+    void setAvoid(char const *value);
+    void setConnectionPoints(gchar const *value);
+    void addConnectionPoint(ConnectionPoint &cp);
+    void updateConnectionPoint(ConnectionPoint &cp);
+    void deleteConnectionPoint(ConnectionPoint &cp);
+    void handleSettingChange(void);
 
     // Returns a list of SPItems of all connectors/shapes attached to
     // this object.  Pass one of the following for 'type':
     //     Avoid::runningTo
     //     Avoid::runningFrom
     //     Avoid::runningToAndFrom
-    std::vector<SPItem *> getAttachedShapes(const unsigned int type);
-    std::vector<SPItem *> getAttachedConnectors(const unsigned int type);
+    GSList *getAttachedShapes(const unsigned int type);
+    GSList *getAttachedConnectors(const unsigned int type);
+    Geom::Point getConnectionPointPos(const int type, const int id);
+
+    bool isValidConnPointId( const int type, const int id );
 
 private:
     SPItem *item;
@@ -52,11 +61,12 @@ private:
 
     // A sigc connection for transformed signal.
     sigc::connection _transformed_connection;
+    void setConnectionPointsAttrUndoable(const gchar* value, const gchar* action);
 };
 
-extern std::vector<SPItem *> get_avoided_items(std::vector<SPItem *> &list, SPObject *from,
+extern GSList *get_avoided_items(GSList *list, SPObject *from,
         SPDesktop *desktop, bool initialised = true);
-extern void avoid_item_move(Geom::Affine const *mp, SPItem *moved_item);
+extern void avoid_item_move(Geom::Matrix const *mp, SPItem *moved_item);
 extern void init_avoided_shape_geometry(SPDesktop *desktop);
 
 static const double defaultConnSpacing = 3.0;

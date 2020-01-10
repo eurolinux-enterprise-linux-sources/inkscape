@@ -1,3 +1,4 @@
+#define INKSCAPE_LPE_INTERPOLATE_CPP
 /** \file
  * LPE interpolate implementation
  */
@@ -10,12 +11,11 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glibmm/i18n.h>
-
 #include "live_effects/lpe-interpolate.h"
 
 #include <2geom/path.h>
 #include <2geom/sbasis-to-bezier.h>
+#include <2geom/d2-sbasis.h>
 #include <2geom/piecewise.h>
 #include <2geom/sbasis-geometric.h>
 
@@ -27,9 +27,9 @@ namespace LivePathEffect {
 
 LPEInterpolate::LPEInterpolate(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    trajectory_path(_("Trajectory:"), _("Path along which intermediate steps are created."), "trajectory", &wr, this, "M0,0 L0,0"),
-    number_of_steps(_("Steps_:"), _("Determines the number of steps from start to end path."), "steps", &wr, this, 5),
-    equidistant_spacing(_("E_quidistant spacing"), _("If true, the spacing between intermediates is constant along the length of the path. If false, the distance depends on the location of the nodes of the trajectory path."), "equidistant_spacing", &wr, this, true)
+    trajectory_path(_("Trajectory"), _("Path along which intermediate steps are created."), "trajectory", &wr, this, "M0,0 L0,0"),
+    number_of_steps(_("Steps"), _("Determines the number of steps from start to end path."), "steps", &wr, this, 5),
+    equidistant_spacing(_("Equidistant spacing"), _("If true, the spacing between intermediates is constant along the length of the path. If false, the distance depends on the location of the nodes of the trajectory path."), "equidistant_spacing", &wr, this, true)
 {
     show_orig_path = true;
 
@@ -38,7 +38,7 @@ LPEInterpolate::LPEInterpolate(LivePathEffectObject *lpeobject) :
     registerParameter( dynamic_cast<Parameter *>(&number_of_steps) );
 
     number_of_steps.param_make_integer();
-    number_of_steps.param_set_range(2, Geom::infinity());
+    number_of_steps.param_set_range(2, NR_HUGE);
 }
 
 LPEInterpolate::~LPEInterpolate()
@@ -60,7 +60,7 @@ LPEInterpolate::doEffect_path (Geom::PathVector const & path_in)
         return path_in;
     }
 
-    Geom::PathVector path_out;
+    std::vector<Geom::Path> path_out;
 
     Geom::Piecewise<Geom::D2<Geom::SBasis> > pwd2_A = path_in[0].toPwSb();
     Geom::Piecewise<Geom::D2<Geom::SBasis> > pwd2_B = path_in[1].toPwSb();
@@ -98,14 +98,14 @@ LPEInterpolate::doEffect_path (Geom::PathVector const & path_in)
 }
 
 void
-LPEInterpolate::resetDefaults(SPItem const* item)
+LPEInterpolate::resetDefaults(SPItem * item)
 {
     Effect::resetDefaults(item);
 
     if (!SP_IS_PATH(item))
         return;
 
-    SPCurve const *crv = SP_PATH(item)->get_curve_reference();
+    SPCurve const *crv = sp_path_get_curve_reference(SP_PATH(item));
     Geom::PathVector const &pathv = crv->get_pathvector();
     if ( (pathv.size() < 2) )
         return;

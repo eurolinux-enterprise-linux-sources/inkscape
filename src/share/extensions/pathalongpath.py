@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 barraud@math.univ-lille1.fr
 
 Quick description:
@@ -30,18 +30,12 @@ as painted on these lines.
 Now move and bend L to make it fit a skeleton, and see what happens to the normals:
 they move and rotate, deforming the pattern.
 '''
-# standard library
-import copy
-import math
-import re
-import random
-# local library
-import inkex
-import cubicsuperpath
-import bezmisc
-import pathmodifier
-import simpletransform
 
+import inkex, cubicsuperpath, bezmisc
+import pathmodifier,simpletransform
+import copy, math, re, random
+import gettext
+_ = gettext.gettext
 
 def flipxy(path):
     for pathcomp in path:
@@ -65,7 +59,7 @@ def stretch(pathcomp,xscale,yscale,org):
 
 def linearize(p,tolerance=0.001):
     '''
-    This function receives a component of a 'cubicsuperpath' and returns two things:
+    This function recieves a component of a 'cubicsuperpath' and returns two things:
     The path subdivided in many straight segments, and an array containing the length of each segment.
     
     We could work with bezier path as well, but bezier arc lengths are (re)computed for each point 
@@ -123,10 +117,6 @@ class PathAlongPath(pathmodifier.Diffeo):
                         action="store", type="inkbool", 
                         dest="duplicate", default=False,
                         help="duplicate pattern before deformation")
-        self.OptionParser.add_option("--tab",
-                        action="store", type="string",
-                        dest="tab",
-                        help="The selected UI-tab when OK was pressed")
 
     def prepareSelectionList(self):
 
@@ -152,7 +142,7 @@ class PathAlongPath(pathmodifier.Diffeo):
     def lengthtotime(self,l):
         '''
         Recieves an arc length l, and returns the index of the segment in self.skelcomp 
-        containing the corresponding point, to gether with the position of the point on this segment.
+        containing the coresponding point, to gether with the position of the point on this segment.
 
         If the deformer is closed, do computations modulo the toal length.
         '''
@@ -226,11 +216,9 @@ class PathAlongPath(pathmodifier.Diffeo):
         if self.options.vertical:
             #flipxy(bbox)...
             bbox=(-bbox[3],-bbox[2],-bbox[1],-bbox[0])
-
+            
         width=bbox[1]-bbox[0]
         dx=width+self.options.space
-        if dx < 0.01:
-            exit(_("The total length of the pattern is too small :\nPlease choose a larger object or set 'Space between copies' > 0"))
 
         for id, node in self.patterns.iteritems():
             if node.tag == inkex.addNS('path','svg') or node.tag=='path':
@@ -272,8 +260,6 @@ class PathAlongPath(pathmodifier.Diffeo):
                             offset(sub,xoffset,yoffset)
 
                         if self.options.stretch:
-                            if not width:
-                                exit(_("The 'stretch' option requires that the pattern must have non-zero width :\nPlease edit the pattern width."))
                             for sub in p:
                                 stretch(sub,length/width,1,self.skelcomp[0])
 
@@ -292,4 +278,4 @@ if __name__ == '__main__':
     e.affect()
 
                     
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

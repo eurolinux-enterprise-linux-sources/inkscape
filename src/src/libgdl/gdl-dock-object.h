@@ -30,11 +30,11 @@ G_BEGIN_DECLS
 
 /* standard macros */
 #define GDL_TYPE_DOCK_OBJECT             (gdl_dock_object_get_type ())
-#define GDL_DOCK_OBJECT(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), GDL_TYPE_DOCK_OBJECT, GdlDockObject))
-#define GDL_DOCK_OBJECT_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST ((klass), GDL_TYPE_DOCK_OBJECT, GdlDockObjectClass))
-#define GDL_IS_DOCK_OBJECT(obj)          (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GDL_TYPE_DOCK_OBJECT))
-#define GDL_IS_DOCK_OBJECT_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE ((klass), GDL_TYPE_DOCK_OBJECT))
-#define GDL_DOCK_OBJECT_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS ((obj), GTK_TYPE_DOCK_OBJECT, GdlDockObjectClass))
+#define GDL_DOCK_OBJECT(obj)             (GTK_CHECK_CAST ((obj), GDL_TYPE_DOCK_OBJECT, GdlDockObject))
+#define GDL_DOCK_OBJECT_CLASS(klass)     (GTK_CHECK_CLASS_CAST ((klass), GDL_TYPE_DOCK_OBJECT, GdlDockObjectClass))
+#define GDL_IS_DOCK_OBJECT(obj)          (GTK_CHECK_TYPE ((obj), GDL_TYPE_DOCK_OBJECT))
+#define GDL_IS_DOCK_OBJECT_CLASS(klass)  (GTK_CHECK_CLASS_TYPE ((klass), GDL_TYPE_DOCK_OBJECT))
+#define GDL_DOCK_OBJECT_GET_CLASS(obj)   (GTK_CHECK_GET_CLASS ((obj), GTK_TYPE_DOCK_OBJECT, GdlDockObjectClass))
 
 /* data types & structures */
 typedef enum {
@@ -65,6 +65,14 @@ typedef enum {
     GDL_DOCK_CENTER,
     GDL_DOCK_FLOATING
 } GdlDockPlacement;
+
+typedef enum {
+    GDL_DOCK_EXPANSION_DIRECTION_NONE = 0,
+    GDL_DOCK_EXPANSION_DIRECTION_UP,
+    GDL_DOCK_EXPANSION_DIRECTION_DOWN,
+    GDL_DOCK_EXPANSION_DIRECTION_LEFT,
+    GDL_DOCK_EXPANSION_DIRECTION_RIGHT
+} GdlDockExpansionDirection;
 
 typedef struct _GdlDockObject      GdlDockObject;
 typedef struct _GdlDockObjectClass GdlDockObjectClass;
@@ -196,7 +204,7 @@ gboolean       gdl_dock_object_child_placement   (GdlDockObject    *object,
 GType gdl_dock_param_get_type (void);
 
 /* functions for setting/retrieving nick names for serializing GdlDockObject types */
-const gchar          *gdl_dock_object_nick_from_type    (GType        type);
+G_CONST_RETURN gchar *gdl_dock_object_nick_from_type    (GType        type);
 GType                 gdl_dock_object_type_from_nick    (const gchar *nick);
 GType                 gdl_dock_object_set_type_for_nick (const gchar *nick,
                                                          GType        type);
@@ -207,13 +215,13 @@ GType                 gdl_dock_object_set_type_for_nick (const gchar *nick,
     G_STMT_START {                            \
     g_log (G_LOG_DOMAIN,                      \
 	   G_LOG_LEVEL_DEBUG,                 \
-           "%s:%d (%s) %s [%p %d%s:%d]: " format, \
+           "%s:%d (%s) %s [%p %d%s:%d]: "format, \
 	   __FILE__,                          \
 	   __LINE__,                          \
 	   __PRETTY_FUNCTION__,               \
            G_OBJECT_TYPE_NAME (object), object, \
            G_OBJECT (object)->ref_count, \
-           (GTK_IS_OBJECT (object) && g_object_is_floating (object)) ? "(float)" : "", \
+           (GTK_IS_OBJECT (object) && GTK_OBJECT_FLOATING (object)) ? "(float)" : "", \
            GDL_IS_DOCK_OBJECT (object) ? GDL_DOCK_OBJECT (object)->freeze_count : -1, \
 	   ##args); } G_STMT_END                   
     

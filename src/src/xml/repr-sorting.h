@@ -7,26 +7,9 @@
 #ifndef SEEN_XML_REPR_SORTING_H
 #define SEEN_XML_REPR_SORTING_H
 
-namespace Inkscape {
-namespace XML {
-
-class Node;
-
-} // namespace XML
-} // namespace Inkscape
-
+#include "xml/xml-forward.h"
 
 Inkscape::XML::Node *LCA(Inkscape::XML::Node *a, Inkscape::XML::Node *b);
-Inkscape::XML::Node const *LCA(Inkscape::XML::Node const *a, Inkscape::XML::Node const *b);
-
-/**
- * Returns a child of \a ancestor such that ret is itself an ancestor of \a descendent.
- *
- * The current version returns NULL if ancestor or descendent is NULL, though future versions may
- * call g_log.  Please update this comment if you rely on the current behaviour.
- */
-Inkscape::XML::Node const *AncetreFils(Inkscape::XML::Node const *descendent, Inkscape::XML::Node const *ancestor);
-
 Inkscape::XML::Node *AncetreFils(Inkscape::XML::Node *descendent, Inkscape::XML::Node *ancestor);
 
 #endif // SEEN_XML_REPR_SOTRING_H
@@ -39,4 +22,4 @@ Inkscape::XML::Node *AncetreFils(Inkscape::XML::Node *descendent, Inkscape::XML:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

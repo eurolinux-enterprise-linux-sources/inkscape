@@ -12,6 +12,7 @@
 #include "Shape.h"
 #include "livarot/sweep-event-queue.h"
 #include "livarot/sweep-tree-list.h"
+#include <libnr/nr-point-fns.h>
 
 /*
  * Shape instances handling.
@@ -20,12 +21,7 @@
  */
 
 Shape::Shape()
-  : nbQRas(0),
-    firstQRas(-1),
-    lastQRas(-1),
-    qrsData(NULL),
-    nbInc(0),
-    maxInc(0),
+  : qrsData(NULL),
     iData(NULL),
     sTree(NULL),
     sEvts(NULL),
@@ -59,10 +55,10 @@ void Shape::Affiche(void)
 {
   printf("sh=%p nbPt=%i nbAr=%i\n", this, static_cast<int>(_pts.size()), static_cast<int>(_aretes.size())); // localizing ok
   for (unsigned int i=0; i<_pts.size(); i++) {
-    printf("pt %u : x=(%f %f) dI=%i dO=%i\n",i, _pts[i].x[0], _pts[i].x[1], _pts[i].dI, _pts[i].dO); // localizing ok
+    printf("pt %i : x=(%f %f) dI=%i dO=%i\n",i, _pts[i].x[0], _pts[i].x[1], _pts[i].dI, _pts[i].dO); // localizing ok
   }
   for (unsigned int i=0; i<_aretes.size(); i++) {
-    printf("ar %u : dx=(%f %f) st=%i en=%i\n",i, _aretes[i].dx[0], _aretes[i].dx[1], _aretes[i].st, _aretes[i].en); // localizing ok
+    printf("ar %i : dx=(%f %f) st=%i en=%i\n",i, _aretes[i].dx[0], _aretes[i].dx[1], _aretes[i].st, _aretes[i].en); // localizing ok
   }
 }
 
@@ -135,12 +131,7 @@ Shape::MakeQuickRasterData (bool nVal)
       if (_has_quick_raster_data == false)
         {
           _has_quick_raster_data = true;
-          quick_raster_data* new_qrsData = static_cast<quick_raster_data*>(realloc(qrsData, maxAr * sizeof(quick_raster_data)));
-          if (!new_qrsData) {
-              g_error("Not enough memory available for reallocating Shape::qrsData");
-          } else {
-              qrsData = new_qrsData;
-          }
+          qrsData = (quick_raster_data*)realloc(qrsData, maxAr * sizeof(quick_raster_data));
         }
     }
   else
@@ -1683,7 +1674,7 @@ Shape::CmpToVert (Geom::Point ax, Geom::Point bx,bool as,bool bs)
   Geom::Point av, bv;
   av = ax;
   bv = bx;
-  double si = cross(av, bv);
+  double si = cross (bv, av);
   int tstSi = 0;
   if (si > 0.000001) tstSi = 1;
   if (si < -0.000001) tstSi = -1;
@@ -2104,7 +2095,7 @@ Shape::PtWinding (const Geom::Point px) const
     }
 
     Geom::Point const diff = px - ast;
-    double const cote = cross(adir, diff);
+    double const cote = cross(diff, adir);
     if (cote == 0) continue;
     if (cote < 0) {
       if (ast[0] > px[0]) lr += nWeight;
@@ -2234,7 +2225,7 @@ double distance(Shape const *s, Geom::Point const &p)
             if ( el > 0.001 ) {
                 double const npr = Geom::dot(d, e);
                 if ( npr > 0 && npr < el ) {
-                    double const nl = fabs( Geom::cross(d, e) );
+                    double const nl = fabs( NR::cross(d, e) );
                     double ndot = nl * nl / el;
                     if ( ndot < bdot ) {
                         bdot = ndot;
@@ -2280,7 +2271,7 @@ bool distanceLessThanOrEqual(Shape const *s, Geom::Point const &p, double const 
     double const max_l1 = max_l2 * M_SQRT2;
     for (int i = 0; i < s->numberOfPoints(); i++) {
         Geom::Point const offset( p - s->getPoint(i).x );
-        double const l1 = Geom::L1(offset);
+        double const l1 = NR::L1(offset);
         if ( (l1 <= max_l2) || ((l1 <= max_l1) && (Geom::L2(offset) <= max_l2)) ) {
             return true;
         }
@@ -2297,7 +2288,7 @@ bool distanceLessThanOrEqual(Shape const *s, Geom::Point const &p, double const 
                 Geom::Point const e_unit(e / el);
                 double const npr = Geom::dot(d, e_unit);
                 if ( npr > 0 && npr < el ) {
-                    double const nl = fabs(Geom::cross(d, e_unit));
+                    double const nl = fabs(NR::cross(d, e_unit));
                     if ( nl <= max_l2 ) {
                         return true;
                     }

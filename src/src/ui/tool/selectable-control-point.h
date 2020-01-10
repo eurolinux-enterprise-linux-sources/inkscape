@@ -1,6 +1,8 @@
+/** @file
+ * Desktop-bound selectable control object
+ */
 /* Authors:
  *   Krzysztof Kosiński <tweenk.pl@gmail.com>
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2009 Authors
  * Released under GNU GPL, read the file 'COPYING' for more information
@@ -9,6 +11,7 @@
 #ifndef SEEN_UI_TOOL_SELECTABLE_CONTROL_POINT_H
 #define SEEN_UI_TOOL_SELECTABLE_CONTROL_POINT_H
 
+#include <boost/enable_shared_from_this.hpp>
 #include "ui/tool/control-point.h"
 
 namespace Inkscape {
@@ -16,46 +19,40 @@ namespace UI {
 
 class ControlPointSelection;
 
-/**
- * Desktop-bound selectable control object.
- */
 class SelectableControlPoint : public ControlPoint {
 public:
+    struct ColorSet {
+        ControlPoint::ColorSet cpset;
+        ColorEntry selected_normal;
+        ColorEntry selected_mouseover;
+        ColorEntry selected_clicked;
+    };
 
     ~SelectableControlPoint();
     bool selected() const;
-    void updateState() { _setState(_state); }
-    virtual Geom::Rect bounds() const {
+    void updateState() const { const_cast<SelectableControlPoint*>(this)->_setState(_state); }
+    virtual Geom::Rect bounds() {
         return Geom::Rect(position(), position());
     }
-    friend class NodeList;
-
 protected:
-
-    SelectableControlPoint(SPDesktop *d, Geom::Point const &initial_pos, SPAnchorType anchor,
-                           Inkscape::ControlType type,
-                           ControlPointSelection &sel,
-                           ColorSet const &cset = _default_scp_color_set, SPCanvasGroup *group = 0);
-
-    SelectableControlPoint(SPDesktop *d, Geom::Point const &initial_pos, SPAnchorType anchor,
-                           Glib::RefPtr<Gdk::Pixbuf> pixbuf,
-                           ControlPointSelection &sel,
-                           ColorSet const &cset = _default_scp_color_set, SPCanvasGroup *group = 0);
+    SelectableControlPoint(SPDesktop *d, Geom::Point const &initial_pos,
+        Gtk::AnchorType anchor, SPCtrlShapeType shape,
+        unsigned int size, ControlPointSelection &sel, ColorSet *cset = 0,
+        SPCanvasGroup *group = 0);
+    SelectableControlPoint(SPDesktop *d, Geom::Point const &initial_pos,
+        Gtk::AnchorType anchor, Glib::RefPtr<Gdk::Pixbuf> pixbuf,
+        ControlPointSelection &sel, ColorSet *cset = 0, SPCanvasGroup *group = 0);
 
     virtual void _setState(State state);
 
-    virtual void dragged(Geom::Point &new_pos, GdkEventMotion *event);
-    virtual bool grabbed(GdkEventMotion *event);
-    virtual void ungrabbed(GdkEventButton *event);
-    virtual bool clicked(GdkEventButton *event);
+    virtual void dragged(Geom::Point &, GdkEventMotion *);
+    virtual bool grabbed(GdkEventMotion *);
+    virtual void ungrabbed(GdkEventButton *);
+    virtual bool clicked(GdkEventButton *);
 
     ControlPointSelection &_selection;
-
 private:
-
     void _takeSelection();
-
-    static ColorSet _default_scp_color_set;
 };
 
 } // namespace UI
@@ -72,4 +69,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

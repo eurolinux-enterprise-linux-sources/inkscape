@@ -14,14 +14,12 @@
 #ifndef SEEN_INKSCAPE_XML_LOG_BUILDER_H
 #define SEEN_INKSCAPE_XML_LOG_BUILDER_H
 
-#include "inkgc/gc-managed.h"
+#include "gc-managed.h"
+#include "xml/xml-forward.h"
 #include "xml/node-observer.h"
 
 namespace Inkscape {
 namespace XML {
-
-class Event;
-class Node;
 
 /**
  * @brief Event log builder
@@ -83,4 +81,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

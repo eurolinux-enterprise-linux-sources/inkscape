@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 r14_header = '''  0
 SECTION
   2

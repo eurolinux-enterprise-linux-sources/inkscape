@@ -1,4 +1,6 @@
-/*
+/**
+ * \brief Groups an HScale and a SpinButton together using the same Adjustment
+ *
  * Author:
  *   Nicholas Bishop <nicholasbishop@gmail.com>
  *
@@ -10,29 +12,21 @@
 #ifndef INKSCAPE_UI_WIDGET_SPIN_SLIDER_H
 #define INKSCAPE_UI_WIDGET_SPIN_SLIDER_H
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/scale.h>
-#include <gtkmm/togglebutton.h>
-#include "spinbutton.h"
+#include <gtkmm/spinbutton.h>
 #include "attr-widget.h"
 
 namespace Inkscape {
 namespace UI {
 namespace Widget {
 
-/**
- * Groups an HScale and a SpinButton together using the same Adjustment.
- */
 class SpinSlider : public Gtk::HBox, public AttrWidget
 {
 public:
     SpinSlider(double value, double lower, double upper, double step_inc,
-	       double climb_rate, int digits, const SPAttributeEnum a = SP_ATTR_INVALID, const char* tip_text = NULL);
+	       double climb_rate, int digits, const SPAttributeEnum a = SP_ATTR_INVALID, char* tip_text = NULL);
 
     virtual Glib::ustring get_as_attribute() const;
     virtual void set_from_attribute(SPObject*);
@@ -42,39 +36,26 @@ public:
     double get_value() const;
     void set_value(const double);
 
-#if WITH_GTKMM_3_0
-    const Glib::RefPtr<Gtk::Adjustment> get_adjustment() const;
-    Glib::RefPtr<Gtk::Adjustment> get_adjustment();
-    const Gtk::Scale& get_scale() const;
-    Gtk::Scale& get_scale();
-#else
     const Gtk::Adjustment& get_adjustment() const;
     Gtk::Adjustment& get_adjustment();
+    
     const Gtk::HScale& get_scale() const;
     Gtk::HScale& get_scale();
-#endif
 
-    const Inkscape::UI::Widget::SpinButton& get_spin_button() const;
-    Inkscape::UI::Widget::SpinButton& get_spin_button();
+    const Gtk::SpinButton& get_spin_button() const;
+    Gtk::SpinButton& get_spin_button();
+
+    void set_update_policy(const Gtk::UpdateType);
 
     // Change the SpinSlider into a SpinButton with AttrWidget support)
     void remove_scale();
 private:
-#if WITH_GTKMM_3_0
-    Glib::RefPtr<Gtk::Adjustment> _adjustment;
-    Gtk::Scale _scale;
-#else
     Gtk::Adjustment _adjustment;
     Gtk::HScale _scale;
-#endif
-    Inkscape::UI::Widget::SpinButton _spin;
+    Gtk::SpinButton _spin;
 };
 
-/**
- * Contains two SpinSliders for controlling number-opt-number attributes.
- *
- * @see SpinSlider
- */
+// Contains two SpinSliders for controlling number-opt-number attributes
 class DualSpinSlider : public Gtk::HBox, public AttrWidget
 {
 public:
@@ -92,6 +73,8 @@ public:
     const SpinSlider& get_spinslider2() const;
     SpinSlider& get_spinslider2();
 
+    void set_update_policy(const Gtk::UpdateType);
+
     void remove_scale();
 private:
     void link_toggled();
@@ -107,13 +90,13 @@ private:
 
 #endif // INKSCAPE_UI_WIDGET_SPIN_SLIDER_H
 
-/*
+/* 
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  c-file-offsets:((innamespace . 0)(inline-open . 0))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

@@ -10,7 +10,6 @@
 #include "extension/system.h"
 
 #include "emboss.h"
-#include <Magick++.h>
 
 namespace Inkscape {
 namespace Extension {
@@ -37,14 +36,14 @@ Emboss::init(void)
 		"<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
 			"<name>" N_("Emboss") "</name>\n"
 			"<id>org.inkscape.effect.bitmap.emboss</id>\n"
-			"<param name=\"radius\" _gui-text=\"" N_("Radius:") "\" type=\"float\" min=\"0\" max=\"100\">1.0</param>\n"
-			"<param name=\"sigma\" _gui-text=\"" N_("Sigma:") "\" type=\"float\" min=\"-50\" max=\"50\">0.5</param>\n"
+			"<param name=\"radius\" gui-text=\"" N_("Radius") "\" type=\"float\" min=\"0\" max=\"100\">1.0</param>\n"
+			"<param name=\"sigma\" gui-text=\"" N_("Sigma") "\" type=\"float\" min=\"-50\" max=\"50\">0.5</param>\n"
 			"<effect>\n"
 				"<object-type>all</object-type>\n"
 				"<effects-menu>\n"
 					"<submenu name=\"" N_("Raster") "\" />\n"
 				"</effects-menu>\n"
-				"<menu-tip>" N_("Emboss selected bitmap(s); highlight edges with 3D effect") "</menu-tip>\n"
+				"<menu-tip>" N_("Emboss selected bitmap(s) -- highlight edges with 3D effect.") "</menu-tip>\n"
 			"</effect>\n"
 		"</inkscape-extension>\n", new Emboss());
 }

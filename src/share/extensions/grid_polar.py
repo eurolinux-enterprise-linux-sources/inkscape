@@ -17,13 +17,12 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
 
 import inkex
 import simplestyle, sys
 from math import *
-from simpletransform import computePointInNode
 
 def draw_SVG_circle(r, cx, cy, width, fill, name, parent):
     style = { 'stroke': '#000000', 'stroke-width':str(width), 'fill': fill }
@@ -54,9 +53,6 @@ def draw_SVG_label_centred(x, y, string, font_size, name, parent):
 class Grid_Polar(inkex.Effect):
     def __init__(self):
         inkex.Effect.__init__(self)
-        self.OptionParser.add_option("--tab",
-                        action="store", type="string", 
-                        dest="tab", default="circular_div") 
         self.OptionParser.add_option("--r_divs",
                         action="store", type="int", 
                         dest="r_divs", default=5,
@@ -123,20 +119,10 @@ class Grid_Polar(inkex.Effect):
                         help="The radial outset of the circumferential labels")
 
     def effect(self):
-
-        self.options.dr = self.unittouu(str(self.options.dr) + 'px')
-        self.options.r_divs_th = self.unittouu(str(self.options.r_divs_th) + 'px')
-        self.options.r_subdivs_th = self.unittouu(str(self.options.r_subdivs_th) + 'px')
-        self.options.a_divs_th = self.unittouu(str(self.options.a_divs_th) + 'px')
-        self.options.a_subdivs_th = self.unittouu(str(self.options.a_subdivs_th) + 'px')
-        self.options.c_dot_dia = self.unittouu(str(self.options.c_dot_dia) + 'px')
-        self.options.a_label_size = self.unittouu(str(self.options.a_label_size) + 'px')
-        self.options.a_label_outset = self.unittouu(str(self.options.a_label_outset) + 'px')
-
+    
         # Embed grid in group
         #Put in in the centre of the current view
-        view_center = computePointInNode(list(self.view_center), self.current_layer)
-        t = 'translate(' + str( view_center[0] ) + ',' + str( view_center[1] ) + ')'
+        t = 'translate(' + str( self.view_center[0] ) + ',' + str( self.view_center[1] ) + ')'
         g_attribs = {inkex.addNS('label','inkscape'):'Grid_Polar:R' +
                                  str( self.options.r_divs )+':A'+str( self.options.a_divs ),
                      'transform':t }
@@ -209,4 +195,4 @@ if __name__ == '__main__':
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

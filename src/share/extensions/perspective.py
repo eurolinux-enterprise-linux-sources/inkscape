@@ -14,35 +14,44 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 Perspective approach & math by Dmitry Platonov, shadowjack@mail.ru, 2006
 """
-# standard library
-import sys
-import os
-import re
+import sys, inkex, os, re, simplepath, cubicsuperpath, simpletransform, voronoi2svg
+import gettext
+_ = gettext.gettext
+from ffgeom import *
+try:
+    from numpy import *
+    from numpy.linalg import *
+except:
+    inkex.errormsg(_("Failed to import the numpy or numpy.linalg modules. These modules are required by this extension. Please install them and try again.  On a Debian-like system this can be done with the command, sudo apt-get install python-numpy."))
+    exit()
+
 try:
     from subprocess import Popen, PIPE
     bsubprocess = True
 except:
     bsubprocess = False
-# local library
-import inkex
-import simplepath
-import cubicsuperpath
-import simpletransform
-from ffgeom import *
 
-# third party
-try:
-    from numpy import *
-    from numpy.linalg import *
-except:
-    # Initialize gettext for messages outside an inkex derived class
-    inkex.localize() 
-    inkex.errormsg(_("Failed to import the numpy or numpy.linalg modules. These modules are required by this extension. Please install them and try again.  On a Debian-like system this can be done with the command, sudo apt-get install python-numpy."))
-    exit()
+uuconv = {'in':90.0, 'pt':1.25, 'px':1, 'mm':3.5433070866, 'cm':35.433070866, 'pc':15.0}
+def unittouu(string):
+    unit = re.compile('(%s)$' % '|'.join(uuconv.keys()))
+    param = re.compile(r'(([-+]?[0-9]+(\.[0-9]*)?|[-+]?\.[0-9]+)([eE][-+]?[0-9]+)?)')
+
+    p = param.match(string)
+    u = unit.search(string)    
+    if p:
+        retval = float(p.string[p.start():p.end()])
+    else:
+        retval = 0.0
+    if u:
+        try:
+            return retval * uuconv[u.string[u.start():u.end()]]
+        except KeyError:
+            pass
+    return retval
 
 class Project(inkex.Effect):
     def __init__(self):
@@ -53,7 +62,6 @@ class Project(inkex.Effect):
             exit()            
             
         #obj is selected second
-        scale = self.unittouu('1px')    # convert to document units
         obj = self.selected[self.options.ids[0]]
         envelope = self.selected[self.options.ids[1]]
         if obj.get(inkex.addNS('type','sodipodi')):
@@ -80,11 +88,11 @@ class Project(inkex.Effect):
                     if bsubprocess:
                         p = Popen('inkscape --query-%s --query-id=%s "%s"' % (query,id,file), shell=True, stdout=PIPE, stderr=PIPE)
                         rc = p.wait()
-                        q[query] = scale*float(p.stdout.read())
+                        q[query] = float(p.stdout.read())
                         err = p.stderr.read()
                     else:
                         f,err = os.popen3('inkscape --query-%s --query-id=%s "%s"' % (query,id,file))[1:]
-                        q[query] = scale*float(f.read())
+                        q[query] = float(f.read())
                         f.close()
                         err.close()
                 sp = array([[q['x'], q['y']+q['height']],[q['x'], q['y']],[q['x']+q['width'], q['y']],[q['x']+q['width'], q['y']+q['height']]], dtype=float64)
@@ -138,7 +146,7 @@ class Project(inkex.Effect):
                 csp[0] = self.project_point(csp[0],m)
                 csp[1] = self.project_point(csp[1],m)
                 csp[2] = self.project_point(csp[2],m)
-        mat = simpletransform.invertTransform(mat)
+        mat = voronoi2svg.Voronoi2svg().invertTransform(mat)
         simpletransform.applyTransformToPath(mat, p)
         path.set('d',cubicsuperpath.formatPath(p))
 

@@ -2,7 +2,6 @@
  * Copyright (C) 2005-2007 Authors:
  *   Ted Gould <ted@gould.cx>
  *   Johan Engelen <johan@shouraizou.nl> *
- *   Jon A. Cruz <jon@joncruz.org>
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
@@ -13,7 +12,6 @@
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/spinbutton.h>
-#include <gtkmm/checkbutton.h>
 
 #include "xml/node.h"
 #include "../extension.h"
@@ -23,24 +21,18 @@
 namespace Inkscape {
 namespace Extension {
 
-ParamBool::ParamBool(const gchar * name, const gchar * guitext, const gchar * desc, const Parameter::_scope_t scope, bool gui_hidden, const gchar * gui_tip, Inkscape::Extension::Extension * ext, Inkscape::XML::Node * xml) :
-        Parameter(name, guitext, desc, scope, gui_hidden, gui_tip, ext),
-                  _value(false), _indent(0)
+/** \brief  Use the superclass' allocator and set the \c _value */
+ParamBool::ParamBool (const gchar * name, const gchar * guitext, const gchar * desc, const Parameter::_scope_t scope, bool gui_hidden, const gchar * gui_tip, Inkscape::Extension::Extension * ext, Inkscape::XML::Node * xml) :
+        Parameter(name, guitext, desc, scope, gui_hidden, gui_tip, ext), _value(false)
 {
     const char * defaultval = NULL;
-    if (xml->firstChild() != NULL) {
-        defaultval = xml->firstChild()->content();
-    }
+    if (sp_repr_children(xml) != NULL)
+        defaultval = sp_repr_children(xml)->content();
 
-    if (defaultval != NULL && (!strcmp(defaultval, "true") || !strcmp(defaultval, "1"))) {
+    if (defaultval != NULL && (!strcmp(defaultval, "true") || !strcmp(defaultval, "true") || !strcmp(defaultval, "1"))) {
         _value = true;
     } else {
         _value = false;
-    }
-
-    const char * indent = xml->attribute("indent");
-    if (indent != NULL) {
-        _indent = atoi(indent) * 12;
     }
 
     gchar * pref_name = this->pref_name();
@@ -51,7 +43,17 @@ ParamBool::ParamBool(const gchar * name, const gchar * guitext, const gchar * de
     return;
 }
 
-bool ParamBool::set( bool in, SPDocument * /*doc*/, Inkscape::XML::Node * /*node*/ )
+/** \brief  A function to set the \c _value
+    \param  in   The value to set to
+    \param  doc  A document that should be used to set the value.
+    \param  node The node where the value may be placed
+
+    This function sets the internal value, but it also sets the value
+    in the preferences structure.  To put it in the right place, \c PREF_DIR
+    and \c pref_name() are used.
+*/
+bool
+ParamBool::set( bool in, SPDocument * /*doc*/, Inkscape::XML::Node * /*node*/ )
 {
     _value = in;
 
@@ -63,47 +65,46 @@ bool ParamBool::set( bool in, SPDocument * /*doc*/, Inkscape::XML::Node * /*node
     return _value;
 }
 
-bool ParamBool::get(const SPDocument * /*doc*/, const Inkscape::XML::Node * /*node*/) const
+/** \brief  Returns \c _value */
+bool 
+ParamBool::get (const SPDocument * doc, const Inkscape::XML::Node * node)
 {
-    return _value; 
+	return _value; 
 }
 
-/**
- * A check button which is Param aware.  It works with the
- * parameter to change it's value as the check button changes
- * value.
- */
+/** \brief  A check button which is Param aware.  It works with the
+            parameter to change it's value as the check button changes
+            value. */
 class ParamBoolCheckButton : public Gtk::CheckButton {
+private:
+    /** \brief  Param to change */
+    ParamBool * _pref;
+    SPDocument * _doc;
+    Inkscape::XML::Node * _node;
+    sigc::signal<void> * _changeSignal;
 public:
-    /**
-     * Initialize the check button.
-     * This function sets the value of the checkbox to be that of the
-     * parameter, and then sets up a callback to \c on_toggle.
-     *
-     * @param  param  Which parameter to adjust on changing the check button
-     */
+    /** \brief  Initialize the check button
+        \param  param  Which parameter to adjust on changing the check button
+
+        This function sets the value of the checkbox to be that of the
+        parameter, and then sets up a callback to \c on_toggle.
+    */
     ParamBoolCheckButton (ParamBool * param, SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal) :
             Gtk::CheckButton(), _pref(param), _doc(doc), _node(node), _changeSignal(changeSignal) {
         this->set_active(_pref->get(NULL, NULL) /**\todo fix */);
         this->signal_toggled().connect(sigc::mem_fun(this, &ParamBoolCheckButton::on_toggle));
         return;
     }
-
-    /**
-     * A function to respond to the check box changing.
-     * Adjusts the value of the preference to match that in the check box.
-     */
     void on_toggle (void);
-
-private:
-    /** Param to change. */
-    ParamBool * _pref;
-    SPDocument * _doc;
-    Inkscape::XML::Node * _node;
-    sigc::signal<void> * _changeSignal;
 };
 
-void ParamBoolCheckButton::on_toggle(void)
+/**
+    \brief  A function to respond to the check box changing
+
+    Adjusts the value of the preference to match that in the check box.
+*/
+void
+ParamBoolCheckButton::on_toggle (void)
 {
     _pref->set(this->get_active(), NULL /**\todo fix this */, NULL);
     if (_changeSignal != NULL) {
@@ -112,7 +113,9 @@ void ParamBoolCheckButton::on_toggle(void)
     return;
 }
 
-void ParamBool::string(std::string &string) const
+/** \brief  Return 'true' or 'false' */
+void
+ParamBool::string (std::string &string)
 {
     if (_value) {
         string += "true";
@@ -123,26 +126,24 @@ void ParamBool::string(std::string &string) const
     return;
 }
 
-Gtk::Widget *ParamBool::get_widget(SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal)
+/**
+    \brief  Creates a bool check button for a bool parameter
+
+    Builds a hbox with a label and a check button in it.
+*/
+Gtk::Widget *
+ParamBool::get_widget (SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal)
 {
-    if (_gui_hidden) {
-        return NULL;
-    }
-
-#if WITH_GTKMM_3_0
-    Gtk::Box * hbox = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 4));
-    hbox->set_homogeneous(false);
-#else
+	if (_gui_hidden) return NULL;
     Gtk::HBox * hbox = Gtk::manage(new Gtk::HBox(false, 4));
-#endif
 
-    Gtk::Label * label = Gtk::manage(new Gtk::Label(_text, Gtk::ALIGN_START));
+    Gtk::Label * label = Gtk::manage(new Gtk::Label(_(_text), Gtk::ALIGN_LEFT));
     label->show();
-    hbox->pack_end(*label, true, true);
+    hbox->pack_start(*label, true, true);
 
-    ParamBoolCheckButton * checkbox = Gtk::manage(new ParamBoolCheckButton(this, doc, node, changeSignal));
+    ParamBoolCheckButton * checkbox = new ParamBoolCheckButton(this, doc, node, changeSignal);
     checkbox->show();
-    hbox->pack_start(*checkbox, false, false, _indent);
+    hbox->pack_start(*checkbox, false, false);
 
     hbox->show();
 
@@ -161,4 +162,4 @@ Gtk::Widget *ParamBool::get_widget(SPDocument * doc, Inkscape::XML::Node * node,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

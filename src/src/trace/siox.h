@@ -1,14 +1,24 @@
-#ifndef SEEN_SIOX_H
-#define SEEN_SIOX_H
-/*
+#ifndef __SIOX_H__
+#define __SIOX_H__
+/**
  *  Copyright 2005, 2006 by Gerald Friedland, Kristian Jantz and Lars Knipping
  *
  *  Conversion to C++ for Inkscape by Bob Jamison
  *
- *  Released under GNU GPL, read the file 'COPYING' for more information
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
  */
 
-/*
+/**
  * Note by Bob Jamison:
  * After translating the siox.org Java API to C++ and receiving an
  * education into this wonderful code,  I began again,
@@ -306,7 +316,7 @@ public:
     /**
      * Saves this image as a simple color PPM
      */
-    bool writePPM(const std::string &fileName);
+    bool writePPM(const std::string fileName);
 
 
 
@@ -498,6 +508,11 @@ private:
     bool keepGoing;
 
     /**
+     * Our signature limits
+     */
+    float limits[3];
+
+    /**
      * Image width
      */
     unsigned int width;
@@ -527,11 +542,6 @@ private:
      */
     int *labelField;
 
-
-    /**
-     * Our signature limits
-     */
-    float limits[3];
 
     /**
      * Maximum distance of two lab values.
@@ -639,6 +649,9 @@ private:
      */
     float sqrEuclidianDist(float *p, int pSize, float *q);
 
+
+
+
 };
 
 
@@ -647,7 +660,10 @@ private:
 } // namespace siox
 } // namespace org
 
-#endif // SEEN_SIOX_H
+#endif /* __SIOX_H__ */
 //########################################################################
 //#  E N D    O F    F I L E
 //########################################################################
+
+
+

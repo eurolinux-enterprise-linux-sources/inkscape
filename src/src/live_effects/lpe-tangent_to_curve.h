@@ -34,6 +34,7 @@ class LPETangentToCurve : public Effect {
 public:
     LPETangentToCurve(LivePathEffectObject *lpeobject);
     virtual ~LPETangentToCurve();
+
     virtual Geom::Piecewise<Geom::D2<Geom::SBasis> >
       doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in);
 
@@ -41,7 +42,6 @@ public:
     friend class TtC::KnotHolderEntityLeftEnd;
     friend class TtC::KnotHolderEntityRightEnd;
     friend class TtC::KnotHolderEntityAttachPt;
-    virtual void addKnotHolderEntities(KnotHolder * knotholder, SPDesktop * desktop, SPItem * item);
 
 private:
     ScalarParam angle;

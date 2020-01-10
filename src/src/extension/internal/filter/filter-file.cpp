@@ -20,22 +20,19 @@
 
 /* System includes */
 #include <glibmm/i18n.h>
-#include <glibmm/fileutils.h>
 
 namespace Inkscape {
 namespace Extension {
 namespace Internal {
 namespace Filter {
 
-void Filter::filters_all_files(void)
+void
+Filter::filters_all_files (void)
 {
-	gchar *filtersProfilePath = Inkscape::Application::profile_path("filters");
-
 	filters_load_dir(INKSCAPE_FILTERDIR, _("Bundled"));
-	filters_load_dir(filtersProfilePath, _("Personal"));
+	filters_load_dir(profile_path("filters"), _("Personal"));
 
-	g_free(filtersProfilePath);
-	filtersProfilePath = 0;
+	return;
 }
 
 #define INKSCAPE_FILTER_FILE  ".svg"
@@ -44,7 +41,7 @@ void
 Filter::filters_load_dir (gchar const * dirname, gchar * menuname)
 {
     if (!dirname) {
-        g_warning("%s", _("Null external module directory name.  Filters will not be loaded."));
+        g_warning(_("Null external module directory name.  Filters will not be loaded."));
         return;
     }
 

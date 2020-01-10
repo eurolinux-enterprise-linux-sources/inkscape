@@ -14,7 +14,7 @@
 #include <sigc++/connection.h>
 #include <sigc++/functors/slot.h>
 
-#include "inkgc/gc-managed.h"
+#include "gc-managed.h"
 #include "gc-anchored.h"
 
 class SPObject;
@@ -51,7 +51,7 @@ private:
 
     void _remove(SPObject *obj, bool subtree);
 
-    struct Relations;
+    class Relations;
 
     Relations *_relations;
 };
@@ -68,4 +68,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

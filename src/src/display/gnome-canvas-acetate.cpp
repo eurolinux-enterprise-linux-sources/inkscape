@@ -1,3 +1,5 @@
+#define __SP_CANVAS_ACETATE_C__
+
 /*
  * Infinite invisible canvas item
  *
@@ -5,7 +7,6 @@
  *   Federico Mena <federico@nuclecu.unam.mx>
  *   Raph Levien <raph@acm.org>
  *   Lauris Kaplinski <lauris@kaplinski.com>
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 1998-1999 The Free Software Foundation
  * Copyright (C) 2002 Lauris Kaplinski
@@ -13,39 +14,75 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "display-forward.h"
 #include "gnome-canvas-acetate.h"
 
-static void sp_canvas_acetate_destroy(SPCanvasItem *object);
+static void sp_canvas_acetate_class_init (SPCanvasAcetateClass *klass);
+static void sp_canvas_acetate_init (SPCanvasAcetate *acetate);
+static void sp_canvas_acetate_destroy (GtkObject *object);
 
-static void sp_canvas_acetate_update (SPCanvasItem *item, Geom::Affine const &affine, unsigned int flags);
+static void sp_canvas_acetate_update (SPCanvasItem *item, Geom::Matrix const &affine, unsigned int flags);
 static double sp_canvas_acetate_point (SPCanvasItem *item, Geom::Point p, SPCanvasItem **actual_item);
 
-G_DEFINE_TYPE(SPCanvasAcetate, sp_canvas_acetate, SP_TYPE_CANVAS_ITEM);
+static SPCanvasItemClass *parent_class;
 
-static void sp_canvas_acetate_class_init (SPCanvasAcetateClass *klass)
+GtkType
+sp_canvas_acetate_get_type (void)
 {
-	SPCanvasItemClass *item_class = (SPCanvasItemClass *) klass;
+	static GtkType acetate_type = 0;
+	if (!acetate_type) {
+		GtkTypeInfo acetate_info = {
+			(gchar *)"SPCanvasAcetate",
+			sizeof (SPCanvasAcetate),
+			sizeof (SPCanvasAcetateClass),
+			(GtkClassInitFunc) sp_canvas_acetate_class_init,
+			(GtkObjectInitFunc) sp_canvas_acetate_init,
+			NULL, NULL, NULL
+		};
+		acetate_type = gtk_type_unique (sp_canvas_item_get_type (), &acetate_info);
+	}
+	return acetate_type;
+}
 
-	item_class->destroy = sp_canvas_acetate_destroy;
+static void
+sp_canvas_acetate_class_init (SPCanvasAcetateClass *klass)
+{
+	GtkObjectClass *object_class;
+	SPCanvasItemClass *item_class;
+
+	object_class = (GtkObjectClass *) klass;
+	item_class = (SPCanvasItemClass *) klass;
+
+	parent_class = (SPCanvasItemClass*)gtk_type_class (sp_canvas_item_get_type ());
+
+	object_class->destroy = sp_canvas_acetate_destroy;
+
 	item_class->update = sp_canvas_acetate_update;
 	item_class->point = sp_canvas_acetate_point;
 }
 
-static void sp_canvas_acetate_init (SPCanvasAcetate */*acetate*/)
+static void
+sp_canvas_acetate_init (SPCanvasAcetate */*acetate*/)
 {
     /* Nothing here */
 }
 
-static void sp_canvas_acetate_destroy(SPCanvasItem *object)
+static void
+sp_canvas_acetate_destroy (GtkObject *object)
 {
+	SPCanvasAcetate *acetate;
+
 	g_return_if_fail (object != NULL);
 	g_return_if_fail (GNOME_IS_CANVAS_ACETATE (object));
 
-	if (SP_CANVAS_ITEM_CLASS(sp_canvas_acetate_parent_class)->destroy)
-	    SP_CANVAS_ITEM_CLASS(sp_canvas_acetate_parent_class)->destroy(object);
+	acetate = SP_CANVAS_ACETATE (object);
+
+	if (GTK_OBJECT_CLASS (parent_class)->destroy)
+		(* GTK_OBJECT_CLASS (parent_class)->destroy) (object);
 }
 
-static void sp_canvas_acetate_update( SPCanvasItem *item, Geom::Affine const &/*affine*/, unsigned int /*flags*/ )
+static void
+sp_canvas_acetate_update( SPCanvasItem *item, Geom::Matrix const &/*affine*/, unsigned int /*flags*/ )
 {
     item->x1 = -G_MAXINT;
     item->y1 = -G_MAXINT;
@@ -53,7 +90,8 @@ static void sp_canvas_acetate_update( SPCanvasItem *item, Geom::Affine const &/*
     item->y2 = G_MAXINT;
 }
 
-static double sp_canvas_acetate_point( SPCanvasItem *item, Geom::Point /*p*/, SPCanvasItem **actual_item )
+static double
+sp_canvas_acetate_point( SPCanvasItem *item, Geom::Point /*p*/, SPCanvasItem **actual_item )
 {
     *actual_item = item;
 

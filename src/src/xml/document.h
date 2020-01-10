@@ -15,6 +15,7 @@
 #ifndef SEEN_INKSCAPE_XML_SP_REPR_DOC_H
 #define SEEN_INKSCAPE_XML_SP_REPR_DOC_H
 
+#include "xml/xml-forward.h"
 #include "xml/node.h"
 
 namespace Inkscape {
@@ -91,7 +92,6 @@ public:
      */
     virtual Node *createElement(char const *name)=0;
     virtual Node *createTextNode(char const *content)=0;
-    virtual Node *createTextNode(char const *content, bool is_CData)=0;
     virtual Node *createComment(char const *content)=0;
     virtual Node *createPI(char const *target, char const *content)=0;
     /*@}*/
@@ -118,4 +118,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

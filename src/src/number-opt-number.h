@@ -13,23 +13,30 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <glib.h>
 #include <glib/gprintf.h>
-#include <cstdlib>
-
+//todo: use glib instead of stdlib
+#include <stdlib.h>
 #include "svg/stringstream.h"
+
+
+gdouble fixed_g_ascii_strtod (const gchar *nptr, gchar **endptr);
 
 class NumberOptNumber {
 
 public:
 
-    float number; 
+    gfloat number; 
 
-    float optNumber;
+    gfloat optNumber;
 
-    unsigned int _set : 1;
+    guint _set : 1;
 
-    unsigned int optNumber_set : 1;
+    guint optNumber_set : 1;
 
     NumberOptNumber()
     {
@@ -40,27 +47,27 @@ public:
         optNumber_set = FALSE;
     }
 
-    float getNumber()
+    gfloat getNumber()
     {
         if(_set)
             return number;
         return -1;
     }
 
-    float getOptNumber()
+    gfloat getOptNumber()
     {
         if(optNumber_set)
             return optNumber;
         return -1;
     }
 
-    void setOptNumber(float num)
+    void setOptNumber(gfloat num)
     {
         optNumber_set = true;
         optNumber = num;
     }
 
-    void setNumber(float num)
+    void setNumber(gfloat num)
     {
         _set = true;
         number = num;
@@ -74,7 +81,7 @@ public:
         return _set;
     }
     
-    char *getValueString()
+    gchar *getValueString()
     {
         Inkscape::SVGOStringStream os;
 
@@ -92,12 +99,12 @@ public:
         return g_strdup(os.str().c_str());
     }
 
-    void set(char const *str)
+    void set(gchar const *str)
     {
         if(!str)
             return;
 
-        char **values = g_strsplit(str, " ", 2);
+        gchar **values = g_strsplit(str, " ", 2);
 
         if( values[0] != NULL )
         {
@@ -116,8 +123,6 @@ public:
                 _set = FALSE;
                 optNumber_set = FALSE;
         }
-
-        g_strfreev(values);
     }
 
 };
@@ -133,4 +138,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

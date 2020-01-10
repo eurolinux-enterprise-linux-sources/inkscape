@@ -13,7 +13,7 @@
 # include "config.h"
 #endif
 
-#include "inkgc/gc-alloc.h"
+#include "gc-alloc.h"
 #include "debug/gc-heap.h"
 #include "debug/sysv-heap.h"
 #include <vector>
@@ -62,4 +62,4 @@ void register_extra_heap(Heap &heap) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

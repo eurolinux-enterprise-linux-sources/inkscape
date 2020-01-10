@@ -39,11 +39,10 @@
 #include <2geom/sbasis.h>
 #include <2geom/bezier.h>
 #include <2geom/bezier-curve.h>
-#include <2geom/polynomial.h>
+#include <2geom/poly.h>
 #include <2geom/ellipse.h>
 #include <2geom/circle.h>
 #include <2geom/utils.h>
-#include <2geom/conicsec.h>
 
 
 namespace Geom { namespace NL {
@@ -84,10 +83,6 @@ namespace Geom { namespace NL {
  *   instance type:  the type of the objects produced by using
  *                   the fitting raw data solution
  */
-
-
-
-
 template< typename ParameterType, typename ValueType, typename InstanceType >
 class LinearFittingModel
 {
@@ -235,32 +230,8 @@ class LFMNormalizedPowerBasis
 // incomplete model, it can be inherited to make up different kinds of
 // instance type; the raw data is a vector of coefficients of the equation
 // of an ellipse curve
-//template< typename InstanceType >
-//class LFMEllipseEquation
-//    : public LinearFittingModelWithFixedTerms<Point, double, InstanceType>
-//{
-//  public:
-//    void feed( VectorView & coeff, double & fixed_term, Point const& p ) const
-//    {
-//        coeff[0] = p[X] * p[Y];
-//        coeff[1] = p[Y] * p[Y];
-//        coeff[2] = p[X];
-//        coeff[3] = p[Y];
-//        coeff[4] = 1;
-//        fixed_term = p[X] * p[X];
-//    }
-//
-//    size_t size() const
-//    {
-//        return 5;
-//    }
-//};
-
-// incomplete model, it can be inherited to make up different kinds of
-// instance type; the raw data is a vector of coefficients of the equation
-// of a conic section
 template< typename InstanceType >
-class LFMConicEquation
+class LFMEllipseEquation
     : public LinearFittingModelWithFixedTerms<Point, double, InstanceType>
 {
   public:
@@ -280,25 +251,15 @@ class LFMConicEquation
     }
 };
 
-// this model generates Ellipse curves
-class LFMConicSection
-    : public LFMConicEquation<xAx>
-{
-  public:
-    void instance(xAx & c, ConstVectorView const& coeff) const
-    {
-        c.set(1, coeff[0], coeff[1], coeff[2], coeff[3], coeff[4]);
-    }
-};
 
 // this model generates Ellipse curves
 class LFMEllipse
-    : public LFMConicEquation<Ellipse>
+    : public LFMEllipseEquation<Ellipse>
 {
   public:
     void instance(Ellipse & e, ConstVectorView const& coeff) const
     {
-        e.setCoefficients(1, coeff[0], coeff[1], coeff[2], coeff[3], coeff[4]);
+        e.set(1, coeff[0], coeff[1], coeff[2], coeff[3], coeff[4]);
     }
 };
 
@@ -333,7 +294,7 @@ class LFMCircle
   public:
     void instance(Circle & c, ConstVectorView const& coeff) const
     {
-        c.setCoefficients(1, coeff[0], coeff[1], coeff[2]);
+        c.set(1, coeff[0], coeff[1], coeff[2]);
     }
 };
 
@@ -372,6 +333,7 @@ class LFMSBasis
 
     void instance(SBasis & sb, ConstVectorView const& raw_data) const
     {
+        sb.clear();
         sb.resize(m_order+1);
         for (unsigned int i = 0, k = 0; i < raw_data.size(); i+=2, ++k)
         {
@@ -469,13 +431,13 @@ class LFMBezier
 
 
 // this model generates Bezier curves
-template <unsigned degree>
-class LFMBezierCurveN
-    : public LinearFittingModel< double, Point, BezierCurveN<degree> >
+template< unsigned int N >
+class LFMBezierCurve
+    : public LinearFittingModel< double, Point, BezierCurve<N> >
 {
   public:
-    LFMBezierCurveN()
-        : mob(degree+1)
+    LFMBezierCurve( size_t _order )
+        : mob(_order)
     {
     }
 
@@ -489,13 +451,13 @@ class LFMBezierCurveN
         return mob.size();
     }
 
-    void instance(BezierCurveN<degree> & bc, ConstMatrixView const& raw_data) const
+    void instance(BezierCurve<N> & bc, ConstMatrixView const& raw_data) const
     {
-        Bezier bx(degree);
-        Bezier by(degree);
+        Bezier bx(size()-1);
+        Bezier by(size()-1);
         mob.instance(bx, raw_data.column_const_view(X));
         mob.instance(by, raw_data.column_const_view(Y));
-        bc = BezierCurveN<degree>(bx, by);
+        bc = BezierCurve<N>(bx, by);
     }
 
   private:
@@ -518,4 +480,4 @@ class LFMBezierCurveN
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

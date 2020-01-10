@@ -12,6 +12,7 @@
 #include <glib.h>
 
 #include "display/nr-filter-units.h"
+#include "libnr/nr-rect-l.h"
 #include "sp-filter-units.h"
 #include <2geom/transforms.h>
 
@@ -34,7 +35,7 @@ FilterUnits::FilterUnits(SPFilterUnits const filterUnits, SPFilterUnits const pr
     paraller_axis(false), automatic_resolution(true)
 {}
 
-void FilterUnits::set_ctm(Geom::Affine const &ctm) {
+void FilterUnits::set_ctm(Geom::Matrix const &ctm) {
     this->ctm = ctm;
 }
 
@@ -62,18 +63,18 @@ void FilterUnits::set_automatic_resolution(bool const automatic) {
     automatic_resolution = automatic;
 }
 
-Geom::Affine FilterUnits::get_matrix_user2pb() const {
+Geom::Matrix FilterUnits::get_matrix_user2pb() const {
     g_assert(resolution_x > 0);
     g_assert(resolution_y > 0);
     g_assert(filter_area);
 
-    Geom::Affine u2pb = ctm;
+    Geom::Matrix u2pb = ctm;
 
     if (paraller_axis || !automatic_resolution) {
-        u2pb[0] = resolution_x / filter_area->width();
+        u2pb[0] = resolution_x / (filter_area->max()[X] - filter_area->min()[X]);
         u2pb[1] = 0;
         u2pb[2] = 0;
-        u2pb[3] = resolution_y / filter_area->height();
+        u2pb[3] = resolution_y / (filter_area->max()[Y] - filter_area->min()[Y]);
         u2pb[4] = ctm[4];
         u2pb[5] = ctm[5];
     }
@@ -81,9 +82,9 @@ Geom::Affine FilterUnits::get_matrix_user2pb() const {
     return u2pb;
 }
 
-Geom::Affine FilterUnits::get_matrix_units2pb(SPFilterUnits units) const {
+Geom::Matrix FilterUnits::get_matrix_units2pb(SPFilterUnits units) const {
     if ( item_bbox && (units == SP_FILTER_UNITS_OBJECTBOUNDINGBOX) ) {
-        Geom::Affine u2pb = get_matrix_user2pb();
+        Geom::Matrix u2pb = get_matrix_user2pb();
         Geom::Point origo(item_bbox->min());
         origo *= u2pb;
         Geom::Point i_end(item_bbox->max()[X], item_bbox->min()[Y]);
@@ -105,31 +106,31 @@ Geom::Affine FilterUnits::get_matrix_units2pb(SPFilterUnits units) const {
         return get_matrix_user2pb();
     } else {
         g_warning("Error in Inkscape::Filters::FilterUnits::get_matrix_units2pb: unrecognized unit type (%d)", units);
-        return Geom::Affine();
+        return Geom::Matrix();
     }
 }
 
-Geom::Affine FilterUnits::get_matrix_filterunits2pb() const {
+Geom::Matrix FilterUnits::get_matrix_filterunits2pb() const {
     return get_matrix_units2pb(filterUnits);
 }
 
-Geom::Affine FilterUnits::get_matrix_primitiveunits2pb() const {
+Geom::Matrix FilterUnits::get_matrix_primitiveunits2pb() const {
     return get_matrix_units2pb(primitiveUnits);
 }
 
-Geom::Affine FilterUnits::get_matrix_display2pb() const {
-    Geom::Affine d2pb = ctm.inverse();
+Geom::Matrix FilterUnits::get_matrix_display2pb() const {
+    Geom::Matrix d2pb = ctm.inverse();
     d2pb *= get_matrix_user2pb();
     return d2pb;
 }
 
-Geom::Affine FilterUnits::get_matrix_pb2display() const {
-    Geom::Affine pb2d = get_matrix_user2pb().inverse();
+Geom::Matrix FilterUnits::get_matrix_pb2display() const {
+    Geom::Matrix pb2d = get_matrix_user2pb().inverse();
     pb2d *= ctm;
     return pb2d;
 }
 
-Geom::Affine FilterUnits::get_matrix_user2units(SPFilterUnits units) const {
+Geom::Matrix FilterUnits::get_matrix_user2units(SPFilterUnits units) const {
     if (item_bbox && units == SP_FILTER_UNITS_OBJECTBOUNDINGBOX) {
         /* No need to worry about rotations: bounding box coordinates
          * always have base vectors paraller with userspace coordinates */
@@ -138,32 +139,41 @@ Geom::Affine FilterUnits::get_matrix_user2units(SPFilterUnits units) const {
         double scale_x = 1.0 / (max[X] - min[X]);
         double scale_y = 1.0 / (max[Y] - min[Y]);
         //return Geom::Translate(min) * Geom::Scale(scale_x,scale_y); ?
-        return Geom::Affine(scale_x, 0,
+        return Geom::Matrix(scale_x, 0,
                             0, scale_y,
                             min[X] * scale_x, min[Y] * scale_y);
     } else if (units == SP_FILTER_UNITS_USERSPACEONUSE) {
         return Geom::identity();
     } else {
         g_warning("Error in Inkscape::Filters::FilterUnits::get_matrix_user2units: unrecognized unit type (%d)", units);
-        return Geom::Affine();
+        return Geom::Matrix();
     }
 }
 
-Geom::Affine FilterUnits::get_matrix_user2filterunits() const {
+Geom::Matrix FilterUnits::get_matrix_user2filterunits() const {
     return get_matrix_user2units(filterUnits);
 }
 
-Geom::Affine FilterUnits::get_matrix_user2primitiveunits() const {
+Geom::Matrix FilterUnits::get_matrix_user2primitiveunits() const {
     return get_matrix_user2units(primitiveUnits);
 }
 
-Geom::IntRect FilterUnits::get_pixblock_filterarea_paraller() const {
+NR::IRect FilterUnits::get_pixblock_filterarea_paraller() const {
     g_assert(filter_area);
 
-    Geom::Affine u2pb = get_matrix_user2pb();
-    Geom::Rect r = *filter_area * u2pb;
-    Geom::IntRect ir = r.roundOutwards();
-    return ir;
+    int min_x = INT_MAX, min_y = INT_MAX, max_x = INT_MIN, max_y = INT_MIN;
+    Geom::Matrix u2pb = get_matrix_user2pb();
+
+    for (int i = 0 ; i < 4 ; i++) {
+        Geom::Point p = filter_area->corner(i);
+        p *= u2pb;
+        if (p[X] < min_x) min_x = (int)std::floor(p[X]);
+        if (p[X] > max_x) max_x = (int)std::ceil(p[X]);
+        if (p[Y] < min_y) min_y = (int)std::floor(p[Y]);
+        if (p[Y] > max_y) max_y = (int)std::ceil(p[Y]);
+    }
+    NR::IRect ret(NR::IPoint(min_x, min_y), NR::IPoint(max_x, max_y));
+    return ret;
 }
 
 FilterUnits& FilterUnits::operator=(FilterUnits const &other) {
@@ -192,4 +202,4 @@ FilterUnits& FilterUnits::operator=(FilterUnits const &other) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

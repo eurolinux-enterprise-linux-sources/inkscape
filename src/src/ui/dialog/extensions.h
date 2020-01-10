@@ -11,8 +11,8 @@
 #ifndef SEEN_EXTENSIONS_H
 #define SEEN_EXTENSIONS_H
 
-#include "ui/widget/panel.h"
 #include <gtkmm/textview.h>
+#include "ui/widget/panel.h"
 
 namespace Inkscape {
 namespace Extension {

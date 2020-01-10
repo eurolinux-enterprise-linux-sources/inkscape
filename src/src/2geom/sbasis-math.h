@@ -1,6 +1,7 @@
-/** @file
- * @brief some std functions to work with (pw)s-basis
- *//*
+/**
+ * \file
+ * \brief some std functions to work with (pw)s-basis
+ *
  *  Authors:
  *   Jean-Francois Barraud
  *
@@ -35,8 +36,8 @@
 //TODO: in all these functions, compute 'order' according to 'tol'.
 //TODO: use template to define the pw version automatically from the sb version?
 
-#ifndef LIB2GEOM_SEEN_SBASIS_MATH_H
-#define LIB2GEOM_SEEN_SBASIS_MATH_H
+#ifndef SEEN_GEOM_SB_CALCULS_H
+#define SEEN_GEOM_SB_CALCULS_H
 
 
 #include <2geom/sbasis.h>
@@ -96,4 +97,4 @@ Piecewise<SBasis> interpolate( std::vector<double> times, std::vector<double> va
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

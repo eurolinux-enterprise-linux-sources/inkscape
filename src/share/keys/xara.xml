@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<keys name="Xara">
+<keys name="Inkscape default">
 
 <!-- 
 This is the alternative Inkscape keymap designed to match as close as possible the
@@ -534,7 +534,8 @@ Hom/end keys-select minimum or maximum feather values
 
   <bind action="DialogMetadata" />
   <bind action="DialogClonetiler" />
-  <bind action="DialogArrange" />
+  <bind action="DialogGridArrange" />
+  <bind action="DialogScript" />
   <bind action="DialogDebug" />
   <bind action="DialogInput" />
 
@@ -542,6 +543,7 @@ Hom/end keys-select minimum or maximum feather values
 
 <!-- Help -->
 
+  <bind key="F1" action="HelpKeys" />
   <bind action="HelpAboutExtensions" />
   <bind action="HelpAboutMemory" />
   <bind action="HelpAbout" />

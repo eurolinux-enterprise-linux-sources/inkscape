@@ -1,5 +1,5 @@
-#ifndef SEEN_SP_ANCHOR_H
-#define SEEN_SP_ANCHOR_H
+#ifndef __SP_ANCHOR_H__
+#define __SP_ANCHOR_H__
 
 /*
  * SVG <a> element implementation
@@ -15,24 +15,20 @@
 
 #include "sp-item-group.h"
 
-#define SP_ANCHOR(obj) (dynamic_cast<SPAnchor*>((SPObject*)obj))
-#define SP_IS_ANCHOR(obj) (dynamic_cast<const SPAnchor*>((SPObject*)obj) != NULL)
+#define SP_TYPE_ANCHOR (sp_anchor_get_type ())
+#define SP_ANCHOR(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_ANCHOR, SPAnchor))
+#define SP_ANCHOR_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_ANCHOR, SPAnchorClass))
+#define SP_IS_ANCHOR(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_ANCHOR))
+#define SP_IS_ANCHOR_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_ANCHOR))
 
-class SPAnchor : public SPGroup {
-public:
-	SPAnchor();
-	virtual ~SPAnchor();
-
-	char *href;
-
-	virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
-	virtual void release();
-	virtual void set(unsigned int key, char const* value);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
-
-    virtual const char* displayName() const;
-	virtual char* description() const;
-	virtual int event(SPEvent *event);
+struct SPAnchor : public SPGroup {
+	gchar *href;
 };
+
+struct SPAnchorClass {
+	SPGroupClass parent_class;
+};
+
+GType sp_anchor_get_type (void);
 
 #endif

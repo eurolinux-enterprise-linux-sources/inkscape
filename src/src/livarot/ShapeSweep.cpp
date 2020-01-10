@@ -10,11 +10,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <glib.h>
-#include <2geom/affine.h>
+
+#include <2geom/matrix.h>
 #include "Shape.h"
 #include "livarot/sweep-event-queue.h"
 #include "livarot/sweep-tree-list.h"
 #include "livarot/sweep-tree.h"
+
+#include "libnr/nr-matrix.h"
 
 //int   doDebug=0;
 
@@ -252,7 +255,8 @@ Shape::ConvertToShape (Shape * a, FillRule directed, bool invert)
       Geom::Point rPtX;
       rPtX[0]= Round (ptX[0]);
       rPtX[1]= Round (ptX[1]);
-      int lastPointNo = AddPoint (rPtX);
+      int lastPointNo = -1;
+      lastPointNo = AddPoint (rPtX);
       pData[lastPointNo].rx = rPtX;
 
       if (rPtX[1] > lastChange)
@@ -1052,7 +1056,8 @@ Shape::Booleen (Shape * a, Shape * b, BooleanOp mod,int cutPathID)
       Geom::Point rPtX;
       rPtX[0]= Round (ptX[0]);
       rPtX[1]= Round (ptX[1]);
-      int lastPointNo = AddPoint (rPtX);
+      int lastPointNo = -1;
+      lastPointNo = AddPoint (rPtX);
       pData[lastPointNo].rx = rPtX;
 
       if (rPtX[1] > lastChange)
@@ -1738,7 +1743,7 @@ Shape::TesteIntersection (SweepTree * iL, SweepTree * iR, Geom::Point &atx, doub
 	}
     }
 
-  double ang = cross (ldir, rdir);
+  double ang = cross (rdir, ldir);
 //      ang*=iL->src->eData[iL->bord].isqlength;
 //      ang*=iR->src->eData[iR->bord].isqlength;
   if (ang <= 0) return false;		// edges in opposite directions:  <-left  ... right ->
@@ -1776,12 +1781,12 @@ Shape::TesteIntersection (SweepTree * iL, SweepTree * iR, Geom::Point &atx, doub
     double srDot, erDot;
     sDiff = iL->src->pData[lSt].rx - iR->src->pData[rSt].rx;
     eDiff = iL->src->pData[lEn].rx - iR->src->pData[rSt].rx;
-    srDot = cross(rdir, sDiff);
-    erDot = cross(rdir, eDiff);
+    srDot = cross (sDiff,rdir);
+    erDot = cross (eDiff,rdir);
     sDiff = iR->src->pData[rSt].rx - iL->src->pData[lSt].rx;
     eDiff = iR->src->pData[rEn].rx - iL->src->pData[lSt].rx;
-    slDot = cross(ldir, sDiff);
-    elDot = cross(ldir, eDiff);
+    slDot = cross (sDiff,ldir);
+    elDot = cross (eDiff,ldir);
 
     if ((srDot >= 0 && erDot >= 0) || (srDot <= 0 && erDot <= 0))
       {
@@ -2089,7 +2094,7 @@ Shape::Winding (const Geom::Point px) const
 	}
 
       diff = px - ast;
-      double cote = cross(adir, diff);
+      double cote = cross (diff,adir);
       if (cote == 0)
 	continue;
       if (cote < 0)
@@ -2563,15 +2568,15 @@ Shape::TesteIntersection (Shape * ils, Shape * irs, int ilb, int irb,
     double srDot, erDot;
     sDiff = ils->pData[lSt].rx - irs->pData[rSt].rx;
     eDiff = ils->pData[lEn].rx - irs->pData[rSt].rx;
-    srDot = cross(rdir, sDiff);
-    erDot = cross(rdir, eDiff);
+    srDot = cross (sDiff,rdir );
+    erDot = cross (eDiff,rdir );
     if ((srDot >= 0 && erDot >= 0) || (srDot <= 0 && erDot <= 0))
       return false;
 
     sDiff = irs->pData[rSt].rx - ils->pData[lSt].rx;
     eDiff = irs->pData[rEn].rx - ils->pData[lSt].rx;
-    slDot = cross(ldir, sDiff);
-    elDot = cross(ldir, eDiff);
+    slDot = cross (sDiff,ldir );
+    elDot = cross (eDiff,ldir);
     if ((slDot >= 0 && elDot >= 0) || (slDot <= 0 && elDot <= 0))
       return false;
 
@@ -2602,7 +2607,7 @@ Shape::TesteIntersection (Shape * ils, Shape * irs, int ilb, int irb,
   usvs = irs->pData[rSt].rx - ils->pData[lSt].rx;
 
   // pas sur de l'ordre des coefs de m
-  Geom::Affine m(ldir[0], ldir[1],
+  Geom::Matrix m(ldir[0], ldir[1],
 	       rdir[0], rdir[1],
 	       0, 0);
   double det = m.det();
@@ -2615,8 +2620,8 @@ Shape::TesteIntersection (Shape * ils, Shape * irs, int ilb, int irb,
       double sDot, eDot;
       sDiff = ils->pData[lSt].rx - irs->pData[rSt].rx;
       eDiff = ils->pData[lEn].rx - irs->pData[rSt].rx;
-      sDot = cross(rdir, sDiff);
-      eDot = cross(rdir, eDiff);
+      sDot = cross (sDiff,rdir );
+      eDot = cross (eDiff,rdir);
 
       atx =
 	(sDot * irs->pData[lEn].rx - eDot * irs->pData[lSt].rx) / (sDot -
@@ -2625,8 +2630,8 @@ Shape::TesteIntersection (Shape * ils, Shape * irs, int ilb, int irb,
 
       sDiff = irs->pData[rSt].rx - ils->pData[lSt].rx;
        eDiff = irs->pData[rEn].rx - ils->pData[lSt].rx;
-      sDot = cross(ldir, sDiff);
-      eDot = cross(ldir, eDiff);
+      sDot = cross (sDiff,ldir );
+      eDot = cross (eDiff,ldir );
 
       atR = sDot / (sDot - eDot);
 
@@ -2669,7 +2674,7 @@ Shape::TesteAdjacency (Shape * a, int no, const Geom::Point atx, int nPt,
 
   diff = atx - ast;
  
-  double e = IHalfRound(cross(adir, diff) * a->eData[no].isqlength);
+  double e = IHalfRound ((cross (diff,adir)) * a->eData[no].isqlength);
   if (-3 < e && e < 3)
     {
       double rad = HalfRound (0.501); // when using single precision, 0.505 is better (0.5 would be the correct value, 
@@ -2684,16 +2689,16 @@ Shape::TesteAdjacency (Shape * a, int no, const Geom::Point atx, int nPt,
       diff4[1] = diff[1] + rad;
       double di1, di2;
       bool adjacent = false;
-      di1 = cross(adir, diff1);
-      di2 = cross(adir, diff3);
+      di1 = cross (diff1,adir);
+      di2 = cross (diff3,adir);
       if ((di1 < 0 && di2 > 0) || (di1 > 0 && di2 < 0))
 	{
 	  adjacent = true;
 	}
       else
 	{
-	  di1 = cross(adir, diff2);
-	  di2 = cross(adir, diff4);
+	  di1 = cross ( diff2,adir);
+	  di2 = cross (diff4,adir);
 	  if ((di1 < 0 && di2 > 0) || (di1 > 0 && di2 < 0))
 	    {
 	      adjacent = true;
@@ -2739,8 +2744,8 @@ Shape::CheckAdjacencies (int lastPointNo, int lastChgtPt, Shape * /*shapeHead*/,
 	    {
 	      if (TesteAdjacency (lS, lB, getPoint(n).x, n, false) ==
 		  false)
-                break;
-              lS->swsData[lB].leftRnd = n;
+		break;
+	      lS->swsData[lB].leftRnd = n;
 	    }
 	  for (int n = rgtN + 1; n < lastPointNo; n++)
 	    {
@@ -2766,7 +2771,7 @@ Shape::CheckAdjacencies (int lastPointNo, int lastChgtPt, Shape * /*shapeHead*/,
 	      if (TesteAdjacency (rS, rB, getPoint(n).x, n, false) ==
 		  false)
 		break;
-              rS->swsData[rB].leftRnd = n;
+	      rS->swsData[rB].leftRnd = n;
 	    }
 	  for (int n = rgtN + 1; n < lastPointNo; n++)
 	    {

@@ -12,23 +12,17 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifndef SEEN_MODULES_DB_H
-#define SEEN_MODULES_DB_H
+#ifndef __MODULES_DB_H__
+#define __MODULES_DB_H__
 
 #include <map>
 #include <list>
 #include <cstring>
 
-#include <glib.h>
-
+#include "extension/extension.h"
 
 namespace Inkscape {
 namespace Extension {
-
-class Input;
-class Output;
-class Effect;
-class Extension;
 
 class DB {
 private:
@@ -80,7 +74,7 @@ extern DB db;
 
 } } /* namespace Extension, Inkscape */
 
-#endif // SEEN_MODULES_DB_H
+#endif /* __MODULES_DB_H__ */
 
 /*
   Local Variables:
@@ -91,4 +85,4 @@ extern DB db;
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

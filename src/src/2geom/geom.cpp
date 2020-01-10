@@ -10,16 +10,7 @@
 #include <algorithm>
 #include <2geom/rect.h>
 
-using std::swap;
-
 namespace Geom {
-
-enum IntersectorKind {
-    intersects = 0,
-    parallel,
-    coincident,
-    no_intersection
-};
 
 /**
  * Finds the intersection of the two (infinite) lines
@@ -314,7 +305,7 @@ rect_line_intersect(Geom::Point const &c0, Geom::Point const &c1,
         Point dir1 (results[1] - results[0]);
         Point dir2 (p1 - p0);
         if (dot(dir1, dir2) < 0) {
-            swap(results[0], results[1]);
+            std::swap(results[0], results[1]);
         }
     }
 
@@ -372,7 +363,7 @@ int centroid(std::vector<Geom::Point> const &p, Geom::Point& centroid, double &a
     Geom::Point centroid_tmp(0,0);
     double atmp = 0;
     for (unsigned i = n-1, j = 0; j < n; i = j, j++) {
-        const double ai = cross(p[j], p[i]);
+        const double ai = -cross(p[j], p[i]);
         atmp += ai;
         centroid_tmp += (p[j] + p[i])*ai; // first moment.
     }
@@ -395,4 +386,4 @@ int centroid(std::vector<Geom::Point> const &p, Geom::Point& centroid, double &a
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

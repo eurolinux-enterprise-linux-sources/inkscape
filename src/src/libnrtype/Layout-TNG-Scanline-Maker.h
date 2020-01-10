@@ -47,7 +47,7 @@ public:
     between calls if the new height too big to fit in the space remaining in
     this shape. Returns an empty vector if there is no space left in the
     current shape. */
-    virtual std::vector<ScanRun> makeScanline(Layout::FontMetrics const &line_height) =0;
+    virtual std::vector<ScanRun> makeScanline(Layout::LineHeight const &line_height) =0;
 
     /** Indicates that the caller has successfully filled the current line
     and hence that the next call to makeScanline() should return lines on
@@ -71,12 +71,7 @@ public:
     The metrics given here are considered to be the ones that are being
     used now, and hence is the line advance height used by completeLine().
     */
-    virtual bool canExtendCurrentScanline(Layout::FontMetrics const &line_height) =0;
-
-    /** Sets current line block height. Call before completeLine() to correct for
-    actually used line height (in case some chunks with larger font-size rolled back).
-    */
-    virtual void setLineHeight(Layout::FontMetrics const &line_height) =0;
+    virtual bool canExtendCurrentScanline(Layout::LineHeight const &line_height) =0;
 };
 
 /** \brief private to Layout. Generates infinite scanlines for when you don't want wrapping
@@ -95,7 +90,7 @@ public:
     virtual ~InfiniteScanlineMaker();
 
     /** Returns a single infinite run at the current location */
-    virtual std::vector<ScanRun> makeScanline(Layout::FontMetrics const &line_height);
+    virtual std::vector<ScanRun> makeScanline(Layout::LineHeight const &line_height);
 
     /** Increments the current y by the current line height */
     virtual void completeLine();
@@ -107,16 +102,11 @@ public:
     virtual void setNewYCoordinate(double new_y);
 
     /** Always true, but has to save the new height */
-    virtual bool canExtendCurrentScanline(Layout::FontMetrics const &line_height);
-
-    /** Sets current line block height. Call before completeLine() to correct for
-    actually used line height (in case some chunks with larger font-size rolled back).
-    */
-    virtual void setLineHeight(Layout::FontMetrics const &line_height);
+    virtual bool canExtendCurrentScanline(Layout::LineHeight const &line_height);
 
 private:
     double _x, _y;
-    Layout::FontMetrics _current_line_height;
+    Layout::LineHeight _current_line_height;
     bool _negative_block_progression;     /// if true, indicates that completeLine() should decrement rather than increment, ie block-progression is either rl or bt
 };
 
@@ -132,7 +122,7 @@ public:
     ShapeScanlineMaker(Shape const *shape, Layout::Direction block_progression);
     virtual ~ShapeScanlineMaker();
 
-    virtual std::vector<ScanRun> makeScanline(Layout::FontMetrics const &line_height);
+    virtual std::vector<ScanRun> makeScanline(Layout::LineHeight const &line_height);
 
     virtual void completeLine();
 
@@ -141,13 +131,7 @@ public:
     virtual void setNewYCoordinate(double new_y);
 
     /** never true */
-    virtual bool canExtendCurrentScanline(Layout::FontMetrics const &line_height);
-
-    /** Sets current line block height. Call before completeLine() to correct for
-    actually used line height (in case some chunks with larger font-size rolled back).
-    */
-    virtual void setLineHeight(Layout::FontMetrics const &line_height);
-
+    virtual bool canExtendCurrentScanline(Layout::LineHeight const &line_height);
 private:
     /** To generate scanlines for top-to-bottom text it is easiest if we
     simply rotate the given shape by a multiple of 90 degrees. This stores
@@ -182,4 +166,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

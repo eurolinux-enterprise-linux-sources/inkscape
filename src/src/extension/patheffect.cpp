@@ -42,9 +42,9 @@ PathEffect::processPathEffects (SPDocument * doc, Inkscape::XML::Node * path)
         return;
 
     gchar ** patheffects = g_strsplit(patheffectlist, ";", 128);
-    Inkscape::XML::Node * defs = doc->getDefs()->getRepr();
+    Inkscape::XML::Node * defs = SP_OBJECT_REPR(SP_DOCUMENT_DEFS(doc));
 
-    for (int i = 0; (i < 128) && (patheffects[i] != NULL); i++) {
+    for (int i = 0; patheffects[i] != NULL && i < 128; i++) {
         gchar * patheffect = patheffects[i];
 
         // This is weird, they should all be references... but anyway
@@ -65,8 +65,11 @@ PathEffect::processPathEffects (SPDocument * doc, Inkscape::XML::Node * path)
         Inkscape::Extension::PathEffect * peffect;
         peffect = dynamic_cast<Inkscape::Extension::PathEffect *>(Inkscape::Extension::db.get(ext_id));
         if (peffect != NULL) {
-            peffect->processPath(doc, path, prefs);
+
+            continue;
         }
+
+        peffect->processPath(doc, path, prefs);
     }
 
     g_strfreev(patheffects);

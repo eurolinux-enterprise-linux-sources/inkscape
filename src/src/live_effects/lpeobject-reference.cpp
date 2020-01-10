@@ -43,7 +43,14 @@ LPEObjectReference::~LPEObjectReference(void)
 bool LPEObjectReference::_acceptObject(SPObject * const obj) const
 {
     if (IS_LIVEPATHEFFECT(obj)) {
-        return URIReference::_acceptObject(obj);
+        SPObject * const owner = getOwner();
+        /* Refuse references to us or to an ancestor. */
+        for ( SPObject *iter = owner ; iter ; iter = SP_OBJECT_PARENT(iter) ) {
+            if ( iter == obj ) {
+                return false;
+            }
+        }
+        return true;
     } else {
         return false;
     }
@@ -87,7 +94,7 @@ LPEObjectReference::start_listening(LivePathEffectObject* to)
         return;
     }
     lpeobject = to;
-    lpeobject_repr = to->getRepr();
+    lpeobject_repr = SP_OBJECT_REPR(to);
     _delete_connection = to->connectDelete(sigc::bind(sigc::ptr_fun(&lpeobjectreference_delete_self), this));
     _modified_connection = to->connectModified(sigc::bind<2>(sigc::ptr_fun(&lpeobjectreference_source_modified), this));
 }

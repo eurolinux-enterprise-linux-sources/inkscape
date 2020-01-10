@@ -4,34 +4,30 @@
  * Authors:
  *   Felipe Corrêa da Silva Sanches <juca@members.fsf.org>
  *   Tavmjong Bah <tavmjong@free.fr>
- *   Abhishek Sharma
  *
- * Copyright (C) 2007-2011 authors
+ * Copyright (C) 2007 authors
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
-#include "display/nr-filter-image.h"
 #include "document.h"
 #include "sp-item.h"
-#include "display/cairo-utils.h"
-#include "display/drawing-context.h"
-#include "display/drawing.h"
-#include "display/drawing-item.h"
+#include "display/nr-arena.h"
+#include "display/nr-arena-item.h"
 #include "display/nr-filter.h"
-#include "display/nr-filter-slot.h"
+#include "display/nr-filter-image.h"
 #include "display/nr-filter-units.h"
-#include "enums.h"
-#include <glibmm/fileutils.h>
+#include "libnr/nr-compose-transform.h"
+#include "libnr/nr-rect-l.h"
+#include "preferences.h"
 
 namespace Inkscape {
 namespace Filters {
 
-FilterImage::FilterImage()
-    : SVGElem(0)
-    , document(0)
-    , feImageHref(0)
-    , image(0)
-    , broken_ref(false)
+FilterImage::FilterImage() :
+    SVGElem(0),
+    document(0),
+    feImageHref(0),
+    image_pixbuf(0)
 { }
 
 FilterPrimitive * FilterImage::create() {
@@ -40,279 +36,208 @@ FilterPrimitive * FilterImage::create() {
 
 FilterImage::~FilterImage()
 {
-    if (feImageHref)
-        g_free(feImageHref);
-    delete image;
+        if (feImageHref) g_free(feImageHref);
 }
 
-void FilterImage::render_cairo(FilterSlot &slot)
-{
-    if (!feImageHref)
-        return;
+int FilterImage::render(FilterSlot &slot, FilterUnits const &units) {
+    if (!feImageHref) return 0;
 
-    //cairo_surface_t *input = slot.getcairo(_input);
+    NRPixBlock* pb = NULL;
+    bool free_pb_on_exit = false;
 
-    // Viewport is filter primitive area (in user coordinates).
-    // Note: viewport calculation in non-trivial. Do not rely
-    // on get_matrix_primitiveunits2pb().
-    Geom::Rect vp = filter_primitive_area( slot.get_units() );
-    slot.set_primitive_area(_output, vp); // Needed for tiling
+    if(from_element){
+        if (!SVGElem) return 0;
+        
+        // prep the document
+        sp_document_ensure_up_to_date(document);
+        NRArena* arena = NRArena::create();
+        unsigned const key = sp_item_display_key_new(1);
+        NRArenaItem* ai = sp_item_invoke_show(SVGElem, arena, key, SP_ITEM_SHOW_DISPLAY);
+        if (!ai) {
+            g_warning("feImage renderer: error creating NRArenaItem for SVG Element");
+            nr_object_unref((NRObject *) arena);
+            return 0;
+        }
 
-    double feImageX      = vp.min()[Geom::X];
-    double feImageY      = vp.min()[Geom::Y];
-    double feImageWidth  = vp.width();
-    double feImageHeight = vp.height();
+        pb = new NRPixBlock;
+        free_pb_on_exit = true;
+
+        Geom::OptRect area = SVGElem->getBounds(Geom::identity());
+        
+        NRRectL rect;
+        rect.x0=area->min()[Geom::X];
+        rect.x1=area->max()[Geom::X];
+        rect.y0=area->min()[Geom::Y];
+        rect.y1=area->max()[Geom::Y];
+
+        width = (int)(rect.x1-rect.x0);
+        height = (int)(rect.y1-rect.y0);
+        rowstride = 4*width;
+        has_alpha = true;
+
+        if (image_pixbuf) g_free(image_pixbuf);
+        image_pixbuf = g_try_new(unsigned char, 4L * width * height);
+        if(image_pixbuf != NULL)
+        {
+            memset(image_pixbuf, 0x00, 4 * width * height);
+
+            NRGC gc(NULL);
+            /* Update to renderable state */
+            double sf = 1.0;
+            Geom::Matrix t(Geom::Scale(sf, sf));
+            nr_arena_item_set_transform(ai, &t);
+            gc.transform.setIdentity();
+            nr_arena_item_invoke_update( ai, NULL, &gc,
+                                                 NR_ARENA_ITEM_STATE_ALL,
+                                                 NR_ARENA_ITEM_STATE_NONE );
+            nr_pixblock_setup_extern(pb, NR_PIXBLOCK_MODE_R8G8B8A8N,
+                                  (int)rect.x0, (int)rect.y0, (int)rect.x1, (int)rect.y1,
+                                  image_pixbuf, 4 * width, FALSE, FALSE );
+
+            nr_arena_item_invoke_render(NULL, ai, &rect, pb, NR_ARENA_ITEM_RENDER_NO_CACHE);
+        }
+        else
+        {
+            g_warning("FilterImage::render: not enough memory to create pixel buffer. Need %ld.", 4L * width * height);
+        }
+        sp_item_invoke_hide(SVGElem, key);
+        nr_object_unref((NRObject *) arena);
+    }
+
+
+    if (!image_pixbuf){
+        try {
+            /* TODO: If feImageHref is absolute, then use that (preferably handling the
+             * case that it's not a file URI).  Otherwise, go up the tree looking
+             * for an xml:base attribute, and use that as the base URI for resolving
+             * the relative feImageHref URI.  Otherwise, if document && document->base,
+             * then use that as the base URI.  Otherwise, use feImageHref directly
+             * (i.e. interpreting it as relative to our current working directory).
+             * (See http://www.w3.org/TR/xmlbase/#resolution .) */
+            gchar *fullname = feImageHref;
+            if ( !g_file_test( fullname, G_FILE_TEST_EXISTS ) ) {
+                // Try to load from relative postion combined with document base
+                if( document ) {
+                    fullname = g_build_filename( document->base, feImageHref, NULL );
+                }
+            }
+            if ( !g_file_test( fullname, G_FILE_TEST_EXISTS ) ) {
+                // Should display Broken Image png.
+                g_warning("FilterImage::render: Can not find: %s", feImageHref  );
+            }
+            image = Gdk::Pixbuf::create_from_file(fullname);
+            if( fullname != feImageHref ) g_free( fullname );
+        }
+        catch (const Glib::FileError & e)
+        {
+            g_warning("caught Glib::FileError in FilterImage::render %i", e.code() );
+            return 0;
+        }
+        catch (const Gdk::PixbufError & e)
+        {
+            g_warning("Gdk::PixbufError in FilterImage::render: %i", e.code() );
+            return 0;
+        }
+        if ( !image ) return 0;
+
+        // Native size of image
+        width = image->get_width();
+        height = image->get_height();
+        rowstride = image->get_rowstride();
+        image_pixbuf = image->get_pixels();
+        has_alpha = image->get_has_alpha();
+    }
+    int w,x,y;
+    NRPixBlock *in = slot.get(_input);
+    if (!in) {
+        g_warning("Missing source image for feImage (in=%d)", _input);
+        return 1;
+    }
+
+    // This section needs to be fully tested!!
+
+    // Region being drawn on screen
+    int x0 = in->area.x0, y0 = in->area.y0;
+    int x1 = in->area.x1, y1 = in->area.y1;
+    NRPixBlock *out = new NRPixBlock;
+    nr_pixblock_setup_fast(out, NR_PIXBLOCK_MODE_R8G8B8A8P, x0, y0, x1, y1, true);
+    w = x1 - x0;
+
+    // Get the object bounding box. Image is placed with respect to box.
+    // Array values:  0: width; 3: height; 4: -x; 5: -y.
+    Geom::Matrix object_bbox = units.get_matrix_user2filterunits().inverse();
 
     // feImage is suppose to use the same parameters as a normal SVG image.
     // If a width or height is set to zero, the image is not suppose to be displayed.
     // This does not seem to be what Firefox or Opera does, nor does the W3C displacement
     // filter test expect this behavior. If the width and/or height are zero, we use
     // the width and height of the object bounding box.
-    Geom::Affine m = slot.get_units().get_matrix_user2filterunits().inverse();
-    Geom::Point bbox_00 = Geom::Point(0,0) * m;
-    Geom::Point bbox_w0 = Geom::Point(1,0) * m;
-    Geom::Point bbox_0h = Geom::Point(0,1) * m;
-    double bbox_width = Geom::distance(bbox_00, bbox_w0);
-    double bbox_height = Geom::distance(bbox_00, bbox_0h);
+    if( feImageWidth  == 0 ) feImageWidth  = object_bbox[0];
+    if( feImageHeight == 0 ) feImageHeight = object_bbox[3];
 
-    if( feImageWidth  == 0 ) feImageWidth  = bbox_width;
-    if( feImageHeight == 0 ) feImageHeight = bbox_height;
+    double scaleX = width/feImageWidth;
+    double scaleY = height/feImageHeight;
 
-    // Internal image, like <use>
-    if (from_element) {
-        if (!SVGElem) return;
+    int coordx,coordy;
+    unsigned char *out_data = NR_PIXBLOCK_PX(out);
+    Geom::Matrix unit_trans = units.get_matrix_primitiveunits2pb().inverse();
+    Geom::Matrix d2s = Geom::Translate(x0, y0) * unit_trans * Geom::Translate(object_bbox[4]-feImageX, object_bbox[5]-feImageY) * Geom::Scale(scaleX, scaleY);
 
-        // TODO: do not recreate the rendering tree every time
-        // TODO: the entire thing is a hack, we should give filter primitives an "update" method
-        //       like the one for DrawingItems
-        document->ensureUpToDate();
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    int nr_arena_image_x_sample = prefs->getInt("/options/bitmapoversample/value", 1);
+    int nr_arena_image_y_sample = nr_arena_image_x_sample;
 
-        Drawing drawing;
-        Geom::OptRect optarea = SVGElem->visualBounds();
-        if (!optarea) return;
+    if (has_alpha) {
+        nr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N_TRANSFORM(out_data, x1-x0, y1-y0, 4*w, image_pixbuf, width, height, rowstride, d2s, 255, nr_arena_image_x_sample, nr_arena_image_y_sample);
+    } else {
+        for (x=x0; x < x1; x++){
+            for (y=y0; y < y1; y++){
+                //TODO: use interpolation
+                // Temporarily add 0.5 so we sample center of "cell"
+                double indexX = scaleX * (((x+0.5) * unit_trans[0] + unit_trans[4]) - feImageX + object_bbox[4]);
+                double indexY = scaleY * (((y+0.5) * unit_trans[3] + unit_trans[5]) - feImageY + object_bbox[5]);
 
-        unsigned const key = SPItem::display_key_new(1);
-        DrawingItem *ai = SVGElem->invoke_show(drawing, key, SP_ITEM_SHOW_DISPLAY);
-        if (!ai) {
-            g_warning("feImage renderer: error creating DrawingItem for SVG Element");
-            return;
-        }
-        drawing.setRoot(ai);
-
-        Geom::Rect area = *optarea;
-        Geom::Affine user2pb = slot.get_units().get_matrix_user2pb();
-
-        /* FIXME: These variables are currently unused.  Why were they calculated?
-        double scaleX = feImageWidth / area.width();
-        double scaleY = feImageHeight / area.height();
-        */
-
-        Geom::Rect sa = slot.get_slot_area();
-        cairo_surface_t *out = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-            sa.width(), sa.height());
-        Inkscape::DrawingContext dc(out, sa.min());
-        dc.transform(user2pb); // we are now in primitive units
-        dc.translate(feImageX, feImageY);
-//        dc.scale(scaleX, scaleY);  No scaling should be done
-
-        Geom::IntRect render_rect = area.roundOutwards();
-//        dc.translate(render_rect.min());  This seems incorrect
-
-        // Update to renderable state
-        drawing.update(render_rect);
-        drawing.render(dc, render_rect);
-        SVGElem->invoke_hide(key);
-
-        // For the moment, we'll assume that any image is in sRGB color space
-        set_cairo_surface_ci(out, SP_CSS_COLOR_INTERPOLATION_SRGB);
-
-        slot.set(_output, out);
-        cairo_surface_destroy(out);
-        return;
-    }
-
-    // External image, like <image>
-    if (!image && !broken_ref) {
-        broken_ref = true;
-
-        /* TODO: If feImageHref is absolute, then use that (preferably handling the
-         * case that it's not a file URI).  Otherwise, go up the tree looking
-         * for an xml:base attribute, and use that as the base URI for resolving
-         * the relative feImageHref URI.  Otherwise, if document->base is valid,
-         * then use that as the base URI.  Otherwise, use feImageHref directly
-         * (i.e. interpreting it as relative to our current working directory).
-         * (See http://www.w3.org/TR/xmlbase/#resolution .) */
-        gchar *fullname = feImageHref;
-        if ( !g_file_test( fullname, G_FILE_TEST_EXISTS ) ) {
-            // Try to load from relative postion combined with document base
-            if( document ) {
-                fullname = g_build_filename( document->getBase(), feImageHref, NULL );
-            }
-        }
-        if ( !g_file_test( fullname, G_FILE_TEST_EXISTS ) ) {
-            // Should display Broken Image png.
-            g_warning("FilterImage::render: Can not find: %s", feImageHref  );
-            return;
-        }
-        image = Inkscape::Pixbuf::create_from_file(fullname);
-        if( fullname != feImageHref ) g_free( fullname );
-
-        if ( !image ) {
-            g_warning("FilterImage::render: failed to load image: %s", feImageHref);
-            return;
-        }
-
-        broken_ref = false;
-    }
-
-    if (broken_ref) {
-        return;
-    }
-
-    cairo_surface_t *image_surface = image->getSurfaceRaw();
-
-    Geom::Rect sa = slot.get_slot_area();
-    cairo_surface_t *out = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-        sa.width(), sa.height());
-
-    // For the moment, we'll assume that any image is in sRGB color space
-    // set_cairo_surface_ci(out, SP_CSS_COLOR_INTERPOLATION_SRGB);
-    // This seemed like a sensible thing to do but it breaks filters-displace-01-f.svg
-
-    cairo_t *ct = cairo_create(out);
-    cairo_translate(ct, -sa.min()[Geom::X], -sa.min()[Geom::Y]);
-
-    // now ct is in pb coordinates, note the feWidth etc. are in user units
-    ink_cairo_transform(ct, slot.get_units().get_matrix_user2pb());
-
-    // now ct is in the coordinates of feImageX etc.
-
-    // Now that we have the viewport, we must map image inside.
-    // Partially copied from sp-image.cpp.
-
-    // Do nothing if preserveAspectRatio is "none".
-    if( aspect_align != SP_ASPECT_NONE ) {
-
-        // Check aspect ratio of image vs. viewport
-        double feAspect = feImageHeight/feImageWidth;
-        double aspect = (double)image->height()/(double)image->width();
-        bool ratio = (feAspect < aspect);
-
-        double ax, ay; // Align side
-        switch( aspect_align ) {
-            case SP_ASPECT_XMIN_YMIN:
-                ax = 0.0;
-                ay = 0.0;
-                break;
-            case SP_ASPECT_XMID_YMIN:
-                ax = 0.5;
-                ay = 0.0;
-                break;
-            case SP_ASPECT_XMAX_YMIN:
-                ax = 1.0;
-                ay = 0.0;
-                break;
-            case SP_ASPECT_XMIN_YMID:
-                ax = 0.0;
-                ay = 0.5;
-                break;
-            case SP_ASPECT_XMID_YMID:
-                ax = 0.5;
-                ay = 0.5;
-                break;
-            case SP_ASPECT_XMAX_YMID:
-                ax = 1.0;
-                ay = 0.5;
-                break;
-            case SP_ASPECT_XMIN_YMAX:
-                ax = 0.0;
-                ay = 1.0;
-                break;
-            case SP_ASPECT_XMID_YMAX:
-                ax = 0.5;
-                ay = 1.0;
-                break;
-            case SP_ASPECT_XMAX_YMAX:
-                ax = 1.0;
-                ay = 1.0;
-                break;
-            default:
-                ax = 0.0;
-                ay = 0.0;
-                break;
-        }
-
-        if( aspect_clip == SP_ASPECT_SLICE ) {
-            // image clipped by viewbox
-
-            if( ratio ) {
-                // clip top/bottom
-                feImageY -= ay * (feImageWidth * aspect - feImageHeight);
-                feImageHeight = feImageWidth * aspect;
-            } else {
-                // clip sides
-                feImageX -= ax * (feImageHeight / aspect - feImageWidth); 
-                feImageWidth = feImageHeight / aspect;
-            }
-
-        } else {
-            // image fits into viewbox
-
-            if( ratio ) {
-                // fit to height
-                feImageX += ax * (feImageWidth - feImageHeight / aspect );
-                feImageWidth = feImageHeight / aspect;
-            } else {
-                // fit to width
-                feImageY += ay * (feImageHeight - feImageWidth * aspect);
-                feImageHeight = feImageWidth * aspect;
+                // coordx == 0 and coordy == 0 must be included, but we protect
+                // against negative numbers which round up to 0 with (int).
+                coordx = ( indexX >= 0 ? int( indexX ) : -1 );
+                coordy = ( indexY >= 0 ? int( indexY ) : -1 );
+                if (coordx >= 0 && coordx < width && coordy >= 0 && coordy < height){
+                    out_data[4*((x - x0)+w*(y - y0))    ] = (unsigned char) image_pixbuf[3*coordx + rowstride*coordy    ]; //Red
+                    out_data[4*((x - x0)+w*(y - y0)) + 1] = (unsigned char) image_pixbuf[3*coordx + rowstride*coordy + 1]; //Green
+                    out_data[4*((x - x0)+w*(y - y0)) + 2] = (unsigned char) image_pixbuf[3*coordx + rowstride*coordy + 2]; //Blue
+                    out_data[4*((x - x0)+w*(y - y0)) + 3] = 255; //Alpha
+                }
             }
         }
     }
+    if (free_pb_on_exit) {
+        nr_pixblock_release(pb);
+        delete pb;
+    }
 
-    double scaleX = feImageWidth / image->width();
-    double scaleY = feImageHeight / image->height();
-
-    cairo_translate(ct, feImageX, feImageY);
-    cairo_scale(ct, scaleX, scaleY);
-    cairo_set_source_surface(ct, image_surface, 0, 0);
-    cairo_paint(ct);
-    cairo_destroy(ct);
-
+    out->empty = FALSE;
     slot.set(_output, out);
-}
-
-bool FilterImage::can_handle_affine(Geom::Affine const &)
-{
-    return true;
-}
-
-double FilterImage::complexity(Geom::Affine const &)
-{
-    // TODO: right now we cannot actually measure this in any meaningful way.
-    return 1.1;
+    return 0;
 }
 
 void FilterImage::set_href(const gchar *href){
-
     if (feImageHref) g_free (feImageHref);
     feImageHref = (href) ? g_strdup (href) : NULL;
-
-    delete image;
-    image = NULL;
-    broken_ref = false;
 }
 
 void FilterImage::set_document(SPDocument *doc){
     document = doc;
 }
 
-void FilterImage::set_align( unsigned int align ) {
-    aspect_align = align;
+void FilterImage::set_region(SVGLength x, SVGLength y, SVGLength width, SVGLength height){
+        feImageX=x.computed;
+        feImageY=y.computed;
+        feImageWidth=width.computed;
+        feImageHeight=height.computed;
 }
 
-void FilterImage::set_clip( unsigned int clip ) {
-    aspect_clip = clip;
+FilterTraits FilterImage::get_input_traits() {
+    return TRAIT_PARALLER;
 }
 
 } /* namespace Filters */
@@ -327,4 +252,4 @@ void FilterImage::set_clip( unsigned int clip ) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

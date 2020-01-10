@@ -2,8 +2,6 @@
 #define SEEN_SP_GRADIENT_REFERENCE_H
 
 #include "uri-references.h"
-
-class SPGradient;
 class SPObject;
 
 class SPGradientReference : public Inkscape::URIReference {
@@ -11,7 +9,7 @@ public:
     SPGradientReference(SPObject *obj) : URIReference(obj) {}
 
     SPGradient *getObject() const {
-        return reinterpret_cast<SPGradient *>(URIReference::getObject());
+        return (SPGradient *)URIReference::getObject();
     }
 
 protected:
@@ -30,4 +28,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

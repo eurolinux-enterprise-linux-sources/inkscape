@@ -17,9 +17,11 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "live_effects/parameter/enum.h"
 #include "live_effects/effect.h"
 #include "live_effects/parameter/point.h"
+#include "live_effects/parameter/enum.h"
+#include "live_effects/parameter/bool.h"
+
 #include "live_effects/lpegroupbbox.h"
 
 namespace Inkscape {
@@ -31,11 +33,11 @@ public:
     LPELattice(LivePathEffectObject *lpeobject);
     virtual ~LPELattice();
 
-    virtual void doBeforeEffect (SPLPEItem const* lpeitem);
+    virtual void doBeforeEffect (SPLPEItem *lpeitem);
 
     virtual Geom::Piecewise<Geom::D2<Geom::SBasis> > doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in);
     
-    virtual void resetDefaults(SPItem const* item);
+    virtual void resetDefaults(SPItem * item);
 
 protected:
     //virtual void addHelperPathsImpl(SPLPEItem *lpeitem, SPDesktop *desktop);
@@ -58,6 +60,7 @@ private:
     PointParam grid_point13;
     PointParam grid_point14;
     PointParam grid_point15;
+    
     LPELattice(const LPELattice&);
     LPELattice& operator=(const LPELattice&);
 };

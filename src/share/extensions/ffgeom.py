@@ -17,7 +17,7 @@
 
     You should have received a copy of the GNU General Public License
     along with FretFind 2-D; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 """
 import math
 try:
@@ -138,4 +138,4 @@ def dot(s1, s2):
     return s1.delta_x() * s2.delta_x() + s1.delta_y() * s2.delta_y()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

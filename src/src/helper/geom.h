@@ -2,10 +2,8 @@
 #define INKSCAPE_HELPER_GEOM_H
 
 /**
- * @file
  * Specific geometry functions for Inkscape, not provided my lib2geom.
- */
-/*
+ *
  * Author:
  *   Johan Engelen <goejendaagh@zonnet.nl>
  *
@@ -15,24 +13,31 @@
  */
 
 #include <2geom/forward.h>
-#include <2geom/rect.h>
-#include <2geom/affine.h>
+#include <libnr/nr-forward.h>
+#include <libnr/nr-coord.h>
 
-Geom::OptRect bounds_fast_transformed(Geom::PathVector const & pv, Geom::Affine const & t);
-Geom::OptRect bounds_exact_transformed(Geom::PathVector const & pv, Geom::Affine const & t);
+Geom::OptRect bounds_fast_transformed(Geom::PathVector const & pv, Geom::Matrix const & t);
+Geom::OptRect bounds_exact_transformed(Geom::PathVector const & pv, Geom::Matrix const & t);
 
-void pathv_matrix_point_bbox_wind_distance ( Geom::PathVector const & pathv, Geom::Affine const &m, Geom::Point const &pt,
+void pathv_matrix_point_bbox_wind_distance ( Geom::PathVector const & pathv, Geom::Matrix const &m, Geom::Point const &pt,
                                              Geom::Rect *bbox, int *wind, Geom::Coord *dist,
                                              Geom::Coord tolerance, Geom::Rect const *viewbox);
 
 Geom::PathVector pathv_to_linear_and_cubic_beziers( Geom::PathVector const &pathv );
-Geom::PathVector pathv_to_linear( Geom::PathVector const &pathv, double maxdisp );
-Geom::PathVector pathv_to_cubicbezier( Geom::PathVector const &pathv);
-void recursive_bezier4(const double x1, const double y1, const double x2, const double y2, 
-                       const double x3, const double y3, const double x4, const double y4,
-                       std::vector<Geom::Point> &pointlist,
-                       int level);
 
+void round_rectangle_outwards(Geom::Rect & rect);
+
+/*
+The following predefined objects are for reference
+and comparison.  They are defined in helper/geom.cpp
+*/
+extern Geom::Matrix GEOM_MATRIX_IDENTITY;
+
+namespace Geom{
+bool transform_equalp(Geom::Matrix const &m0, Geom::Matrix const &m1, Geom::Coord const epsilon);
+bool translate_equalp(Geom::Matrix const &m0, Geom::Matrix const &m1, Geom::Coord const epsilon);
+bool matrix_equalp(Geom::Matrix const &m0, Geom::Matrix const &m1, Geom::Coord const epsilon);
+}
 #endif  // INKSCAPE_HELPER_GEOM_H
 
 /*
@@ -44,4 +49,4 @@ void recursive_bezier4(const double x1, const double y1, const double x2, const 
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -7,14 +7,14 @@
  */
 
 #include "livarot/Shape.h"
+#include <libnr/nr-matrix-fns.h>
+#include <libnr/nr-point-fns.h>
 #include "livarot/Path.h"
 #include "livarot/path-description.h"
 #include <glib.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <2geom/point.h>
-#include <2geom/affine.h>
 
 /*
  * polygon offset and polyline to path reassembling (when using back data)
@@ -327,7 +327,7 @@ Shape::ConvertToForme (Path * dest, int nbP, Path * *orig, bool splitWhenForced)
   MakeSweepDestData (false);
 }
 void 
-Shape::ConvertToFormeNested (Path * dest, int nbP, Path * *orig, int /*wildPath*/,int &nbNest,int *&nesting,int *&contStart,bool splitWhenForced)
+Shape::ConvertToFormeNested (Path * dest, int nbP, Path * *orig, int wildPath,int &nbNest,int *&nesting,int *&contStart,bool splitWhenForced)
 {
   nesting=NULL;
   contStart=NULL;
@@ -371,11 +371,9 @@ Shape::ConvertToFormeNested (Path * dest, int nbP, Path * *orig, int /*wildPath*
   int searchInd = 0;
   
   int lastPtUsed = 0;
-  int parentContour=-1;
   do
   {
-    int childEdge = -1;
-    bool foundChild = false;
+    int dadContour=-1;
     int startBord = -1;
     {
       int fi = 0;
@@ -387,13 +385,10 @@ Shape::ConvertToFormeNested (Path * dest, int nbP, Path * *orig, int /*wildPath*
       {
         int askTo = pData[fi].askForWindingB;
         if (askTo < 0 || askTo >= numberOfEdges() ) {
-          parentContour=-1;
+          dadContour=-1;
         } else {
-          if (getEdge(askTo).prevS >= 0) {
-              parentContour = GPOINTER_TO_INT(swdData[askTo].misc);
-              parentContour-=1; // pour compenser le decalage
-          }
-          childEdge = getPoint(fi).incidentEdge[FIRST];
+          dadContour = GPOINTER_TO_INT(swdData[askTo].misc);
+          dadContour-=1; // pour compenser le decalage
         }
       }
       lastPtUsed = fi + 1;
@@ -411,10 +406,7 @@ Shape::ConvertToFormeNested (Path * dest, int nbP, Path * *orig, int /*wildPath*
     if (startBord >= 0)
     {
       // parcours en profondeur pour mettre les leF et riF a leurs valeurs
-      swdData[startBord].misc = (void *)(intptr_t)(1 + nbNest);
-      if (startBord == childEdge) {
-          foundChild = true;
-      }
+      swdData[startBord].misc = (void *) (1+nbNest);
       //printf("part de %d\n",startBord);
       int curBord = startBord;
       bool back = false;
@@ -452,23 +444,22 @@ Shape::ConvertToFormeNested (Path * dest, int nbP, Path * *orig, int /*wildPath*
             }
             else
             {
-//              bool escapePath=false;
-//              int tb=curBord;
-//              while ( tb >= 0 && tb < numberOfEdges() ) {
-//                if ( ebData[tb].pathID == wildPath ) {
-//                  escapePath=true;
-//                  break;
-//                }
-//                tb=swdData[tb].precParc;
-//              }
+              bool escapePath=false;
+              int tb=curBord;
+              while ( tb >= 0 && tb < numberOfEdges() ) {
+                if ( ebData[tb].pathID == wildPath ) {
+                  escapePath=true;
+                  break;
+                }
+                tb=swdData[tb].precParc;
+              }
               nesting=(int*)g_realloc(nesting,(nbNest+1)*sizeof(int));
               contStart=(int*)g_realloc(contStart,(nbNest+1)*sizeof(int));
               contStart[nbNest]=dest->descr_cmd.size();
-              if (foundChild) {
-                nesting[nbNest++]=parentContour;
-                foundChild = false;
-              } else {
+              if ( escapePath ) {
                 nesting[nbNest++]=-1; // contient des bouts de coupure -> a part
+              } else {
+                nesting[nbNest++]=dadContour;
               }
               swdData[curBord].suivParc = -1;
               AddContour (dest, nbP, orig, startBord, curBord,splitWhenForced);
@@ -493,37 +484,34 @@ Shape::ConvertToFormeNested (Path * dest, int nbP, Path * *orig, int /*wildPath*
             if ( getEdge(curBord).en == curStartPt ) {
               //printf("contour %i ",curStartPt);
               
-//              bool escapePath=false;
-//              int tb=curBord;
-//              while ( tb >= 0 && tb < numberOfEdges() ) {
-//                if ( ebData[tb].pathID == wildPath ) {
-//                  escapePath=true;
-//                  break;
-//                }
-//                tb=swdData[tb].precParc;
-//              }
+              bool escapePath=false;
+              int tb=curBord;
+              while ( tb >= 0 && tb < numberOfEdges() ) {
+                if ( ebData[tb].pathID == wildPath ) {
+                  escapePath=true;
+                  break;
+                }
+                tb=swdData[tb].precParc;
+              }
               nesting=(int*)g_realloc(nesting,(nbNest+1)*sizeof(int));
               contStart=(int*)g_realloc(contStart,(nbNest+1)*sizeof(int));
               contStart[nbNest]=dest->descr_cmd.size();
-              if (foundChild) {
-                nesting[nbNest++]=parentContour;
-                foundChild = false;
-              } else {
+              if ( escapePath ) {
                 nesting[nbNest++]=-1; // contient des bouts de coupure -> a part
+              } else {
+                nesting[nbNest++]=dadContour;
               }
+
               swdData[curBord].suivParc = -1;
               AddContour (dest, nbP, orig, startBord, curBord,splitWhenForced);
               startBord=nb;
             }
           }
-          swdData[nb].misc = (void *)(intptr_t)(1 + nbNest);
+          swdData[nb].misc = (void *) (1+nbNest);
           swdData[nb].ind = searchInd++;
           swdData[nb].precParc = curBord;
           swdData[curBord].suivParc = nb;
           curBord = nb;
-          if (nb == childEdge) {
-              foundChild = true;
-          }
           //printf("suite %d\n",curBord);
         }
 	    }
@@ -540,7 +528,7 @@ Shape::ConvertToFormeNested (Path * dest, int nbP, Path * *orig, int /*wildPath*
 
 
 int
-Shape::MakeTweak (int mode, Shape *a, double power, JoinType join, double miter, bool do_profile, Geom::Point c, Geom::Point vector, double radius, Geom::Affine *i2doc)
+Shape::MakeTweak (int mode, Shape *a, double power, JoinType join, double miter, bool do_profile, Geom::Point c, Geom::Point vector, double radius, Geom::Matrix *i2doc)
 {
   Reset (0, 0);
   MakeBackData(a->_has_back_data);
@@ -596,13 +584,15 @@ Shape::MakeTweak (int mode, Shape *a, double power, JoinType join, double miter,
       enB = a->CyclePrevAt (a->getEdge(i).en, i);
     }
     
-    Geom::Point stD = a->getEdge(stB).dx;
-    Geom::Point seD = a->getEdge(i).dx;
-    Geom::Point enD = a->getEdge(enB).dx;
+    Geom::Point stD, seD, enD;
+    double stL, seL, enL;
+    stD = a->getEdge(stB).dx;
+    seD = a->getEdge(i).dx;
+    enD = a->getEdge(enB).dx;
 
-    double stL = sqrt (dot(stD,stD));
-    double seL = sqrt (dot(seD,seD));
-    //double enL = sqrt (dot(enD,enD));
+    stL = sqrt (dot(stD,stD));
+    seL = sqrt (dot(seD,seD));
+    enL = sqrt (dot(enD,enD));
     MiscNormalize (stD);
     MiscNormalize (enD);
     MiscNormalize (seD);
@@ -649,7 +639,7 @@ Shape::MakeTweak (int mode, Shape *a, double power, JoinType join, double miter,
 
 		Geom::Point this_vec(0,0);
     if (mode == tweak_mode_push) {
-			Geom::Affine tovec (*i2doc);
+			Geom::Matrix tovec (*i2doc);
 			tovec[4] = tovec[5] = 0;
 			tovec = tovec.inverse();
 			this_vec = this_power * (vector * tovec) ;
@@ -728,7 +718,7 @@ Shape::MakeTweak (int mode, Shape *a, double power, JoinType join, double miter,
 // you gotta be very careful with the join, as anything but the right one will fuck everything up
 // see PathStroke.cpp for the "right" joins
 int
-Shape::MakeOffset (Shape * a, double dec, JoinType join, double miter, bool do_profile, double cx, double cy, double radius, Geom::Affine *i2doc)
+Shape::MakeOffset (Shape * a, double dec, JoinType join, double miter, bool do_profile, double cx, double cy, double radius, Geom::Matrix *i2doc)
 {
   Reset (0, 0);
   MakeBackData(a->_has_back_data);
@@ -788,13 +778,15 @@ Shape::MakeOffset (Shape * a, double dec, JoinType join, double miter, bool do_p
       enB = a->CycleNextAt (a->getEdge(i).en, i);
     }
     
-    Geom::Point stD = a->getEdge(stB).dx;
-    Geom::Point seD = a->getEdge(i).dx;
-    Geom::Point enD = a->getEdge(enB).dx;
+    Geom::Point stD, seD, enD;
+    double stL, seL, enL;
+    stD = a->getEdge(stB).dx;
+    seD = a->getEdge(i).dx;
+    enD = a->getEdge(enB).dx;
 
-    double stL = sqrt (dot(stD,stD));
-    double seL = sqrt (dot(seD,seD));
-    //double enL = sqrt (dot(enD,enD));
+    stL = sqrt (dot(stD,stD));
+    seL = sqrt (dot(seD,seD));
+    enL = sqrt (dot(enD,enD));
     MiscNormalize (stD);
     MiscNormalize (enD);
     MiscNormalize (seD);
@@ -1058,7 +1050,7 @@ Shape::ReFormeArcTo (int bord, int /*curBord*/, Path * dest, Path * from)
   PathDescrArcTo* nData = dynamic_cast<PathDescrArcTo *>(from->descr_cmd[nPiece]);
   bool nLarge = nData->large;
   bool nClockwise = nData->clockwise;
-  Path::ArcAngles (from->PrevPoint (nPiece - 1), nData->p,nData->rx,nData->ry,nData->angle*M_PI/180.0, nLarge, nClockwise,  sang, eang);
+  Path::ArcAngles (from->PrevPoint (nPiece - 1), nData->p,nData->rx,nData->ry,nData->angle, nLarge, nClockwise,  sang, eang);
   if (nClockwise)
   {
     if (sang < eang)

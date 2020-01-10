@@ -14,17 +14,9 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
-# standard library
-import math
-import re
-import string
-# local library
-import inkex
-import simplestyle
-from pathmodifier import zSort
-
+import inkex, simplestyle, math, re, string
 
 class InterpAttG(inkex.Effect):
 
@@ -58,14 +50,6 @@ class InterpAttG(inkex.Effect):
                         action="store", type="string",
                         dest="unit", default="color",
                         help="Values unit.")
-        self.OptionParser.add_option("--zsort",
-                        action="store", type="inkbool",
-                        dest="zsort", default=True,
-                        help="use z-order instead of selection order")
-        self.OptionParser.add_option("--tab",
-                        action="store", type="string",
-                        dest="tab",
-                        help="The selected UI-tab when OK was pressed")
 
     def getColorValues(self):
       sv = string.replace( self.options.start_val, '#', '' )
@@ -107,8 +91,8 @@ class InterpAttG(inkex.Effect):
       sv = self.options.start_val
       ev = self.options.end_val
       if self.inte_att_type and self.inte_att_type != 'none':
-        sv = self.unittouu( sv + self.inte_att_type )
-        ev = self.unittouu( ev + self.inte_att_type )
+        sv = inkex.unittouu( sv + self.inte_att_type )
+        ev = inkex.unittouu( ev + self.inte_att_type )
       self.val_cur = self.val_ini = sv
       self.val_end = ev
       self.val_inc = ( ev - sv ) / float( self.tot_el - 1 )
@@ -120,12 +104,8 @@ class InterpAttG(inkex.Effect):
         return False
       if len( self.selected ) > 1:
         # multiple selection
-        if self.options.zsort:
-            sorted_ids = zSort(self.document.getroot(),self.selected.keys())
-        else:
-            sorted_ids = self.options.ids
-        self.collection = list(sorted_ids)
-        for i in sorted_ids:
+        self.collection = self.options.ids
+        for i in self.options.ids:
           path = '//*[@id="%s"]' % i
           self.collection[self.tot_el] = self.document.xpath(path, namespaces=inkex.NSS)[0]
           self.tot_el += 1
@@ -172,7 +152,7 @@ class InterpAttG(inkex.Effect):
         self.getNumberValues()
 
       if self.collection is None:
-        inkex.errormsg( _('There is no selection to interpolate' ))
+        inkex.errormsg( 'There is no selection to interpolate' )
         return False
 
       for node in self.collection:

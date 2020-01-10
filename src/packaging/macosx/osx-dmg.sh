@@ -22,8 +22,6 @@
 # Modify the 'dmg_background.svg' file and generate a new 
 # 'dmg_background.png' file.
 #
-# inkscape -z dmg_background.svg -i dmg_background -w 600 -h 400 -e dmg_background.png
-#
 # Update the AppleScript file 'dmg_set_style.scpt'.
 #
 # Run this script with the '-s' option.  It will apply the
@@ -47,7 +45,7 @@ auto_open_opt=
 #----------------------------------------------------------
 help()
 {
-echo -e "
+echo "
 Create a custom dmg file to distribute Inkscape
 
 \033[1mUSAGE\033[0m

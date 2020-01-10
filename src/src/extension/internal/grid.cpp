@@ -6,32 +6,25 @@
 /*
  * Copyright (C) 2004-2005  Ted Gould <ted@gould.cx>
  * Copyright (C) 2007  MenTaLguY <mental@rydia.net>
- *   Abhishek Sharma
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
-
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
 
 #include <gtkmm/box.h>
 #include <gtkmm/adjustment.h>
 #include <gtkmm/spinbutton.h>
 
 #include "desktop.h"
-
-#include "document.h"
+#include "desktop-handles.h"
 #include "selection.h"
 #include "sp-object.h"
-#include "2geom/geom.h"
+#include "util/glib-list-iterators.h"
 
 #include "svg/path-string.h"
 
 #include "extension/effect.h"
 #include "extension/system.h"
 
-#include "util/units.h"
 
 #include "grid.h"
 
@@ -54,30 +47,30 @@ Grid::load (Inkscape::Extension::Extension */*module*/)
 namespace {
 
 Glib::ustring build_lines(Geom::Rect bounding_area,
-                          Geom::Point const &offset, Geom::Point const &spacing)
+                          float offset[], float spacing[])
 {
     Geom::Point point_offset(0.0, 0.0);
 
     SVG::PathString path_data;
 
-    for ( int axis = Geom::X ; axis <= Geom::Y ; ++axis ) {
+    for ( int axis = 0 ; axis < 2 ; ++axis ) {
         point_offset[axis] = offset[axis];
 
         for (Geom::Point start_point = bounding_area.min();
-             start_point[axis] + offset[axis] <= (bounding_area.max())[axis];
-             start_point[axis] += spacing[axis]) {
+                start_point[axis] + offset[axis] <= (bounding_area.max())[axis];
+                start_point[axis] += spacing[axis]) {
             Geom::Point end_point = start_point;
             end_point[1-axis] = (bounding_area.max())[1-axis];
 
             path_data.moveTo(start_point + point_offset)
-                .lineTo(end_point + point_offset);
+                     .lineTo(end_point + point_offset);
         }
     }
-    // std::cout << "Path data:" << path_data.c_str() << std::endl;
-    return path_data;
-}
+        // std::cout << "Path data:" << path_data.c_str() << std::endl;
+        return path_data;
+    }
 
-} // namespace
+}
 
 /**
     \brief  This actually draws the grid.
@@ -94,46 +87,50 @@ Grid::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::View *doc
         /* get page size */
         SPDocument * doc = document->doc();
         bounding_area = Geom::Rect(  Geom::Point(0,0),
-                                     Geom::Point(doc->getWidth().value("px"), doc->getHeight().value("px"))  );
+                                     Geom::Point(sp_document_width(doc), sp_document_height(doc))  );
     } else {
-        Geom::OptRect bounds = selection->visualBounds();
+        Geom::OptRect bounds = selection->bounds();
         if (bounds) {
             bounding_area = *bounds;
         }
 
-        gdouble doc_height  =  (document->doc())->getHeight().value("px");
+        gdouble doc_height  =  sp_document_height(document->doc());
         Geom::Rect temprec = Geom::Rect(Geom::Point(bounding_area.min()[Geom::X], doc_height - bounding_area.min()[Geom::Y]),
                                     Geom::Point(bounding_area.max()[Geom::X], doc_height - bounding_area.max()[Geom::Y]));
 
         bounding_area = temprec;
     }
 
-    double scale = document->doc()->getDocumentScale().inverse()[Geom::X];
-
-    bounding_area *= Geom::Scale(scale);
-    Geom::Point spacings( scale * module->get_param_float("xspacing"),
-                          scale * module->get_param_float("yspacing") );
-    gdouble line_width = scale * module->get_param_float("lineWidth");
-    Geom::Point offsets( scale * module->get_param_float("xoffset"),
-                         scale * module->get_param_float("yoffset") );
+    float spacings[2] = { module->get_param_float("xspacing"),
+                          module->get_param_float("yspacing") };
+    float line_width = module->get_param_float("lineWidth");
+    float offsets[2] = { module->get_param_float("xoffset"),
+                         module->get_param_float("yoffset") };
 
     Glib::ustring path_data("");
 
-    path_data = build_lines(bounding_area, offsets, spacings);
-    Inkscape::XML::Document * xml_doc = document->doc()->getReprDoc();
-
-    //XML Tree being used directly here while it shouldn't be.
-    Inkscape::XML::Node * current_layer = static_cast<SPDesktop *>(document)->currentLayer()->getRepr();
+    path_data = build_lines(bounding_area,
+                                 offsets, spacings);
+    Inkscape::XML::Document * xml_doc = sp_document_repr_doc(document->doc());
+    Inkscape::XML::Node * current_layer = static_cast<SPDesktop *>(document)->currentLayer()->repr;
     Inkscape::XML::Node * path = xml_doc->createElement("svg:path");
 
     path->setAttribute("d", path_data.c_str());
 
+    Glib::ustring style("fill:none;fill-opacity:0.75000000;fill-rule:evenodd;stroke:#000000;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1.0000000");
+    style += ";stroke-width:";
+    gchar floatstring[64];
     std::ostringstream stringstream;
-    stringstream << "fill:none;stroke:#000000;stroke-width:" << line_width << "px";
-    path->setAttribute("style", stringstream.str().c_str());
+    stringstream << line_width;
+    sprintf(floatstring, "%s", stringstream.str().c_str());
+    style += floatstring;
+    style += "pt";
+    path->setAttribute("style", style.c_str());
 
     current_layer->appendChild(path);
-    Inkscape::GC::release(path);
+		Inkscape::GC::release(path);
+
+    return;
 }
 
 /** \brief  A class to make an adjustment that uses Extension params */
@@ -180,11 +177,11 @@ Grid::prefs_effect(Inkscape::Extension::Effect *module, Inkscape::UI::View::View
 {
     SPDocument * current_document = view->doc();
 
-    std::vector<SPItem*> selected = ((SPDesktop *)view)->getSelection()->itemList();
+    using Inkscape::Util::GSListConstIterator;
+    GSListConstIterator<SPItem *> selected = sp_desktop_selection((SPDesktop *)view)->itemList();
     Inkscape::XML::Node * first_select = NULL;
-    if (!selected.empty()) {
-        first_select = selected[0]->getRepr();
-    }
+    if (selected != NULL)
+        first_select = SP_OBJECT_REPR(*selected);
 
     return module->autogui(current_document, first_select, changeSignal);
 }
@@ -198,17 +195,15 @@ Grid::init (void)
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
             "<name>" N_("Grid") "</name>\n"
             "<id>org.inkscape.effect.grid</id>\n"
-            "<param name=\"lineWidth\" _gui-text=\"" N_("Line Width:") "\" type=\"float\">1.0</param>\n"
-            "<param name=\"xspacing\" _gui-text=\"" N_("Horizontal Spacing:") "\" type=\"float\" min=\"0.1\" max=\"1000\">10.0</param>\n"
-            "<param name=\"yspacing\" _gui-text=\"" N_("Vertical Spacing:") "\" type=\"float\" min=\"0.1\" max=\"1000\">10.0</param>\n"
-            "<param name=\"xoffset\" _gui-text=\"" N_("Horizontal Offset:") "\" type=\"float\" min=\"0.0\" max=\"1000\">0.0</param>\n"
-            "<param name=\"yoffset\" _gui-text=\"" N_("Vertical Offset:") "\" type=\"float\" min=\"0.0\" max=\"1000\">0.0</param>\n"
+            "<param name=\"lineWidth\" gui-text=\"" N_("Line Width") "\" type=\"float\">1.0</param>\n"
+            "<param name=\"xspacing\" gui-text=\"" N_("Horizontal Spacing") "\" type=\"float\" min=\"0.1\" max=\"1000\">10.0</param>\n"
+            "<param name=\"yspacing\" gui-text=\"" N_("Vertical Spacing") "\" type=\"float\" min=\"0.1\" max=\"1000\">10.0</param>\n"
+            "<param name=\"xoffset\" gui-text=\"" N_("Horizontal Offset") "\" type=\"float\" min=\"0.0\" max=\"1000\">0.0</param>\n"
+            "<param name=\"yoffset\" gui-text=\"" N_("Vertical Offset") "\" type=\"float\" min=\"0.0\" max=\"1000\">0.0</param>\n"
             "<effect>\n"
                 "<object-type>all</object-type>\n"
                 "<effects-menu>\n"
-                "<submenu name=\"" N_("Render") "\">\n"
-                    "<submenu name=\"" N_("Grids") "\" />\n"
-                "</submenu>\n"
+                    "<submenu name=\"" N_("Render") "\" />\n"
                 "</effects-menu>\n"
                 "<menu-tip>" N_("Draw a path which is a grid") "</menu-tip>\n"
             "</effect>\n"

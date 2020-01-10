@@ -4,7 +4,7 @@
 /*
  * Inkscape::LivePathEffectParameters
  *
- * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
+* Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -25,11 +25,10 @@ public:
                const Glib::ustring& key,
                Inkscape::UI::Widget::Registry* wr,
                Effect* effect,
-               bool default_value = false,
-               bool no_widget = false);
+               bool default_value = false);
     virtual ~BoolParam();
 
-    virtual Gtk::Widget * param_newWidget();
+    virtual Gtk::Widget * param_newWidget(Gtk::Tooltips * tooltips);
 
     virtual bool param_readSVGValue(const gchar * strvalue);
     virtual gchar * param_getSVGValue() const;
@@ -37,9 +36,10 @@ public:
     void param_setValue(bool newvalue);
     virtual void param_set_default();
 
-    bool get_value() const { return value; };
+    bool get_value() { return value; };
 
-    inline operator bool() const { return value; };
+    inline operator bool()
+        { return value; };
 
 private:
     BoolParam(const BoolParam&);
@@ -47,7 +47,6 @@ private:
 
     bool value;
     bool defvalue;
-    bool hide_widget;
 };
 
 

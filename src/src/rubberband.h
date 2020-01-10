@@ -1,6 +1,10 @@
-#ifndef SEEN_RUBBERBAND_H
-#define SEEN_RUBBERBAND_H
-/*
+#ifndef __RUBBERBAND_H__
+#define __RUBBERBAND_H__
+
+/**
+ * \file src/rubberband.h
+ * \brief Rubberbanding selector
+ *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Carl Hetherington <inkscape@carlh.net>
@@ -10,17 +14,17 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <2geom/point.h>
-#include <2geom/rect.h>
+#include "forward.h"
 #include <boost/optional.hpp>
 #include <vector>
+#include <2geom/point.h>
+#include <2geom/rect.h>
 
 /* fixme: do multidocument safe */
 
 class CtrlRect;
+class SPCanvasItem;
 class SPCurve;
-class SPDesktop;
-struct SPCanvasItem;
 
 enum {
     RUBBERBAND_MODE_RECT,
@@ -30,9 +34,6 @@ enum {
 namespace Inkscape
 {
 
-/**
- * Rubberbanding selector.
- */
 class Rubberband
 {
 public:
@@ -73,7 +74,7 @@ private:
 
 }
 
-#endif // SEEN_RUBBERBAND_H
+#endif
 
 /*
   Local Variables:
@@ -84,4 +85,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

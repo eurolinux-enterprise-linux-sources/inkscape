@@ -1,8 +1,8 @@
 #ifndef SEEN_INKSCAPE_LIVAROT_PATH_DESCRIPTION_H
 #define SEEN_INKSCAPE_LIVAROT_PATH_DESCRIPTION_H
 
-#include <2geom/point.h>
 #include "svg/stringstream.h"
+#include "libnr/nr-point.h"
 
 // path description commands
 /* FIXME: these should be unnecessary once the refactoring of the path
@@ -37,7 +37,7 @@ struct PathDescr
 
     virtual void dumpSVG(Inkscape::SVGOStringStream &/*s*/, Geom::Point const &/*last*/) const {}
     virtual PathDescr *clone() const = 0;
-    virtual void transform(Geom::Affine const &/*t*/) {}
+    virtual void transform(Geom::Matrix const &/*t*/) {}
     virtual void dump(std::ostream &/*s*/) const {}
 
   int    flags;         // most notably contains the path command no
@@ -53,7 +53,7 @@ struct PathDescrMoveTo : public PathDescr
 
   void dumpSVG(Inkscape::SVGOStringStream &s, Geom::Point const &last) const;
   PathDescr *clone() const;
-  void transform(Geom::Affine const &t);
+  void transform(Geom::Matrix const &t);
   void dump(std::ostream &s) const;
 
   Geom::Point p;
@@ -66,7 +66,7 @@ struct PathDescrLineTo : public PathDescr
 
   void dumpSVG(Inkscape::SVGOStringStream &s, Geom::Point const &last) const;
   PathDescr *clone() const;
-  void transform(Geom::Affine const &t);
+  void transform(Geom::Matrix const &t);
   void dump(std::ostream &s) const;
 
   Geom::Point p;
@@ -79,7 +79,7 @@ struct PathDescrBezierTo : public PathDescr
     : PathDescr(descr_bezierto), p(pp), nb(n) {}
 
   PathDescr *clone() const;
-  void transform(Geom::Affine const &t);
+  void transform(Geom::Matrix const &t);
   void dump(std::ostream &s) const;
 
   Geom::Point p;        // the endpoint's coordinates
@@ -95,7 +95,7 @@ struct PathDescrIntermBezierTo : public PathDescr
     : PathDescr(descr_interm_bezier), p(pp) {}
 
   PathDescr *clone() const;
-  void transform(Geom::Affine const &t);
+  void transform(Geom::Matrix const &t);
   void dump(std::ostream &s) const;
 
   Geom::Point p;                  // control point coordinates
@@ -109,7 +109,7 @@ struct PathDescrCubicTo : public PathDescr
 
   void dumpSVG(Inkscape::SVGOStringStream &s, Geom::Point const &last) const;
   PathDescr *clone() const;
-  void transform(Geom::Affine const &t);
+  void transform(Geom::Matrix const &t);
   void dump(std::ostream &s) const;
 
   Geom::Point p;
@@ -125,7 +125,7 @@ struct PathDescrArcTo : public PathDescr
 
   void dumpSVG(Inkscape::SVGOStringStream &s, Geom::Point const &last) const;
   PathDescr *clone() const;
-  void transform(Geom::Affine const &t);
+  void transform(Geom::Matrix const &t);
   void dump(std::ostream &s) const;
 
   Geom::Point p;
@@ -173,4 +173,4 @@ struct PathDescrClose : public PathDescr
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

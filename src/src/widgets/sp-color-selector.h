@@ -1,12 +1,13 @@
 #ifndef SEEN_SP_COLOR_SELECTOR_H
 #define SEEN_SP_COLOR_SELECTOR_H
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
 #include <gtk/gtk.h>
-#include "color.h"
+#include "../color.h"
+
+#include <glib.h>
+
+
+
 
 struct SPColorSelector;
 
@@ -57,28 +58,20 @@ private:
 
 
 #define SP_TYPE_COLOR_SELECTOR (sp_color_selector_get_type ())
-#define SP_COLOR_SELECTOR(o) (G_TYPE_CHECK_INSTANCE_CAST ((o), SP_TYPE_COLOR_SELECTOR, SPColorSelector))
-#define SP_COLOR_SELECTOR_CLASS(k) (G_TYPE_CHECK_CLASS_CAST ((k), SP_TYPE_COLOR_SELECTOR, SPColorSelectorClass))
-#define SP_IS_COLOR_SELECTOR(o) (G_TYPE_CHECK_INSTANCE_TYPE ((o), SP_TYPE_COLOR_SELECTOR))
-#define SP_IS_COLOR_SELECTOR_CLASS(k) (G_TYPE_CHECK_CLASS_TYPE ((k), SP_TYPE_COLOR_SELECTOR))
+#define SP_COLOR_SELECTOR(o) (GTK_CHECK_CAST ((o), SP_TYPE_COLOR_SELECTOR, SPColorSelector))
+#define SP_COLOR_SELECTOR_CLASS(k) (GTK_CHECK_CLASS_CAST ((k), SP_TYPE_COLOR_SELECTOR, SPColorSelectorClass))
+#define SP_IS_COLOR_SELECTOR(o) (GTK_CHECK_TYPE ((o), SP_TYPE_COLOR_SELECTOR))
+#define SP_IS_COLOR_SELECTOR_CLASS(k) (GTK_CHECK_CLASS_TYPE ((k), SP_TYPE_COLOR_SELECTOR))
 #define SP_COLOR_SELECTOR_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), SP_TYPE_COLOR_SELECTOR, SPColorSelectorClass))
 
 struct SPColorSelector {
-#if GTK_CHECK_VERSION(3,0,0)
-    GtkBox vbox;
-#else
     GtkVBox vbox;
-#endif
 
     ColorSelector* base;
 };
 
 struct SPColorSelectorClass {
-#if GTK_CHECK_VERSION(3,0,0)
-    GtkBoxClass parent_class;
-#else
     GtkVBoxClass parent_class;
-#endif
 
     const gchar **name;
     guint submode_count;
@@ -106,4 +99,4 @@ GtkWidget *sp_color_selector_new( GType selector_type );
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

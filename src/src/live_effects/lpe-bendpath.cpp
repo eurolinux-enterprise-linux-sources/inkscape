@@ -1,3 +1,5 @@
+#define INKSCAPE_LPE_BENDPATH_CPP
+
 /*
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  * Copyright (C) Steren Giannini 2008 <steren.giannini@gmail.com>
@@ -20,13 +22,7 @@
 #include <2geom/d2.h>
 #include <2geom/piecewise.h>
 
-#include "knot-holder-entity.h"
-#include "knotholder.h"
-
-#include <glibmm/i18n.h>
-
 #include <algorithm>
-
 using std::vector;
 
 
@@ -54,23 +50,12 @@ first) but I think we can first forget about them.
 namespace Inkscape {
 namespace LivePathEffect {
 
-Geom::PathVector bp_helper_path;
-namespace BeP {
-class KnotHolderEntityWidthBendPath : public LPEKnotHolderEntity {
-    public:
-        KnotHolderEntityWidthBendPath(LPEBendPath * effect) : LPEKnotHolderEntity(effect) {}
-        virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
-        virtual Geom::Point knot_get() const;
-    };
-} // BeP
-
 LPEBendPath::LPEBendPath(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    bend_path(_("Bend path:"), _("Path along which to bend the original path"), "bendpath", &wr, this, "M0,0 L1,0"),
-    original_height(0.0),
-    prop_scale(_("_Width:"), _("Width of the path"), "prop_scale", &wr, this, 1.0),
-    scale_y_rel(_("W_idth in units of length"), _("Scale the width of the path in units of its length"), "scale_y_rel", &wr, this, false),
-    vertical_pattern(_("_Original path is vertical"), _("Rotates the original 90 degrees, before bending it along the bend path"), "vertical", &wr, this, false)
+    bend_path(_("Bend path"), _("Path along which to bend the original path"), "bendpath", &wr, this, "M0,0 L1,0"),
+    prop_scale(_("Width"), _("Width of the path"), "prop_scale", &wr, this, 1),
+    scale_y_rel(_("Width in units of length"), _("Scale the width of the path in units of its length"), "scale_y_rel", &wr, this, false),
+    vertical_pattern(_("Original path is vertical"), _("Rotates the original 90 degrees, before bending it along the bend path"), "vertical", &wr, this, false)
 {
     registerParameter( dynamic_cast<Parameter *>(&bend_path) );
     registerParameter( dynamic_cast<Parameter *>(&prop_scale) );
@@ -80,8 +65,6 @@ LPEBendPath::LPEBendPath(LivePathEffectObject *lpeobject) :
     prop_scale.param_set_digits(3);
     prop_scale.param_set_increments(0.01, 0.10);
 
-    _provides_knotholder_entities = true;
-    apply_to_clippath_and_mask = true;
     concatenate_before_pwd2 = true;
 }
 
@@ -91,11 +74,10 @@ LPEBendPath::~LPEBendPath()
 }
 
 void
-LPEBendPath::doBeforeEffect (SPLPEItem const* lpeitem)
+LPEBendPath::doBeforeEffect (SPLPEItem *lpeitem)
 {
     // get the item bounding box
     original_bbox(lpeitem);
-    original_height = boundingbox_Y.max() - boundingbox_Y.min();
 }
 
 Geom::Piecewise<Geom::D2<Geom::SBasis> >
@@ -114,10 +96,6 @@ LPEBendPath::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd
         bend_path.changed = false;
     }
 
-    if (uskeleton.empty()) {
-        return pwd2_in;  /// \todo or throw an exception instead? might be better to throw an exception so that the UI can display an error message or smth
-    }
-
     D2<Piecewise<SBasis> > patternd2 = make_cuts_independent(pwd2_in);
     Piecewise<SBasis> x = vertical_pattern.get_value() ? Piecewise<SBasis>(patternd2[1]) : Piecewise<SBasis>(patternd2[0]);
     Piecewise<SBasis> y = vertical_pattern.get_value() ? Piecewise<SBasis>(patternd2[0]) : Piecewise<SBasis>(patternd2[1]);
@@ -129,9 +107,9 @@ LPEBendPath::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd
     x-= bboxHorizontal.min();
     y-= bboxVertical.middle();
 
-    double scaling = uskeleton.cuts.back()/bboxHorizontal.extent();
+  double scaling = uskeleton.cuts.back()/bboxHorizontal.extent();
 
-    if (scaling != 1.0) {
+  if (scaling != 1.0) {
         x*=scaling;
     }
 
@@ -141,12 +119,13 @@ LPEBendPath::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd
         if (prop_scale != 1.0) y *= prop_scale;
     }
 
+
     Piecewise<D2<SBasis> > output = compose(uskeleton,x) + y*compose(n,x);
     return output;
 }
 
 void
-LPEBendPath::resetDefaults(SPItem const* item)
+LPEBendPath::resetDefaults(SPItem * item)
 {
     Effect::resetDefaults(item);
 
@@ -165,75 +144,7 @@ LPEBendPath::resetDefaults(SPItem const* item)
     bend_path.set_new_value( path.toPwSb(), true );
 }
 
-void
-LPEBendPath::addCanvasIndicators(SPLPEItem const */*lpeitem*/, std::vector<Geom::PathVector> &hp_vec)
-{
-    hp_vec.push_back(bp_helper_path);
-}
 
-void 
-LPEBendPath::addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item)
-{
-    KnotHolderEntity *e = new BeP::KnotHolderEntityWidthBendPath(this);
-    e->create(desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN, _("Change the width"), SP_KNOT_SHAPE_CIRCLE);
-    knotholder->add(e);
-}
-
-namespace BeP {
-
-void 
-KnotHolderEntityWidthBendPath::knot_set(Geom::Point const &p, Geom::Point const& /*origin*/, guint state)
-{
-    LPEBendPath *lpe = dynamic_cast<LPEBendPath *> (_effect);
-
-    Geom::Point const s = snap_knot_position(p, state);
-    Geom::Path path_in = lpe->bend_path.get_pathvector().pathAt(Geom::PathVectorTime(0, 0, 0.0));
-    Geom::Point ptA = path_in.pointAt(Geom::PathTime(0, 0.0));
-    Geom::Point B = path_in.pointAt(Geom::PathTime(1, 0.0));
-    Geom::Curve const *first_curve = &path_in.curveAt(Geom::PathTime(0, 0.0));
-    Geom::CubicBezier const *cubic = dynamic_cast<Geom::CubicBezier const *>(&*first_curve);
-    Geom::Ray ray(ptA, B);
-    if (cubic) {
-        ray.setPoints(ptA, (*cubic)[1]);
-    }
-    ray.setAngle(ray.angle() + Geom::rad_from_deg(90));
-    Geom::Point knot_pos = this->knot->pos * item->i2dt_affine().inverse();
-    Geom::Coord nearest_to_ray = ray.nearestTime(knot_pos);
-    if(nearest_to_ray == 0){
-        lpe->prop_scale.param_set_value(-Geom::distance(s , ptA)/(lpe->original_height/2.0));
-    } else {
-        lpe->prop_scale.param_set_value(Geom::distance(s , ptA)/(lpe->original_height/2.0));
-    }
-
-    sp_lpe_item_update_patheffect (SP_LPE_ITEM(item), false, true);
-}
-
-Geom::Point 
-KnotHolderEntityWidthBendPath::knot_get() const
-{
-    LPEBendPath *lpe = dynamic_cast<LPEBendPath *> (_effect);
-
-    Geom::Path path_in = lpe->bend_path.get_pathvector().pathAt(Geom::PathVectorTime(0, 0, 0.0));
-    Geom::Point ptA = path_in.pointAt(Geom::PathTime(0, 0.0));
-    Geom::Point B = path_in.pointAt(Geom::PathTime(1, 0.0));
-    Geom::Curve const *first_curve = &path_in.curveAt(Geom::PathTime(0, 0.0));
-    Geom::CubicBezier const *cubic = dynamic_cast<Geom::CubicBezier const *>(&*first_curve);
-    Geom::Ray ray(ptA, B);
-    if (cubic) {
-        ray.setPoints(ptA,(*cubic)[1]);
-    }
-    ray.setAngle(ray.angle() + Geom::rad_from_deg(90));
-    Geom::Point result_point = Geom::Point::polar(ray.angle(), (lpe->original_height/2.0) * lpe->prop_scale) + ptA;
-
-    bp_helper_path.clear();
-    Geom::Path hp(result_point);
-    hp.appendNew<Geom::LineSegment>(ptA);
-    bp_helper_path.push_back(hp);
-    hp.clear();
-
-    return result_point;
-}
-} // namespace BeP
 } // namespace LivePathEffect
 } /* namespace Inkscape */
 

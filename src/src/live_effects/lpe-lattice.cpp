@@ -1,3 +1,4 @@
+#define INKSCAPE_LPE_LATTICE_CPP
 /** \file
  * LPE <lattice> implementation
  
@@ -42,22 +43,22 @@ LPELattice::LPELattice(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
     
     // initialise your parameters here:
-    grid_point0(_("Control handle 0:"), _("Control handle 0"), "gridpoint0", &wr, this),
-    grid_point1(_("Control handle 1:"), _("Control handle 1"), "gridpoint1", &wr, this),
-    grid_point2(_("Control handle 2:"), _("Control handle 2"), "gridpoint2", &wr, this),
-    grid_point3(_("Control handle 3:"), _("Control handle 3"), "gridpoint3", &wr, this),
-    grid_point4(_("Control handle 4:"), _("Control handle 4"), "gridpoint4", &wr, this),
-    grid_point5(_("Control handle 5:"), _("Control handle 5"), "gridpoint5", &wr, this),
-    grid_point6(_("Control handle 6:"), _("Control handle 6"), "gridpoint6", &wr, this),
-    grid_point7(_("Control handle 7:"), _("Control handle 7"), "gridpoint7", &wr, this),
-    grid_point8(_("Control handle 8:"), _("Control handle 8"), "gridpoint8", &wr, this),
-    grid_point9(_("Control handle 9:"), _("Control handle 9"), "gridpoint9", &wr, this),
-    grid_point10(_("Control handle 10:"), _("Control handle 10"), "gridpoint10", &wr, this),
-    grid_point11(_("Control handle 11:"), _("Control handle 11"), "gridpoint11", &wr, this),
-    grid_point12(_("Control handle 12:"), _("Control handle 12"), "gridpoint12", &wr, this),
-    grid_point13(_("Control handle 13:"), _("Control handle 13"), "gridpoint13", &wr, this),
-    grid_point14(_("Control handle 14:"), _("Control handle 14"), "gridpoint14", &wr, this),
-    grid_point15(_("Control handle 15:"), _("Control handle 15"), "gridpoint15", &wr, this)
+    grid_point0(_("Control handle 0"), _("Control handle 0"), "gridpoint0", &wr, this),
+    grid_point1(_("Control handle 1"), _("Control handle 1"), "gridpoint1", &wr, this),
+    grid_point2(_("Control handle 2"), _("Control handle 2"), "gridpoint2", &wr, this),
+    grid_point3(_("Control handle 3"), _("Control handle 3"), "gridpoint3", &wr, this),
+    grid_point4(_("Control handle 4"), _("Control handle 4"), "gridpoint4", &wr, this),
+    grid_point5(_("Control handle 5"), _("Control handle 5"), "gridpoint5", &wr, this),
+    grid_point6(_("Control handle 6"), _("Control handle 6"), "gridpoint6", &wr, this),
+    grid_point7(_("Control handle 7"), _("Control handle 7"), "gridpoint7", &wr, this),
+    grid_point8(_("Control handle 8"), _("Control handle 8"), "gridpoint8", &wr, this),
+    grid_point9(_("Control handle 9"), _("Control handle 9"), "gridpoint9", &wr, this),
+    grid_point10(_("Control handle 10"), _("Control handle 10"), "gridpoint10", &wr, this),
+    grid_point11(_("Control handle 11"), _("Control handle 11"), "gridpoint11", &wr, this),
+    grid_point12(_("Control handle 12"), _("Control handle 12"), "gridpoint12", &wr, this),
+    grid_point13(_("Control handle 13"), _("Control handle 13"), "gridpoint13", &wr, this),
+    grid_point14(_("Control handle 14"), _("Control handle 14"), "gridpoint14", &wr, this),
+    grid_point15(_("Control handle 15"), _("Control handle 15"), "gridpoint15", &wr, this)
     
 {
     // register all your parameters here, so Inkscape knows which parameters this effect has:
@@ -78,7 +79,7 @@ LPELattice::LPELattice(LivePathEffectObject *lpeobject) :
     registerParameter( dynamic_cast<Parameter *>(&grid_point14) );
     registerParameter( dynamic_cast<Parameter *>(&grid_point15) );
 
-    apply_to_clippath_and_mask = true;
+    
 }
 
 LPELattice::~LPELattice()
@@ -173,13 +174,13 @@ LPELattice::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2
 }
 
 void
-LPELattice::doBeforeEffect (SPLPEItem const* lpeitem)
+LPELattice::doBeforeEffect (SPLPEItem *lpeitem)
 {
     original_bbox(lpeitem);
 }
 
 void
-LPELattice::resetDefaults(SPItem const* item)
+LPELattice::resetDefaults(SPItem * item)
 {
     Effect::resetDefaults(item);
 
@@ -233,21 +234,6 @@ LPELattice::resetDefaults(SPItem const* item)
     
     grid_point15[Geom::X] = 2.0/3*boundingbox_X.max()+1.0/3*boundingbox_X.min();
     grid_point15[Geom::Y] = 2.0/3*boundingbox_Y.max()+1.0/3*boundingbox_Y.min();
-    grid_point1.param_update_default(grid_point1);
-    grid_point2.param_update_default(grid_point2);
-    grid_point3.param_update_default(grid_point3);
-    grid_point4.param_update_default(grid_point4);
-    grid_point5.param_update_default(grid_point5);
-    grid_point6.param_update_default(grid_point6);
-    grid_point7.param_update_default(grid_point7);
-    grid_point8.param_update_default(grid_point8);
-    grid_point9.param_update_default(grid_point9);
-    grid_point10.param_update_default(grid_point10);
-    grid_point11.param_update_default(grid_point11);
-    grid_point12.param_update_default(grid_point12);
-    grid_point13.param_update_default(grid_point13);
-    grid_point14.param_update_default(grid_point14);
-    grid_point15.param_update_default(grid_point15);
 }
 
 /**
@@ -297,7 +283,7 @@ LPELattice::addHelperPathsImpl(SPLPEItem *lpeitem, SPDesktop *desktop)
     c->lineto(grid_point3);
 
     // TODO: factor this out (and remove the #include of desktop.h above)
-    SPCanvasItem *canvasitem = sp_nodepath_generate_helperpath(desktop, c, lpeitem, 0x009000ff);
+    SPCanvasItem *canvasitem = sp_nodepath_generate_helperpath(desktop, c, SP_ITEM(lpeitem), 0x009000ff);
     Inkscape::Display::TemporaryItem* tmpitem = desktop->add_temporary_canvasitem (canvasitem, 0);
     lpeitem->lpe_helperpaths.push_back(tmpitem);
 

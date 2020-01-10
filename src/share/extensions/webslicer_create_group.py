@@ -14,45 +14,45 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
-# local library
+
 from webslicer_effect import *
 import inkex
+import gettext
+
+_ = gettext.gettext
 
 class WebSlicer_CreateGroup(WebSlicer_Effect):
 
     def __init__(self):
         WebSlicer_Effect.__init__(self)
         self.OptionParser.add_option("--html-id",
-                        action="store", type="string",
-                        dest="html_id",
-                        help="")
+                                     action="store", type="string",
+                                     dest="html_id",
+                                     help="")
         self.OptionParser.add_option("--html-class",
-                        action="store", type="string",
-                        dest="html_class",
-                        help="")
+                                     action="store", type="string",
+                                     dest="html_class",
+                                     help="")
         self.OptionParser.add_option("--width-unity",
-                        action="store", type="string",
-                        dest="width_unity",
-                        help="")
+                                     action="store", type="string",
+                                     dest="width_unity",
+                                     help="")
         self.OptionParser.add_option("--height-unity",
-                        action="store", type="string",
-                        dest="height_unity",
-                        help="")
+                                     action="store", type="string",
+                                     dest="height_unity",
+                                     help="")
         self.OptionParser.add_option("--bg-color",
-                        action="store", type="string",
-                        dest="bg_color",
-                        help="")
-        self.OptionParser.add_option("--tab",
-                        action="store", type="string",
-                        dest="tab",
-                        help="The selected UI-tab when OK was pressed")
+                                     action="store", type="string",
+                                     dest="bg_color",
+                                     help="")
+
 
     def get_base_elements(self):
         self.layer = self.get_slicer_layer()
         if is_empty(self.layer):
-            inkex.errormsg(_('You must create and select some "Slicer rectangles" before trying to group.'))
+            inkex.errormsg(_('You must to create and select some "Slicer rectangles" before try to group.'))
             exit(3)
         self.layer_descendants = self.get_descendants_in_array(self.layer)
 
@@ -71,7 +71,7 @@ class WebSlicer_CreateGroup(WebSlicer_Effect):
             exit(1)
         for id,node in self.selected.iteritems():
             if node not in self.layer_descendants:
-                inkex.errormsg(_('Oops... The element "%s" is not in the Web Slicer layer') % id)
+                inkex.errormsg(_('Opss... The element "%s" is not in the Web Slicer layer') % id)
                 exit(2)
         g_parent = self.getParentNode(node)
         group = inkex.etree.SubElement(g_parent, 'g')

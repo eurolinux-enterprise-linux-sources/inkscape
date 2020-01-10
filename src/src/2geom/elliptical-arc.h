@@ -1,14 +1,12 @@
 /**
  * \file
- * \brief  Elliptical arc curve
+ * \brief  Elliptical Arc - implementation of the svg elliptical arc path element
  *
- *//*
  * Authors:
- *    MenTaLguY <mental@rydia.net>
- *    Marco Cecchetti <mrcekets at gmail.com>
- *    Krzysztof Kosiński <tweenk.pl@gmail.com>
+ * 		MenTaLguY <mental@rydia.net>
+ * 		Marco Cecchetti <mrcekets at gmail.com>
  * 
- * Copyright 2007-2009 Authors
+ * Copyright 2007-2008  authors
  *
  * This library is free software; you can redistribute it and/or
  * modify it either under the terms of the GNU Lesser General Public
@@ -34,300 +32,271 @@
  * the specific language governing rights and limitations.
  */
 
-#ifndef LIB2GEOM_SEEN_ELLIPTICAL_ARC_H
-#define LIB2GEOM_SEEN_ELLIPTICAL_ARC_H
+
+
+
+#ifndef _2GEOM_ELLIPTICAL_ARC_H_
+#define _2GEOM_ELLIPTICAL_ARC_H_
+
+
+#include <2geom/curve.h>
+#include <2geom/angle.h>
+#include <2geom/utils.h>
+#include <2geom/sbasis-curve.h>  // for non-native methods
 
 #include <algorithm>
-#include <2geom/affine.h>
-#include <2geom/angle.h>
-#include <2geom/bezier-curve.h>
-#include <2geom/curve.h>
-#include <2geom/ellipse.h>
-#include <2geom/sbasis-curve.h>  // for non-native methods
-#include <2geom/utils.h>
+
 
 namespace Geom 
 {
 
 class EllipticalArc : public Curve
 {
-public:
-    /** @brief Creates an arc with all variables set to zero. */
-    EllipticalArc()
-        : _initial_point(0,0)
-        , _final_point(0,0)
-        , _large_arc(false)
-    {}
-    /** @brief Create a new elliptical arc.
-     * @param ip Initial point of the arc
-     * @param r Rays of the ellipse as a point
-     * @param rot Angle of rotation of the X axis of the ellipse in radians
-     * @param large If true, the large arc is chosen (always >= 180 degrees), otherwise
-     *              the smaller arc is chosen
-     * @param sweep If true, the clockwise arc is chosen, otherwise the counter-clockwise
-     *              arc is chosen
-     * @param fp Final point of the arc */
-    EllipticalArc( Point const &ip, Point const &r,
-                   Coord rot_angle, bool large_arc, bool sweep,
-                   Point const &fp
-                 )
-        : _initial_point(ip)
-        , _final_point(fp)
-        , _ellipse(0, 0, r[X], r[Y], rot_angle)
-        , _angles(0, 0, sweep)
-        , _large_arc(large_arc)
+  public:
+	EllipticalArc()
+		: m_initial_point(Point(0,0)), m_final_point(Point(0,0)),
+		  m_rx(0), m_ry(0), m_rot_angle(0),
+		  m_large_arc(true), m_sweep(true)
+	{
+		m_start_angle = m_end_angle = 0;
+		m_center = Point(0,0);
+	}
+	
+    EllipticalArc( Point _initial_point, double _rx, double _ry,
+                   double _rot_angle, bool _large_arc, bool _sweep,
+                   Point _final_point
+                  )
+        : m_initial_point(_initial_point), m_final_point(_final_point),
+          m_rx(_rx), m_ry(_ry), m_rot_angle(_rot_angle),
+          m_large_arc(_large_arc), m_sweep(_sweep)
     {
-        _updateCenterAndAngles();
+            calculate_center_and_extreme_angles();
     }
-
-    /// Create a new elliptical arc, giving the ellipse's rays as separate coordinates.
-    EllipticalArc( Point const &ip, Coord rx, Coord ry,
-                   Coord rot_angle, bool large_arc, bool sweep,
-                   Point const &fp
-                 )
-        : _initial_point(ip)
-        , _final_point(fp)
-        , _ellipse(0, 0, rx, ry, rot_angle)
-        , _angles(0, 0, sweep)
-        , _large_arc(large_arc)
+	  
+    void set( Point _initial_point, double _rx, double _ry,
+              double _rot_angle, bool _large_arc, bool _sweep,
+              Point _final_point
+             )
     {
-        _updateCenterAndAngles();
+    	m_initial_point = _initial_point;
+    	m_final_point = _final_point;
+    	m_rx = _rx;
+    	m_ry = _ry;
+    	m_rot_angle = _rot_angle;
+    	m_large_arc = _large_arc;
+    	m_sweep = _sweep;
+    	calculate_center_and_extreme_angles();
     }
 
-    /// @name Retrieve basic information
-    /// @{
-
-    /** @brief Get a coordinate of the elliptical arc's center.
-     * @param d The dimension to retrieve
-     * @return The selected coordinate of the center */
-    Coord center(Dim2 d) const { return _ellipse.center(d); }
-
-    /** @brief Get the arc's center
-     * @return The arc's center, situated on the intersection of the ellipse's rays */
-    Point center() const { return _ellipse.center(); }
-
-    /** @brief Get one of the ellipse's rays
-     * @param d Dimension to retrieve
-     * @return The selected ray of the ellipse */
-    Coord ray(Dim2 d) const { return _ellipse.ray(d); }
-
-    /** @brief Get both rays as a point
-     * @return Point with X equal to the X ray and Y to Y ray */
-    Point rays() const { return _ellipse.rays(); }
-
-    /** @brief Get the defining ellipse's rotation
-     * @return Angle between the +X ray of the ellipse and the +X axis */
-    Angle rotationAngle() const {
-        return _ellipse.rotationAngle();
-    }
-
-    /** @brief Whether the arc is larger than half an ellipse.
-     * @return True if the arc is larger than \f$\pi\f$, false otherwise */
-    bool largeArc() const { return _large_arc; }
-
-    /** @brief Whether the arc turns clockwise
-     * @return True if the arc makes a clockwise turn when going from initial to final
-     *         point, false otherwise */
-    bool sweep() const { return _angles.sweep(); }
-
-    Angle initialAngle() const { return _angles.initialAngle(); }
-    Angle finalAngle() const { return _angles.finalAngle(); }
-    /// @}
-
-    /// @name Modify parameters
-    /// @{
-
-    /// Change all of the arc's parameters.
-    void set( Point const &ip, double rx, double ry,
-              double rot_angle, bool large_arc, bool sweep,
-              Point const &fp
-            )
+	Curve* duplicate() const
+	{
+		return new EllipticalArc(*this);
+	}
+	
+    double center(unsigned int i) const
     {
-        _initial_point = ip;
-        _final_point = fp;
-        _ellipse.setRays(rx, ry);
-        _ellipse.setRotationAngle(rot_angle);
-        _angles.setSweep(sweep);
-        _large_arc = large_arc;
-        _updateCenterAndAngles();
+        return m_center[i];
     }
 
-    /// Change all of the arc's parameters.
-    void set( Point const &ip, Point const &r,
-              Angle rot_angle, bool large_arc, bool sweep,
-              Point const &fp
-            )
+    Point center() const
     {
-        _initial_point = ip;
-        _final_point = fp;
-        _ellipse.setRays(r);
-        _ellipse.setRotationAngle(rot_angle);
-        _angles.setSweep(sweep);
-        _large_arc = large_arc;
-        _updateCenterAndAngles();
+        return m_center;
     }
 
-    /** @brief Change the initial and final point in one operation.
-     * This method exists because modifying any of the endpoints causes rather costly
-     * recalculations of the center and extreme angles.
-     * @param ip New initial point
-     * @param fp New final point */
-    void setEndpoints(Point const &ip, Point const &fp) {
-        _initial_point = ip;
-        _final_point = fp;
-        _updateCenterAndAngles();
-    }
-    /// @}
-
-    /// @name Evaluate the arc as a function
-    /// @{
-    /** Check whether the arc contains the given angle
-     * @param t The angle to check
-     * @return True if the arc contains the angle, false otherwise */
-    bool containsAngle(Angle angle) const { return _angles.contains(angle); }
-
-    /** @brief Evaluate the arc at the specified angular coordinate
-     * @param t Angle
-     * @return Point corresponding to the given angle */
-    Point pointAtAngle(Coord t) const;
-
-    /** @brief Evaluate one of the arc's coordinates at the specified angle
-     * @param t Angle
-     * @param d The dimension to retrieve
-     * @return Selected coordinate of the arc at the specified angle */
-    Coord valueAtAngle(Coord t, Dim2 d) const;
-
-    /// Compute the curve time value corresponding to the given angular value.
-    Coord timeAtAngle(Angle a) const { return _angles.timeAtAngle(a); }
-
-    /// Compute the angular domain value corresponding to the given time value.
-    Angle angleAt(Coord t) const { return _angles.angleAt(t); }
-
-    /** @brief Compute the amount by which the angle parameter changes going from start to end.
-     * This has range \f$(-2\pi, 2\pi)\f$ and thus cannot be represented as instance
-     * of the class Angle. Add this to the initial angle to obtain the final angle. */
-    Coord sweepAngle() const { return _angles.sweepAngle(); }
-
-    /** @brief Get the elliptical angle spanned by the arc.
-     * This is basically the absolute value of sweepAngle(). */
-    Coord angularExtent() const { return _angles.extent(); }
-
-    /// Get the angular interval of the arc.
-    AngleInterval angularInterval() const { return _angles; }
-
-    /// Evaluate the arc in the curve domain, i.e. \f$[0, 1]\f$.
-    virtual Point pointAt(Coord t) const;
-
-    /// Evaluate a single coordinate on the arc in the curve domain.
-    virtual Coord valueAt(Coord t, Dim2 d) const;
-
-    /** @brief Compute a transform that maps the unit circle to the arc's ellipse.
-     * Each ellipse can be interpreted as a translated, scaled and rotate unit circle.
-     * This function returns the transform that maps the unit circle to the arc's ellipse.
-     * @return Transform from unit circle to the arc's ellipse */
-    Affine unitCircleTransform() const {
-        Affine result = _ellipse.unitCircleTransform();
-        return result;
+    Point initialPoint() const
+    {
+        return m_initial_point;
     }
 
-    /** @brief Compute a transform that maps the arc's ellipse to the unit circle. */
-    Affine inverseUnitCircleTransform() const {
-        Affine result = _ellipse.inverseUnitCircleTransform();
-        return result;
-    }
-    /// @}
-
-    /// @name Deal with degenerate ellipses.
-    /// @{
-    /** @brief Check whether both rays are nonzero.
-     * If they are not, the arc is represented as a line segment instead. */
-    bool isChord() const {
-        return ray(X) == 0 || ray(Y) == 0;
+    Point finalPoint() const
+    {
+        return m_final_point;
     }
 
-    /** @brief Get the line segment connecting the arc's endpoints.
-     * @return A linear segment with initial and final point correspoding to those of the arc. */
-    LineSegment chord() const { return LineSegment(_initial_point, _final_point); }
-    /// @}
+    double start_angle() const
+    {
+        return m_start_angle;
+    }
 
-    // implementation of overloads goes here
-    virtual Point initialPoint() const { return _initial_point; }
-    virtual Point finalPoint() const { return _final_point; }
-    virtual Curve* duplicate() const { return new EllipticalArc(*this); }
-    virtual void setInitial(Point const &p) {
-        _initial_point = p;
-        _updateCenterAndAngles();
+    double end_angle() const
+    {
+        return m_end_angle;
     }
-    virtual void setFinal(Point const &p) {
-        _final_point = p;
-        _updateCenterAndAngles();
+
+    double ray(unsigned int i) const
+    {
+        return (i == 0) ? m_rx : m_ry;
     }
-    virtual bool isDegenerate() const {
-        return _initial_point == _final_point;
+
+    bool large_arc_flag() const
+    {
+        return m_large_arc;
     }
-    virtual bool isLineSegment() const { return isChord(); }
-    virtual Rect boundsFast() const {
+
+    bool sweep_flag() const
+    {
+        return m_sweep;
+    }
+
+    double rotation_angle() const
+    {
+        return m_rot_angle;
+    }
+
+    void setInitial( const Point _point)
+    {
+        m_initial_point = _point;
+        calculate_center_and_extreme_angles();
+    }
+
+    void setFinal( const Point _point)
+    {
+        m_final_point = _point;
+        calculate_center_and_extreme_angles();
+    }
+
+    void setExtremes( const Point& _initial_point, const Point& _final_point )
+    {
+        m_initial_point = _initial_point;
+        m_final_point = _final_point;
+        calculate_center_and_extreme_angles();
+    }
+
+    bool isDegenerate() const
+    {
+        return ( are_near(ray(X), 0) || are_near(ray(Y), 0) );
+    }
+    
+    
+    virtual OptRect boundsFast() const
+    {
         return boundsExact();
     }
-    virtual Rect boundsExact() const;
+  
+    virtual OptRect boundsExact() const;
+    
     // TODO: native implementation of the following methods
-    virtual OptRect boundsLocal(OptInterval const &i, unsigned int deg) const {
+    virtual OptRect boundsLocal(OptInterval i, unsigned int deg) const
+    {
         return SBasisCurve(toSBasis()).boundsLocal(i, deg);
     }
-    virtual std::vector<double> roots(double v, Dim2 d) const;
-#ifdef HAVE_GSL
-    virtual std::vector<double> allNearestTimes( Point const& p, double from = 0, double to = 1 ) const;
-    virtual double nearestTime( Point const& p, double from = 0, double to = 1 ) const {
-        if ( are_near(ray(X), ray(Y)) && are_near(center(), p) ) {
-            return from;
-        }
-        return allNearestTimes(p, from, to).front();
+    
+    std::vector<double> roots(double v, Dim2 d) const;
+    
+    std::vector<double> 
+    allNearestPoints( Point const& p, double from = 0, double to = 1 ) const;
+    
+    double nearestPoint( Point const& p, double from = 0, double to = 1 ) const
+    {
+    	if ( are_near(ray(X), ray(Y)) && are_near(center(), p) )
+    	{
+    		return from;
+    	}
+    	return allNearestPoints(p, from, to).front();
     }
-#endif
-    virtual std::vector<CurveIntersection> intersect(Curve const &other, Coord eps=EPSILON) const;
-    virtual int degreesOfFreedom() const { return 7; }
-    virtual Curve *derivative() const;
+    
+    // TODO: native implementation of the following methods
+    int winding(Point p) const
+    {
+    	return SBasisCurve(toSBasis()).winding(p);
+    }
 
-    using Curve::operator*=;
-    virtual void operator*=(Translate const &tr);
-    virtual void operator*=(Scale const &s);
-    virtual void operator*=(Rotate const &r);
-    virtual void operator*=(Zoom const &z);
-    virtual void operator*=(Affine const &m);
+    int degreesOfFreedom() const { return 7;}
+    
+    Curve *derivative() const;
+    
+    // TODO: native implementation of the following methods
+    Curve *transformed(Matrix const &m) const
+    {
+    	return SBasisCurve(toSBasis()).transformed(m);
+    }
+    
+    std::vector<Point> pointAndDerivatives(Coord t, unsigned int n) const;
+    
+    D2<SBasis> toSBasis() const;
+    
+    bool containsAngle(Coord angle) const;
+    
+    double valueAtAngle(Coord t, Dim2 d) const;
+    
+    Point pointAtAngle(Coord t) const
+    {
+        double sin_rot_angle = std::sin(rotation_angle());
+        double cos_rot_angle = std::cos(rotation_angle());
+        Matrix m( ray(X) * cos_rot_angle, ray(X) * sin_rot_angle,
+                 -ray(Y) * sin_rot_angle, ray(Y) * cos_rot_angle,
+                  center(X),              center(Y) );
+        Point p( std::cos(t), std::sin(t) );
+        return p * m;
+    }
+    
+    double valueAt(Coord t, Dim2 d) const
+    {
+    	Coord tt = map_to_02PI(t);
+    	return valueAtAngle(tt, d);
+    }
 
-    virtual std::vector<Point> pointAndDerivatives(Coord t, unsigned int n) const;
-    virtual D2<SBasis> toSBasis() const;
-    virtual Curve *portion(double f, double t) const;
-    virtual Curve *reverse() const;
-    virtual bool operator==(Curve const &c) const;
-    virtual bool isNear(Curve const &other, Coord precision) const;
-    virtual void feed(PathSink &sink, bool moveto_initial) const;
-    virtual int winding(Point const &p) const;
+    Point pointAt(Coord t) const
+    {
+        Coord tt = map_to_02PI(t);
+        return pointAtAngle(tt);
+    }
 
-private:
-    void _updateCenterAndAngles();
-    void _filterIntersections(std::vector<ShapeIntersection> &xs, bool is_first) const;
+    std::pair<EllipticalArc, EllipticalArc>
+    subdivide(Coord t) const
+    {
+        EllipticalArc* arc1 = static_cast<EllipticalArc*>(portion(0, t));
+        EllipticalArc* arc2 = static_cast<EllipticalArc*>(portion(t, 1));
+        assert( arc1 != NULL && arc2 != NULL);
+        std::pair<EllipticalArc, EllipticalArc> arc_pair(*arc1, *arc2);        
+        delete arc1;
+        delete arc2;
+        return arc_pair;
+    }
 
-    Point _initial_point, _final_point;
-    Ellipse _ellipse;
-    AngleInterval _angles;
-    bool _large_arc;
+    Curve* portion(double f, double t) const;
+    
+    // the arc is the same but traversed in the opposite direction
+    Curve* reverse() const
+    {
+        EllipticalArc* rarc = new EllipticalArc( *this );
+        rarc->m_sweep = !m_sweep;
+        rarc->m_initial_point = m_final_point;
+        rarc->m_final_point = m_initial_point;
+        rarc->m_start_angle = m_end_angle;
+        rarc->m_end_angle = m_start_angle;
+        return rarc;
+    }
+
+    double sweep_angle() const
+    {
+        Coord d = end_angle() - start_angle();
+        if ( !sweep_flag() ) d = -d;
+        if ( d < 0 )
+            d += 2*M_PI;
+        return d;
+    }
+    
+  private:
+    Coord map_to_02PI(Coord t) const;
+    Coord map_to_01(Coord angle) const; 
+    void calculate_center_and_extreme_angles();
+  private:
+    Point m_initial_point, m_final_point;
+    double m_rx, m_ry, m_rot_angle;
+    bool m_large_arc, m_sweep;
+    double m_start_angle, m_end_angle;
+    Point m_center;
+    
 }; // end class EllipticalArc
 
 
-// implemented in elliptical-arc-from-sbasis.cpp
-/** @brief Fit an elliptical arc to an SBasis fragment.
- * @relates EllipticalArc */
-bool arc_from_sbasis(EllipticalArc &ea, D2<SBasis> const &in,
-                     double tolerance = EPSILON, unsigned num_samples = 20);
-
-/** @brief Debug output for elliptical arcs.
- * @relates EllipticalArc */
-std::ostream &operator<<(std::ostream &out, EllipticalArc const &ea);
-
 } // end namespace Geom
 
-#endif // LIB2GEOM_SEEN_ELLIPTICAL_ARC_H
+#endif // _2GEOM_ELLIPTICAL_ARC_H_
+
+
+
 
 /*
   Local Variables:
@@ -338,4 +307,4 @@ std::ostream &operator<<(std::ostream &out, EllipticalArc const &ea);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

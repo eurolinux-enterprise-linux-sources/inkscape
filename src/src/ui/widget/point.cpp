@@ -1,4 +1,7 @@
-/*
+/**
+ * \brief Point Widget - A labelled text box, with spin buttons and optional
+ *        icon or suffix, for entering arbitrary coordinate values.
+ *
  * Authors:
  *   Johan Engelen <j.b.c.engelen@utwente.nl>
  *   Carl Hetherington <inkscape@carlh.net>
@@ -25,6 +28,16 @@ namespace Inkscape {
 namespace UI {
 namespace Widget {
 
+/**
+ * Construct a Point Widget.
+ *
+ * \param label     Label.
+ * \param suffix    Suffix, placed after the widget (defaults to "").
+ * \param icon      Icon filename, placed before the label (defaults to "").
+ * \param mnemonic  Mnemonic toggle; if true, an underscore (_) in the label
+ *                  indicates the next character should be used for the
+ *                  mnemonic accelerator key (defaults to false).
+ */
 Point::Point(Glib::ustring const &label, Glib::ustring const &tooltip,
                Glib::ustring const &suffix,
                Glib::ustring const &icon,
@@ -38,6 +51,17 @@ Point::Point(Glib::ustring const &label, Glib::ustring const &tooltip,
     static_cast<Gtk::VBox*>(_widget)->show_all_children();
 }
 
+/**
+ * Construct a Point Widget.
+ *
+ * \param label     Label.
+ * \param digits    Number of decimal digits to display.
+ * \param suffix    Suffix, placed after the widget (defaults to "").
+ * \param icon      Icon filename, placed before the label (defaults to "").
+ * \param mnemonic  Mnemonic toggle; if true, an underscore (_) in the label
+ *                  indicates the next character should be used for the
+ *                  mnemonic accelerator key (defaults to false).
+ */
 Point::Point(Glib::ustring const &label, Glib::ustring const &tooltip,
                unsigned digits,
                Glib::ustring const &suffix,
@@ -52,12 +76,20 @@ Point::Point(Glib::ustring const &label, Glib::ustring const &tooltip,
     static_cast<Gtk::VBox*>(_widget)->show_all_children();
 }
 
+/**
+ * Construct a Point Widget.
+ *
+ * \param label     Label.
+ * \param adjust    Adjustment to use for the SpinButton.
+ * \param digits    Number of decimal digits to display (defaults to 0).
+ * \param suffix    Suffix, placed after the widget (defaults to "").
+ * \param icon      Icon filename, placed before the label (defaults to "").
+ * \param mnemonic  Mnemonic toggle; if true, an underscore (_) in the label
+ *                  indicates the next character should be used for the
+ *                  mnemonic accelerator key (defaults to true).
+ */
 Point::Point(Glib::ustring const &label, Glib::ustring const &tooltip,
-#if WITH_GTKMM_3_0
-               Glib::RefPtr<Gtk::Adjustment> &adjust,
-#else
                Gtk::Adjustment &adjust,
-#endif
                unsigned digits,
                Glib::ustring const &suffix,
                Glib::ustring const &icon,
@@ -71,105 +103,131 @@ Point::Point(Glib::ustring const &label, Glib::ustring const &tooltip,
     static_cast<Gtk::VBox*>(_widget)->show_all_children();
 }
 
-unsigned Point::getDigits() const
+/** Fetches the precision of the spin buton */
+unsigned
+Point::getDigits() const
 {
     return xwidget.getDigits();
 }
 
-double Point::getStep() const
+/** Gets the current step ingrement used by the spin button */
+double
+Point::getStep() const
 {
     return xwidget.getStep();
 }
 
-double Point::getPage() const
+/** Gets the current page increment used by the spin button */
+double
+Point::getPage() const
 {
     return xwidget.getPage();
 }
 
-double Point::getRangeMin() const
+/** Gets the minimum range value allowed for the spin button */
+double
+Point::getRangeMin() const
 {
     return xwidget.getRangeMin();
 }
 
-double Point::getRangeMax() const
+/** Gets the maximum range value allowed for the spin button */
+double
+Point::getRangeMax() const
 {
     return xwidget.getRangeMax();
 }
 
-double Point::getXValue() const
+/** Get the value in the spin_button . */
+double
+Point::getXValue() const
 {
     return xwidget.getValue();
 }
-
-double Point::getYValue() const
+double
+Point::getYValue() const
 {
     return ywidget.getValue();
 }
-
-Geom::Point Point::getValue() const
+Geom::Point
+Point::getValue() const
 {
     return Geom::Point( getXValue() , getYValue() );
 }
 
-int Point::getXValueAsInt() const
+/** Get the value spin_button represented as an integer. */
+int
+Point::getXValueAsInt() const
 {
     return xwidget.getValueAsInt();
 }
-
-int Point::getYValueAsInt() const
+int
+Point::getYValueAsInt() const
 {
     return ywidget.getValueAsInt();
 }
 
 
-void Point::setDigits(unsigned digits)
+/** Sets the precision to be displayed by the spin button */
+void
+Point::setDigits(unsigned digits)
 {
     xwidget.setDigits(digits);
     ywidget.setDigits(digits);
 }
 
-void Point::setIncrements(double step, double page)
+/** Sets the step and page increments for the spin button */
+void
+Point::setIncrements(double step, double page)
 {
     xwidget.setIncrements(step, page);
     ywidget.setIncrements(step, page);
 }
 
-void Point::setRange(double min, double max)
+/** Sets the minimum and maximum range allowed for the spin button */
+void
+Point::setRange(double min, double max)
 {
     xwidget.setRange(min, max);
     ywidget.setRange(min, max);
 }
 
-void Point::setValue(Geom::Point const & p)
+/** Sets the value of the spin button */
+void
+Point::setValue(Geom::Point const & p)
 {
     xwidget.setValue(p[0]);
     ywidget.setValue(p[1]);
 }
 
-void Point::update()
-{
+/** Manually forces an update of the spin button */
+void
+Point::update() {
     xwidget.update();
     ywidget.update();
 }
 
-bool Point::setProgrammatically() 
-{
+/** Check 'setProgrammatically' of both scalar widgets.   False if value is changed by user by clicking the widget. */
+bool
+Point::setProgrammatically() {
     return (xwidget.setProgrammatically || ywidget.setProgrammatically);
 }
 
-void Point::clearProgrammatically()
-{
+void
+Point::clearProgrammatically() {
     xwidget.setProgrammatically = false;
     ywidget.setProgrammatically = false;
 }
 
 
-Glib::SignalProxy0<void> Point::signal_x_value_changed()
+/** Signal raised when the spin button's value changes */
+Glib::SignalProxy0<void>
+Point::signal_x_value_changed()
 {
     return xwidget.signal_value_changed();
 }
-
-Glib::SignalProxy0<void> Point::signal_y_value_changed()
+Glib::SignalProxy0<void>
+Point::signal_y_value_changed()
 {
     return ywidget.signal_value_changed();
 }
@@ -188,4 +246,4 @@ Glib::SignalProxy0<void> Point::signal_y_value_changed()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

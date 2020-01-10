@@ -7,12 +7,12 @@ doc = minidom.parse(sys.argv[1])
 
 filters = doc.getElementsByTagName('pattern')
 
-sys.stdout.write("char * stringlst = [")
+print "char * stringlst = ["
 
 for filter in filters:
 	id = filter.getAttribute('id')
 	stockid = filter.getAttribute('inkscape:stockid')
 
-	sys.stdout.write("N_(\"" + stockid + "\"),")
+	print "N_(\"" + stockid + "\"),"
 
-sys.stdout.write("];")
+print "];"

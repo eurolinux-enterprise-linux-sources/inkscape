@@ -12,7 +12,7 @@
 #ifndef SEEN_INKSCAPE_DEBUG_GC_HEAP_H
 #define SEEN_INKSCAPE_DEBUG_GC_HEAP_H
 
-#include "inkgc/gc-core.h"
+#include "gc-core.h"
 #include "debug/heap.h"
 
 namespace Inkscape {
@@ -49,4 +49,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

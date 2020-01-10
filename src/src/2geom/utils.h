@@ -1,7 +1,10 @@
+#ifndef LIB2GEOM_UTILS_HEADER
+#define LIB2GEOM_UTILS_HEADER
+
 /**
  * \file
  * \brief  Various utility functions.
- *//*
+ *
  * Copyright 2007 Johan Engelen <goejendaagh@zonnet.nl>
  * Copyright 2006 Michael G. Sloan <mgsloan@gmail.com>
  *
@@ -30,74 +33,59 @@
  *
  */
 
-#ifndef LIB2GEOM_SEEN_UTILS_H
-#define LIB2GEOM_SEEN_UTILS_H
-
+#include <cmath>
 #include <cstddef>
 #include <vector>
-#include <boost/operators.hpp>
 
 namespace Geom {
 
 // proper logical xor
 inline bool logical_xor (bool a, bool b) { return (a || b) && !(a && b); }
 
-void binomial_coefficients(std::vector<size_t>& bc, std::size_t n);
-
-struct EmptyClass {};
-
-/**
- * @brief Noncommutative multiplication helper.
- * Generates operator*(T, U) from operator*=(T, U). Does not generate operator*(U, T)
- * like boost::multipliable does. This makes it suitable for noncommutative cases,
- * such as transforms.
+/** Sign function - indicates the sign of a numeric type.  -1 indicates negative, 1 indicates
+ *  positive, and 0 indicates, well, 0.  Mathsy people will know this is basically the derivative
+ *  of abs, except for the fact that it is defined on 0.
  */
-template <class T, class U, class B = EmptyClass>
-struct MultipliableNoncommutative : B
-{
-    friend T operator*(T const &lhs, U const &rhs) {
-        T nrv(lhs); nrv *= rhs; return nrv;
-    }
-};
+template <class T> inline int sgn(const T& x) {return (x < 0 ? -1 : (x > 0 ? 1 : 0) );}
 
-/** @brief Null output iterator
- * Use this if you want to discard a result returned through an output iterator. */
-struct NullIterator
-    : public boost::output_iterator_helper<NullIterator>
-{
-    NullIterator() {}
+template <class T> inline T sqr(const T& x) {return x * x;}
+template <class T> inline T cube(const T& x) {return x * x * x;}
 
-    template <typename T>
-    void operator=(T const &) {}
-};
+/** Between function - returns true if a number x is within a range. The values delimiting the
+ *  range and the number must have the same type.
+ */
+template <class T> inline const T& between (const T& min, const T& max, const T& x)
+    { return min < x && max > x; }
 
-/** @brief Get the next iterator in the container with wrap-around.
- * If the iterator would become the end iterator after incrementing,
- * return the begin iterator instead. */
-template <typename Iter, typename Container>
-Iter cyclic_next(Iter i, Container &c) {
-    ++i;
-    if (i == c.end()) {
-        i = c.begin();
-    }
-    return i;
+/** Returns x rounded to the nearest integer.  It is unspecified what happens
+ *  if x is half way between two integers: we may in future use rint/round
+ *  on platforms that have them.
+ */
+inline double round(double const x) { return std::floor(x + .5); }
+
+/** Returns x rounded to the nearest \a places decimal places.
+
+    Implemented in terms of round, i.e. we make no guarantees as to what happens if x is
+    half way between two rounded numbers.
+    
+    Note: places is the number of decimal places without using scientific (e) notation, not the
+    number of significant figures.  This function may not be suitable for values of x whose
+    magnitude is so far from 1 that one would want to use scientific (e) notation.
+
+    places may be negative: e.g. places = -2 means rounding to a multiple of .01
+**/
+inline double decimal_round(double const x, int const places) {
+    //TODO: possibly implement with modulus instead?
+    double const multiplier = std::pow(10.0, places);
+    return round( x * multiplier ) / multiplier;
 }
 
-/** @brief Get the previous iterator in the container with wrap-around.
- * If the passed iterator is the begin iterator, return the iterator
- * just before the end iterator instead. */
-template <typename Iter, typename Container>
-Iter cyclic_prior(Iter i, Container &c) {
-    if (i == c.begin()) {
-        i = c.end();
-    }
-    --i;
-    return i;
+
+void binomial_coefficients(std::vector<size_t>& bc, size_t n);
+
 }
 
-} // end namespace Geom
-
-#endif // LIB2GEOM_SEEN_UTILS_H
+#endif
 
 /*
   Local Variables:
@@ -108,4 +96,4 @@ Iter cyclic_prior(Iter i, Container &c) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

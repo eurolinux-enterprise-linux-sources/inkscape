@@ -45,7 +45,7 @@ public:
     virtual operator Gtk::Widget&() =0;
     virtual GtkWidget *gobj() =0;
     virtual void present() =0;
-    virtual Gtk::Box *get_vbox() =0;
+    virtual Gtk::VBox *get_vbox() =0;
     virtual void show() =0;
     virtual void hide() =0;
     virtual void show_all_children() =0;
@@ -100,4 +100,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

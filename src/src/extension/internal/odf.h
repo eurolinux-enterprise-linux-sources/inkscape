@@ -1,7 +1,16 @@
-/*
+/**
+ * OpenDocument <drawing> input and output
+ *
+ * This is an an entry in the extensions mechanism to begin to enable
+ * the inputting and outputting of OpenDocument Format (ODF) files from
+ * within Inkscape.  Although the initial implementations will be very lossy
+ * do to the differences in the models of SVG and ODF, they will hopefully
+ * improve greatly with time.
+ *
+ * http://www.w3.org/TR/2004/REC-DOM-Level-3-Core-20040407/idl-definitions.html
+ *
  * Authors:
  *   Bob Jamison
- *   Abhishek Sharma
  *
  * Copyright (C) 2006 Bob Jamison
  *
@@ -23,19 +32,22 @@
 #ifndef EXTENSION_INTERNAL_ODG_OUT_H
 #define EXTENSION_INTERNAL_ODG_OUT_H
 
-#include <io/stringstream.h>
-#include <util/ziptool.h>
+#include <dom/dom.h>
+#include <dom/io/stringstream.h>
+#include <dom/uri.h>
 
+#include <glibmm.h>
 #include "extension/implementation/implementation.h"
 
+
 #include <xml/repr.h>
+
 #include <string>
 #include <map>
 
-#include "uri.h"
-#include "sp-item.h"
+#include <dom/util/ziptool.h>
+#include <dom/io/domstream.h>
 
-#include <glibmm/ustring.h>
 
 namespace Inkscape
 {
@@ -44,7 +56,9 @@ namespace Extension
 namespace Internal
 {
 
-typedef Inkscape::IO::Writer Writer;
+typedef org::w3c::dom::URI URI;
+typedef org::w3c::dom::io::Writer Writer;
+
 
 class StyleInfo
 {
@@ -126,7 +140,7 @@ public:
 class GradientStop
 {
 public:
-    GradientStop() : rgb(0), opacity(0)
+    GradientStop()
         {}
     GradientStop(unsigned long rgbArg, double opacityArg)
         { rgb = rgbArg; opacity = opacityArg; }
@@ -134,7 +148,7 @@ public:
         {}
     GradientStop(const GradientStop &other)
         {  assign(other); }
-    virtual GradientStop& operator=(const GradientStop &other)
+    virtual GradientStop operator=(const GradientStop &other)
         {  assign(other); return *this; }
     void assign(const GradientStop &other)
         {
@@ -250,17 +264,6 @@ public:
 
 
 
-/**
- * OpenDocument <drawing> input and output
- *
- * This is an an entry in the extensions mechanism to begin to enable
- * the inputting and outputting of OpenDocument Format (ODF) files from
- * within Inkscape.  Although the initial implementations will be very lossy
- * do to the differences in the models of SVG and ODF, they will hopefully
- * improve greatly with time.
- *
- * http://www.w3.org/TR/2004/REC-DOM-Level-3-Core-20040407/idl-definitions.html
- */
 class OdfOutput : public Inkscape::Extension::Implementation::Implementation
 {
 
@@ -276,7 +279,7 @@ public:
 
 private:
 
-    Inkscape::URI documentUri;
+    URI documentUri;
 
     void reset();
 
@@ -310,10 +313,10 @@ private:
 
     bool writeStyle(ZipFile &zf);
 
-    bool processStyle(SPItem *item, const Glib::ustring &id, const Glib::ustring &gradientNameFill, const Glib::ustring &gradientNameStroke, Glib::ustring& output);
+    bool processStyle(Writer &outs, SPItem *item, const Glib::ustring &id);
 
-    bool processGradient(SPItem *item,
-                    const Glib::ustring &id, Geom::Affine &tf, Glib::ustring& gradientName, Glib::ustring& output, bool checkFillGradient = 1);
+    bool processGradient(Writer &outs, SPItem *item,
+                    const Glib::ustring &id, Geom::Matrix &tf);
 
     bool writeStyleHeader(Writer &outs);
 
@@ -328,6 +331,8 @@ private:
     bool writeContent(ZipFile &zf, Inkscape::XML::Node *node);
 
 };
+
+
 
 
 }  //namespace Internal

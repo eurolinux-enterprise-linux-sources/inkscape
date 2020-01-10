@@ -10,12 +10,11 @@
 #ifndef SEEN_INKSCAPE_LAYER_MANAGER_H
 #define SEEN_INKSCAPE_LAYER_MANAGER_H
 
-#include <vector>
-#include <map>
-
 #include "document-subset.h"
 #include "gc-finalized.h"
-#include "inkgc/gc-soft-ptr.h"
+#include "gc-soft-ptr.h"
+#include <vector>
+#include <map>
 
 class SPDesktop;
 class SPDocument;
@@ -30,8 +29,7 @@ public:
     virtual ~LayerManager();
 
     void setCurrentLayer( SPObject* obj );
-    void renameLayer( SPObject* obj, char const *label, bool uniquify );
-    Glib::ustring getNextLayerName( SPObject* obj, char const *label);
+    void renameLayer( SPObject* obj, gchar const *label, bool uniquify );
 
     sigc::connection connectCurrentLayerChanged(const sigc::slot<void, SPObject *> & slot) {
         return _layer_changed_signal.connect(slot);
@@ -45,7 +43,7 @@ private:
     friend class LayerWatcher;
     class LayerWatcher;
 
-    void _objectModified( SPObject* obj, unsigned int flags );
+    void _objectModified( SPObject* obj, guint flags );
     void _setDocument(SPDocument *document);
     void _rebuild();
     void _selectedLayerChanged(SPObject *layer);
@@ -75,4 +73,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

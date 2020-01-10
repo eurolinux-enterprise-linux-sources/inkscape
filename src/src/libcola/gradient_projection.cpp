@@ -17,7 +17,7 @@
 #include <libvpsc/constraint.h>
 #include "gradient_projection.h"
 #include <iostream>
-#include <2geom/math-utils.h>
+#include "2geom/isnan.h"
 #include "isinf.h"
 #include <math.h>
 
@@ -222,7 +222,7 @@ void GradientProjection::destroyVPSC(IncSolver *vpsc) {
     delete vpsc;
     delete [] cs;
     delete [] vs;
-    for(vector<Constraint*>::iterator i=lcs.begin();i!=lcs.end();++i) {
+    for(vector<Constraint*>::iterator i=lcs.begin();i!=lcs.end();i++) {
             delete *i;
     }
     lcs.clear();

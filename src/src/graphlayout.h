@@ -1,8 +1,6 @@
 /**
- * @file
- * graph layout functions.
- */
-/*
+ * \brief graph layout functions
+ *
  * Authors:
  *   Tim Dwyer <tgdwyer@gmail.com>
  *
@@ -14,14 +12,10 @@
 #ifndef SEEN_GRAPHLAYOUT_H
 #define SEEN_GRAPHLAYOUT_H
 
-#include <list>
-
+struct _GSList;
+void graphlayout(_GSList const *const items);
 class SPItem;
-
-void graphlayout(std::vector<SPItem*> const &items);
-
 bool isConnector(SPItem const *const item);
-
-void filterConnectors(std::vector<SPItem*> const &items, std::list<SPItem *> &filtered);
-
+#include <list>
+void filterConnectors(_GSList const *const items, std::list<SPItem *> &filtered);
 #endif // SEEN_GRAPHLAYOUT_H

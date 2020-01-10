@@ -32,10 +32,7 @@ options:
     -P, --export-ps=FILENAME
     -E, --export-eps=FILENAME
     -A, --export-pdf=FILENAME
-        --export-pdf-version=VERSION-STRING
         --export-latex
-
-    --export-ps-level {2,3}
 
     -T, --export-text-to-path
         --export-ignore-filters
@@ -63,7 +60,6 @@ options:
     -z, --without-gui                 
 
         --vacuum-defs
-        --no-convert-text-baseline-spacing
 
         --g-fatal-warnings
 
@@ -131,7 +127,7 @@ export area for EPS. For PNG, it can be used in combination with --export-use-hi
 =item B<--export-area-snap>
 
 For PNG export, snap the export area outwards to the nearest integer SVG user unit (px) values. If you are using the 
-default export resolution of 96 dpi and your graphics are pixel-snapped to minimize antialiasing, this switch 
+default export resolution of 90 dpi and your graphics are pixel-snapped to minimize antialiasing, this switch 
 allows you to preserve this alignment even if you are exporting some object's bounding 
 box (with --export-id or --export-area-drawing) which is itself not pixel-aligned.
 
@@ -147,7 +143,7 @@ then the page color set in Inkscape in the Document Options dialog will be used 
 The resolution used for PNG export.
 It is also used for fallback rasterization of filtered objects
 when exporting to PS, EPS, or PDF (unless you specify --export-ignore-filters to suppress
-rasterization). The default is 96 dpi, which corresponds to 1 SVG user unit 
+rasterization). The default is 90 dpi, which corresponds to 1 SVG user unit 
 (px, also called "user unit") exporting to 1 bitmap pixel.
 This value overrides the DPI hint if used with --export-use-hints.
 
@@ -172,14 +168,14 @@ This value overrides the --export-dpi setting (or the DPI hint if used with --ex
 
 =item B<-i> I<ID>, B<--export-id>=I<ID>
 
-For PNG, PS, EPS, PDF and plain SVG export, the id attribute value of the object that you want 
+For PNG, PS, EPS, and PDF export, the id attribute value of the object that you want 
 to export from the document; all other objects are not exported.  By
 default the exported area is the bounding box of the object; you can override this using
 --export-area (PNG only) or --export-area-page.
 
 =item B<-j>, B<--export-id-only>
 
-For PNG and plain SVG, only export the object whose id is given in --export-id. All other objects are hidden and won't 
+Only export to PNG the object whose id is given in --export-id. All other objects are hidden and won't 
 show in export even if they overlay the exported object. 
 Without --export-id, this option is ignored. For PDF export, this is the default, so this option has no effect.
 
@@ -272,13 +268,6 @@ The default export area is page; you can set it to drawing by --export-area-draw
 specify --export-id to export a single object (all other are hidden); in that case 
 export area is that object's bounding box, but can be set to page by --export-area-page.
 
-=item B<--export-pdf-version>=I<PDF-VERSION>
-
-Select the PDF version of the exported PDF file. This option basically
-exposes the PDF version selector found in the PDF-export dialog of the
-GUI. You must provide one of the versions from that combo-box,
-e.g. "1.4". The default pdf export version is "1.4".
-
 =item B<--export-latex>
 
 (for PS, EPS, and PDF export)
@@ -293,12 +282,12 @@ Also see GNUPlot's `epslatex' output terminal.
 
 =item B<-T>, B<--export-text-to-path>
 
-Convert text objects to paths on export, where applicable (for PS, EPS, PDF and SVG export).
+Convert text objects to paths on export, where applicable (for PS, EPS, and PDF export).
 
 =item B<--export-ignore-filters>
 
 Export filtered objects (e.g. those with blur) as vectors, ignoring the filters (for PS, EPS, and PDF export). 
-By default, all filtered objects are rasterized at --export-dpi (default 96 dpi), preserving the appearance.
+By default, all filtered objects are rasterized at --export-dpi (default 90 dpi), preserving the appearance.
 
 =item B<-I>, B<--query-id>
 
@@ -342,15 +331,6 @@ complete valid Inkscape command line but without the Inkscape program name, for 
 Remove all unused items from the <lt>defs<gt> section of the SVG file.  If this
 option is invoked in conjunction with --export-plain-svg, only the exported file
 will be affected.  If it is used alone, the specified file will be modified in place.
-
-=item B<--no-convert-text-baseline-spacing>
-
-Do not automatically fix text baselines in legacy (pre-0.92) files on
-opening.  Inkscape 0.92 adopts the CSS standard definition for the
-'line-height' property, which differs from past versions.  By default,
-the line height values in files created prior to Inkscape 0.92 will be
-adjusted on loading to preserve the intended text layout.  This command
-line option will skip that adjustment.
 
 =item B<-z>, B<--without-gui>
 
@@ -403,7 +383,7 @@ Print an SVG file from the command line:
 
     inkscape filename.svg -p '| lpr'
 
-Export an SVG file into PNG with the default resolution of 96 dpi (one SVG user unit translates to one bitmap pixel):
+Export an SVG file into PNG with the default resolution of 90dpi (one SVG user unit translates to one bitmap pixel):
 
     inkscape filename.svg --export-png=filename.png
 
@@ -420,7 +400,7 @@ the resolution that were used for that object last time when it was exported fro
 
     inkscape filename.svg --export-id=text1555 --export-use-hints
 
-Same, but use the default 96 dpi resolution, specify the filename, 
+Same, but use the default 90 dpi resolution, specify the filename, 
 and snap the exported area outwards to the nearest whole SVG user unit values 
 (to preserve pixel-alignment of objects and thus minimize aliasing):
 
@@ -449,9 +429,6 @@ B<DISPLAY> to get the default host and display number.
 
 B<TMPDIR> to set the default path of the directory to use for temporary
 files.  The directory must exist.
-
-B<INKSCAPE_PROFILE_DIR> to set the path of the directory to use for the
-user profile.
 
 =head1 THEMES
 
@@ -510,7 +487,7 @@ Apart from SVG, Inkscape can import (File > Import) most bitmap formats
 (PNG, BMP, JPG, XPM, GIF, etc.), plain text (requires Perl), PS and EPS (requires Ghostscript), PDF 
 and AI format (AI version 9.0 or newer).
 
-Inkscape exports 32-bit PNG images (File > Export PNG Image) as well as AI, PS, EPS, PDF, DXF, 
+Inkscape exports 32-bit PNG images (File > Export) as well as AI, PS, EPS, PDF, DXF, 
 and several other formats via File > Save as.
 
 Inkscape can use the pressure and tilt of a graphic tablet pen for width, angle,
@@ -544,7 +521,7 @@ application sits:
 [% INCLUDE "AUTHORS" %]
 
 This man page was put together by Bryce Harrington
-E<lt>brycehar@bryceharrington.orgE<gt>.
+E<lt>brycehar@bryceharrington.comE<gt>.
 
 =head1 HISTORY
 
@@ -592,10 +569,10 @@ making Open Source more visually stimulating to larger audiences.
 
 =head1 COPYRIGHT AND LICENSE
 
-B<Copyright (C)> 1999-2017 by Authors.
+B<Copyright (C)> 1999-2010 by Authors.
 
 B<Inkscape> is free software; you can redistribute it and/or modify it
-under the terms of the GPL version 2 or later.
+under the terms of the GPL.
 
 
 =for comment

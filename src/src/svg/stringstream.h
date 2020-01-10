@@ -1,6 +1,7 @@
 #ifndef INKSCAPE_STRINGSTREAM_H
 #define INKSCAPE_STRINGSTREAM_H
 
+#include <glib.h>
 #include <sstream>
 #include <string>
 
@@ -40,8 +41,8 @@ public:
 
 #undef INK_SVG_STR_OP
 
-    char const *gcharp() const {
-        return ostr.str().c_str();
+    gchar const *gcharp() const {
+        return reinterpret_cast<gchar const *>(ostr.str().c_str());
     }
 
     std::string str() const {
@@ -99,4 +100,4 @@ Inkscape::SVGOStringStream &operator<<(Inkscape::SVGOStringStream &os, Geom::Poi
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

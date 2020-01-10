@@ -1,4 +1,6 @@
-/**
+#define __SP_SVG_LENGTH_C__
+
+/*
  * SVG data parser
  *
  * Authors:
@@ -10,15 +12,19 @@
  * This code is in public domain
  */
 
-#include <cmath>
+#ifdef HAVE_CONFIG_H
+# include "config.h"
+#endif
+
 #include <cstring>
 #include <string>
+#include <math.h>
 #include <glib.h>
-#include <iostream>
 
 #include "svg.h"
 #include "stringstream.h"
-#include "util/units.h"
+#include "../unit-constants.h"
+
 
 static unsigned sp_svg_length_read_lff(gchar const *str, SVGLength::Unit *unit, float *val, float *computed, char **next);
 
@@ -59,7 +65,6 @@ unsigned int sp_svg_number_read_d(gchar const *str, double *val)
 }
 
 // TODO must add a buffer length parameter for safety:
-// rewrite using std::string?
 static unsigned int sp_svg_number_write_ui(gchar *buf, unsigned int val)
 {
     unsigned int i = 0;
@@ -75,8 +80,6 @@ static unsigned int sp_svg_number_write_ui(gchar *buf, unsigned int val)
     return i;
 }
 
-// TODO unsafe code ingnoring bufLen
-// rewrite using std::string?
 static unsigned int sp_svg_number_write_i(gchar *buf, int bufLen, int val)
 {
     int p = 0;
@@ -93,8 +96,6 @@ static unsigned int sp_svg_number_write_i(gchar *buf, int bufLen, int val)
     return p;
 }
 
-// TODO unsafe code ingnoring bufLen
-// rewrite using std::string?
 static unsigned sp_svg_number_write_d(gchar *buf, int bufLen, double val, unsigned int tprec, unsigned int fprec)
 {
     /* Process sign */
@@ -166,14 +167,6 @@ unsigned int sp_svg_number_write_de(gchar *buf, int bufLen, double val, unsigned
         p += sp_svg_number_write_i(buf + p, bufLen - p, eval);
         return p;
     }
-}
-
-SVGLength::SVGLength()
-    : _set(false)
-    , unit(NONE)
-    , value(0)
-    , computed(0)
-{
 }
 
 /* Length */
@@ -290,10 +283,6 @@ std::vector<SVGLength> sp_svg_length_list_read(gchar const *str)
 
 static unsigned sp_svg_length_read_lff(gchar const *str, SVGLength::Unit *unit, float *val, float *computed, char **next)
 {
-/* note: this function is sometimes fed a string with several consecutive numbers, e.g. by sp_svg_length_list_read.
-So after the number, the string does not necessarily have a \0 or a unit, it might also contain a space or comma and then the next number!
-*/
-
     if (!str) {
         return 0;
     }
@@ -339,8 +328,6 @@ So after the number, the string does not necessarily have a \0 or a unit, it mig
                 *next = (char *) e + 1;
             }
             return 1;
-        } else if (g_ascii_isspace(e[0]) && e[1] && g_ascii_isalpha(e[1])) {
-            return 0; // spaces between value and unit are not allowed
         } else {
             /* Unitless */
             if (unit) {
@@ -376,7 +363,7 @@ So after the number, the string does not necessarily have a \0 or a unit, it mig
                     *unit = SVGLength::PT;
                 }
                 if (computed) {
-                    *computed = Inkscape::Util::Quantity::convert(v, "pt", "px");
+                    *computed = v * PX_PER_PT;
                 }
                 break;
             case UVAL('p','c'):
@@ -384,7 +371,7 @@ So after the number, the string does not necessarily have a \0 or a unit, it mig
                     *unit = SVGLength::PC;
                 }
                 if (computed) {
-                    *computed = Inkscape::Util::Quantity::convert(v, "pc", "px");
+                    *computed = v * PX_PER_PC;
                 }
                 break;
             case UVAL('m','m'):
@@ -392,7 +379,7 @@ So after the number, the string does not necessarily have a \0 or a unit, it mig
                     *unit = SVGLength::MM;
                 }
                 if (computed) {
-                    *computed = Inkscape::Util::Quantity::convert(v, "mm", "px");
+                    *computed = v * PX_PER_MM;
                 }
                 break;
             case UVAL('c','m'):
@@ -400,7 +387,7 @@ So after the number, the string does not necessarily have a \0 or a unit, it mig
                     *unit = SVGLength::CM;
                 }
                 if (computed) {
-                    *computed = Inkscape::Util::Quantity::convert(v, "cm", "px");
+                    *computed = v * PX_PER_CM;
                 }
                 break;
             case UVAL('i','n'):
@@ -408,7 +395,15 @@ So after the number, the string does not necessarily have a \0 or a unit, it mig
                     *unit = SVGLength::INCH;
                 }
                 if (computed) {
-                    *computed = Inkscape::Util::Quantity::convert(v, "in", "px");
+                    *computed = v * PX_PER_IN;
+                }
+                break;
+            case UVAL('f','t'):
+                if (unit) {
+                    *unit = SVGLength::FOOT;
+                }
+                if (computed) {
+                    *computed = v * PX_PER_FT;
                 }
                 break;
             case UVAL('e','m'):
@@ -455,45 +450,6 @@ unsigned int sp_svg_length_read_ldd(gchar const *str, SVGLength::Unit *unit, dou
     return r;
 }
 
-std::string SVGLength::write() const
-{
-    return sp_svg_length_write_with_units(*this);
-}
-
-void SVGLength::set(SVGLength::Unit u, float v)
-{
-    _set = true;
-    unit = u;
-    Glib::ustring hack("px");
-    switch( unit ) {
-        case NONE:
-        case PX:
-        case EM:
-        case EX:
-        case PERCENT:
-            break;
-        case PT:
-            hack = "pt";
-            break;
-        case PC:
-            hack = "pc";
-            break;
-        case MM:
-            hack = "pt";
-            break;
-        case CM:
-            hack = "pt";
-            break;
-        case INCH:
-            hack = "pt";
-            break;
-        default:
-            break;
-    }
-    value = v;
-    computed =  Inkscape::Util::Quantity::convert(v, hack, "px");
-}
-
 void SVGLength::set(SVGLength::Unit u, float v, float c)
 {
     _set = true;
@@ -508,12 +464,6 @@ void SVGLength::unset(SVGLength::Unit u, float v, float c)
     unit = u;
     value = v;
     computed = c;
-}
-
-void SVGLength::scale(double scale)
-{
-    value *= scale;
-    computed *= scale;
 }
 
 void SVGLength::update(double em, double ex, double scale)
@@ -558,6 +508,7 @@ gchar const *sp_svg_length_get_css_units(SVGLength::Unit unit)
         case SVGLength::MM: return "mm";
         case SVGLength::CM: return "cm";
         case SVGLength::INCH: return "in";
+        case SVGLength::FOOT: return ""; // Does not have a "foot" unit string in the SVG spec
         case SVGLength::EM: return "em";
         case SVGLength::EX: return "ex";
         case SVGLength::PERCENT: return "%";
@@ -598,4 +549,4 @@ void SVGLength::readOrUnset(gchar const *str, Unit u, float v, float c)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

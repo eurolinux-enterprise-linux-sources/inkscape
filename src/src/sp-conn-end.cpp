@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "display/curve.h"
+#include "libnr/nr-matrix-fns.h"
 #include "xml/repr.h"
 #include "sp-conn-end.h"
 #include "sp-path.h"
@@ -21,10 +22,11 @@ SPConnEnd::SPConnEnd(SPObject *const owner) :
     ref(owner),
     href(NULL),
     // Default to center connection endpoint
+    type(ConnPointDefault),
+    id(4),
     _changed_connection(),
     _delete_connection(),
-    _transformed_connection(),
-    _group_connection()
+    _transformed_connection()
 {
 }
 
@@ -41,7 +43,7 @@ get_nearest_common_ancestor(SPObject const *const obj, SPItem const *const objs[
 
 
 static bool try_get_intersect_point_with_item_recursive(Geom::PathVector& conn_pv, SPItem* item,
-        const Geom::Affine& item_transform, double& intersect_pos) {
+        const Geom::Matrix& item_transform, double& intersect_pos) {
 
     double initial_pos = intersect_pos;
     // if this is a group...
@@ -50,9 +52,8 @@ static bool try_get_intersect_point_with_item_recursive(Geom::PathVector& conn_p
 
         // consider all first-order children
         double child_pos = 0.0;
-        std::vector<SPItem*> g = sp_item_group_item_list(group);
-        for (std::vector<SPItem*>::const_iterator i = g.begin();i!=g.end();++i) {
-            SPItem* child_item = *i;
+        for (GSList const* i = sp_item_group_item_list(group); i != NULL; i = i->next) {
+            SPItem* child_item = SP_ITEM(i->data);
             try_get_intersect_point_with_item_recursive(conn_pv, child_item,
                     item_transform * child_item->transform, child_pos);
             if (intersect_pos < child_pos)
@@ -65,7 +66,7 @@ static bool try_get_intersect_point_with_item_recursive(Geom::PathVector& conn_p
     if (!SP_IS_SHAPE(item)) return false;
 
     // make sure it has an associated curve
-    SPCurve* item_curve = SP_SHAPE(item)->getCurve();
+    SPCurve* item_curve = sp_shape_get_curve(SP_SHAPE(item));
     if (!item_curve) return false;
 
     // apply transformations (up to common ancestor)
@@ -74,12 +75,10 @@ static bool try_get_intersect_point_with_item_recursive(Geom::PathVector& conn_p
     const Geom::PathVector& curve_pv = item_curve->get_pathvector();
     Geom::CrossingSet cross = crossings(conn_pv, curve_pv);
     // iterate over all Crossings
-    //TODO: check correctness of the following code: inner loop uses loop variable
-    //      with a name identical to the loop variable of the outer loop. Then rename.
-    for (Geom::CrossingSet::const_iterator i = cross.begin(); i != cross.end(); ++i) {
+    for (Geom::CrossingSet::const_iterator i = cross.begin(); i != cross.end(); i++) {
         const Geom::Crossings& cr = *i;
 
-        for (Geom::Crossings::const_iterator i = cr.begin(); i != cr.end(); ++i) {
+        for (Geom::Crossings::const_iterator i = cr.begin(); i != cr.end(); i++) {
             const Geom::Crossing& cr_pt = *i;
             if ( intersect_pos < cr_pt.ta)
                 intersect_pos = cr_pt.ta;
@@ -97,11 +96,11 @@ static bool try_get_intersect_point_with_item_recursive(Geom::PathVector& conn_p
 // The transforms given should be to a common ancestor of both the path and item.
 //
 static bool try_get_intersect_point_with_item(SPPath* conn, SPItem* item,
-        const Geom::Affine& item_transform, const Geom::Affine& conn_transform,
+        const Geom::Matrix& item_transform, const Geom::Matrix& conn_transform,
         const bool at_start, double& intersect_pos) {
 
     // Copy the curve and apply transformations up to common ancestor.
-    SPCurve* conn_curve = conn->_curve->copy();
+    SPCurve* conn_curve = conn->curve->copy();
     conn_curve->transform(conn_transform);
 
     Geom::PathVector conn_pv = conn_curve->get_pathvector();
@@ -110,7 +109,7 @@ static bool try_get_intersect_point_with_item(SPPath* conn, SPItem* item,
     if (!at_start)
     {
         // connectors are actually a single path, so consider the first element from a Geom::PathVector
-        conn_pv[0] = conn_pv[0].reversed();
+        conn_pv[0] = conn_pv[0].reverse();
     }
 
     // We start with the intersection point at the beginning of the path
@@ -143,26 +142,27 @@ sp_conn_get_route_and_redraw(SPPath *const path,
         return;
     }
 
-    SPItem *h2attItem[2] = {0};
+    SPItem *h2attItem[2];
     path->connEndPair.getAttachedItems(h2attItem);
 
-    SPObject const *const ancestor = get_nearest_common_ancestor(path, h2attItem);
-    Geom::Affine const path2anc(i2anc_affine(path, ancestor));
+    SPItem const *const path_item = SP_ITEM(path);
+    SPObject const *const ancestor = get_nearest_common_ancestor(path_item, h2attItem);
+    Geom::Matrix const path2anc(i2anc_affine(path_item, ancestor));
 
     // Set sensible values incase there the connector ends are not
     // attached to any shapes.
-    Geom::PathVector conn_pv = path->_curve->get_pathvector();
-    double endPos[2] = { 0.0, static_cast<double>(conn_pv[0].size()) };
+    Geom::PathVector conn_pv = path->curve->get_pathvector();
+    double endPos[2] = { 0, conn_pv[0].size() };
 
+    SPConnEnd** _connEnd = path->connEndPair.getConnEnds();
     for (unsigned h = 0; h < 2; ++h) {
-        // Assume center point for all
-        if (h2attItem[h]) {
-            Geom::Affine h2i2anc = i2anc_affine(h2attItem[h], ancestor);
+        if (h2attItem[h] && _connEnd[h]->type == ConnPointDefault && _connEnd[h]->id == ConnPointPosCC) {
+            Geom::Matrix h2i2anc = i2anc_affine(h2attItem[h], ancestor);
             try_get_intersect_point_with_item(path, h2attItem[h], h2i2anc, path2anc,
                         (h == 0), endPos[h]);
         }
     }
-    change_endpts(path->_curve, endPos);
+    change_endpts(path->curve, endPos);
     if (updatePathRepr) {
         path->updateRepr();
         path->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
@@ -171,7 +171,7 @@ sp_conn_get_route_and_redraw(SPPath *const path,
 
 
 static void
-sp_conn_end_shape_move(Geom::Affine const */*mp*/, SPItem */*moved_item*/,
+sp_conn_end_shape_move(Geom::Matrix const */*mp*/, SPItem */*moved_item*/,
                             SPPath *const path)
 {
     if (path->connEndPair.isAutoRoutingConn()) {
@@ -228,9 +228,13 @@ change_endpts(SPCurve *const curve, double const endPos[2])
 static void
 sp_conn_end_deleted(SPObject *, SPObject *const owner, unsigned const handle_ix)
 {
-    char const * const attrs[] = {
-        "inkscape:connection-start", "inkscape:connection-end"};
-    owner->getRepr()->setAttribute(attrs[handle_ix], NULL);
+    // todo: The first argument is the deleted object, or just NULL if
+    //       called by sp_conn_end_detach.
+    g_return_if_fail(handle_ix < 2);
+    char const * const attr_strs[] = {"inkscape:connection-start", "inkscape:connection-start-point",
+                                      "inkscape:connection-end", "inkscape:connection-end-point"};
+    SP_OBJECT_REPR(owner)->setAttribute(attr_strs[2*handle_ix], NULL);
+    SP_OBJECT_REPR(owner)->setAttribute(attr_strs[2*handle_ix+1], NULL);
     /* I believe this will trigger sp_conn_end_href_changed. */
 }
 
@@ -279,6 +283,84 @@ SPConnEnd::setAttacherHref(gchar const *value, SPPath* /*path*/)
     }
 }
 
+void
+SPConnEnd::setAttacherEndpoint(gchar const *value, SPPath* /*path*/)
+{
+    
+    /* References to the connection points have the following format
+        <t><id>, where t is the type of the point, which
+        can be either "d" for default or "u" for user-defined, and
+        id is the local (inside the item) id of the connection point.
+        In the case of default points id represents the position on the
+        item (i.e. Top-Left, Center-Center, etc.).
+    */
+    
+    bool changed = false;
+    ConnPointType newtype = type;
+    
+    if (!value)
+    {
+        // Default to center endpoint
+        type = ConnPointDefault;
+        id = 4;
+    }
+    else
+    {
+        switch (value[0])
+        {
+            case 'd':
+                if ( newtype != ConnPointDefault )
+                {
+                    newtype = ConnPointDefault;
+                    changed = true;
+                }
+                break;
+            case 'u':
+                if ( newtype != ConnPointUserDefined)
+                {
+                    newtype = ConnPointUserDefined;
+                    changed = true;
+                }
+                break;
+            default:
+                g_warning("Bad reference to a connection point.");
+        }
+        
+        int newid = (int) g_ascii_strtod( value+1, 0 );
+        if ( id != newid )
+        {
+            id = newid;
+            changed = true;
+        }
+
+        // We have to verify that the reference to the
+        // connection point is a valid one.
+        
+        if ( changed )
+        {
+
+            // Get the item the connector is attached to
+            SPItem* item = ref.getObject();
+            if ( item )
+            {
+                if (!item->avoidRef->isValidConnPointId( newtype, newid ) )
+                {
+                    g_warning("Bad reference to a connection point.");
+                }
+                else
+                {
+                    type = newtype;
+                    id = newid;
+                }
+    /*          // Update the connector
+                if (path->connEndPair.isAutoRoutingConn()) {
+                    path->connEndPair.tellLibavoidNewEndpoints();
+                }
+    */
+            }
+        }
+    }
+}
 
 void
 sp_conn_end_href_changed(SPObject */*old_ref*/, SPObject */*ref*/,
@@ -288,22 +370,13 @@ sp_conn_end_href_changed(SPObject */*old_ref*/, SPObject */*ref*/,
     SPConnEnd &connEnd = *connEndPtr;
     connEnd._delete_connection.disconnect();
     connEnd._transformed_connection.disconnect();
-    connEnd._group_connection.disconnect();
 
     if (connEnd.href) {
         SPObject *refobj = connEnd.ref.getObject();
         if (refobj) {
             connEnd._delete_connection
-                = refobj->connectDelete(sigc::bind(sigc::ptr_fun(&sp_conn_end_deleted),
-                                                   path, handle_ix));
-            // This allows the connector tool to dive into a group's children
-            // And connect to their children's centers.
-            SPObject *parent = refobj->parent;
-            if (SP_IS_GROUP(parent) && ! SP_IS_LAYER(parent)) {
-                connEnd._group_connection
-                    = SP_ITEM(parent)->connectTransformed(sigc::bind(sigc::ptr_fun(&sp_conn_end_shape_move),
-                                                                 path));
-            }
+                = SP_OBJECT(refobj)->connectDelete(sigc::bind(sigc::ptr_fun(&sp_conn_end_deleted),
+                                                              SP_OBJECT(path), handle_ix));
             connEnd._transformed_connection
                 = SP_ITEM(refobj)->connectTransformed(sigc::bind(sigc::ptr_fun(&sp_conn_end_shape_move),
                                                                  path));

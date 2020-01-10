@@ -9,13 +9,7 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
-#ifndef PANGO_ENABLE_ENGINE
 #define PANGO_ENABLE_ENGINE
-#endif
 
 #include <gtk/gtk.h>
 #include "Layout-TNG.h"
@@ -25,16 +19,20 @@
 #include "sp-string.h"
 #include "FontFactory.h"
 
+#if !PANGO_VERSION_CHECK(1,24,0)
+#define PANGO_WEIGHT_THIN       static_cast<PangoWeight>(100)
+#define PANGO_WEIGHT_BOOK       static_cast<PangoWeight>(380)
+#define PANGO_WEIGHT_MEDIUM     static_cast<PangoWeight>(500)
+#define PANGO_WEIGHT_ULTRAHEAVY static_cast<PangoWeight>(1000)
+#endif
 
 namespace Inkscape {
 namespace Text {
 
 void Layout::_clearInputObjects()
 {
-    for(std::vector<InputStreamItem*>::iterator it = _input_stream.begin() ; it != _input_stream.end() ; ++it) {
+    for(std::vector<InputStreamItem*>::iterator it = _input_stream.begin() ; it != _input_stream.end() ; it++)
         delete *it;
-    }
-
     _input_stream.clear();
     _input_wrap_shapes.clear();
 }
@@ -54,7 +52,7 @@ void Layout::appendText(Glib::ustring const &text, SPStyle *style, void *source_
     sp_style_ref(style);
 
     new_source->text_length = 0;
-    for ( ; text_begin != text_end && text_begin != text.end() ; ++text_begin)
+    for ( ; text_begin != text_end && text_begin != text.end() ; text_begin++)
         new_source->text_length++;        // save this because calculating the length of a UTF-8 string is expensive
 
     if (optional_attributes) {
@@ -72,11 +70,6 @@ void Layout::appendText(Glib::ustring const &text, SPStyle *style, void *source_
                     last_rotate = *it;
             new_source->rotate.resize(1, last_rotate);
         }
-        new_source->textLength._set = optional_attributes->textLength._set;
-        new_source->textLength.value = optional_attributes->textLength.value;
-        new_source->textLength.computed = optional_attributes->textLength.computed;
-        new_source->textLength.unit = optional_attributes->textLength.unit;
-        new_source->lengthAdjust = optional_attributes->lengthAdjust;
     }
     
     _input_stream.push_back(new_source);
@@ -126,43 +119,89 @@ int Layout::_enum_converter(int input, EnumConversionItem const *conversion_tabl
     return conversion_table[0].output;
 }
 
+// ***** the style format interface
+// this doesn't include all accesses to SPStyle, only the ones that are non-trivial
+
+static const float medium_font_size = 12.0;     // more of a default if all else fails than anything else
+float Layout::InputStreamTextSource::styleComputeFontSize() const
+{
+    return style->font_size.computed;
+
+    // in case the computed value's not good enough, here's some manual code held in reserve:
+    SPStyle const *this_style = style;
+    float inherit_multiplier = 1.0;
+
+    for ( ; ; ) {
+        if (this_style->font_size.set && !this_style->font_size.inherit) {
+            switch (this_style->font_size.type) {
+                case SP_FONT_SIZE_LITERAL: {
+                    switch(this_style->font_size.value) {   // these multipliers are straight out of the CSS spec
+	                    case SP_CSS_FONT_SIZE_XX_SMALL: return medium_font_size * inherit_multiplier * (3.0/5.0);
+	                    case SP_CSS_FONT_SIZE_X_SMALL:  return medium_font_size * inherit_multiplier * (3.0/4.0);
+	                    case SP_CSS_FONT_SIZE_SMALL:    return medium_font_size * inherit_multiplier * (8.0/9.0);
+                        default:
+	                    case SP_CSS_FONT_SIZE_MEDIUM:   return medium_font_size * inherit_multiplier;
+	                    case SP_CSS_FONT_SIZE_LARGE:    return medium_font_size * inherit_multiplier * (6.0/5.0);
+	                    case SP_CSS_FONT_SIZE_X_LARGE:  return medium_font_size * inherit_multiplier * (3.0/2.0);
+	                    case SP_CSS_FONT_SIZE_XX_LARGE: return medium_font_size * inherit_multiplier * 2.0;
+	                    case SP_CSS_FONT_SIZE_SMALLER: inherit_multiplier *= 0.84; break;   //not exactly according to spec
+	                    case SP_CSS_FONT_SIZE_LARGER:  inherit_multiplier *= 1.26; break;   //not exactly according to spec
+                    }
+                    break;
+                }
+                case SP_FONT_SIZE_PERCENTAGE: {    // 'em' units should be in here, but aren't. Fix in style.cpp.
+                    inherit_multiplier *= this_style->font_size.value;
+                    break;
+                }
+                case SP_FONT_SIZE_LENGTH: {
+                    return this_style->font_size.value * inherit_multiplier;
+                }
+            }
+        }
+        if (this_style->object == NULL || this_style->object->parent == NULL) break;
+        this_style = this_style->object->parent->style;
+        if (this_style == NULL) break;
+    }
+    return medium_font_size * inherit_multiplier;
+}
+
+static const Layout::EnumConversionItem enum_convert_spstyle_block_progression_to_direction[] = {
+    {SP_CSS_BLOCK_PROGRESSION_TB, Layout::TOP_TO_BOTTOM},
+    {SP_CSS_BLOCK_PROGRESSION_LR, Layout::LEFT_TO_RIGHT},
+    {SP_CSS_BLOCK_PROGRESSION_RL, Layout::RIGHT_TO_LEFT}};
+
+static const Layout::EnumConversionItem enum_convert_spstyle_writing_mode_to_direction[] = {
+    {SP_CSS_WRITING_MODE_LR_TB, Layout::TOP_TO_BOTTOM},
+    {SP_CSS_WRITING_MODE_RL_TB, Layout::TOP_TO_BOTTOM},
+    {SP_CSS_WRITING_MODE_TB_RL, Layout::RIGHT_TO_LEFT},
+    {SP_CSS_WRITING_MODE_TB_LR, Layout::LEFT_TO_RIGHT}};
+
 Layout::Direction Layout::InputStreamTextSource::styleGetBlockProgression() const
 {
-  switch( style->writing_mode.computed ) {
+    // this function shouldn't be necessary, but since style.cpp doesn't support
+    // shorthand properties yet, it is.
+    SPStyle const *this_style = style;
 
-  case SP_CSS_WRITING_MODE_LR_TB:
-  case SP_CSS_WRITING_MODE_RL_TB:
+    for ( ; ; ) {
+        if (this_style->block_progression.set)
+            return (Layout::Direction)_enum_converter(this_style->block_progression.computed, enum_convert_spstyle_block_progression_to_direction, sizeof(enum_convert_spstyle_block_progression_to_direction)/sizeof(enum_convert_spstyle_block_progression_to_direction[0]));
+        if (this_style->writing_mode.set)
+            return (Layout::Direction)_enum_converter(this_style->writing_mode.computed, enum_convert_spstyle_writing_mode_to_direction, sizeof(enum_convert_spstyle_writing_mode_to_direction)/sizeof(enum_convert_spstyle_writing_mode_to_direction[0]));
+        if (this_style->object == NULL || this_style->object->parent == NULL) break;
+        this_style = this_style->object->parent->style;
+        if (this_style == NULL) break;
+    }
     return TOP_TO_BOTTOM;
-      
-  case SP_CSS_WRITING_MODE_TB_RL:
-    return RIGHT_TO_LEFT;
 
-  case SP_CSS_WRITING_MODE_TB_LR:
-    return LEFT_TO_RIGHT;
-
-  default:
-    std::cerr << "Layout::InputTextStream::styleGetBlockProgression: invalid writing mode." << std::endl;
-  }
-  return TOP_TO_BOTTOM;
 }
 
-SPCSSTextOrientation Layout::InputStreamTextSource::styleGetTextOrientation() const
-{
-  return ((SPCSSTextOrientation)style->text_orientation.computed);
-}
-
-SPCSSBaseline Layout::InputStreamTextSource::styleGetDominantBaseline() const
-{
-  return ((SPCSSBaseline)style->dominant_baseline.computed);
-}
-
-static Layout::Alignment text_anchor_to_alignment(unsigned anchor, Layout::Direction para_direction)
+static Layout::Alignment text_anchor_to_alignment(unsigned anchor, Layout::Direction /*para_direction*/)
 {
     switch (anchor) {
         default:
-        case SP_CSS_TEXT_ANCHOR_START:  return para_direction == Layout::LEFT_TO_RIGHT ? Layout::LEFT : Layout::RIGHT;
+        case SP_CSS_TEXT_ANCHOR_START:  return Layout::LEFT;
         case SP_CSS_TEXT_ANCHOR_MIDDLE: return Layout::CENTER;
-        case SP_CSS_TEXT_ANCHOR_END:    return para_direction == Layout::LEFT_TO_RIGHT ? Layout::RIGHT : Layout::LEFT;
+        case SP_CSS_TEXT_ANCHOR_END:    return Layout::RIGHT;
     }
 }
 
@@ -245,15 +284,16 @@ font_instance *Layout::InputStreamTextSource::styleGetFontInstance() const
 
 PangoFontDescription *Layout::InputStreamTextSource::styleGetFontDescription() const
 {
+    if (style->text == NULL) return NULL;
     PangoFontDescription *descr = pango_font_description_new();
     // Pango can't cope with spaces before or after the commas - let's remove them.
     // this code is not exactly unicode-safe, but it's similar to what's done in
     // pango, so it's not the limiting factor
     Glib::ustring family;
-    if (style->font_family.value == NULL) {
-        family = "sans-serif";
+    if (style->text->font_family.value == NULL) {
+        family = "Sans";
     } else {
-        gchar **families = g_strsplit(style->font_family.value, ",", -1);
+        gchar **families = g_strsplit(style->text->font_family.value, ",", -1);
         if (families) {
             for (gchar **f = families ; *f ; ++f) {
                 g_strstrip(*f);
@@ -284,7 +324,7 @@ PangoFontDescription *Layout::InputStreamTextSource::styleGetFontDescription() c
 
 Layout::InputStreamTextSource::~InputStreamTextSource()
 {
-  sp_style_unref(style);
+    sp_style_unref(style);
 }
 
 }//namespace Text

@@ -1,11 +1,9 @@
-#ifndef SEEN_INKSCAPE_IO_URISTREAM_H
-#define SEEN_INKSCAPE_IO_URISTREAM_H
+#ifndef __INKSCAPE_IO_URISTREAM_H__
+#define __INKSCAPE_IO_URISTREAM_H__
 /**
- * @file
  * This should be the only way that we provide sources/sinks
  * to any input/output stream.
- */
-/*
+ *
  * Authors:
  *   Bob Jamison <rjamison@titan.com>
  *
@@ -37,27 +35,30 @@ class UriInputStream : public InputStream
 {
 
 public:
-    UriInputStream(FILE *source, Inkscape::URI &uri);
+    UriInputStream(FILE *source, Inkscape::URI &uri) throw(StreamException);
 
-    UriInputStream(Inkscape::URI &source);
+    UriInputStream(Inkscape::URI &source) throw(StreamException);
 
-    virtual ~UriInputStream();
+    virtual ~UriInputStream() throw(StreamException);
 
-    virtual int available();
+    virtual int available() throw(StreamException);
 
-    virtual void close();
+    virtual void close() throw(StreamException);
 
-    virtual int get();
+    virtual int get() throw(StreamException);
 
 private:
-    Inkscape::URI &uri;
+
+    bool closed;
+
     FILE *inf;           //for file: uris
     unsigned char *data; //for data: uris
     int dataPos;         //  current read position in data field
     int dataLen;         //  length of data buffer
-    bool closed;
-    int scheme;
 
+    Inkscape::URI &uri;
+
+    int scheme;
 
 }; // class UriInputStream
 
@@ -73,15 +74,15 @@ class UriReader : public BasicReader
 
 public:
 
-    UriReader(Inkscape::URI &source);
+    UriReader(Inkscape::URI &source) throw(StreamException);
 
-    virtual ~UriReader();
+    virtual ~UriReader() throw(StreamException);
 
-    virtual int available();
+    virtual int available() throw(StreamException);
 
-    virtual void close();
+    virtual void close() throw(StreamException);
 
-    virtual gunichar get();
+    virtual gunichar get() throw(StreamException);
 
 private:
 
@@ -105,17 +106,17 @@ class UriOutputStream : public OutputStream
 
 public:
 
-    UriOutputStream(FILE *fp, Inkscape::URI &destination);
+    UriOutputStream(FILE *fp, Inkscape::URI &destination) throw(StreamException);
 
-    UriOutputStream(Inkscape::URI &destination);
+    UriOutputStream(Inkscape::URI &destination) throw(StreamException);
 
-    virtual ~UriOutputStream();
+    virtual ~UriOutputStream() throw(StreamException);
 
-    virtual void close();
+    virtual void close() throw(StreamException);
 
-    virtual void flush();
+    virtual void flush() throw(StreamException);
 
-    virtual int put(gunichar ch);
+    virtual void put(int ch) throw(StreamException);
 
 private:
 
@@ -144,15 +145,15 @@ class UriWriter : public BasicWriter
 
 public:
 
-    UriWriter(Inkscape::URI &source);
+    UriWriter(Inkscape::URI &source) throw(StreamException);
 
-    virtual ~UriWriter();
+    virtual ~UriWriter() throw(StreamException);
 
-    virtual void close();
+    virtual void close() throw(StreamException);
 
-    virtual void flush();
+    virtual void flush() throw(StreamException);
 
-    virtual void put(gunichar ch);
+    virtual void put(gunichar ch) throw(StreamException);
 
 private:
 
@@ -169,4 +170,4 @@ private:
 } // namespace Inkscape
 
 
-#endif // SEEN_INKSCAPE_IO_URISTREAM_H
+#endif /* __INKSCAPE_IO_URISTREAM_H__ */

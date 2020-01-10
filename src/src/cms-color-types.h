@@ -10,14 +10,15 @@
 # include "config.h"
 #endif // HAVE_CONFIG_H
 
+#include <glib.h>
+
 #if HAVE_LIBLCMS1
 # include <icc34.h>
 #endif
 
 #if HAVE_STDINT_H
-# include <stdint.h> // uint8_t, etc
+# include <stdint.h>
 #endif
-typedef unsigned int guint32;
 
 typedef void * cmsHPROFILE;
 typedef void * cmsHTRANSFORM;

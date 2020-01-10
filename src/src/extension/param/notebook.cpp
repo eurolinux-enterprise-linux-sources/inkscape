@@ -3,9 +3,8 @@
  */
 
 /*
- * Authors:
+ * Author:
  *   Johan Engelen <johan@shouraizou.nl>
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2006 Author
  *
@@ -16,10 +15,12 @@
 # include "config.h"
 #endif
 
+
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/spinbutton.h>
 #include <gtkmm/notebook.h>
+#include <gtkmm/tooltips.h>
 
 #include <glibmm/i18n.h>
 
@@ -32,24 +33,21 @@
 
 #include "notebook.h"
 
-/**
- * The root directory in the preferences database for extension
- * related parameters.
- */
+/** \brief  The root directory in the preferences database for extension
+            related parameters. */
 #define PREF_DIR "extensions"
 
 namespace Inkscape {
 namespace Extension {
 
 
-/**
- * A class to represent the pages of a notebookparameter of an extension.
- */
+// \brief  A class to represent the pages of a notebookparameter of an extension
 class ParamNotebookPage : public Parameter {
 private:
     GSList * parameters; /**< A table to store the parameters for this page.
                               This only gets created if there are parameters on this
                               page */
+    Gtk::Tooltips * _tooltips;
 
 public:
     static ParamNotebookPage * makepage (Inkscape::XML::Node * in_repr, Inkscape::Extension::Extension * in_ext);
@@ -59,7 +57,7 @@ public:
     Gtk::Widget * get_widget(SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal);
     void paramString (std::list <std::string> &list);
     gchar * get_guitext (void) {return _text;};
-    Parameter * get_param (const gchar * name);
+
 }; /* class ParamNotebookPage */
 
 
@@ -70,12 +68,12 @@ ParamNotebookPage::ParamNotebookPage (const gchar * name, const gchar * guitext,
 
     // Read XML to build page
     if (xml != NULL) {
-        Inkscape::XML::Node *child_repr = xml->firstChild();
+        Inkscape::XML::Node *child_repr = sp_repr_children(xml);
         while (child_repr != NULL) {
             char const * chname = child_repr->name();
-            if (!strncmp(chname, INKSCAPE_EXTENSION_NS_NC, strlen(INKSCAPE_EXTENSION_NS_NC))) {
-                chname += strlen(INKSCAPE_EXTENSION_NS);
-            }
+			if (!strncmp(chname, INKSCAPE_EXTENSION_NS_NC, strlen(INKSCAPE_EXTENSION_NS_NC))) {
+				chname += strlen(INKSCAPE_EXTENSION_NS);
+			}
             if (chname[0] == '_') // Allow _ for translation of tags
                 chname++;
             if (!strcmp(chname, "param") || !strcmp(chname, "_param")) {
@@ -83,13 +81,16 @@ ParamNotebookPage::ParamNotebookPage (const gchar * name, const gchar * guitext,
                 param = Parameter::make(child_repr, ext);
                 if (param != NULL) parameters = g_slist_append(parameters, param);
             }
-            child_repr = child_repr->next();
+            child_repr = sp_repr_next(child_repr);
         }
     }
+
+    return;
 }
 
 ParamNotebookPage::~ParamNotebookPage (void)
 {
+    if (_tooltips) delete _tooltips;
     //destroy parameters
     for (GSList * list = parameters; list != NULL; list = g_slist_next(list)) {
         Parameter * param = reinterpret_cast<Parameter *>(list->data);
@@ -98,13 +99,16 @@ ParamNotebookPage::~ParamNotebookPage (void)
     g_slist_free(parameters);
 }
 
-/** Return the value as a string. */
-void ParamNotebookPage::paramString(std::list <std::string> &list)
+/** \brief  Return the value as a string */
+void
+ParamNotebookPage::paramString (std::list <std::string> &list)
 {
     for (GSList * plist = parameters; plist != NULL; plist = g_slist_next(plist)) {
         Parameter * param = reinterpret_cast<Parameter *>(plist->data);
         param->string(list);
     }
+
+    return;
 }
 
 
@@ -115,7 +119,6 @@ void ParamNotebookPage::paramString(std::list <std::string> &list)
             in the XML file describing the extension (it's private so people
             have to use the system) :)
     \param  in_repr  The XML describing the page
-    \todo   the 'gui-hidden' attribute is read but not used!
 
     This function first grabs all of the data out of the Repr and puts
     it into local variables.  Actually, these are just pointers, and the
@@ -140,9 +143,9 @@ ParamNotebookPage::makepage (Inkscape::XML::Node * in_repr, Inkscape::Extension:
     const char * desc;
     const char * scope_str;
     Parameter::_scope_t scope = Parameter::SCOPE_USER;
-    bool gui_hidden = false;
-    const char * gui_hide;
-    const char * gui_tip;
+	bool gui_hidden = false;
+	const char * gui_hide;
+	const char * gui_tip;
 
     name = in_repr->attribute("name");
     guitext = in_repr->attribute("gui-text");
@@ -155,14 +158,14 @@ ParamNotebookPage::makepage (Inkscape::XML::Node * in_repr, Inkscape::Extension:
     if (desc == NULL)
         desc = in_repr->attribute("_gui-description");
     scope_str = in_repr->attribute("scope");
-    gui_hide = in_repr->attribute("gui-hidden");
-    if (gui_hide != NULL) {
-        if (strcmp(gui_hide, "1") == 0 ||
-            strcmp(gui_hide, "true") == 0) {
-                gui_hidden = true;
-        }
-        /* else stays false */
-    }
+	gui_hide = in_repr->attribute("gui-hidden");
+	if (gui_hide != NULL) {
+		if (strcmp(gui_hide, "1") == 0 ||
+			strcmp(gui_hide, "true") == 0) {
+			gui_hidden = true;
+		}
+		/* else stays false */
+	}
 
     /* In this case we just don't have enough information */
     if (name == NULL) {
@@ -179,7 +182,7 @@ ParamNotebookPage::makepage (Inkscape::XML::Node * in_repr, Inkscape::Extension:
         }
     }
 
-    ParamNotebookPage * page = new ParamNotebookPage(name, guitext, desc, scope, gui_hidden, gui_tip, in_ext, in_repr);
+    ParamNotebookPage * page = new ParamNotebookPage(name, guitext, desc, scope, gui_hide, gui_tip, in_ext, in_repr);
 
     /* Note: page could equal NULL */
     return page;
@@ -188,15 +191,16 @@ ParamNotebookPage::makepage (Inkscape::XML::Node * in_repr, Inkscape::Extension:
 
 
 /**
- * Creates a notebookpage widget for a notebook.
- *
- * Builds a notebook page (a vbox) and puts parameters on it.
- */
-Gtk::Widget * ParamNotebookPage::get_widget(SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal)
+    \brief  Creates a notebookpage widget for a notebook
+
+    Builds a notebook page (a vbox) and puts parameters on it.
+*/
+Gtk::Widget *
+ParamNotebookPage::get_widget (SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal)
 {
-    if (_gui_hidden) {
-        return NULL;
-    }
+	if (_gui_hidden) return NULL;
+
+    if (!_tooltips) _tooltips = new Gtk::Tooltips();
 
     Gtk::VBox * vbox = Gtk::manage(new Gtk::VBox);
     vbox->set_border_width(5);
@@ -205,16 +209,11 @@ Gtk::Widget * ParamNotebookPage::get_widget(SPDocument * doc, Inkscape::XML::Nod
     for (GSList * list = parameters; list != NULL; list = g_slist_next(list)) {
         Parameter * param = reinterpret_cast<Parameter *>(list->data);
         Gtk::Widget * widg = param->get_widget(doc, node, changeSignal);
-        if (widg) {
-            gchar const * tip = param->get_tooltip();
-    //        printf("Tip: '%s'\n", tip);
-            vbox->pack_start(*widg, false, false, 2);
-            if (tip) {
-                widg->set_tooltip_text(tip);
-            } else {
-                widg->set_tooltip_text("");
-                widg->set_has_tooltip(false);
-            }
+        gchar const * tip = param->get_tooltip();
+
+        vbox->pack_start(*widg, true, true, 2);
+        if (tip != NULL) {
+            _tooltips->set_tip(*widg, Glib::ustring(tip));
         }
     }
 
@@ -231,12 +230,12 @@ ParamNotebook::ParamNotebook (const gchar * name, const gchar * guitext, const g
 
     // Read XML tree to add pages:
     if (xml != NULL) {
-        Inkscape::XML::Node *child_repr = xml->firstChild();
+        Inkscape::XML::Node *child_repr = sp_repr_children(xml);
         while (child_repr != NULL) {
             char const * chname = child_repr->name();
-            if (!strncmp(chname, INKSCAPE_EXTENSION_NS_NC, strlen(INKSCAPE_EXTENSION_NS_NC))) {
-                chname += strlen(INKSCAPE_EXTENSION_NS);
-            }
+			if (!strncmp(chname, INKSCAPE_EXTENSION_NS_NC, strlen(INKSCAPE_EXTENSION_NS_NC))) {
+				chname += strlen(INKSCAPE_EXTENSION_NS);
+			}
             if (chname[0] == '_') // Allow _ for translation of tags
                 chname++;
             if (!strcmp(chname, "page")) {
@@ -244,7 +243,7 @@ ParamNotebook::ParamNotebook (const gchar * name, const gchar * guitext, const g
                 page = ParamNotebookPage::makepage(child_repr, ext);
                 if (page != NULL) pages = g_slist_append(pages, page);
             }
-            child_repr = child_repr->next();
+            child_repr = sp_repr_next(child_repr);
         }
     }
 
@@ -265,6 +264,8 @@ ParamNotebook::ParamNotebook (const gchar * name, const gchar * guitext, const g
         defaultval = paramval.data();
     if (defaultval != NULL)
         _value = g_strdup(defaultval);  // allocate space for _value
+
+    return;
 }
 
 ParamNotebook::~ParamNotebook (void)
@@ -280,22 +281,21 @@ ParamNotebook::~ParamNotebook (void)
 }
 
 
-/**
- * A function to set the \c _value.
- *
- * This function sets the internal value, but it also sets the value
- * in the preferences structure.  To put it in the right place, \c PREF_DIR
- * and \c pref_name() are used.
- *
- * To copy the data into _value the old memory must be free'd first.
- * It is important to note that \c g_free handles \c NULL just fine.  Then
- * the passed in value is duplicated using \c g_strdup().
- *
- * @param  in   The number of the page which value must be set.
- * @param  doc  A document that should be used to set the value.
- * @param  node The node where the value may be placed.
- */
-const gchar *ParamNotebook::set(const int in, SPDocument * /*doc*/, Inkscape::XML::Node * /*node*/)
+/** \brief  A function to set the \c _value
+    \param  in   The number of the page which value must be set
+    \param  doc  A document that should be used to set the value.
+    \param  node The node where the value may be placed
+
+    This function sets the internal value, but it also sets the value
+    in the preferences structure.  To put it in the right place, \c PREF_DIR
+    and \c pref_name() are used.
+
+    To copy the data into _value the old memory must be free'd first.
+    It is important to note that \c g_free handles \c NULL just fine.  Then
+    the passed in value is duplicated using \c g_strdup().
+*/
+const gchar *
+ParamNotebook::set (const int in, SPDocument * /*doc*/, Inkscape::XML::Node * /*node*/)
 {
     ParamNotebookPage * page = NULL;
     int i = 0;
@@ -317,7 +317,13 @@ const gchar *ParamNotebook::set(const int in, SPDocument * /*doc*/, Inkscape::XM
     return _value;
 }
 
-void ParamNotebook::string(std::list <std::string> &list) const
+
+/**
+    \brief  A function to get the currentpage and the parameters in a string form
+    \return A string with the 'value' and all the parameters on all pages as command line arguments
+*/
+void
+ParamNotebook::string (std::list <std::string> &list)
 {
     std::string param_string;
     param_string += "--";
@@ -333,100 +339,59 @@ void ParamNotebook::string(std::list <std::string> &list) const
         ParamNotebookPage * page = reinterpret_cast<ParamNotebookPage *>(pglist->data);
         page->paramString(list);
     }
+
+    return;
 }
 
-/** A special category of Gtk::Notebook to handle notebook parameters. */
+/** \brief  A special category of Gtk::Notebook to handle notebook parameters */
 class ParamNotebookWdg : public Gtk::Notebook {
 private:
     ParamNotebook * _pref;
     SPDocument * _doc;
     Inkscape::XML::Node * _node;
 public:
-    /**
-     * Build a notebookpage preference for the given parameter.
-     * @param  pref  Where to get the string (pagename) from, and where to put it
-     *               when it changes.
-     */
+    /** \brief  Build a notebookpage preference for the given parameter
+        \param  pref  Where to get the string (pagename) from, and where to put it
+                      when it changes.
+    */
     ParamNotebookWdg (ParamNotebook * pref, SPDocument * doc, Inkscape::XML::Node * node) :
         Gtk::Notebook(), _pref(pref), _doc(doc), _node(node), activated(false) {
         // don't have to set the correct page: this is done in ParamNotebook::get_widget.
         // hook function
         this->signal_switch_page().connect(sigc::mem_fun(this, &ParamNotebookWdg::changed_page));
+        return;
     };
-#if WITH_GTKMM_3_0
-    void changed_page(Gtk::Widget *page, guint pagenum);
-#else
     void changed_page(GtkNotebookPage *page, guint pagenum);
-#endif
     bool activated;
 };
 
-/**
- * Respond to the selected page of notebook changing.
- * This function responds to the changing by reporting it to
- * ParamNotebook. The change is only reported when the notebook
- * is actually visible. This to exclude 'fake' changes when the
- * notebookpages are added or removed.
- */
-#if WITH_GTKMM_3_0
-void ParamNotebookWdg::changed_page(Gtk::Widget * /*page*/, guint pagenum)
-#else
-void ParamNotebookWdg::changed_page(GtkNotebookPage * /*page*/, guint pagenum)
-#endif
+/** \brief  Respond to the selected page of notebook changing
+    This function responds to the changing by reporting it to
+    ParamNotebook. The change is only reported when the notebook
+    is actually visible. This to exclude 'fake' changes when the
+    notebookpages are added or removed.
+*/
+void
+ParamNotebookWdg::changed_page(GtkNotebookPage */*page*/,
+                                   guint pagenum)
 {
-    if (get_visible()) {
+    if (is_visible()) {
         _pref->set((int)pagenum, _doc, _node);
     }
+    return;
 }
 
-/** Search the parameter's name in the notebook content. */
-Parameter *ParamNotebook::get_param(const gchar * name)
-{
-    if (name == NULL) {
-        throw Extension::param_not_exist();
-    }
-    for (GSList * pglist = pages; pglist != NULL; pglist = g_slist_next(pglist)) {
-        ParamNotebookPage * page = reinterpret_cast<ParamNotebookPage *>(pglist->data);
-        Parameter * subparam = page->get_param(name);
-        if (subparam) {
-            return subparam;
-        }
-    }
 
-    return NULL;
-}
-
-/** Search the parameter's name in the page content. */
-Parameter *ParamNotebookPage::get_param(const gchar * name)
-{
-    if (name == NULL) {
-        throw Extension::param_not_exist();
-    }
-    if (this->parameters == NULL) {
-        // the list of parameters is empty
-        throw Extension::param_not_exist();
-    }
-
-    for (GSList * list = this->parameters; list != NULL; list = g_slist_next(list)) {
-        Parameter * param = static_cast<Parameter*>(list->data);
-        if (!strcmp(param->name(), name)) {
-            return param;
-        }
-    }
-
-    return NULL;
-}
 
 /**
- * Creates a Notebook widget for a notebook parameter.
- *
- * Builds a notebook and puts pages in it.
- */
-Gtk::Widget * ParamNotebook::get_widget(SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal)
+    \brief  Creates a Notebook widget for a notebook parameter
+
+    Builds a notebook and puts pages in it.
+*/
+Gtk::Widget *
+ParamNotebook::get_widget (SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal)
 {
-    if (_gui_hidden) {
-        return NULL;
-    }
+	if (_gui_hidden) return NULL;
 
     ParamNotebookWdg * nb = Gtk::manage(new ParamNotebookWdg(this, doc, node));
 
@@ -451,8 +416,8 @@ Gtk::Widget * ParamNotebook::get_widget(SPDocument * doc, Inkscape::XML::Node * 
 }
 
 
-}  // namespace Extension
-}  // namespace Inkscape
+}  /* namespace Extension */
+}  /* namespace Inkscape */
 
 /*
   Local Variables:
@@ -463,4 +428,4 @@ Gtk::Widget * ParamNotebook::get_widget(SPDocument * doc, Inkscape::XML::Node * 
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

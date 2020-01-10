@@ -9,6 +9,7 @@
 #include <glib.h>
 #include "Path.h"
 #include "livarot/path-description.h"
+#include <libnr/nr-matrix-ops.h>
 
 /*
  * manipulation of the path data: path description and polyline
@@ -28,7 +29,7 @@ Path::Path()
 
 Path::~Path()
 {
-    for (std::vector<PathDescr*>::iterator i = descr_cmd.begin(); i != descr_cmd.end(); ++i) {
+    for (std::vector<PathDescr*>::iterator i = descr_cmd.begin(); i != descr_cmd.end(); i++) {
         delete *i;
     }
 }
@@ -37,7 +38,7 @@ Path::~Path()
 void Path::Affiche()
 {
     std::cout << "path: " << descr_cmd.size() << " commands." << std::endl;
-    for (std::vector<PathDescr*>::const_iterator i = descr_cmd.begin(); i != descr_cmd.end(); ++i) {
+    for (std::vector<PathDescr*>::const_iterator i = descr_cmd.begin(); i != descr_cmd.end(); i++) {
         (*i)->dump(std::cout);
         std::cout << std::endl;
     }
@@ -47,7 +48,7 @@ void Path::Affiche()
 
 void Path::Reset()
 {
-    for (std::vector<PathDescr*>::iterator i = descr_cmd.begin(); i != descr_cmd.end(); ++i) {
+    for (std::vector<PathDescr*>::iterator i = descr_cmd.begin(); i != descr_cmd.end(); i++) {
         delete *i;
     }
     
@@ -61,7 +62,7 @@ void Path::Copy(Path * who)
 {
     ResetPoints();
     
-    for (std::vector<PathDescr*>::iterator i = descr_cmd.begin(); i != descr_cmd.end(); ++i) {
+    for (std::vector<PathDescr*>::iterator i = descr_cmd.begin(); i != descr_cmd.end(); i++) {
         delete *i;
     }
         
@@ -69,7 +70,7 @@ void Path::Copy(Path * who)
         
     for (std::vector<PathDescr*>::const_iterator i = who->descr_cmd.begin();
          i != who->descr_cmd.end();
-         ++i)
+         i++)
     {
         descr_cmd.push_back((*i)->clone());
     }
@@ -496,9 +497,9 @@ void Path::PolylineBoundingBox(double &l, double &t, double &r, double &b)
   std::vector<path_lineto>::const_iterator i = pts.begin();
   l = r = i->p[Geom::X];
   t = b = i->p[Geom::Y];
-  ++i;
+  i++;
 
-  for (; i != pts.end(); ++i) {
+  for (; i != pts.end(); i++) {
       r = std::max(r, i->p[Geom::X]);
       l = std::min(l, i->p[Geom::X]);
       b = std::max(b, i->p[Geom::Y]);
@@ -699,9 +700,9 @@ void Path::PointAndTangentAt(int piece, double at, Geom::Point &pos, Geom::Point
     }
 }
 
-void Path::Transform(const Geom::Affine &trans)
+void Path::Transform(const Geom::Matrix &trans)
 {
-    for (std::vector<PathDescr*>::iterator i = descr_cmd.begin(); i != descr_cmd.end(); ++i) {
+    for (std::vector<PathDescr*>::iterator i = descr_cmd.begin(); i != descr_cmd.end(); i++) {
         (*i)->transform(trans);
     }
 }

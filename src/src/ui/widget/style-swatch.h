@@ -13,35 +13,24 @@
 #ifndef INKSCAPE_UI_CURRENT_STYLE_H
 #define INKSCAPE_UI_CURRENT_STYLE_H
 
-#if HAVE_CONFIG_H
-# include "config.h"
-#endif
-
-#include <gtkmm/box.h>
+#include <gtkmm/table.h>
 #include <gtkmm/label.h>
+#include <gtkmm/box.h>
 #include <gtkmm/eventbox.h>
 #include <gtkmm/enums.h>
 
+#include <glibmm/i18n.h>
+
 #include "desktop.h"
+#include "verbs.h"
+#include "button.h"
 #include "preferences.h"
 
+class SPUnit;
 class SPStyle;
 class SPCSSAttr;
 
-namespace Gtk {
-#if WITH_GTKMM_3_0
-class Grid;
-#else
-class Table;
-#endif
-}
-
 namespace Inkscape {
-
-namespace Util {
-    class Unit;
-}
-
 namespace UI {
 namespace Widget {
 
@@ -74,13 +63,7 @@ private:
     Glib::ustring _tool_path;
 
     Gtk::EventBox _swatch;
-
-#if WITH_GTKMM_3_0
-    Gtk::Grid *_table;
-#else
-    Gtk::Table *_table;
-#endif
-
+    Gtk::Table _table;
     Gtk::Label _label[2];
     Gtk::EventBox _place[2];
     Gtk::EventBox _opacity_place;
@@ -92,8 +75,10 @@ private:
     Gtk::EventBox _stroke_width_place;
     Gtk::Label _stroke_width;
 
-    Inkscape::Util::Unit *_sw_unit;
+    SPUnit *_sw_unit;
 
+    Gtk::Tooltips _tooltips;
+    
 friend class ToolObserver;
 };
 
@@ -104,13 +89,13 @@ friend class ToolObserver;
 
 #endif // INKSCAPE_UI_WIDGET_BUTTON_H
 
-/*
+/* 
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  c-file-offsets:((innamespace . 0)(inline-open . 0))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

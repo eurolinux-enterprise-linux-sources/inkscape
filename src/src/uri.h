@@ -1,4 +1,7 @@
-/*
+/**
+ * \file
+ * \brief Classes for representing and manipulating URIs as per RFC 2396.
+ *
  * Authors:
  *   MenTaLguY <mental@rydia.net>
  *   Jon A. Cruz <jon@joncruz.org>
@@ -11,115 +14,38 @@
 #ifndef INKSCAPE_URI_H
 #define INKSCAPE_URI_H
 
+#include <glib.h>
 #include <exception>
 #include <libxml/uri.h>
 #include "bad-uri-exception.h"
-#include <string>
 
 namespace Inkscape {
 
-/**
- * Represents an URI as per RFC 2396.
- */
+/** \brief Represents an URI as per RFC 2396. */
 class URI {
 public:
-
-    /* Blank constructor */
-    URI();
-
-    /**
-     * Copy constructor.
-     */
     URI(URI const &uri);
-
-    /**
-     * Constructor from a C-style ASCII string.
-     *
-     * @param preformed Properly quoted C-style string to be represented.
-     */
-    explicit URI(char const *preformed);
-
-    /**
-     * Destructor.
-     */
+    explicit URI(gchar const *preformed) throw(BadURIException);
     ~URI();
 
-    /**
-     * Determines if the URI represented is an 'opaque' URI.
-     *
-     * @return \c true if the URI is opaque, \c false if hierarchial.
-     */
     bool isOpaque() const { return _impl->isOpaque(); }
-
-    /**
-     * Determines if the URI represented is 'relative' as per RFC 2396.
-     *
-     * Relative URI references are distinguished by not begining with a
-     * scheme name.
-     *
-     * @return \c true if the URI is relative, \c false if it is absolute.
-     */
     bool isRelative() const { return _impl->isRelative(); }
-
-    /**
-     * Determines if the relative URI represented is a 'net-path' as per RFC 2396.
-     *
-     * A net-path is one that starts with "\\".
-     *
-     * @return \c true if the URI is relative and a net-path, \c false otherwise.
-     */
     bool isNetPath() const { return _impl->isNetPath(); }
-
-    /**
-     * Determines if the relative URI represented is a 'relative-path' as per RFC 2396.
-     *
-     * A relative-path is one that starts with no slashes.
-     *
-     * @return \c true if the URI is relative and a relative-path, \c false otherwise.
-     */
     bool isRelativePath() const { return _impl->isRelativePath(); }
-
-    /**
-     * Determines if the relative URI represented is a 'absolute-path' as per RFC 2396.
-     *
-     * An absolute-path is one that starts with a single "\".
-     *
-     * @return \c true if the URI is relative and an absolute-path, \c false otherwise.
-     */
     bool isAbsolutePath() const { return _impl->isAbsolutePath(); }
+    const gchar *getScheme() const { return _impl->getScheme(); }
+    const gchar *getPath() const { return _impl->getPath(); }
+    const gchar *getQuery() const { return _impl->getQuery(); }
+    const gchar *getFragment() const { return _impl->getFragment(); }
+    const gchar *getOpaque() const { return _impl->getOpaque(); }
 
-    const char *getScheme() const { return _impl->getScheme(); }
+    static URI fromUtf8( gchar const* path ) throw (BadURIException);
+    static URI from_native_filename(gchar const *path) throw(BadURIException);
+    static gchar *to_native_filename(gchar const* uri) throw(BadURIException);
 
-    const char *getPath() const { return _impl->getPath(); }
+    gchar *toNativeFilename() const throw(BadURIException);
+    gchar *toString() const { return _impl->toString(); }
 
-    const char *getQuery() const { return _impl->getQuery(); }
-
-    const char *getFragment() const { return _impl->getFragment(); }
-
-    const char *getOpaque() const { return _impl->getOpaque(); }
-
-    static URI fromUtf8( char const* path );
-
-    static URI from_native_filename(char const *path);
-
-    static char *to_native_filename(char const* uri);
-
-    const std::string getFullPath(std::string const &base) const;
-
-    char *toNativeFilename() const;
-
-    /**
-     * Returns a glib string version of this URI.
-     *
-     * The returned string must be freed with \c g_free().
-     *
-     * @return a glib string version of this URI.
-     */
-    char *toString() const { return _impl->toString(); }
-
-    /**
-     * Assignment operator.
-     */
     URI &operator=(URI const &uri);
 
 private:
@@ -134,12 +60,12 @@ private:
         bool isNetPath() const;
         bool isRelativePath() const;
         bool isAbsolutePath() const;
-        const char *getScheme() const;
-        const char *getPath() const;
-        const char *getQuery() const;
-        const char *getFragment() const;
-        const char *getOpaque() const;
-        char *toString() const;
+        const gchar *getScheme() const;
+        const gchar *getPath() const;
+        const gchar *getQuery() const;
+        const gchar *getFragment() const;
+        const gchar *getOpaque() const;
+        gchar *toString() const;
     private:
         Impl(xmlURIPtr uri);
         ~Impl();
@@ -162,4 +88,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

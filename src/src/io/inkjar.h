@@ -18,10 +18,15 @@
 # include <zlib.h>
 #endif
 
-#include <stdint.h>
+#ifdef HAVE_INTTYPES_H
+# include <inttypes.h>
+#else
+# ifdef HAVE_STDINT_H
+#  include <stdint.h>
+# endif
+#endif
 
 #include <glib.h>
-#include <cstdio>
 
 namespace Inkjar {
 
@@ -82,10 +87,11 @@ typedef uint32_t ub4;
  *
  * All memory allocations are done with g_malloc.
  */
+
 class JarFile {
 public:
 
-    JarFile() : _file(NULL), _filename(NULL), _last_filename(NULL) {}
+    JarFile() : fd(-1), _filename(NULL), _last_filename(NULL) {}
     virtual ~JarFile();
     JarFile(gchar const *new_filename);
     
@@ -93,14 +99,14 @@ public:
     gchar *get_last_filename() const;
     bool open();
     bool close();
-    int read(guint8 *buf, unsigned int count);
+    int read(guint8 *buf, int count);
 
     JarFile(JarFile const &rhs);
     JarFile &operator=(JarFile const &rhs);
 
 private:
 
-    FILE  *_file; // File descriptor
+    int fd;
     gchar *_filename;
     z_stream _zs;
     gchar *_last_filename;

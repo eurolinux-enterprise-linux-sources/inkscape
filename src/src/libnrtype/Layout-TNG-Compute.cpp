@@ -14,7 +14,6 @@
 #include "svg/svg-length.h"
 #include "sp-object.h"
 #include "Layout-TNG-Scanline-Maker.h"
-#include <limits>
 
 namespace Inkscape {
 namespace Text {
@@ -23,6 +22,17 @@ namespace Text {
 #define IFTRACE(_code)
 
 #define TRACE(_args) IFTRACE(g_print _args)
+
+// ******* enum conversion tables
+static Layout::EnumConversionItem const enum_convert_spstyle_direction_to_pango_direction[] = {
+    {SP_CSS_WRITING_MODE_LR_TB, PANGO_DIRECTION_LTR},
+    {SP_CSS_WRITING_MODE_RL_TB, PANGO_DIRECTION_RTL},
+    {SP_CSS_WRITING_MODE_TB_LR, PANGO_DIRECTION_LTR}};   // this is correct
+
+static Layout::EnumConversionItem const enum_convert_spstyle_direction_to_my_direction[] = {
+    {SP_CSS_WRITING_MODE_LR_TB, Layout::LEFT_TO_RIGHT},
+    {SP_CSS_WRITING_MODE_RL_TB, Layout::RIGHT_TO_LEFT},
+    {SP_CSS_WRITING_MODE_TB_LR, Layout::LEFT_TO_RIGHT}};   // this is correct
 
 /** \brief private to Layout. Does the real work of text flowing.
 
@@ -110,14 +120,13 @@ class Layout::Calculator
     BrokenSpan. */
     struct UnbrokenSpan {
         PangoGlyphString *glyph_string;
-        int pango_item_index;           /// index into _para.pango_items, or -1 if this is style only
-        unsigned input_index;           /// index into Layout::_input_stream
+        int pango_item_index;    /// index into _para.pango_items, or -1 if this is style only
+        unsigned input_index;         /// index into Layout::_input_stream
         Glib::ustring::const_iterator input_stream_first_character;
         double font_size;
-        FontMetrics line_height;         /// This is not the CSS line-height attribute!
+        LineHeight line_height;         /// This is not the CSS line-height attribute!
         double line_height_multiplier;  /// calculated from the font-height css property
         double baseline_shift;          /// calculated from the baseline-shift css property
-        SPCSSTextOrientation text_orientation;
         unsigned text_bytes;
         unsigned char_index_in_para;    /// the index of the first character in this span in the paragraph, for looking up char_attributes
         SVGLength x, y, dx, dy, rotate;  // these are reoriented copies of the <tspan> attributes. We change span when we encounter one.
@@ -195,59 +204,20 @@ class Layout::Calculator
 
     void _buildPangoItemizationForPara(ParagraphInfo *para) const;
 
-    // Returns line_height_multiplier
-    static double _computeFontLineHeight( SPStyle const *style );
+    static void _computeFontLineHeight(font_instance *font, double font_size,
+                                       SPStyle const *style, LineHeight *line_height,
+                                       double *line_height_multiplier);
 
     unsigned _buildSpansForPara(ParagraphInfo *para) const;
 
 /* *********************************************************************************************************/
 //                             Per-line functions
 
-/**
- * For debugging, not called in distributed code
- *
- * Input: para->first_input_index, para->pango_items
- */
-static void dumpPangoItemsOut(ParagraphInfo *para){
-    std::cout << "Pango items: " << para->pango_items.size() << std::endl;
-    for(unsigned pidx = 0 ; pidx < para->pango_items.size(); pidx++){
-        std::cout 
-        << "idx: " << pidx 
-        << " offset: " 
-        << para->pango_items[pidx].item->offset
-        << " length: "
-        << para->pango_items[pidx].item->length
-        << std::endl;
-    }
-}
-
-/**
- * For debugging, not called in distributed code
- *
- * Input: para->first_input_index, para->pango_items
- */
-static void dumpUnbrokenSpans(ParagraphInfo *para){
-    std::cout << "Unbroken Spans: " << para->unbroken_spans.size() << std::endl;
-    for(unsigned uidx = 0 ; uidx < para->unbroken_spans.size(); uidx++){
-        std::cout 
-        << "idx: "                 << uidx 
-        << " pango_item_index: "   << para->unbroken_spans[uidx].pango_item_index
-        << " input_index: "        << para->unbroken_spans[uidx].input_index
-        << " char_index_in_para: " << para->unbroken_spans[uidx].char_index_in_para
-        << " text_bytes: "         << para->unbroken_spans[uidx].text_bytes
-        << std::endl;
-    }
-}
-
-
 
     bool _goToNextWrapShape();
 
-    bool _findChunksForLine(ParagraphInfo const &para,
-                            UnbrokenSpanPosition *start_span_pos,
-                            std::vector<ChunkInfo> *chunk_info,
-                            FontMetrics *line_box_height,
-                            FontMetrics const *strut_height);
+    bool _findChunksForLine(ParagraphInfo const &para, UnbrokenSpanPosition *start_span_pos,
+                            std::vector<ChunkInfo> *chunk_info, LineHeight *line_height);
 
     static inline PangoLogAttr const &_charAttributes(ParagraphInfo const &para,
                                                       UnbrokenSpanPosition const &span_pos)
@@ -259,8 +229,7 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
                                UnbrokenSpanPosition const &start_span_pos,
                                ScanlineMaker::ScanRun const &scan_run,
                                std::vector<ChunkInfo> *chunk_info,
-                               FontMetrics *line_height,
-                               FontMetrics const *strut_height) const;
+                               LineHeight *line_height) const;
 
     /** computes the width of a single UnbrokenSpan (pointed to by span->start.iter_span)
     and outputs its vital statistics into the other fields of \a span.
@@ -275,16 +244,10 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
     or will be unaltered if there is none. */
     bool _measureUnbrokenSpan(ParagraphInfo const &para, BrokenSpan *span, BrokenSpan *last_break_span, BrokenSpan *last_emergency_break_span, double maximum_width) const
     {
-        TRACE(("      start _measureUnbrokenSpan %g\n", maximum_width));
         span->setZero();
 
-        if (span->start.iter_span->dx._set && span->start.char_byte == 0){
-            if(para.direction == RIGHT_TO_LEFT){
-                span->width -= span->start.iter_span->dx.computed;
-            } else {
-                span->width += span->start.iter_span->dx.computed;
-            }
-        }
+        if (span->start.iter_span->dx._set && span->start.char_byte == 0)
+            span->width += span->start.iter_span->dx.computed;
 
         if (span->start.iter_span->pango_item_index == -1) {
             // if this is a style-only span there's no text in it
@@ -302,7 +265,7 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
             if (control_code->code == ARBITRARY_GAP) {
                 if (span->width + control_code->width > maximum_width)
                     return false;
-                TRACE(("        fitted control code, width = %f\n", control_code->width));
+                TRACE(("fitted control code, width = %f\n", control_code->width));
                 span->width += control_code->width;
                 span->end.increment();
             }
@@ -341,14 +304,12 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
             PangoLogAttr const &char_attributes = _charAttributes(para, span->end);
 
             if (char_attributes.is_mandatory_break && span->end != span->start) {
-                TRACE(("      is_mandatory_break  ************\n"));
                 *last_emergency_break_span = *last_break_span = *span;
-                TRACE(("        span %ld end of para; width = %f chars = %d\n", span->start.iter_span - para.unbroken_spans.begin(), span->width, char_count));
+                TRACE(("span %d end of para; width = %f chars = %d\n", span->start.iter_span - para.unbroken_spans.begin(), span->width, char_count));
                 return false;
             }
 
             if (char_attributes.is_line_break) {
-                TRACE(("        is_line_break  ************\n"));
                 // a suitable position to break at, record where we are
                 *last_emergency_break_span = *last_break_span = *span;
                 if (soft_hyphen_in_word) {
@@ -362,33 +323,20 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
             }
             // todo: break between chars if necessary (ie no word breaks present) when doing rectangular flowing
 
-            // sum the glyph widths, letter spacing, word spacing, and textLength adjustment to get the character width
+            // sum the glyph widths, letter spacing and word spacing to get the character width
             double char_width = 0.0;
             while (span->end_glyph_index < (unsigned)span->end.iter_span->glyph_string->num_glyphs
                    && span->end.iter_span->glyph_string->log_clusters[span->end_glyph_index] <= (int)span->end.char_byte) {
-                if (_block_progression == LEFT_TO_RIGHT || _block_progression == RIGHT_TO_LEFT) {
-                    // Vertical text
-
-                    if( text_source->style->text_orientation.computed == SP_CSS_TEXT_ORIENTATION_SIDEWAYS ||
-                        (text_source->style->text_orientation.computed == SP_CSS_TEXT_ORIENTATION_MIXED &&
-                         para.pango_items[span->end.iter_span->pango_item_index].item->analysis.gravity == 0) ) {
-                        // Sideways orientation
-                        char_width += span->start.iter_span->font_size * para.pango_items[span->end.iter_span->pango_item_index].font->Advance(span->end.iter_span->glyph_string->glyphs[span->end_glyph_index].glyph, false);
-                    } else {
-                        // Upright orientation
-                        char_width += span->start.iter_span->font_size * para.pango_items[span->end.iter_span->pango_item_index].font->Advance(span->end.iter_span->glyph_string->glyphs[span->end_glyph_index].glyph, true);
-                    }
-                } else {
-                    // Horizontal text
+                if (_block_progression == LEFT_TO_RIGHT || _block_progression == RIGHT_TO_LEFT)
+                    char_width += span->start.iter_span->font_size * para.pango_items[span->end.iter_span->pango_item_index].font->Advance(span->end.iter_span->glyph_string->glyphs[span->end_glyph_index].glyph, true);
+                else
                     char_width += font_size_multiplier * span->end.iter_span->glyph_string->glyphs[span->end_glyph_index].geometry.width;
-                }
                 span->end_glyph_index++;
             }
             if (char_attributes.is_cursor_position)
-                char_width += text_source->style->letter_spacing.computed * _flow.getTextLengthMultiplierDue();
+                char_width += text_source->style->letter_spacing.computed;
             if (char_attributes.is_white)
-                char_width += text_source->style->word_spacing.computed * _flow.getTextLengthMultiplierDue();
-            char_width += _flow.getTextLengthIncrementDue();
+                char_width += text_source->style->word_spacing.computed;
             span->width += char_width;
             IFTRACE(char_count++);
 
@@ -413,14 +361,13 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
             span->word_spacing   = text_source->style->word_spacing.computed;
 
             if (test_width > maximum_width && !char_attributes.is_white) { // whitespaces don't matter, we can put as many as we want at eol
-                TRACE(("        span %ld exceeded scanrun; width = %f chars = %d\n", span->start.iter_span - para.unbroken_spans.begin(), span->width, char_count));
+                TRACE(("span %d exceeded scanrun; width = %f chars = %d\n", span->start.iter_span - para.unbroken_spans.begin(), span->width, char_count));
                 return false;
             }
 
         } while (span->end.char_byte != 0);  // while we haven't wrapped to the next span
 
-        TRACE(("        fitted span %ld width = %f chars = %d\n", span->start.iter_span - para.unbroken_spans.begin(), span->width, char_count));
-        TRACE(("      end _measureUnbrokenSpan %g\n", maximum_width));
+        TRACE(("fitted span %d width = %f chars = %d\n", span->start.iter_span - para.unbroken_spans.begin(), span->width, char_count));
         return true;
     }
 
@@ -471,33 +418,19 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
     are ready to output the final result to #_flow. This method takes its
     input parameters and does that.
     */
-    void _outputLine(ParagraphInfo const &para, FontMetrics const &line_height, std::vector<ChunkInfo> const &chunk_info)
+    void _outputLine(ParagraphInfo const &para, LineHeight const &line_height, std::vector<ChunkInfo> const &chunk_info)
     {
-        TRACE(("  Start _outputLine: ascent %f, descent %f, top of box %f\n", line_height.ascent, line_height.descent, _scanline_maker->yCoordinate() ));
+        TRACE(("Start _outputLine\n"));
         if (chunk_info.empty()) {
-            TRACE(("    line too short to fit anything on it, go to next\n"));
+            TRACE(("line too short to fit anything on it, go to next\n"));
             return;
         }
 
         // we've finished fiddling about with ascents and descents: create the output
-        TRACE(("    found line fit; creating output\n"));
+        TRACE(("found line fit; creating output\n"));
         Layout::Line new_line;
         new_line.in_paragraph = _flow._paragraphs.size() - 1;
-        new_line.baseline_y = _scanline_maker->yCoordinate();
-
-        // The y coordinate is at the beginning edge of the line box (top for horizontal text, left
-        // edge for vertical lr text, right edge for vertical rl text. We align, by default to the
-        // alphabetic baseline for horizontal text and the central baseline for vertical text.
-        if( _block_progression == RIGHT_TO_LEFT ) {
-            // Vertical text, use em box center as baseline
-            new_line.baseline_y -= 0.5 * line_height.emSize();
-        } else if ( _block_progression == LEFT_TO_RIGHT ) {
-            // Vertical text, use em box center as baseline
-            new_line.baseline_y += 0.5 * line_height.emSize();
-        } else {
-            new_line.baseline_y += line_height.getTypoAscent();
-        }
-
+        new_line.baseline_y = _scanline_maker->yCoordinate() + line_height.ascent;
         new_line.in_shape = _current_shape_index;
         _flow._lines.push_back(new_line);
 
@@ -507,7 +440,7 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
             // add the chunk to the list
             Layout::Chunk new_chunk;
             new_chunk.in_line = _flow._lines.size() - 1;
-            TRACE(("    New chunk: in_line: %d\n", new_chunk.in_line));
+            TRACE(("  New chunk: in_line: %d\n", new_chunk.in_line));
             new_chunk.left_x = _getChunkLeftWithAlignment(para, it_chunk, &add_to_each_whitespace);
 
             // we may also have y move orders to deal with here (dx, dy and rotate are done per span)
@@ -538,27 +471,17 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
                     // If <tspan> "y" attribute is set, use it (initial "y" attributes in
                     // <tspans> other than the first have already been stripped for <tspans>
                     // marked with role="line", see sp-text.cpp: SPText::_buildLayoutInput).
-                    // NOTE: for vertical text, "y" is the user-space "x" value.
                     if( it_chunk->broken_spans.front().start.iter_span->y._set ) {
 
                         // Use set "y" attribute
                         new_line.baseline_y = it_chunk->broken_spans.front().start.iter_span->y.computed;
+
                         // Save baseline
                         _flow._lines.back().baseline_y = new_line.baseline_y;
 
-                        double top_of_line_box = new_line.baseline_y;
-                        if( _block_progression == RIGHT_TO_LEFT ) {
-                            // Vertical text, use em box center as baseline
-                            top_of_line_box += 0.5 * line_height.emSize();
-                        } else if (_block_progression == LEFT_TO_RIGHT ) {
-                            // Vertical text, use em box center as baseline
-                            top_of_line_box -= 0.5 * line_height.emSize();
-                        } else {
-                            top_of_line_box -= line_height.getTypoAscent();
-                        }
-                        TRACE(("      y attribute set, next line top_of_line_box: %f\n", top_of_line_box ));
-                        // Set the initial y coordinate of the next line (see above).
-                        _scanline_maker->setNewYCoordinate(top_of_line_box);
+                        // Save new <tspan> y coordinate
+                        _scanline_maker->setNewYCoordinate(new_line.baseline_y - line_height.ascent);
+
                     }
 
                     // Reset relative y_offset ("dy" attribute is relative but should be reset at
@@ -577,34 +500,30 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
             }
             _flow._chunks.push_back(new_chunk);
 
-            double current_x;
+            double x;
             double direction_sign;
             Direction previous_direction = para.direction;
             double counter_directional_width_remaining = 0.0;
             float glyph_rotate = 0.0;
             if (para.direction == LEFT_TO_RIGHT) {
                 direction_sign = +1.0;
-                current_x = 0.0;
+                x = 0.0;
             } else {
                 direction_sign = -1.0;
-                if (para.alignment == FULL && !_flow._input_wrap_shapes.empty()){
-                    current_x = it_chunk->scanrun_width;
-                }
-                else {
-                    current_x = it_chunk->text_width;
-                }
+                if (para.alignment == FULL && !_flow._input_wrap_shapes.empty())
+                    x = it_chunk->scanrun_width;
+                else
+                    x = it_chunk->text_width;
             }
 
             for (std::vector<BrokenSpan>::const_iterator it_span = it_chunk->broken_spans.begin() ; it_span != it_chunk->broken_spans.end() ; it_span++) {
                 // begin adding spans to the list
                 UnbrokenSpan const &unbroken_span = *it_span->start.iter_span;
-                double x_in_span_last = 0.0;  // set at the END when a new cluster starts
-                double x_in_span      = 0.0;  // set from the preceding at the START when a new cluster starts.
 
                 if (it_span->start.char_byte == 0) {
                     // Start of an unbroken span, we might have dx, dy or rotate still to process
                     // (x and y are done per chunk)
-                    if (unbroken_span.dx._set) current_x += unbroken_span.dx.computed;
+                    if (unbroken_span.dx._set) x += unbroken_span.dx.computed;
                     if (unbroken_span.dy._set) _y_offset += unbroken_span.dy.computed;
                     if (unbroken_span.rotate._set) glyph_rotate = unbroken_span.rotate.computed * (M_PI/180);
                 }
@@ -616,13 +535,13 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
                 }
 
                 Layout::Span new_span;
+                double x_in_span = 0.0;
 
                 new_span.in_chunk = _flow._chunks.size() - 1;
                 new_span.line_height = unbroken_span.line_height;
                 new_span.in_input_stream_item = unbroken_span.input_index;
                 new_span.baseline_shift = 0.0;
                 new_span.block_progression = _block_progression;
-                new_span.text_orientation = unbroken_span.text_orientation;
                 if ((_flow._input_stream[unbroken_span.input_index]->Type() == TEXT_SOURCE) && (new_span.font = para.pango_items[unbroken_span.pango_item_index].font))
                     {
 		    new_span.font->Ref();
@@ -631,12 +550,12 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
                     new_span.input_stream_first_character = Glib::ustring::const_iterator(unbroken_span.input_stream_first_character.base() + it_span->start.char_byte);
                 } else {  // a control code
                     new_span.font = NULL;
-                    new_span.font_size = new_span.line_height.emSize();
+                    new_span.font_size = new_span.line_height.ascent + new_span.line_height.descent;
                     new_span.direction = para.direction;
                 }
 
                 if (new_span.direction == para.direction) {
-                    current_x -= counter_directional_width_remaining;
+                    x -= counter_directional_width_remaining;
                     counter_directional_width_remaining = 0.0;
                 } else if (new_span.direction != previous_direction) {
                     // measure width of spans we need to switch round
@@ -652,29 +571,24 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
                         }
                         counter_directional_width_remaining += direction_sign * (it_following_span->width + it_following_span->whitespace_count * add_to_each_whitespace);
                     }
-                    current_x += counter_directional_width_remaining;
+                    x += counter_directional_width_remaining;
                     counter_directional_width_remaining = 0.0;    // we want to go increasingly negative
                 }
-                new_span.x_start = current_x;
+                new_span.x_start = x;
 
                 if (_flow._input_stream[unbroken_span.input_index]->Type() == TEXT_SOURCE) {
                     // the span is set up, push the glyphs and chars
                     InputStreamTextSource const *text_source = static_cast<InputStreamTextSource const *>(_flow._input_stream[unbroken_span.input_index]);
                     Glib::ustring::const_iterator iter_source_text = Glib::ustring::const_iterator(unbroken_span.input_stream_first_character.base() + it_span->start.char_byte) ;
                     unsigned char_index_in_unbroken_span = it_span->start.char_index;
-                    double   font_size_multiplier        = new_span.font_size / (PANGO_SCALE * _font_factory_size_multiplier);
-                    int      log_cluster_size_glyphs     = 0;   // Number of glyphs in this log_cluster
-                    int      log_cluster_size_chars      = 0;   // Number of characters in this log_cluster 
-                    unsigned end_byte                    = 0;
+                    unsigned cluster_start_char_index = _flow._characters.size();
+                    double font_size_multiplier = new_span.font_size / (PANGO_SCALE * _font_factory_size_multiplier);
 
                     for (unsigned glyph_index = it_span->start_glyph_index ; glyph_index < it_span->end_glyph_index ; glyph_index++) {
-                        unsigned char_byte              = iter_source_text.base() - unbroken_span.input_stream_first_character.base();
-                        int      newcluster             = 0;
-                        if (unbroken_span.glyph_string->glyphs[glyph_index].attr.is_cluster_start){
-                            newcluster = 1;
-                            x_in_span = x_in_span_last;
-                        }
- 
+                        unsigned char_byte = iter_source_text.base() - unbroken_span.input_stream_first_character.base();
+                        if (unbroken_span.glyph_string->glyphs[glyph_index].attr.is_cluster_start)
+                            cluster_start_char_index = _flow._characters.size();
+
                         if (unbroken_span.glyph_string->log_clusters[glyph_index] < (int)unbroken_span.text_bytes
                             && *iter_source_text == UNICODE_SOFT_HYPHEN
                             && glyph_index + 1 != it_span->end_glyph_index) {
@@ -695,83 +609,35 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
                         }
 
                         // create the Layout::Glyph
-                        PangoGlyphInfo *unbroken_span_glyph_info = &unbroken_span.glyph_string->glyphs[glyph_index];
                         Layout::Glyph new_glyph;
-                        new_glyph.glyph = unbroken_span_glyph_info->glyph;
-                        new_glyph.in_character = _flow._characters.size();
+                        new_glyph.glyph = unbroken_span.glyph_string->glyphs[glyph_index].glyph;
+                        new_glyph.in_character = cluster_start_char_index;
                         new_glyph.rotation = glyph_rotate;
-                        new_glyph.orientation = ORIENTATION_UPRIGHT; // Only effects vertical text
 
-                        // We may have scaled font size to fit textLength; now, if
-                        // @lengthAdjust=spacingAndGlyphs, this scaling must be only horizontal,
-                        // not vertical, so we unscale it back vertically during output
-                        if (_flow.lengthAdjust == Inkscape::Text::Layout::LENGTHADJUST_SPACINGANDGLYPHS)
-                            new_glyph.vertical_scale = 1.0 / _flow.getTextLengthMultiplierDue();
-                        else
-                            new_glyph.vertical_scale = 1.0;
-
-                        // Position glyph --------------------
-                        new_glyph.x = current_x + unbroken_span_glyph_info->geometry.x_offset * font_size_multiplier;
-                        new_glyph.y =_y_offset;
-
-                        // y-coordinate is flipped between vertical and horizontal text... delta_y is common offset but applied with opposite sign
-                        double delta_y = unbroken_span_glyph_info->geometry.y_offset * font_size_multiplier + unbroken_span.baseline_shift;
-                        SPCSSBaseline dominant_baseline = _flow._blockBaseline();
+                        /* put something like this back in when we do glyph-rotation-horizontal/vertical
+                        if (new_span.block_progression == LEFT_TO_RIGHT || new_span.block_progression == RIGHT_TO_LEFT) {
+                            new_glyph.x += new_span.line_height.ascent;
+                            new_glyph.y -= unbroken_span.glyph_string->glyphs[glyph_index].geometry.width * font_size_multiplier * 0.5;
+                            new_glyph.width = new_span.line_height.ascent + new_span.line_height.descent;
+                        } else */
 
                         if (_block_progression == LEFT_TO_RIGHT || _block_progression == RIGHT_TO_LEFT) {
-                            // Vertical text
-
-                            // Default dominant baseline is determined by overall block (i.e. <text>) 'text-orientation' value.
-                            if( _flow._blockTextOrientation() != SP_CSS_TEXT_ORIENTATION_SIDEWAYS ) {
-                                if( dominant_baseline == SP_CSS_BASELINE_AUTO ) dominant_baseline = SP_CSS_BASELINE_CENTRAL;
-                            } else {
-                                if( dominant_baseline == SP_CSS_BASELINE_AUTO ) dominant_baseline = SP_CSS_BASELINE_ALPHABETIC;
-                            }
-
-                            new_glyph.y += delta_y;
-
-                            // TODO: Should also check 'glyph_orientation_vertical' if 'text-orientation' is unset...
-                            if( new_span.text_orientation == SP_CSS_TEXT_ORIENTATION_SIDEWAYS ||
-                                (new_span.text_orientation == SP_CSS_TEXT_ORIENTATION_MIXED &&
-                                 para.pango_items[unbroken_span.pango_item_index].item->analysis.gravity == 0) ) {
-
-                                // Sideways orientation (Latin characters, CJK punctuation), 90deg rotation done at output stage. zzzzzzz
-                                new_glyph.orientation = ORIENTATION_SIDEWAYS;
-
-                                new_glyph.y -= new_span.font_size * para.pango_items[unbroken_span.pango_item_index].font->GetBaselines()[ dominant_baseline ];
-                                new_glyph.width = new_span.font_size * para.pango_items[unbroken_span.pango_item_index].font->Advance(unbroken_span_glyph_info->glyph, false);
-
-                            } else {
-                                // Upright orientation
-
-                                new_glyph.x +=  new_span.line_height.ascent;
-
-                                // Glyph reference point is center  (shift: left edge to center glyph)
-                                new_glyph.y -= unbroken_span_glyph_info->geometry.width * 0.5 * font_size_multiplier;
-                                new_glyph.y -= new_span.font_size * (para.pango_items[unbroken_span.pango_item_index].font->GetBaselines()[ dominant_baseline ] -
-                                                                     para.pango_items[unbroken_span.pango_item_index].font->GetBaselines()[ SP_CSS_BASELINE_CENTRAL ] );
-
-                                new_glyph.width = new_span.font_size * para.pango_items[unbroken_span.pango_item_index].font->Advance(unbroken_span_glyph_info->glyph, true);
-                                if( new_glyph.width == 0 ) {
-                                    new_glyph.width = unbroken_span_glyph_info->geometry.width * font_size_multiplier;
-                                }
-
-                            }
+                            new_glyph.x = x + unbroken_span.glyph_string->glyphs[glyph_index].geometry.x_offset * font_size_multiplier + new_span.line_height.ascent;
+                            new_glyph.y = _y_offset -
+                                unbroken_span.baseline_shift +
+                                (unbroken_span.glyph_string->glyphs[glyph_index].geometry.y_offset -
+                                 unbroken_span.glyph_string->glyphs[glyph_index].geometry.width * 0.5) * font_size_multiplier;
+                            new_glyph.width = new_span.font_size * para.pango_items[unbroken_span.pango_item_index].font->Advance(unbroken_span.glyph_string->glyphs[glyph_index].glyph, true);
                         } else {
-                            // Horizontal text
-
-                            if( dominant_baseline == SP_CSS_BASELINE_AUTO ) dominant_baseline = SP_CSS_BASELINE_ALPHABETIC;
-
-                            new_glyph.y -= delta_y;
-                            new_glyph.y += new_span.font_size * para.pango_items[unbroken_span.pango_item_index].font->GetBaselines()[ dominant_baseline ];
-                            
-                            new_glyph.width = unbroken_span_glyph_info->geometry.width * font_size_multiplier;
+                            new_glyph.x = x + unbroken_span.glyph_string->glyphs[glyph_index].geometry.x_offset * font_size_multiplier;
+                            new_glyph.y = _y_offset -
+                                unbroken_span.baseline_shift +
+                                unbroken_span.glyph_string->glyphs[glyph_index].geometry.y_offset * font_size_multiplier;
+                            new_glyph.width = unbroken_span.glyph_string->glyphs[glyph_index].geometry.width * font_size_multiplier;
                             if ((new_glyph.width == 0) && (para.pango_items[unbroken_span.pango_item_index].font))
-                                new_glyph.width = new_span.font_size * para.pango_items[unbroken_span.pango_item_index].font->Advance(unbroken_span_glyph_info->glyph, false);
+                                new_glyph.width = new_span.font_size * para.pango_items[unbroken_span.pango_item_index].font->Advance(unbroken_span.glyph_string->glyphs[glyph_index].glyph, false);
                                 // for some reason pango returns zero width for invalid glyph characters (those empty boxes), so go to freetype for the info
                         }
-
-
                         if (new_span.direction == RIGHT_TO_LEFT) {
                             // pango wanted to give us glyphs in visual order but we refused, so we need to work
                             // out where the cluster start is ourselves
@@ -780,10 +646,8 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
                                 if (unbroken_span.glyph_string->glyphs[rtl_index].attr.is_cluster_start && rtl_index != glyph_index)
                                     break;
                                 if (_block_progression == LEFT_TO_RIGHT || _block_progression == RIGHT_TO_LEFT)
-                                    // Vertical text
                                     cluster_width += new_span.font_size * para.pango_items[unbroken_span.pango_item_index].font->Advance(unbroken_span.glyph_string->glyphs[rtl_index].glyph, true);
                                 else
-                                    // Horizontal text
                                     cluster_width += font_size_multiplier * unbroken_span.glyph_string->glyphs[rtl_index].geometry.width;
                             }
                             new_glyph.x -= cluster_width;
@@ -792,39 +656,24 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
 
                         // create the Layout::Character(s)
                         double advance_width = new_glyph.width;
-                        if (newcluster){
-                            newcluster = 0;
-                            // find where the text ends for this log_cluster
-                            end_byte = it_span->start.iter_span->text_bytes;  // Upper limit
-                            for(int next_glyph_index = glyph_index+1; next_glyph_index < unbroken_span.glyph_string->num_glyphs; next_glyph_index++){
-                                if(unbroken_span.glyph_string->glyphs[next_glyph_index].attr.is_cluster_start){
-                                    end_byte = unbroken_span.glyph_string->log_clusters[next_glyph_index];
-                                    break;
-                                }
-                            }
-                            // Figure out how many glyphs and characters are in the log_cluster.
-                            log_cluster_size_glyphs = 0;
-                            log_cluster_size_chars  = 0;
-                            for(; log_cluster_size_glyphs + glyph_index < it_span->end_glyph_index; log_cluster_size_glyphs++){
-                               if(unbroken_span.glyph_string->log_clusters[glyph_index                          ] != 
-                                  unbroken_span.glyph_string->log_clusters[glyph_index + log_cluster_size_glyphs])break;
-                            }
-                            Glib::ustring::const_iterator lclist = iter_source_text;
-                            unsigned lcb = char_byte;
-                            while(lcb < end_byte){
-                                log_cluster_size_chars++;
-                                lclist++;
-                                lcb = lclist.base() - unbroken_span.input_stream_first_character.base();
-                            }
+                        unsigned end_byte;
+                        if (glyph_index == (unsigned)unbroken_span.glyph_string->num_glyphs - 1)
+                            end_byte = it_span->start.iter_span->text_bytes;
+                        else {
+                            // output chars for the whole cluster that is commenced by this glyph
+                            if (unbroken_span.glyph_string->glyphs[glyph_index].attr.is_cluster_start) {
+                                int next_cluster_glyph_index = glyph_index + 1;
+                                while (next_cluster_glyph_index < unbroken_span.glyph_string->num_glyphs
+                                       && !unbroken_span.glyph_string->glyphs[next_cluster_glyph_index].attr.is_cluster_start)
+                                    next_cluster_glyph_index++;
+                                if (next_cluster_glyph_index < unbroken_span.glyph_string->num_glyphs)
+                                    end_byte = unbroken_span.glyph_string->log_clusters[next_cluster_glyph_index];
+                                else
+                                    end_byte = it_span->start.iter_span->text_bytes;
+                            } else
+                                end_byte = char_byte;    // don't output any chars if we're not at the start of a cluster
                         }
                         while (char_byte < end_byte) {
-                            /* Hack to survive ligatures:  in log_cluster keep the number of available chars >= number of glyphs remaining.
-                               When there are no ligatures these two sizes are always the same.
-                            */
-                            if(log_cluster_size_chars < log_cluster_size_glyphs){
-                               log_cluster_size_glyphs--;
-                               break;
-                            }
                             Layout::Character new_character;
                             new_character.in_span = _flow._spans.size();
                             new_character.x = x_in_span;
@@ -832,37 +681,35 @@ static void dumpUnbrokenSpans(ParagraphInfo *para){
                             new_character.in_glyph = _flow._glyphs.size() - 1;
                             _flow._characters.push_back(new_character);
                             if (new_character.char_attributes.is_white)
-                                advance_width += text_source->style->word_spacing.computed * _flow.getTextLengthMultiplierDue() + add_to_each_whitespace;    // justification
+                                advance_width += text_source->style->word_spacing.computed + add_to_each_whitespace;    // justification
                             if (new_character.char_attributes.is_cursor_position)
-                                advance_width += text_source->style->letter_spacing.computed * _flow.getTextLengthMultiplierDue();
-                            advance_width += _flow.getTextLengthIncrementDue();
+                                advance_width += text_source->style->letter_spacing.computed;
                             iter_source_text++;
                             char_index_in_unbroken_span++;
                             char_byte = iter_source_text.base() - unbroken_span.input_stream_first_character.base();
-                            log_cluster_size_chars--;
                         }
 
                         advance_width *= direction_sign;
                         if (new_span.direction != para.direction) {
                             counter_directional_width_remaining -= advance_width;
-                            current_x -= advance_width;
-                            x_in_span_last -= advance_width;
+                            x -= advance_width;
+                            x_in_span -= advance_width;
                         } else {
-                            current_x += advance_width;
-                            x_in_span_last += advance_width;
+                            x += advance_width;
+                            x_in_span += advance_width;
                         }
                     }
                 } else if (_flow._input_stream[unbroken_span.input_index]->Type() == CONTROL_CODE) {
-                    current_x += static_cast<InputStreamControlCode const *>(_flow._input_stream[unbroken_span.input_index])->width;
+                    x += static_cast<InputStreamControlCode const *>(_flow._input_stream[unbroken_span.input_index])->width;
                 }
 
-                new_span.x_end = new_span.x_start + x_in_span_last;
+                new_span.x_end = new_span.x_start + x_in_span;
                 _flow._spans.push_back(new_span);
                 previous_direction = new_span.direction;
             }
             // end adding spans to the list, on to the next chunk...
         }
-        TRACE(("  End _outputLine\n"));
+        TRACE(("output done\n"));
     }
 
 /* *********************************************************************************************************/
@@ -942,8 +789,6 @@ void Layout::Calculator::BrokenSpan::setZero()
     end_glyph_index = start_glyph_index = 0;
     ends_with_whitespace = false;
     each_whitespace_width = 0.0;
-    letter_spacing = 0.0;
-    word_spacing = 0.0;
 }
 
 template<typename T> void Layout::Calculator::ParagraphInfo::free_sequence(T &seq)
@@ -1034,15 +879,9 @@ void Layout::Calculator::ParagraphInfo::free()
  *
  * Input: para.first_input_index.
  * Output: para.direction, para.pango_items, para.char_attributes.
- * Returns: the number of spans created by pango_itemize
  */
-void  Layout::Calculator::_buildPangoItemizationForPara(ParagraphInfo *para) const
+void Layout::Calculator::_buildPangoItemizationForPara(ParagraphInfo *para) const
 {
-    TRACE(("pango version string: %s\n", pango_version_string() ));
-#if PANGO_VERSION_CHECK(1,37,1)
-    TRACE((" ... compiled for font features\n"));
-#endif
-
     Glib::ustring para_text;
     PangoAttrList *attributes_list;
     unsigned input_index;
@@ -1064,51 +903,41 @@ void  Layout::Calculator::_buildPangoItemizationForPara(ParagraphInfo *para) con
         } else if (_flow._input_stream[input_index]->Type() == TEXT_SOURCE) {
             Layout::InputStreamTextSource *text_source = static_cast<Layout::InputStreamTextSource *>(_flow._input_stream[input_index]);
 
-            // create the font_instance
-            font_instance *font = text_source->styleGetFontInstance();
-            if (font == NULL)
-                continue;  // bad news: we'll have to ignore all this text because we know of no font to render it
+			// create the font_instance
+			font_instance *font = text_source->styleGetFontInstance();
+			if (font == NULL)
+				continue;  // bad news: we'll have to ignore all this text because we know of no font to render it
 
             PangoAttribute *attribute_font_description = pango_attr_font_desc_new(font->descr);
             attribute_font_description->start_index = para_text.bytes();
-
-#if PANGO_VERSION_CHECK(1,37,1)
-            PangoAttribute *attribute_font_features =
-                pango_attr_font_features_new( text_source->style->getFontFeatureString().c_str());
-            attribute_font_features->start_index = para_text.bytes();
-#endif
             para_text.append(&*text_source->text_begin.base(), text_source->text_length);     // build the combined text
             attribute_font_description->end_index = para_text.bytes();
             pango_attr_list_insert(attributes_list, attribute_font_description);
-
-#if PANGO_VERSION_CHECK(1,37,1)
-            attribute_font_features->end_index = para_text.bytes();
-            pango_attr_list_insert(attributes_list, attribute_font_features);
-#endif
-
             // ownership of attribute is assumed by the list
-            font->Unref();
         }
     }
 
     TRACE(("whole para: \"%s\"\n", para_text.data()));
     TRACE(("%d input sources used\n", input_index - para->first_input_index));
+
     // do the pango_itemize()
     GList *pango_items_glist = NULL;
-    para->direction = LEFT_TO_RIGHT; // CSS default
     if (_flow._input_stream[para->first_input_index]->Type() == TEXT_SOURCE) {
         Layout::InputStreamTextSource const *text_source = static_cast<Layout::InputStreamTextSource *>(_flow._input_stream[para->first_input_index]);
-
-        para->direction =                (text_source->style->direction.computed == SP_CSS_DIRECTION_LTR) ? LEFT_TO_RIGHT : RIGHT_TO_LEFT;
-        PangoDirection pango_direction = (text_source->style->direction.computed == SP_CSS_DIRECTION_LTR) ? PANGO_DIRECTION_LTR : PANGO_DIRECTION_RTL;
-        pango_items_glist = pango_itemize_with_base_dir(_pango_context, pango_direction, para_text.data(), 0, para_text.bytes(), attributes_list, NULL);
+        if (text_source->style->direction.set) {
+            PangoDirection pango_direction = (PangoDirection)_enum_converter(text_source->style->direction.computed, enum_convert_spstyle_direction_to_pango_direction, sizeof(enum_convert_spstyle_direction_to_pango_direction)/sizeof(enum_convert_spstyle_direction_to_pango_direction[0]));
+            pango_items_glist = pango_itemize_with_base_dir(_pango_context, pango_direction, para_text.data(), 0, para_text.bytes(), attributes_list, NULL);
+            para->direction = (Layout::Direction)_enum_converter(text_source->style->direction.computed, enum_convert_spstyle_direction_to_my_direction, sizeof(enum_convert_spstyle_direction_to_my_direction)/sizeof(enum_convert_spstyle_direction_to_my_direction[0]));
+        }
     }
-
-    if( pango_items_glist == NULL ) {
-        // Type wasn't TEXT_SOURCE or direction was not set.
+    if (pango_items_glist == NULL) {  // no direction specified, guess it
         pango_items_glist = pango_itemize(_pango_context, para_text.data(), 0, para_text.bytes(), attributes_list, NULL);
-    }
 
+        // I think according to the css spec this is wrong and we're never allowed to guess the directionality
+        // of a paragraph. Need to talk to an rtl speaker.
+        if (pango_items_glist == NULL || pango_items_glist->data == NULL) para->direction = LEFT_TO_RIGHT;
+        else para->direction = (((PangoItem*)pango_items_glist->data)->analysis.level & 1) ? RIGHT_TO_LEFT : LEFT_TO_RIGHT;
+    }
     pango_attr_list_unref(attributes_list);
 
     // convert the GList to our vector<> and make the font_instance for each PangoItem at the same time
@@ -1132,33 +961,51 @@ void  Layout::Calculator::_buildPangoItemizationForPara(ParagraphInfo *para) con
 }
 
 /**
- * Finds the value of line_height_multiplier given the 'line-height' property. The result of
- * multiplying \a l by \a line_height_multiplier is the inline box height as specified in css2
- * section 10.8.  http://www.w3.org/TR/CSS2/visudet.html#line-height
- *
- * The 'computed' value of 'line-height' does not have a consistent meaning. We need to find the
- * 'used' value and divide that by the font size.
+ * Gets the ascent, descent and leading for a font and the alteration that has to be performed
+ * according to the value specified by the line-height css property. The result of multiplying
+ * \a line_height by \a line_height_multiplier is the inline box height as specified in css2
+ * section 10.8.
  */
-double Layout::Calculator::_computeFontLineHeight( SPStyle const *style )
+void Layout::Calculator::_computeFontLineHeight(font_instance *font, double font_size,
+                                                SPStyle const *style, LineHeight *line_height,
+                                                double *line_height_multiplier)
 {
-    // This is a bit backwards... we should be returning the absolute height
-    // but as the code expects line_height_multiplier we return that.
-    if (style->line_height.normal) {
-        return (LINE_HEIGHT_NORMAL);
-    } else if (style->line_height.unit == SP_CSS_UNIT_NONE) {
-        // Special case per CSS, computed value is multiplier
-        return style->line_height.computed;
-    } else {
-        // Normal case, computed value is absolute height. Turn it into multiplier.
-        return style->line_height.computed / style->font_size.computed;
+    if (font == NULL) {
+        line_height->setZero();
+        *line_height_multiplier = 1.0;
     }
-}
+    else
+	font->FontMetrics(line_height->ascent, line_height->descent, line_height->leading);
+    *line_height *= font_size;
 
-bool compareGlyphWidth(const PangoGlyphInfo &a, const PangoGlyphInfo &b)
-{
-    bool retval = false;
-    if ( b.geometry.width == 0 && (a.geometry.width > 0))retval = true;
-    return (retval);
+    // yet another borked SPStyle member that we're going to have to fix ourselves
+    for ( ; ; ) {
+        if (style->line_height.set && !style->line_height.inherit) {
+            if (style->line_height.normal)
+                break;
+            switch (style->line_height.unit) {
+                case SP_CSS_UNIT_NONE:
+                    *line_height_multiplier = style->line_height.computed * font_size / line_height->total();
+                    return;
+                case SP_CSS_UNIT_EX:
+                    *line_height_multiplier = style->line_height.value * 0.5 * font_size / line_height->total();
+                    // 0.5 is an approximation of the x-height. Fixme.
+                    return;
+                case SP_CSS_UNIT_EM:
+                case SP_CSS_UNIT_PERCENT:
+                    *line_height_multiplier = style->line_height.value * font_size / line_height->total();
+                    return;
+                default:  // absolute values
+                    *line_height_multiplier = style->line_height.computed / line_height->total();
+                    return;
+            }
+            break;
+        }
+        if (style->object == NULL || style->object->parent == NULL) break;
+        style = style->object->parent->style;
+        if (style == NULL) break;
+    }
+    *line_height_multiplier = LINE_HEIGHT_NORMAL * font_size / line_height->total();
 }
 
 
@@ -1187,14 +1034,15 @@ unsigned Layout::Calculator::_buildSpansForPara(ParagraphInfo *para) const
                 break;                                    // stop at the end of the paragraph
             else if (control_code->code == ARBITRARY_GAP) {
                 UnbrokenSpan new_span;
-                new_span.pango_item_index    = -1;
-                new_span.input_index         = input_index;
-                new_span.line_height.ascent  = control_code->ascent * _flow.getTextLengthMultiplierDue();
-                new_span.line_height.descent = control_code->descent * _flow.getTextLengthMultiplierDue();
-                new_span.text_bytes          = 0;
-                new_span.char_index_in_para  = char_index_in_para;
+                new_span.pango_item_index = -1;
+                new_span.input_index = input_index;
+                new_span.line_height.ascent = control_code->ascent;
+                new_span.line_height.descent = control_code->descent;
+                new_span.line_height.leading = 0.0;
+                new_span.text_bytes = 0;
+                new_span.char_index_in_para = char_index_in_para;
                 para->unbroken_spans.push_back(new_span);
-                TRACE(("add gap span %lu\n", para->unbroken_spans.size() - 1));
+                TRACE(("add gap span %d\n", para->unbroken_spans.size() - 1));
             }
         } else if (_flow._input_stream[input_index]->Type() == TEXT_SOURCE && pango_item_index < para->pango_items.size()) {
             Layout::InputStreamTextSource const *text_source = static_cast<Layout::InputStreamTextSource const *>(_flow._input_stream[input_index]);
@@ -1229,17 +1077,15 @@ unsigned Layout::Calculator::_buildSpansForPara(ParagraphInfo *para) const
                 new_span.dy._set = false;
                 new_span.rotate._set = false;
                 if (_block_progression == TOP_TO_BOTTOM || _block_progression == BOTTOM_TO_TOP) {
-                    // Horizontal text
                     if (text_source->x.size()  > char_index_in_source) new_span.x  = text_source->x[char_index_in_source];
                     if (text_source->y.size()  > char_index_in_source) new_span.y  = text_source->y[char_index_in_source];
-                    if (text_source->dx.size() > char_index_in_source) new_span.dx = text_source->dx[char_index_in_source].computed * _flow.getTextLengthMultiplierDue();
-                    if (text_source->dy.size() > char_index_in_source) new_span.dy = text_source->dy[char_index_in_source].computed * _flow.getTextLengthMultiplierDue();
+                    if (text_source->dx.size() > char_index_in_source) new_span.dx = text_source->dx[char_index_in_source];
+                    if (text_source->dy.size() > char_index_in_source) new_span.dy = text_source->dy[char_index_in_source];
                 } else {
-                    // Vertical text
                     if (text_source->x.size()  > char_index_in_source) new_span.y  = text_source->x[char_index_in_source];
                     if (text_source->y.size()  > char_index_in_source) new_span.x  = text_source->y[char_index_in_source];
-                    if (text_source->dx.size() > char_index_in_source) new_span.dy = text_source->dx[char_index_in_source].computed * _flow.getTextLengthMultiplierDue();
-                    if (text_source->dy.size() > char_index_in_source) new_span.dx = text_source->dy[char_index_in_source].computed * _flow.getTextLengthMultiplierDue();
+                    if (text_source->dx.size() > char_index_in_source) new_span.dy = text_source->dx[char_index_in_source];
+                    if (text_source->dy.size() > char_index_in_source) new_span.dx = text_source->dy[char_index_in_source];
                 }
                 if (text_source->rotate.size() > char_index_in_source) new_span.rotate = text_source->rotate[char_index_in_source];
                 else if (char_index_in_source == 0) new_span.rotate = 0.f;
@@ -1268,7 +1114,7 @@ unsigned Layout::Calculator::_buildSpansForPara(ParagraphInfo *para) const
                 }
 
                 // now we know the length, do some final calculations and add the UnbrokenSpan to the list
-                new_span.font_size = text_source->style->font_size.computed * _flow.getTextLengthMultiplierDue();
+                new_span.font_size = text_source->styleComputeFontSize();
                 if (new_span.text_bytes) {
                     new_span.glyph_string = pango_glyph_string_new();
                     /* Some assertions intended to help diagnose bug #1277746. */
@@ -1277,16 +1123,6 @@ unsigned Layout::Calculator::_buildSpansForPara(ParagraphInfo *para) const
                     g_assert( span_start_byte_in_source + new_span.text_bytes <= text_source->text->bytes() );
                     g_assert( memchr(text_source->text->data() + span_start_byte_in_source, '\0', static_cast<size_t>(new_span.text_bytes))
                               == NULL );
-
-                    /* Notes as of 4/29/13.  Pango_shape is not generating English language ligatures, but it is generating
-                    them for Hebrew (and probably other similar languages).  In the case observed 3 unicode characters (a base
-                    and 2 Mark, nonspacings) are merged into two glyphs (the base + first Mn, the 2nd Mn).  All of these map
-                    from glyph to first character of the log_cluster range.  This destroys the 1:1 correspondence between
-                    characters and glyphs.  A big chunk of the conditional code which immediately follows this call
-                    is there to clean up the resulting mess.
-                    */
-                    
-                    // Convert characters to glyphs
                     pango_shape(text_source->text->data() + span_start_byte_in_source,
                                 new_span.text_bytes,
                                 &para->pango_items[pango_item_index].item->analysis,
@@ -1298,98 +1134,47 @@ unsigned Layout::Calculator::_buildSpansForPara(ParagraphInfo *para) const
                         // let's reverse the glyphstring on a cluster-by-cluster basis
                         const unsigned nglyphs = new_span.glyph_string->num_glyphs;
                         std::vector<PangoGlyphInfo> infos(nglyphs);
-                        std::vector<gint>           clusters(nglyphs);
-                        unsigned i, j;
-                        for (i = 0 ; i < nglyphs ; i++)new_span.glyph_string->glyphs[i].attr.is_cluster_start = 0;
-                        for (i = 0 ; i < nglyphs ; i++) {
-                            j=i;
-                            while(  (j < nglyphs-1) &&  
-                                    (new_span.glyph_string->log_clusters[j+1] == new_span.glyph_string->log_clusters[i])
-                            )j++;
-                            /*      
-                            CAREFUL, within a log_cluster the order of glyphs may not map 1:1, or
-                            even in the same order, to the original unicode characters!!!  Among
-                            other things, diacritical mark glyphs can end up sequentially in front of the base
-                            character glyph.  That makes determining kerning, even approximately, difficult
-                            later on.  
-                            
-                            To resolve this to the extent possible sort the glyphs within the same
-                            log_cluster into descending order by width in a special manner before copying.  Diacritical marks
-                            and similar have zero width and the glyph they modify has nonzero width.  The order 
-                            of the zero width ones does not matter.  A logical cluster is sorted into sequential order
-                               [base] [zw_modifier1] [zw_modifier2] 
-                            where all the modifiers have zero width and the base does not. This works for languages like Hebrew. 
-                            
-                            Pango also creates log clusters for languages like Telugu having many glyphs with nonzero widths. 
-                            Since these are nonzero, their order is not modified.
-                            
-                            If some language mixes these modes, having a log cluster having something like 
-                               [base1] [zw_modifier1] [base2] [zw_modifier2]
-                            the result will be incorrect: 
-                               base1] [base2] [zw_modifier1] [zw_modifier2]
+                        std::vector<gint> clusters(nglyphs);
+                        unsigned i, cluster_start = 0;
 
-                               
-                            If ligatures other than with Mark, nonspacing are ever implemented in Pango this will screw up, for instance
-                            changing "fi" to "if".
-                            */
-                            if(j - i){
-                                std::sort(&(new_span.glyph_string->glyphs[i]), &(new_span.glyph_string->glyphs[j+1]), compareGlyphWidth);
+                        for (i = 0 ; i < nglyphs ; ++i) {
+                            if (new_span.glyph_string->glyphs[i].attr.is_cluster_start) {
+                                if (i != cluster_start) {
+                                    std::copy(&new_span.glyph_string->glyphs[cluster_start], &new_span.glyph_string->glyphs[i], infos.end() - i);
+                                    std::copy(&new_span.glyph_string->log_clusters[cluster_start], &new_span.glyph_string->log_clusters[i], clusters.end() - i);
+                                }
+                                cluster_start = i;
                             }
-
-                            new_span.glyph_string->glyphs[i].attr.is_cluster_start = 1;
-                            std::copy(&new_span.glyph_string->glyphs[      i], &new_span.glyph_string->glyphs[      j+1], infos.end()    - j -1);
-                            std::copy(&new_span.glyph_string->log_clusters[i], &new_span.glyph_string->log_clusters[j+1], clusters.end() - j -1);
-                            i = j;
+                        }
+                        if (i != cluster_start) {
+                            std::copy(&new_span.glyph_string->glyphs[cluster_start], &new_span.glyph_string->glyphs[i], infos.end() - i);
+                            std::copy(&new_span.glyph_string->log_clusters[cluster_start], &new_span.glyph_string->log_clusters[i], clusters.end() - i);
                         }
                         std::copy(infos.begin(), infos.end(), new_span.glyph_string->glyphs);
                         std::copy(clusters.begin(), clusters.end(), new_span.glyph_string->log_clusters);
-                        /* glyphs[].x_offset values are probably out of order within any log_clusters, apparently harmless */
-                    }
-                    else {  //  ltr sections are in order but glyphs in a log_cluster following a ligature may not be.  Sort, but no block swapping.
-                        const unsigned nglyphs = new_span.glyph_string->num_glyphs;
-                        unsigned i, j;
-                        for (i = 0 ; i < nglyphs ; i++)new_span.glyph_string->glyphs[i].attr.is_cluster_start = 0;
-                        for (i = 0 ; i < nglyphs ; i++) {
-                            j=i;
-                            while(  (j < nglyphs-1) &&  
-                                    (new_span.glyph_string->log_clusters[j+1] == new_span.glyph_string->log_clusters[i])
-                            )j++;
-                            /* see note in preceding section */
-                            if(j - i){
-                                std::sort(&(new_span.glyph_string->glyphs[i]), &(new_span.glyph_string->glyphs[j+1]), compareGlyphWidth);
-                            }
-                            new_span.glyph_string->glyphs[i].attr.is_cluster_start = 1;
-                            i = j;
-                        }
-                        /* glyphs[].x_offset values may be out of order within any log_clusters, apparently harmless */
                     }
                     new_span.pango_item_index = pango_item_index;
-                    new_span.line_height_multiplier = _computeFontLineHeight( text_source->style );
-                    new_span.line_height.set( para->pango_items[pango_item_index].font );
-                    new_span.line_height *= new_span.font_size;
+                    _computeFontLineHeight(para->pango_items[pango_item_index].font, new_span.font_size, text_source->style, &new_span.line_height, &new_span.line_height_multiplier);
 
                     // At some point we may want to calculate baseline_shift here (to take advantage
                     // of otm features like superscript baseline), but for now we use style baseline_shift.
                     new_span.baseline_shift = text_source->style->baseline_shift.computed;
-                    new_span.text_orientation = (SPCSSTextOrientation)text_source->style->text_orientation.computed;
 
                     // TODO: metrics for vertical text
-                    TRACE(("add text span %lu \"%s\"\n", para->unbroken_spans.size(), text_source->text->raw().substr(span_start_byte_in_source, new_span.text_bytes).c_str()));
+                    TRACE(("add text span %d \"%s\"\n", para->unbroken_spans.size(), text_source->text->raw().substr(span_start_byte_in_source, new_span.text_bytes).c_str()));
                     TRACE(("  %d glyphs\n", new_span.glyph_string->num_glyphs));
                 } else {
                     // if there's no text we still need to initialise the styles
                     new_span.pango_item_index = -1;
                     font_instance *font = text_source->styleGetFontInstance();
                     if (font) {
-                        new_span.line_height_multiplier = _computeFontLineHeight( text_source->style );
-                        new_span.line_height.set( font );
-                        new_span.line_height *= new_span.font_size;
+                        _computeFontLineHeight(font, new_span.font_size, text_source->style, &new_span.line_height, &new_span.line_height_multiplier);
                         font->Unref();
                     } else {
-                        new_span.line_height *= 0.0;  // Set all to zero
-                        new_span.line_height_multiplier = LINE_HEIGHT_NORMAL;
+                        new_span.line_height.setZero();
+                        new_span.line_height_multiplier = 1.0;
                     }
-                    TRACE(("add style init span %lu\n", para->unbroken_spans.size()));
+                    TRACE(("add style init span %d\n", para->unbroken_spans.size()));
                 }
                 para->unbroken_spans.push_back(new_span);
 
@@ -1425,7 +1210,7 @@ bool Layout::Calculator::_goToNextWrapShape()
     _current_shape_index++;
     if (_current_shape_index == _flow._input_wrap_shapes.size()) return false;
     _scanline_maker = new ShapeScanlineMaker(_flow._input_wrap_shapes[_current_shape_index].shape, _block_progression);
-    TRACE(("begin wrap shape %u\n", _current_shape_index));
+    TRACE(("begin wrap shape %d\n", _current_shape_index));
     return true;
 }
 
@@ -1437,68 +1222,67 @@ bool Layout::Calculator::_goToNextWrapShape()
  * bits of information that will prove useful when we come to output the
  * line to #_flow. Returns with \a start_span_pos set to the end of the
  * text that was fitted, \a chunk_info completely filled out and
- * \a line_box_height set with the largest ascent and the largest
- * descent (individually per CSS) on the line. The line_box_height
- * can never be smaller than the line_box_strut (which is determined
- * by the block level value of line_height). The return
+ * \a line_height set to the largest line box on the line. The return
  * value is false only if we've run out of shapes to wrap inside (and
  * hence couldn't create any chunks).
  */
 bool Layout::Calculator::_findChunksForLine(ParagraphInfo const &para,
                                             UnbrokenSpanPosition *start_span_pos,
                                             std::vector<ChunkInfo> *chunk_info,
-                                            FontMetrics *line_box_height,
-                                            FontMetrics const *strut_height)
+                                            LineHeight *line_height)
 {
-    TRACE(("  begin _findChunksForLine: chunks: %lu, em size: %f\n", chunk_info->size(), line_box_height->emSize() ));
-
-    // CSS 2.1 dictates that the minimum line height (i.e. the strut height)
-    // is found from the block element.
-    *line_box_height = *strut_height;
-    TRACE(("    initial line_box_height (em size): %f\n", line_box_height->emSize() ));
+    // init the initial line_height
+    if (start_span_pos->iter_span == para.unbroken_spans.end()) {
+        if (_flow._spans.empty()) {
+            // empty first para: create a font for the sole purpose of measuring it
+            InputStreamTextSource const *text_source = static_cast<InputStreamTextSource const *>(_flow._input_stream.front());
+            font_instance *font = text_source->styleGetFontInstance();
+            if (font) {
+                double font_size = text_source->styleComputeFontSize();
+                double multiplier;
+                _computeFontLineHeight(font, font_size, text_source->style, line_height, &multiplier);
+                font->Unref();
+                *line_height *= multiplier;
+                _scanline_maker->setNewYCoordinate(_scanline_maker->yCoordinate() - line_height->ascent);
+            }
+        }
+        // else empty subsequent para: keep the old line height
+    } else {
+        if (_flow._input_wrap_shapes.empty()) {
+            // if we're not wrapping set the line_height big and negative so we can use negative line height
+            line_height->ascent = -1.0e10;
+            line_height->descent = -1.0e10;
+            line_height->leading = -1.0e10;
+        }
+        else
+            line_height->setZero();
+    }
 
     UnbrokenSpanPosition span_pos;
     for( ; ; ) {
-
-        // Get regions where one can place one line of text (can be more than one, if filling a
-        // donut for example).
         std::vector<ScanlineMaker::ScanRun> scan_runs;
-        scan_runs = _scanline_maker->makeScanline(*line_box_height); // Only one line with "InfiniteScanlineMaker
-
-        // If scan_runs is empty, we must have reached the bottom of a shape. Go to next shape.
+        scan_runs = _scanline_maker->makeScanline(*line_height); // Only one line with "InfiniteScanlineMaker
         while (scan_runs.empty()) {
             // Only used by ShapeScanlineMaker
             if (!_goToNextWrapShape()) return false;  // no more shapes to wrap in to
-
-            *line_box_height = *strut_height;
-            scan_runs = _scanline_maker->makeScanline(*line_box_height);
+            scan_runs = _scanline_maker->makeScanline(*line_height);
         }
 
-        TRACE(("    finding line fit y=%f, %lu scan runs\n", scan_runs.front().y, scan_runs.size()));
+        TRACE(("finding line fit y=%f, %d scan runs\n", scan_runs.front().y, scan_runs.size()));
         chunk_info->clear();
         chunk_info->reserve(scan_runs.size());
         if (para.direction == RIGHT_TO_LEFT) std::reverse(scan_runs.begin(), scan_runs.end());
         unsigned scan_run_index;
         span_pos = *start_span_pos;
         for (scan_run_index = 0 ; scan_run_index < scan_runs.size() ; scan_run_index++) {
-
-            // Returns false if some text in line requires a taller line_box_height.
-            // (We try again with a larger line_box_height.)
-            if (!_buildChunksInScanRun(para, span_pos, scan_runs[scan_run_index], chunk_info, line_box_height, strut_height)) {
+            if (!_buildChunksInScanRun(para, span_pos, scan_runs[scan_run_index], chunk_info, line_height))
                 break;
-            }
-
             if (!chunk_info->empty() && !chunk_info->back().broken_spans.empty())
                 span_pos = chunk_info->back().broken_spans.back().end;
         }
-
         if (scan_run_index == scan_runs.size()) break;  // ie when buildChunksInScanRun() succeeded
-
-    } // End for loop
-
+    }
     *start_span_pos = span_pos;
-    TRACE(("    final line_box_height: %f\n", line_box_height->emSize() ));
-    TRACE(("  end _findChunksForLine: chunks: %lu\n", chunk_info->size()));
     return true;
 }
 
@@ -1520,11 +1304,8 @@ bool Layout::Calculator::_buildChunksInScanRun(ParagraphInfo const &para,
                                                UnbrokenSpanPosition const &start_span_pos,
                                                ScanlineMaker::ScanRun const &scan_run,
                                                std::vector<ChunkInfo> *chunk_info,
-                                               FontMetrics *line_height,
-                                               FontMetrics const *strut_height) const
+                                               LineHeight *line_height) const
 {
-    TRACE(("    begin _buildChunksInScanRun: chunks: %lu, em size: %f\n", chunk_info->size(), line_height->emSize() ));
-
     ChunkInfo new_chunk;
     new_chunk.text_width = 0.0;
     new_chunk.whitespace_count = 0;
@@ -1538,7 +1319,7 @@ bool Layout::Calculator::_buildChunksInScanRun(ParagraphInfo const &para,
     last_span_at_emergency_break.start = start_span_pos;
     last_span_at_emergency_break.setZero();
 
-    TRACE(("      trying chunk from %f to %g\n", scan_run.x_start, scan_run.x_end));
+    TRACE(("trying chunk from %f to %g\n", scan_run.x_start, scan_run.x_end));
     BrokenSpan new_span;
     new_span.end = start_span_pos;
     while (new_span.end.iter_span != para.unbroken_spans.end()) {    // this loops once for each UnbrokenSpan
@@ -1560,20 +1341,16 @@ bool Layout::Calculator::_buildChunksInScanRun(ParagraphInfo const &para,
         }
 
         // see if this span is too tall to fit on the current line
-        FontMetrics new_span_height = new_span.start.iter_span->line_height;
-        new_span_height.computeEffective( new_span.start.iter_span->line_height_multiplier );
-
+        LineHeight total_height = new_span.start.iter_span->line_height;
+        total_height *= new_span.start.iter_span->line_height_multiplier;
         /* floating point 80-bit/64-bit rounding problems require epsilon. See
            discussion http://inkscape.gristle.org/2005-03-16.txt around 22:00 */
-        if ( new_span_height.ascent  > line_height->ascent  + std::numeric_limits<float>::epsilon() ||
-             new_span_height.descent > line_height->descent + std::numeric_limits<float>::epsilon() ) {
-            // Take larger of each of the two ascents and two descents per CSS
-            line_height->max(new_span_height);
-
-            // Currently always true for flowed text and false for Inkscape multiline text.
-            if (!_scanline_maker->canExtendCurrentScanline(*line_height)) {
+        if (   total_height.ascent  > line_height->ascent  + FLT_EPSILON
+               || total_height.descent > line_height->descent + FLT_EPSILON
+               || total_height.leading > line_height->leading + FLT_EPSILON) {
+            line_height->max(total_height);
+            if (!_scanline_maker->canExtendCurrentScanline(*line_height))
                 return false;
-            }
         }
 
         bool span_fitted = _measureUnbrokenSpan(para, &new_span, &last_span_at_break, &last_span_at_emergency_break, new_chunk.scanrun_width - new_chunk.text_width);
@@ -1590,10 +1367,10 @@ bool Layout::Calculator::_buildChunksInScanRun(ParagraphInfo const &para,
         }
     }
 
-    TRACE(("      chunk complete, used %f width (%d whitespaces, %lu brokenspans)\n", new_chunk.text_width, new_chunk.whitespace_count, new_chunk.broken_spans.size()));
+    TRACE(("chunk complete, used %f width (%d whitespaces, %d brokenspans)\n", new_chunk.text_width, new_chunk.whitespace_count, new_chunk.broken_spans.size()));
     chunk_info->push_back(new_chunk);
 
-    if (scan_run.width() >= 4.0 * line_height->emSize() && last_span_at_break.end == start_span_pos) {
+    if (scan_run.width() >= 4.0 * line_height->total() && last_span_at_break.end == start_span_pos) {
         /* **non-SVG spec bit**: See bug #1191102
            If the user types a very long line with no spaces, the way the spec
            is written at the moment means that when the length of the text
@@ -1628,25 +1405,12 @@ bool Layout::Calculator::_buildChunksInScanRun(ParagraphInfo const &para,
                 chunk_info->back().text_width += last_span_at_break.width;
                 chunk_info->back().whitespace_count += last_span_at_break.whitespace_count;
             }
-            TRACE(("      correction: fitted span %lu width = %f\n", last_span_at_break.start.iter_span - para.unbroken_spans.begin(), last_span_at_break.width));
+            TRACE(("correction: fitted span %d width = %f\n", last_span_at_break.start.iter_span - para.unbroken_spans.begin(), last_span_at_break.width));
         }
     }
-
-    // Recalculate line_box_height after backing out chunks
-    *line_height = *strut_height;
-    for (std::vector<ChunkInfo>::const_iterator it_chunk = chunk_info->begin() ; it_chunk != chunk_info->end() ; it_chunk++) {
-        for (std::vector<BrokenSpan>::const_iterator it_span = it_chunk->broken_spans.begin() ; it_span != it_chunk->broken_spans.end() ; it_span++) {
-            TRACE(("      brokenspan line_height: %f\n", it_span->start.iter_span->line_height.emSize() ));
-            FontMetrics span_height = it_span->start.iter_span->line_height;
-            span_height.computeEffective( it_span->start.iter_span->line_height_multiplier );
-            line_height->max( span_height );
-        }
-    }
-    TRACE(("      line_box_height: %f\n", line_height->emSize()));
 
     if (!chunk_info->empty() && !chunk_info->back().broken_spans.empty() && chunk_info->back().broken_spans.back().ends_with_whitespace) {
         // for justification we need to discard space occupied by the single whitespace at the end of the chunk
-        TRACE(("      backing out whitespace\n"));
         chunk_info->back().broken_spans.back().ends_with_whitespace = false;
         chunk_info->back().broken_spans.back().width -= chunk_info->back().broken_spans.back().each_whitespace_width;
         chunk_info->back().broken_spans.back().whitespace_count--;
@@ -1658,13 +1422,11 @@ bool Layout::Calculator::_buildChunksInScanRun(ParagraphInfo const &para,
         // for justification we need to discard line-spacing and word-spacing at end of the chunk
         chunk_info->back().broken_spans.back().width -= chunk_info->back().broken_spans.back().letter_spacing;
         chunk_info->back().text_width -= chunk_info->back().broken_spans.back().letter_spacing;
-        TRACE(("      width after subtracting last letter_spacing: %f\n", chunk_info->back().broken_spans.back().width));
+        TRACE(("width after subtracting last letter_spacing: %f\n", chunk_info->back().broken_spans.back().width));
     }
 
-    TRACE(("    end _buildChunksInScanRun: chunks: %lu\n", chunk_info->size()));
     return true;
 }
-
 
 /** The management function to start the whole thing off. */
 bool Layout::Calculator::calculate()
@@ -1681,34 +1443,19 @@ bool Layout::Calculator::calculate()
         g_warning("flow text is not of type TEXT_SOURCE. Abort.");
         return false;
     }
-    TRACE(("begin calculate()\n"));
+    TRACE(("begin calculateFlow()\n"));
 
     _flow._clearOutputObjects();
 
     _pango_context = (font_factory::Default())->fontContext;
-
     _font_factory_size_multiplier = (font_factory::Default())->fontSize;
 
-    // Reset gravity hint in case it was changed via previous use of 'text-orientation'
-    // (scripts take their natural gravity given base gravity).
-    pango_context_set_gravity_hint(_pango_context, PANGO_GRAVITY_HINT_NATURAL);
-
     _block_progression = _flow._blockProgression();
-    if( _block_progression == RIGHT_TO_LEFT || _block_progression == LEFT_TO_RIGHT ) {
-        // Vertical text, CJK
-        pango_context_set_base_gravity(_pango_context, PANGO_GRAVITY_EAST);
-    } else {
-        // Horizontal text
-        pango_context_set_base_gravity(_pango_context, PANGO_GRAVITY_AUTO);
-    }
-
-    // Minimum line box height determined by block container.
-    FontMetrics strut_height = _flow.strut;
     _y_offset = 0.0;
     _createFirstScanlineMaker();
 
     ParagraphInfo para;
-    FontMetrics line_box_height; // Current value of line box height for line.
+    LineHeight line_height; // needs to be maintained across paragraphs to be able to deal with blank paras
     for(para.first_input_index = 0 ; para.first_input_index < _flow._input_stream.size() ; ) {
         // jump to the next wrap shape if this is a SHAPE_BREAK control code
         if (_flow._input_stream[para.first_input_index]->Type() == CONTROL_CODE) {
@@ -1722,10 +1469,7 @@ bool Layout::Calculator::calculate()
         if (_scanline_maker == NULL)
             break;       // we're trying to flow past the last wrap shape
 
-        // Break things up into little pango units with unique direction, gravity, etc.
         _buildPangoItemizationForPara(&para);
-
-        // Do shaping (convert characters to glyphs)
         unsigned para_end_input_index = _buildSpansForPara(&para);
 
         if (_flow._input_stream[para.first_input_index]->Type() == TEXT_SOURCE)
@@ -1733,7 +1477,7 @@ bool Layout::Calculator::calculate()
         else
             para.alignment = para.direction == LEFT_TO_RIGHT ? LEFT : RIGHT;
 
-        TRACE(("para prepared, adding as #%lu\n", _flow._paragraphs.size()));
+        TRACE(("para prepared, adding as #%d\n", _flow._paragraphs.size()));
         Layout::Paragraph new_paragraph;
         new_paragraph.base_direction = para.direction;
         new_paragraph.alignment = para.alignment;
@@ -1745,28 +1489,18 @@ bool Layout::Calculator::calculate()
         span_pos.char_byte = 0;
         span_pos.char_index = 0;
 
-        bool keep_going = true;
         do {   // for each line in the paragraph
             TRACE(("begin line\n"));
-
             std::vector<ChunkInfo> line_chunk_info;
-            if (!_findChunksForLine(para, &span_pos, &line_chunk_info, &line_box_height, &strut_height )) {
-                keep_going = false;
+            if (!_findChunksForLine(para, &span_pos, &line_chunk_info, &line_height))
                 break;   // out of shapes to wrap in to
-            }
 
-            if (line_box_height.emSize() < 0.001 && line_chunk_info.empty()) {
-                keep_going = false;
-                break;   // No room for text and not useful to try again at same place.
-            }
-            _outputLine(para, line_box_height, line_chunk_info);
-            _scanline_maker->setLineHeight( line_box_height );
+            _outputLine(para, line_height, line_chunk_info);
             _scanline_maker->completeLine(); // Increments y by line height
-            TRACE(("end line\n"));
         } while (span_pos.iter_span != para.unbroken_spans.end());
 
-        TRACE(("para %lu end\n\n", _flow._paragraphs.size() - 1));
-        if (keep_going) {
+        TRACE(("para %d end\n\n", _flow._paragraphs.size() - 1));
+        if (_scanline_maker != NULL) {
             bool is_empty_para = _flow._characters.empty() || _flow._characters.back().line(&_flow).in_paragraph != _flow._paragraphs.size() - 1;
             if ((is_empty_para && para_end_input_index + 1 >= _flow._input_stream.size())
                 || para_end_input_index + 1 < _flow._input_stream.size()) {
@@ -1774,8 +1508,8 @@ bool Layout::Calculator::calculate()
                 Layout::Span new_span;
                 if (_flow._spans.empty()) {
                     new_span.font = NULL;
-                    new_span.font_size = line_box_height.emSize();
-                    new_span.line_height = line_box_height;
+                    new_span.font_size = line_height.ascent + line_height.descent;
+                    new_span.line_height = line_height;
                     new_span.x_end = 0.0;
                 } else {
                     new_span = _flow._spans.back();
@@ -1828,14 +1562,6 @@ bool Layout::Calculator::calculate()
         _flow._input_truncated = true;
     }
 
-    if (_flow.textLength._set) {
-        // Calculate the adjustment needed to meet the textLength
-        double actual_length = _flow.getActualLength();
-        double difference = _flow.textLength.computed - actual_length;
-        _flow.textLengthMultiplier = (actual_length + difference) / actual_length;
-        _flow.textLengthIncrement = difference / (_flow._characters.size() == 1? 1 : _flow._characters.size() - 1);
-    }
-
     return true;
 }
 
@@ -1850,16 +1576,19 @@ void Layout::_calculateCursorShapeForEmpty()
     InputStreamTextSource const *text_source = static_cast<InputStreamTextSource const *>(_input_stream.front());
 
     font_instance *font = text_source->styleGetFontInstance();
-    double font_size = text_source->style->font_size.computed;
+    double font_size = text_source->styleComputeFontSize();
     double caret_slope_run = 0.0, caret_slope_rise = 1.0;
-    FontMetrics line_height;
+    LineHeight line_height;
     if (font) {
         const_cast<font_instance*>(font)->FontSlope(caret_slope_run, caret_slope_rise);
-        font->FontMetrics(line_height.ascent, line_height.descent, line_height.xheight);
+        font->FontMetrics(line_height.ascent, line_height.descent, line_height.leading);
         line_height *= font_size;
         font->Unref();
+    } else {
+        line_height.ascent = font_size * 0.85;      // random guesses
+        line_height.descent = font_size * 0.15;
+        line_height.leading = 0.0;
     }
-
     double caret_slope = atan2(caret_slope_run, caret_slope_rise);
     _empty_cursor_shape.height = font_size / cos(caret_slope);
     _empty_cursor_shape.rotation = caret_slope;
@@ -1872,26 +1601,17 @@ void Layout::_calculateCursorShapeForEmpty()
         ShapeScanlineMaker scanline_maker(_input_wrap_shapes.front().shape, block_progression);
         std::vector<ScanlineMaker::ScanRun> scan_runs = scanline_maker.makeScanline(line_height);
         if (!scan_runs.empty()) {
-            if (block_progression == LEFT_TO_RIGHT || block_progression == RIGHT_TO_LEFT) {
-                // Vertical text
+            if (block_progression == LEFT_TO_RIGHT || block_progression == RIGHT_TO_LEFT)
                 _empty_cursor_shape.position = Geom::Point(scan_runs.front().y + font_size, scan_runs.front().x_start);
-            } else {
-                // Horizontal text
+            else
                 _empty_cursor_shape.position = Geom::Point(scan_runs.front().x_start, scan_runs.front().y + font_size);
-            }
         }
     }
 }
 
 bool Layout::calculateFlow()
 {
-    TRACE(("begin calculateFlow()\n"));
-    Layout::Calculator calc = Calculator(this);
-    bool result = calc.calculate();
-    if (textLengthIncrement != 0) {
-        TRACE(("Recalculating layout the second time to fit textLength!\n"));
-        result = calc.calculate();
-    }
+    bool result = Calculator(this).calculate();
     if (_characters.empty())
         _calculateCursorShapeForEmpty();
     return result;
@@ -1910,4 +1630,4 @@ bool Layout::calculateFlow()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

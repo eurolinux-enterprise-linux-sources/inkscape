@@ -14,7 +14,7 @@
 
 #include <glibmm/ustring.h>
 #include <boost/operators.hpp>
-#include <2geom/affine.h>
+#include <2geom/matrix.h>
 
 class SPItem;
 namespace Inkscape {
@@ -32,7 +32,7 @@ struct ShapeRecord :
     public boost::totally_ordered<ShapeRecord>
 {
     SPItem *item; // SP node for the edited shape
-    Geom::Affine edit_transform; // how to transform controls - used for clipping paths and masks
+    Geom::Matrix edit_transform; // how to transform controls - used for clipping paths and masks
     ShapeRole role;
     Glib::ustring lpe_key; // name of LPE shape param being edited
 
@@ -58,4 +58,4 @@ struct ShapeRecord :
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

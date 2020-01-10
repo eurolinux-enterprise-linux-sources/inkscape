@@ -1,4 +1,4 @@
-/*
+/**
  * Zlib-enabled input and output streams
  *
  * This is a thin wrapper of libz calls, in order
@@ -8,27 +8,13 @@
  * Authors:
  *   Bob Jamison <rjamison@titan.com>
  *
- * Copyright (C) 2004
+ * Copyright (C) 2004 Inkscape.org
  *
-
- *  This library is free software; you can redistribute it and/or
- *  modify it under the terms of the GNU Lesser General Public
- *  License as published by the Free Software Foundation; either
- *  version 2.1 of the License, or (at your option) any later version.
- *
- *  This library is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- *  Lesser General Public License for more details.
- *
- *  You should have received a copy of the GNU Lesser General Public
- *  License along with this library; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
 #include "gzipstream.h"
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -52,7 +38,6 @@ GzipInputStream::GzipInputStream(InputStream &sourceStream)
                       totalIn(0),
                       totalOut(0),
                       outputBuf(NULL),
-                      srcBuf(NULL),
                       crc(0),
                       srcCrc(0),
                       srcSiz(0),
@@ -71,12 +56,12 @@ GzipInputStream::~GzipInputStream()
 {
     close();
     if ( srcBuf ) {
-      delete[] srcBuf;
-      srcBuf = NULL;
+      free(srcBuf);
+      srcBuf = 0;
     }
     if ( outputBuf ) {
-        delete[] outputBuf;
-        outputBuf = NULL;
+        free(outputBuf);
+        outputBuf = 0;
     }
 }
 
@@ -108,12 +93,12 @@ void GzipInputStream::close()
     }
 
     if ( srcBuf ) {
-      delete[] srcBuf;
-      srcBuf = NULL;
+      free(srcBuf);
+      srcBuf = 0;
     }
     if ( outputBuf ) {
-        delete[] outputBuf;
-        outputBuf = NULL;
+        free(outputBuf);
+        outputBuf = 0;
     }
     closed = true;
 }
@@ -132,9 +117,10 @@ int GzipInputStream::get()
     } else {
         loaded = true;
 
+        int zerr = Z_OK;
         if ( outputBufPos >= outputBufLen ) {
             // time to read more, if we can
-            fetchMore();
+            zerr = fetchMore();
         }
 
         if ( outputBufPos < outputBufLen ) {
@@ -161,7 +147,7 @@ bool GzipInputStream::load()
         int ch = source.get();
         if (ch<0)
             break;
-        inputBuf.push_back(static_cast<Byte>(ch & 0xff));
+        inputBuf.push_back((Byte)(ch & 0xff));
         }
     long inputBufLen = inputBuf.size();
     
@@ -171,59 +157,57 @@ bool GzipInputStream::load()
         }
 
     srcLen = inputBuf.size();
-    srcBuf = new Byte [srcLen];
+    srcBuf = (Bytef *)malloc(srcLen * sizeof(Byte));
     if (!srcBuf) {
         return false;
     }
 
-    outputBuf = new unsigned char [OUT_SIZE];
+    outputBuf = (unsigned char *)malloc(OUT_SIZE);
     if ( !outputBuf ) {
-        delete[] srcBuf;
-        srcBuf = NULL;
+        free(srcBuf);
+        srcBuf = 0;
         return false;
     }
     outputBufLen = 0; // Not filled in yet
 
     std::vector<unsigned char>::iterator iter;
     Bytef *p = srcBuf;
-    for (iter=inputBuf.begin() ; iter != inputBuf.end() ; ++iter)
-	{
+    for (iter=inputBuf.begin() ; iter != inputBuf.end() ; iter++)
         *p++ = *iter;
-	}
 
     int headerLen = 10;
 
     //Magic
-    //int val = (int)srcBuf[0];
-    ////printf("val:%x\n", val);
-    //val = (int)srcBuf[1];
-    ////printf("val:%x\n", val);
+    int val = (int)srcBuf[0];
+    //printf("val:%x\n", val);
+    val = (int)srcBuf[1];
+    //printf("val:%x\n", val);
 
-    ////Method
-    //val = (int)srcBuf[2];
-    ////printf("val:%x\n", val);
+    //Method
+    val = (int)srcBuf[2];
+    //printf("val:%x\n", val);
 
     //flags
-    int flags = static_cast<int>(srcBuf[3]);
+    int flags = (int)srcBuf[3];
 
-    ////time
-    //val = (int)srcBuf[4];
-    //val = (int)srcBuf[5];
-    //val = (int)srcBuf[6];
-    //val = (int)srcBuf[7];
+    //time
+    val = (int)srcBuf[4];
+    val = (int)srcBuf[5];
+    val = (int)srcBuf[6];
+    val = (int)srcBuf[7];
 
-    ////xflags
-    //val = (int)srcBuf[8];
-    ////OS
-    //val = (int)srcBuf[9];
+    //xflags
+    val = (int)srcBuf[8];
+    //OS
+    val = (int)srcBuf[9];
 
+    int cur = 10;
 //     if ( flags & FEXTRA ) {
 //         headerLen += 2;
 //         int xlen = 
 //         TODO deal with optional header parts
 //     }
     if ( flags & FNAME ) {
-        int cur = 10;
         while ( srcBuf[cur] )
         {
             cur++;
@@ -245,6 +229,10 @@ bool GzipInputStream::load()
            | ((0x0ff & srcBuf[srcLen - 4]) <<  0);
     //printf("srcSiz:%lx/%ld\n", srcSiz, srcSiz);
     
+    if ( srcSiz <= 0 ) {
+        return false;
+    }
+
     //outputBufLen = srcSiz + srcSiz/100 + 14;
     
     unsigned char *data = srcBuf + headerLen;
@@ -274,17 +262,19 @@ bool GzipInputStream::load()
 
 int GzipInputStream::fetchMore()
 {
+    int zerr = Z_OK;
+
     // TODO assumes we aren't called till the buffer is empty
     d_stream.next_out  = outputBuf;
     d_stream.avail_out = OUT_SIZE;
     outputBufLen = 0;
     outputBufPos = 0;
 
-    int zerr = inflate( &d_stream, Z_SYNC_FLUSH );
+    zerr = inflate( &d_stream, Z_SYNC_FLUSH );
     if ( zerr == Z_OK || zerr == Z_STREAM_END ) {
         outputBufLen = OUT_SIZE - d_stream.avail_out;
         if ( outputBufLen ) {
-            crc = crc32(crc, const_cast<const Bytef *>(outputBuf), outputBufLen);
+            crc = crc32(crc, (const Bytef *)outputBuf, outputBufLen);
         }
         //printf("crc:%lx\n", crc);
 //     } else if ( zerr != Z_STREAM_END ) {
@@ -359,14 +349,14 @@ void GzipOutputStream::close()
     uLong outlong = crc;
     for (int n = 0; n < 4; n++)
         {
-        destination.put(static_cast<gunichar>(outlong & 0xff));
+        destination.put((int)(outlong & 0xff));
         outlong >>= 8;
         }
     //# send the file length
     outlong = totalIn & 0xffffffffL;
     for (int n = 0; n < 4; n++)
         {
-        destination.put(static_cast<gunichar>(outlong & 0xff));
+        destination.put((int)(outlong & 0xff));
         outlong >>= 8;
         }
 
@@ -380,34 +370,32 @@ void GzipOutputStream::close()
  */ 
 void GzipOutputStream::flush()
 {
-    if (closed || inputBuf.empty())
-	{
+    if (closed || inputBuf.size()<1)
         return;
-    }
-	
+    
     uLong srclen = inputBuf.size();
-    Bytef *srcbuf = new Bytef [srclen];
+    Bytef *srcbuf = (Bytef *)malloc(srclen * sizeof(Byte));
     if (!srcbuf)
         {
         return;
         }
         
     uLong destlen = srclen;
-    Bytef *destbuf = new Bytef [(destlen + (srclen/100) + 13)];
+    Bytef *destbuf = (Bytef *)malloc((destlen + (srclen/100) + 13) * sizeof(Byte));
     if (!destbuf)
         {
-        delete[] srcbuf;
+        free(srcbuf);
         return;
         }
         
     std::vector<unsigned char>::iterator iter;
     Bytef *p = srcbuf;
-    for (iter=inputBuf.begin() ; iter != inputBuf.end() ; ++iter)
+    for (iter=inputBuf.begin() ; iter != inputBuf.end() ; iter++)
         *p++ = *iter;
         
-    crc = crc32(crc, const_cast<const Bytef *>(srcbuf), srclen);
+    crc = crc32(crc, (const Bytef *)srcbuf, srclen);
     
-    int zerr = compress(destbuf, static_cast<uLongf *>(&destlen), srcbuf, srclen);
+    int zerr = compress(destbuf, (uLongf *)&destlen, srcbuf, srclen);
     if (zerr != Z_OK)
         {
         printf("Some kind of problem\n");
@@ -423,8 +411,11 @@ void GzipOutputStream::flush()
     destination.flush();
 
     inputBuf.clear();
-    delete[] srcbuf;
-    delete[] destbuf;
+    free(srcbuf);
+    free(destbuf);
+    
+    //printf("done\n");
+    
 }
 
 
@@ -432,19 +423,19 @@ void GzipOutputStream::flush()
 /**
  * Writes the specified byte to this output stream.
  */ 
-int GzipOutputStream::put(gunichar ch)
+void GzipOutputStream::put(int ch)
 {
     if (closed)
         {
         //probably throw an exception here
-        return -1;
+        return;
         }
 
 
     //Add char to buffer
     inputBuf.push_back(ch);
     totalIn++;
-    return 1;
+
 }
 
 

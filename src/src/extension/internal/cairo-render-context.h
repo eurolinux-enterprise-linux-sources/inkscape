@@ -6,7 +6,7 @@
  */
 /*
  * Authors:
- *     Miklos Erdelyi <erdelyim@gmail.com>
+ * 	   Miklos Erdelyi <erdelyim@gmail.com>
  *
  * Copyright (C) 2006 Miklos Erdelyi
  *
@@ -22,7 +22,6 @@
 #include <string>
 
 #include <2geom/forward.h>
-#include <2geom/affine.h>
 
 #include "style.h"
 
@@ -31,19 +30,14 @@
 class SPClipPath;
 class SPMask;
 
-typedef struct _PangoFont PangoFont;
-typedef struct _PangoLayout PangoLayout;
-
 namespace Inkscape {
-class Pixbuf;
-
 namespace Extension {
 namespace Internal {
 
 class CairoRenderer;
 class CairoRenderContext;
-struct CairoRenderState;
-struct CairoGlyphInfo;
+class CairoRenderState;
+class CairoGlyphInfo;
 
 // Holds info for rendering a glyph
 struct CairoGlyphInfo {
@@ -59,12 +53,12 @@ struct CairoRenderState {
     unsigned int parent_has_userspace : 1;  // whether the parent's ctm should be applied
     float opacity;
     bool has_filtereffect;
-    Geom::Affine item_transform;     // this item's item->transform, for correct clipping
+    Geom::Matrix item_transform;     // this item's item->transform, for correct clipping
 
     SPClipPath *clip_path;
     SPMask* mask;
 
-    Geom::Affine transform;     // the CTM
+    Geom::Matrix transform;     // the CTM
 };
 
 class CairoRenderContext {
@@ -99,8 +93,6 @@ public:
     void setPDFLevel(unsigned int level);
     void setTextToPath(bool texttopath);
     bool getTextToPath(void);
-    void setOmitText(bool omittext);
-    bool getOmitText(void);
     void setFilterToBitmap(bool filtertobitmap);
     bool getFilterToBitmap(void);
     void setBitmapResolution(int resolution);
@@ -115,9 +107,6 @@ public:
 
     /** Saves the contents of the context to a PNG file. */
     bool saveAsPng(const char *file_name);
-
-    /** On targets supporting multiple pages, sends subsequent rendering to a new page*/
-    void newPage(void);
 
     /* Render/clip mode setting/query */
     void setRenderMode(CairoRenderMode mode);
@@ -138,27 +127,20 @@ public:
     CairoRenderState *getParentState(void) const;
     void setStateForStyle(SPStyle const *style);
 
-    void transform(Geom::Affine const &transform);
-    void setTransform(Geom::Affine const &transform);
-    Geom::Affine getTransform() const;
-    Geom::Affine getParentTransform() const;
+    void transform(Geom::Matrix const *transform);
+    void setTransform(Geom::Matrix const *transform);
+    void getTransform(Geom::Matrix *copy) const;
+    void getParentTransform(Geom::Matrix *copy) const;
 
     /* Clipping methods */
     void addClipPath(Geom::PathVector const &pv, SPIEnum const *fill_rule);
     void addClippingRect(double x, double y, double width, double height);
 
     /* Rendering methods */
-    enum CairoPaintOrder {
-        STROKE_OVER_FILL,
-        FILL_OVER_STROKE,
-        FILL_ONLY,
-        STROKE_ONLY
-    };
-
-    bool renderPathVector(Geom::PathVector const &pathv, SPStyle const *style, Geom::OptRect const &pbox, CairoPaintOrder order = STROKE_OVER_FILL);
-    bool renderImage(Inkscape::Pixbuf *pb,
-                     Geom::Affine const &image_transform, SPStyle const *style);
-    bool renderGlyphtext(PangoFont *font, Geom::Affine const &font_matrix,
+    bool renderPathVector(Geom::PathVector const & pathv, SPStyle const *style, NRRect const *pbox);
+    bool renderImage(unsigned char *px, unsigned int w, unsigned int h, unsigned int rs,
+                     Geom::Matrix const *image_transform, SPStyle const *style);
+    bool renderGlyphtext(PangoFont *font, Geom::Matrix const *font_matrix,
                          std::vector<CairoGlyphInfo> const &glyphtext, SPStyle const *style);
 
     /* More general rendering methods will have to be added (like fill, stroke) */
@@ -167,12 +149,6 @@ protected:
     CairoRenderContext(CairoRenderer *renderer);
     virtual ~CairoRenderContext(void);
 
-    enum CairoOmitTextPageState {
-        EMPTY,
-        GRAPHIC_ON_TOP,
-        NEW_PAGE_ON_GRAPHIC
-    };
-
     float _width;
     float _height;
     unsigned short _dpi;
@@ -180,7 +156,6 @@ protected:
     unsigned int _ps_level;
     bool _eps;
     bool _is_texttopath;
-    bool _is_omittext;
     bool _is_filtertobitmap;
     int _bitmapresolution;
 
@@ -206,28 +181,21 @@ protected:
     CairoRenderMode _render_mode;
     CairoClipMode _clip_mode;
 
-    CairoOmitTextPageState _omittext_state;
-    int _omittext_missing_pages;
-
     cairo_pattern_t *_createPatternForPaintServer(SPPaintServer const *const paintserver,
-                                                  Geom::OptRect const &pbox, float alpha);
-    cairo_pattern_t *_createPatternPainter(SPPaintServer const *const paintserver, Geom::OptRect const &pbox);
-    cairo_pattern_t *_createHatchPainter(SPPaintServer const *const paintserver, Geom::OptRect const &pbox);
+                                                  NRRect const *pbox, float alpha);
+    cairo_pattern_t *_createPatternPainter(SPPaintServer const *const paintserver, NRRect const *pbox);
 
     unsigned int _showGlyphs(cairo_t *cr, PangoFont *font, std::vector<CairoGlyphInfo> const &glyphtext, bool is_stroke);
 
     bool _finishSurfaceSetup(cairo_surface_t *surface, cairo_matrix_t *ctm = NULL);
-    void _setFillStyle(SPStyle const *style, Geom::OptRect const &pbox);
-    void _setStrokeStyle(SPStyle const *style, Geom::OptRect const &pbox);
+    void _setFillStyle(SPStyle const *style, NRRect const *pbox);
+    void _setStrokeStyle(SPStyle const *style, NRRect const *pbox);
 
-    void _initCairoMatrix(cairo_matrix_t *matrix, Geom::Affine const &transform);
+    void _initCairoMatrix(cairo_matrix_t *matrix, Geom::Matrix const *transform);
     void _concatTransform(cairo_t *cr, double xx, double yx, double xy, double yy, double x0, double y0);
-    void _concatTransform(cairo_t *cr, Geom::Affine const &transform);
+    void _concatTransform(cairo_t *cr, Geom::Matrix const *transform);
 
-    void _prepareRenderGraphic(void);
-    void _prepareRenderText(void);
-
-    std::map<gpointer, cairo_font_face_t *> font_table;
+    GHashTable *font_table;
     static void font_data_free(gpointer data);
 
     CairoRenderState *_createState(void);
@@ -248,4 +216,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

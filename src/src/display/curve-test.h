@@ -16,18 +16,17 @@ public:
     CurveTest() : path4(Geom::Point(3,5)) // Just a moveto
     {
         // Closed path
-        path1.append(Geom::LineSegment(Geom::Point(0,0),Geom::Point(1,0)));
-        path1.append(Geom::LineSegment(Geom::Point(1,0),Geom::Point(1,1)));
+        path1.append(Geom::HLineSegment(Geom::Point(0,0),1));
+        path1.append(Geom::VLineSegment(Geom::Point(1,0),1));
         path1.close();
         // Closed path (ClosingSegment is zero length)
         path2.append(Geom::LineSegment(Geom::Point(2,0),Geom::Point(3,0)));
-        path2.append(Geom::CubicBezier(Geom::Point(3,0),Geom::Point(2,1),Geom::Point(1,1),Geom::Point(2,0)));
+        path2.append(Geom::BezierCurve<3>(Geom::Point(3,0),Geom::Point(2,1),Geom::Point(1,1),Geom::Point(2,0)));
         path2.close();
         // Open path
-        path3.setStitching(true);
-        path3.append(Geom::EllipticalArc(Geom::Point(4,0),1,2,M_PI,false,false,Geom::Point(5,1)));
-        path3.append(Geom::LineSegment(Geom::Point(5,1),Geom::Point(5,2)));
-        path3.append(Geom::LineSegment(Geom::Point(6,4),Geom::Point(2,4)));
+        path3.append(Geom::SVGEllipticalArc(Geom::Point(4,0),1,2,M_PI,false,false,Geom::Point(5,1)));
+        path3.append(Geom::VLineSegment(Geom::Point(5,1),2), Geom::Path::STITCH_DISCONTINUOUS);
+        path3.append(Geom::HLineSegment(Geom::Point(6,4),2), Geom::Path::STITCH_DISCONTINUOUS);
     }
     virtual ~CurveTest() {}
 
@@ -50,17 +49,17 @@ public:
             TS_ASSERT_EQUALS(curve.get_segment_count() , 0u);
         }
         { // Individual paths
-            Geom::PathVector pv((Geom::Path()));
+            Geom::PathVector pv(1, Geom::Path());
             pv[0] = path1;
             TS_ASSERT_EQUALS(SPCurve(pv).get_segment_count() , 3u);
             pv[0] = path2;
-            TS_ASSERT_EQUALS(SPCurve(pv).get_segment_count() , 2u);
+            TS_ASSERT_EQUALS(SPCurve(pv).get_segment_count() , 3u);
             pv[0] = path3;
             TS_ASSERT_EQUALS(SPCurve(pv).get_segment_count() , 4u);
             pv[0] = path4;
             TS_ASSERT_EQUALS(SPCurve(pv).get_segment_count() , 0u);
             pv[0].close();
-            TS_ASSERT_EQUALS(SPCurve(pv).get_segment_count() , 0u);
+            TS_ASSERT_EQUALS(SPCurve(pv).get_segment_count() , 1u);
         }
         { // Combination
             Geom::PathVector pv;
@@ -69,7 +68,7 @@ public:
             pv.push_back(path3);
             pv.push_back(path4);
             SPCurve curve(pv);
-            TS_ASSERT_EQUALS(curve.get_segment_count() , 9u);
+            TS_ASSERT_EQUALS(curve.get_segment_count() , 10u);
         }
     }
 
@@ -87,7 +86,7 @@ public:
             TS_ASSERT_EQUALS(curve.nodes_in_path() , 1u);
         }
         { // Individual paths
-            Geom::PathVector pv((Geom::Path()));
+            Geom::PathVector pv(1, Geom::Path());
             pv[0] = path1;
             TS_ASSERT_EQUALS(SPCurve(pv).nodes_in_path() , 3u);
             pv[0] = path2;
@@ -113,28 +112,28 @@ public:
     void testIsEmpty()
     {
         TS_ASSERT(SPCurve(Geom::PathVector()).is_empty());
-        TS_ASSERT(!SPCurve(path1).is_empty());
-        TS_ASSERT(!SPCurve(path2).is_empty());
-        TS_ASSERT(!SPCurve(path3).is_empty());
-        TS_ASSERT(!SPCurve(path4).is_empty());
+        TS_ASSERT(!SPCurve(Geom::PathVector(1, path1)).is_empty());
+        TS_ASSERT(!SPCurve(Geom::PathVector(1, path2)).is_empty());
+        TS_ASSERT(!SPCurve(Geom::PathVector(1, path3)).is_empty());
+        TS_ASSERT(!SPCurve(Geom::PathVector(1, path4)).is_empty());
     }
 
     void testIsClosed()
     {
         TS_ASSERT(!SPCurve(Geom::PathVector()).is_closed());
-        Geom::PathVector pv((Geom::Path()));
+        Geom::PathVector pv(1, Geom::Path());
         TS_ASSERT(!SPCurve(pv).is_closed());
         pv[0].close();
         TS_ASSERT(SPCurve(pv).is_closed());
-        TS_ASSERT(SPCurve(path1).is_closed());
-        TS_ASSERT(SPCurve(path2).is_closed());
-        TS_ASSERT(!SPCurve(path3).is_closed());
-        TS_ASSERT(!SPCurve(path4).is_closed());
+        TS_ASSERT(SPCurve(Geom::PathVector(1, path1)).is_closed());
+        TS_ASSERT(SPCurve(Geom::PathVector(1, path2)).is_closed());
+        TS_ASSERT(!SPCurve(Geom::PathVector(1, path3)).is_closed());
+        TS_ASSERT(!SPCurve(Geom::PathVector(1, path4)).is_closed());
     }
 
     void testLastFirstSegment()
     {
-        Geom::PathVector pv(path4);
+        Geom::PathVector pv(1, path4);
         TS_ASSERT_EQUALS(SPCurve(pv).first_segment() , (void*)0);
         TS_ASSERT_EQUALS(SPCurve(pv).last_segment()  , (void*)0);
         pv[0].close();
@@ -186,10 +185,10 @@ public:
 
     void testFirstPoint()
     {
-        TS_ASSERT_EQUALS(*(SPCurve(path1).first_point()) , Geom::Point(0,0));
-        TS_ASSERT_EQUALS(*(SPCurve(path2).first_point()) , Geom::Point(2,0));
-        TS_ASSERT_EQUALS(*(SPCurve(path3).first_point()) , Geom::Point(4,0));
-        TS_ASSERT_EQUALS(*(SPCurve(path4).first_point()) , Geom::Point(3,5));
+        TS_ASSERT_EQUALS(*(SPCurve(Geom::PathVector(1, path1)).first_point()) , Geom::Point(0,0));
+        TS_ASSERT_EQUALS(*(SPCurve(Geom::PathVector(1, path2)).first_point()) , Geom::Point(2,0));
+        TS_ASSERT_EQUALS(*(SPCurve(Geom::PathVector(1, path3)).first_point()) , Geom::Point(4,0));
+        TS_ASSERT_EQUALS(*(SPCurve(Geom::PathVector(1, path4)).first_point()) , Geom::Point(3,5));
         Geom::PathVector pv;
         TS_ASSERT(!SPCurve(pv).first_point());
         pv.push_back(path1);
@@ -202,10 +201,10 @@ public:
 
     void testLastPoint()
     {
-        TS_ASSERT_EQUALS(*(SPCurve(path1).last_point()) , Geom::Point(0,0));
-        TS_ASSERT_EQUALS(*(SPCurve(path2).last_point()) , Geom::Point(2,0));
-        TS_ASSERT_EQUALS(*(SPCurve(path3).last_point()) , Geom::Point(8,4));
-        TS_ASSERT_EQUALS(*(SPCurve(path4).last_point()) , Geom::Point(3,5));
+        TS_ASSERT_EQUALS(*(SPCurve(Geom::PathVector(1, path1)).last_point()) , Geom::Point(0,0));
+        TS_ASSERT_EQUALS(*(SPCurve(Geom::PathVector(1, path2)).last_point()) , Geom::Point(2,0));
+        TS_ASSERT_EQUALS(*(SPCurve(Geom::PathVector(1, path3)).last_point()) , Geom::Point(8,4));
+        TS_ASSERT_EQUALS(*(SPCurve(Geom::PathVector(1, path4)).last_point()) , Geom::Point(3,5));
         Geom::PathVector pv;
         TS_ASSERT(!SPCurve(pv).last_point());
         pv.push_back(path1);
@@ -218,10 +217,10 @@ public:
 
     void testSecondPoint()
     {
-        TS_ASSERT_EQUALS( *(SPCurve(path1).second_point()) , Geom::Point(1,0));
-        TS_ASSERT_EQUALS( *(SPCurve(path2).second_point()) , Geom::Point(3,0));
-        TS_ASSERT_EQUALS( *(SPCurve(path3).second_point()) , Geom::Point(5,1));
-        TS_ASSERT_EQUALS( *(SPCurve(path4).second_point()) , Geom::Point(3,5));
+        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(1, path1)).second_point()) , Geom::Point(1,0));
+        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(1, path2)).second_point()) , Geom::Point(3,0));
+        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(1, path3)).second_point()) , Geom::Point(5,1));
+        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(1, path4)).second_point()) , Geom::Point(3,5));
         Geom::PathVector pv;
         pv.push_back(path1);
         pv.push_back(path2);
@@ -233,10 +232,10 @@ public:
 
     void testPenultimatePoint()
     {
-        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(path1)).penultimate_point()) , Geom::Point(1,1));
-        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(path2)).penultimate_point()) , Geom::Point(3,0));
-        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(path3)).penultimate_point()) , Geom::Point(6,4));
-        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(path4)).penultimate_point()) , Geom::Point(3,5));
+        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(1, path1)).penultimate_point()) , Geom::Point(1,1));
+        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(1, path2)).penultimate_point()) , Geom::Point(3,0));
+        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(1, path3)).penultimate_point()) , Geom::Point(6,4));
+        TS_ASSERT_EQUALS( *(SPCurve(Geom::PathVector(1, path4)).penultimate_point()) , Geom::Point(3,5));
         Geom::PathVector pv;
         pv.push_back(path1);
         pv.push_back(path2);
@@ -258,4 +257,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

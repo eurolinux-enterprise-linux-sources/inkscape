@@ -1,4 +1,6 @@
-/*
+/**
+ * \brief widget adjustable by dragging it to rotate away from a zero-change axis
+ *
  * Authors:
  *   buliabyak@gmail.com
  *
@@ -7,16 +9,13 @@
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
+#include "event-context.h"
+#include "rotateable.h"
+#include "libnr/nr-point.h"
+#include "libnr/nr-point-fns.h"
 #include <gtkmm/box.h>
 #include <gtkmm/eventbox.h>
 #include <glibmm/i18n.h>
-#include <2geom/point.h>
-#include "ui/tools/tool-base.h"
-#include "rotateable.h"
 
 namespace Inkscape {
 namespace UI {
@@ -28,28 +27,25 @@ Rotateable::Rotateable():
 {
 		dragging = false;
 		working = false;
-		scrolling = false;
 		modifier = 0;
 		current_axis = axis;
 
     signal_button_press_event().connect(sigc::mem_fun(*this, &Rotateable::on_click));
     signal_motion_notify_event().connect(sigc::mem_fun(*this, &Rotateable::on_motion));
     signal_button_release_event().connect(sigc::mem_fun(*this, &Rotateable::on_release));
-    signal_scroll_event().connect(sigc::mem_fun(*this, &Rotateable::on_scroll));
-
 }
 
 bool Rotateable::on_click(GdkEventButton *event) {
-	if (event->button == 1) {
+		if (event->button == 1) {
         drag_started_x = event->x;
         drag_started_y = event->y;
-        modifier = get_single_modifier(modifier, event->state);
+        modifier = get_single_modifier(modifier, event->state); 
         dragging = true;
         working = false;
         current_axis = axis;
         return true;
-    }
-    return false;
+		} 
+		return false; 
 }
 
 guint Rotateable::get_single_modifier(guint old, guint state) {
@@ -107,7 +103,7 @@ bool Rotateable::on_motion(GdkEventMotion *event) {
                 do_motion(force, modifier);
             }
         }
-        Inkscape::UI::Tools::gobble_motion_events(GDK_BUTTON1_MASK);
+        gobble_motion_events(GDK_BUTTON1_MASK);
         return true;
 		} 
 		return false; 
@@ -115,9 +111,9 @@ bool Rotateable::on_motion(GdkEventMotion *event) {
 
 
 bool Rotateable::on_release(GdkEventButton *event) {
-	if (dragging && working) {
+		if (dragging && working) {
         double angle = atan2(event->y - drag_started_y, event->x - drag_started_x);
-        double force = CLAMP(-(angle - current_axis) / maxdecl, -1, 1);
+        double force = CLAMP (-(angle - current_axis)/maxdecl, -1, 1);
         if (fabs(force) < 0.002)
             force = 0; // snap to zero
         do_release(force, modifier);
@@ -125,40 +121,12 @@ bool Rotateable::on_release(GdkEventButton *event) {
         dragging = false;
         working = false;
         return true;
-    }
+		}
     dragging = false;
     working = false;
-    return false;
+		return false;
 }
 
-bool Rotateable::on_scroll(GdkEventScroll* event)
-{
-    double change = 0.0;
-
-    if (event->direction == GDK_SCROLL_UP) {
-        change = 1.0;
-    } else if (event->direction == GDK_SCROLL_DOWN) {
-        change = -1.0;
-    } else {
-        return FALSE;
-    }
-
-    drag_started_x = event->x;
-    drag_started_y = event->y;
-    modifier = get_single_modifier(modifier, event->state);
-    dragging = false;
-    working = false;
-    scrolling = true;
-    current_axis = axis;
-
-    do_scroll(change, modifier);
-
-    dragging = false;
-    working = false;
-    scrolling = false;
-
-    return TRUE;
-}
 
 Rotateable::~Rotateable() {
 }
@@ -169,13 +137,13 @@ Rotateable::~Rotateable() {
 } // namespace UI
 } // namespace Inkscape
 
-/*
+/* 
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  c-file-offsets:((innamespace . 0)(inline-open . 0))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

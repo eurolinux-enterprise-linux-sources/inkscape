@@ -25,6 +25,8 @@ sys.path.append('C:\Program Files\Inkscape\share\extensions')
 
 # We will use the inkex module with the predefined Effect base class.
 import inkex
+import gettext
+_ = gettext.gettext
 
 class JessyInk_MasterSlide(inkex.Effect):
 	def __init__(self):

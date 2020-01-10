@@ -1,38 +1,7 @@
-/**
- * @file
- * @brief Root finding for sbasis functions.
- *//*
- * Authors: 
- *   Nathan Hurst <njh@njhurst.com>
- *   JF Barraud
- * Copyright 2006-2007 Authors
-  *
- * This library is free software; you can redistribute it and/or
- * modify it either under the terms of the GNU Lesser General Public
- * License version 2.1 as published by the Free Software Foundation
- * (the "LGPL") or, at your option, under the terms of the Mozilla
- * Public License Version 1.1 (the "MPL"). If you do not alter this
- * notice, a recipient may use your version of this file under either
- * the MPL or the LGPL.
+/** root finding for sbasis functions.
+ * Copyright 2006 N Hurst
+ * Copyright 2007 JF Barraud
  *
- * You should have received a copy of the LGPL along with this library
- * in the file COPYING-LGPL-2.1; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- * You should have received a copy of the MPL along with this library
- * in the file COPYING-MPL-1.1
- *
- * The contents of this file are subject to the Mozilla Public License
- * Version 1.1 (the "License"); you may not use this file except in
- * compliance with the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
- * OF ANY KIND, either express or implied. See the LGPL or the MPL for
- * the specific language governing rights and limitations.
- *
- */
- 
- /*
  * It is more efficient to find roots of f(t) = c_0, c_1, ... all at once, rather than iterating.
  *
  * Todo/think about:
@@ -105,7 +74,7 @@ OptInterval bounds_exact(SBasis const &a) {
     SBasis df = derivative(a);
     vector<double>extrema = roots(df);
     for (unsigned i=0; i<extrema.size(); i++){
-        result.expandTo(a(extrema[i]));
+        result.extendTo(a(extrema[i]));
     }
     return result;
 }
@@ -129,23 +98,23 @@ OptInterval bounds_fast(const SBasis &sb, int order) {
         double b=sb[j][1];
 
         double v, t = 0;
-        v = res.min();
+        v = res[0];
         if (v<0) t = ((b-a)/v+1)*0.5;
         if (v>=0 || t<0 || t>1) {
-            res.setMin(std::min(a,b));
-        } else {
-            res.setMin(lerp(t, a+v*t, b));
+            res[0] = std::min(a,b);
+        }else{
+            res[0]=lerp(t, a+v*t, b);
         }
 
-        v = res.max();
+        v = res[1];
         if (v>0) t = ((b-a)/v+1)*0.5;
         if (v<=0 || t<0 || t>1) {
-            res.setMax(std::max(a,b));
+            res[1] = std::max(a,b);
         }else{
-            res.setMax(lerp(t, a+v*t, b));
+            res[1]=lerp(t, a+v*t, b);
         }
     }
-    if (order>0) res*=std::pow(.25,order);
+    if (order>0) res*=pow(.25,order);
     return res;
 }
 
@@ -182,7 +151,7 @@ OptInterval bounds_local(const SBasis &sb, const OptInterval &i, int order) {
         }
     }
     Interval res = Interval(lo,hi);
-    if (order>0) res*=std::pow(.25,order);
+    if (order>0) res*=pow(.25,order);
     return res;
 }
 
@@ -222,7 +191,7 @@ static void multi_roots_internal(SBasis const &f,
 				 double b,
 				 double fb){
 
-    if (f.isZero(0)){
+    if (f.size()==0){
         int idx;
         idx=upper_level(levels,0,vtol);
         if (idx<(int)levels.size()&&fabs(levels.at(idx))<=vtol){
@@ -357,211 +326,6 @@ std::vector<std::vector<double> > multi_roots(SBasis const &f,
 
     return(roots);
 }
-
-
-static bool compareIntervalMin( Interval I, Interval J ){
-	return I.min()<J.min();
-}
-static bool compareIntervalMax( Interval I, Interval J ){
-	return I.max()<J.max();
-}
-
-//find the first interval whose max is >= x
-static unsigned upper_level(vector<Interval> const &levels, double x ){
-    return( lower_bound( levels.begin(), levels.end(), Interval(x,x), compareIntervalMax) - levels.begin() );
-}
-
-static std::vector<Interval> fuseContiguous(std::vector<Interval> const &sets, double tol=0.){
-	std::vector<Interval> result;
-	if (sets.empty() ) return result;
-	result.push_back( sets.front() );
-	for (unsigned i=1; i < sets.size(); i++ ){
-		if ( result.back().max() + tol >= sets[i].min() ){
-			result.back().unionWith( sets[i] );
-		}else{
-			result.push_back( sets[i] );
-		}
-	}
-	return result;
-}
-
-/** level_sets internal method.
-* algorithm: (~adaptation of Newton method versus 'accroissements finis')
-   -compute f at both ends of the given segment [a,b].
-   -compute bounds m<df(t)<M for df on the segment.
-    Suppose f(a) is between two 'levels' c and C. Then
-      f wont enter c before a + (f(a)-c.max())/m
-      f wont enter C before a + (C.min()-f(a))/M
-    From this we conclude nothing happens before a'=a+min((f(a)-c.max())/m,(C.min()-f(a))/M).
-    We do the same for b: compute some b' such that nothing happens in (b',b].
-    -if [a',b'] is not empty, repeat the process with [a',(a'+b')/2] and [(a'+b')/2,b'].
-
-    If f(a) or f(b) belongs to some 'level' C, then use the same argument to find a' or b' such
-    that f remains in C on [a,a'] or [b',b]. In case f is monotonic, we also know f won't enter another
-    level before or after some time, allowing us to restrict the search a little more.
-
-  unfortunately, extra care is needed about rounding errors, and also to avoid the repetition of roots,
-  making things tricky and unpleasant...
-*/
-
-static void level_sets_internal(SBasis const &f,
-				 SBasis const &df,
-				 std::vector<Interval> const &levels,
-				 std::vector<std::vector<Interval> > &solsets,
-				 double a,
-				 double fa,
-				 double b,
-				 double fb,
-				 double tol=1e-5){
-
-    if (f.isZero(0)){
-        unsigned idx;
-        idx=upper_level( levels, 0. );
-        if (idx<levels.size() && levels[idx].contains(0.)){
-            solsets[idx].push_back( Interval(a,b) ) ;
-        }
-        return;
-    }
-
-    unsigned idxa=upper_level(levels,fa);
-    unsigned idxb=upper_level(levels,fb);
-
-    Interval bs = *bounds_local(df,Interval(a,b));
-
-    //first times when a level (higher or lower) can be reached from a or b.
-    double ta_hi; // f remains below next level for t<ta_hi
-    double ta_lo; // f remains above prev level for t<ta_lo
-    double tb_hi; // f remains below next level for t>tb_hi
-    double tb_lo; // f remains above next level for t>tb_lo
-
-    ta_hi=ta_lo=b+1;//default values => no root there.
-    tb_hi=tb_lo=a-1;//default values => no root there.
-
-    //--- if f(a) belongs to a level.-------
-    if ( idxa < levels.size() && levels[idxa].contains( fa ) ){
-    	//find the first time when we may exit this level.
-    	ta_lo = a + ( levels[idxa].min() - fa)/bs.min();
-    	ta_hi = a + ( levels[idxa].max() - fa)/bs.max();
-    	if ( ta_lo < a || ta_lo > b ) ta_lo = b;
-    	if ( ta_hi < a || ta_hi > b  ) ta_hi = b;
-    	//move to that time for the next iteration.
-    	solsets[idxa].push_back( Interval( a, std::min( ta_lo, ta_hi ) ) );
-    }else{
-        //--- if f(b) does not belong to a level.-------
-        if ( idxa == 0 ){
-        	ta_lo = b;
-        }else{
-        	ta_lo = a + ( levels[idxa-1].max() - fa)/bs.min();
-        	if ( ta_lo < a ) ta_lo = b;
-        }
-        if ( idxa == levels.size() ){
-        	ta_hi = b;
-        }else{
-        	ta_hi = a + ( levels[idxa].min() - fa)/bs.max();
-        	if ( ta_hi < a ) ta_hi = b;
-        }
-    }
-
-    //--- if f(b) belongs to a level.-------
-    if (idxb<levels.size() && levels.at(idxb).contains(fb)){
-    	//find the first time from b when we may exit this level.
-    	tb_lo = b + ( levels[idxb].min() - fb ) / bs.max();
-    	tb_hi = b + ( levels[idxb].max() - fb ) / bs.min();
-    	if ( tb_lo > b || tb_lo < a ) tb_lo = a;
-    	if ( tb_hi > b || tb_hi < a ) tb_hi = a;
-    	//move to that time for the next iteration.
-    	solsets[idxb].push_back( Interval( std::max( tb_lo, tb_hi ), b) );
-    }else{
-        //--- if f(b) does not belong to a level.-------
-        if ( idxb == 0 ){
-        	tb_lo = a;
-        }else{
-        	tb_lo = b + ( levels[idxb-1].max() - fb)/bs.max();
-        	if ( tb_lo > b ) tb_lo = a;
-        }
-        if ( idxb == levels.size() ){
-        	tb_hi = a;
-        }else{
-        	tb_hi = b + ( levels[idxb].min() - fb)/bs.min();
-        	if ( tb_hi > b ) tb_hi = a;
-        }
-
-
-    	if ( bs.min() < 0 && idxb < levels.size() )
-            tb_hi = b + ( levels[idxb  ].min() - fb ) / bs.min();
-        if ( bs.max() > 0 && idxb > 0 )
-            tb_lo = b + ( levels[idxb-1].max() - fb ) / bs.max();
-    }
-
-    //let [t0,t1] be the next interval where to search.
-    double t0=std::min(ta_hi,ta_lo);
-    double t1=std::max(tb_hi,tb_lo);
-
-    if (t0>=t1) return;//no root here.
-
-    //if the interval is smaller than our resolution:
-    //pretend f simultaneously meets all the levels between f(t0) and f(t1)...
-    if ( t1 - t0 <= tol ){
-    	Interval f_t0t1 ( f(t0), f(t1) );
-    	unsigned idxmin = std::min(idxa, idxb);
-    	unsigned idxmax = std::max(idxa, idxb);
-    	//push [t0,t1] into all crossed level. Cheat to avoid overlapping intervals on different levels?
-    	if ( idxmax > idxmin ){
-        	for (unsigned idx = idxmin; idx < idxmax; idx++){
-    			solsets[idx].push_back( Interval( t0, t1 ) );
-        	}
-    	}
-    	if ( idxmax < levels.size() && f_t0t1.intersects( levels[idxmax] ) ){
-    		solsets[idxmax].push_back( Interval( t0, t1 ) );
-    	}
-    	return;
-    }
-
-	//To make sure we finally exit the level jump at least by tol:
-    t0 = std::min( std::max( t0, a + tol ), b );
-    t1 = std::max( std::min( t1, b - tol ), a );
-
-    double t =(t0+t1)/2;
-    double ft=f(t);
-    level_sets_internal( f, df, levels, solsets, t0, f(t0), t, ft );
-    level_sets_internal( f, df, levels, solsets, t, ft, t1, f(t1) );
-}
-
-std::vector<std::vector<Interval> > level_sets(SBasis const &f,
-                                      std::vector<Interval> const &levels,
-                                      double a, double b, double tol){
-
-    std::vector<std::vector<Interval> > solsets(levels.size(), std::vector<Interval>());
-
-    SBasis df=derivative(f);
-    level_sets_internal(f,df,levels,solsets,a,f(a),b,f(b),tol);
-    // Fuse overlapping intervals...
-    for (unsigned i=0; i<solsets.size(); i++){
-    	if ( solsets[i].size() == 0 ) continue;
-    	std::sort( solsets[i].begin(), solsets[i].end(), compareIntervalMin );
-    	solsets[i] = fuseContiguous( solsets[i], tol );
-    }
-    return solsets;
-}
-
-std::vector<Interval> level_set (SBasis const &f, double level, double vtol, double a, double b, double tol){
-	Interval fat_level( level - vtol, level + vtol );
-	return level_set(f, fat_level, a, b, tol);
-}
-std::vector<Interval> level_set (SBasis const &f, Interval const &level, double a, double b, double tol){
-	std::vector<Interval> levels(1,level);
-	return level_sets(f,levels, a, b, tol).front() ;
-}
-std::vector<std::vector<Interval> > level_sets (SBasis const &f, std::vector<double> const &levels, double vtol, double a, double b, double tol){
-	std::vector<Interval> fat_levels( levels.size(), Interval());
-	for (unsigned i = 0; i < levels.size(); i++){
-		fat_levels[i] = Interval( levels[i]-vtol, levels[i]+vtol);
-	}
-	return level_sets(f, fat_levels, a, b, tol);
-}
-
-
-//-------------------------------------
 //-------------------------------------
 
 
@@ -594,27 +358,14 @@ std::vector<double> roots1(SBasis const & s) {
     return res;
 }
 
-std::vector<double> roots1(SBasis const & s, Interval const ivl) {
-    std::vector<double> res;
-    double d = s[0][0] - s[0][1];
-    if(d != 0) {
-        double r = s[0][0] / d;
-        if(ivl.contains(r))
-            res.push_back(r);
-    }
-    return res;
-}
-
 /** Find all t s.t s(t) = 0
  \param a sbasis function
- \see Bezier::roots
  \returns vector of zeros (roots)
 
 */
 std::vector<double> roots(SBasis const & s) {
     switch(s.size()) {
         case 0:
-            assert(false);
             return std::vector<double>();
         case 1:
             return roots1(s);
@@ -623,21 +374,6 @@ std::vector<double> roots(SBasis const & s) {
             Bezier bz;
             sbasis_to_bezier(bz, s);
             return bz.roots();
-        }
-    }
-}
-std::vector<double> roots(SBasis const & s, Interval const ivl) {
-    switch(s.size()) {
-        case 0:
-        	assert(false);
-            return std::vector<double>();
-        case 1:
-            return roots1(s, ivl);
-        default:
-        {
-            Bezier bz;
-            sbasis_to_bezier(bz, s);
-            return bz.roots(ivl);
         }
     }
 }
@@ -653,4 +389,4 @@ std::vector<double> roots(SBasis const & s, Interval const ivl) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -1,6 +1,5 @@
-/**
- * @file
- * Static style swatch (fill, stroke, opacity).
+/** @file
+ * @brief Static style swatch (fill, stroke, opacity)
  */
 /* Authors:
  *   buliabyak@gmail.com
@@ -11,34 +10,28 @@
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
 
-#include "style-swatch.h"
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
 #include <cstring>
 #include <string>
+
+#include "style-swatch.h"
 
 #include "widgets/spw-utilities.h"
 #include "ui/widget/color-preview.h"
 
 #include "style.h"
-#include "sp-linear-gradient.h"
-#include "sp-radial-gradient.h"
+#include "sp-linear-gradient-fns.h"
+#include "sp-radial-gradient-fns.h"
 #include "sp-pattern.h"
 #include "xml/repr.h"
-#include "xml/sp-css-attr.h"
 #include "widgets/widget-sizes.h"
-#include "util/units.h"
+#include "helper/units.h"
 #include "helper/action.h"
-#include "helper/action-context.h"
 #include "preferences.h"
 #include "inkscape.h"
-#include "verbs.h"
-#include <glibmm/i18n.h>
-
-#if WITH_GTKMM_3_0
-# include <gtkmm/grid.h>
-#else
-# include <gtkmm/table.h>
-#endif
 
 enum {
     SS_FILL,
@@ -50,7 +43,7 @@ namespace UI {
 namespace Widget {
 
 /**
- * Watches whether the tool uses the current style.
+ * @brief Watches whether the tool uses the current style
  */
 class StyleSwatch::ToolObserver : public Inkscape::Preferences::Observer {
 public:
@@ -64,7 +57,7 @@ private:
 };
 
 /**
- * Watches for changes in the observed style pref.
+ * @brief Watches for changes in the observed style pref
  */
 class StyleSwatch::StyleObserver : public Inkscape::Preferences::Observer {
 public:
@@ -113,19 +106,14 @@ void StyleSwatch::ToolObserver::notify(Inkscape::Preferences::Entry const &val)
 StyleSwatch::StyleSwatch(SPCSSAttr *css, gchar const *main_tip)
     :
       _desktop(NULL),
-      _verb_t(0),
+      _verb_t(NULL),
       _css(NULL),
       _tool_obs(NULL),
       _style_obs(NULL),
-#if WITH_GTKMM_3_0
-      _table(Gtk::manage(new Gtk::Grid())),
-#else
-      _table(Gtk::manage(new Gtk::Table(2, 6))),
-#endif
-      _sw_unit(NULL)
+      _table(2, 6),
+      _sw_unit(NULL),
+      _tooltips ()
 {
-    set_name("StyleSwatch");
-    
     _label[SS_FILL].set_markup(_("Fill:"));
     _label[SS_STROKE].set_markup(_("Stroke:"));
 
@@ -139,35 +127,23 @@ StyleSwatch::StyleSwatch(SPCSSAttr *css, gchar const *main_tip)
     _opacity_value.set_alignment(0.0, 0.5);
     _opacity_value.set_padding(0, 0);
 
-#if WITH_GTKMM_3_0
-    _table->set_column_spacing(2);
-    _table->set_row_spacing(0);
-#else
-    _table->set_col_spacings(2);
-    _table->set_row_spacings(0);
-#endif
+    _table.set_col_spacings (2);
+    _table.set_row_spacings (0);
 
     _stroke.pack_start(_place[SS_STROKE]);
     _stroke_width_place.add(_stroke_width);
     _stroke.pack_start(_stroke_width_place, Gtk::PACK_SHRINK);
-    
+
+    _table.attach(_label[SS_FILL], 0,1, 0,1, Gtk::FILL, Gtk::SHRINK);
+    _table.attach(_label[SS_STROKE], 0,1, 1,2, Gtk::FILL, Gtk::SHRINK);
+
+    _table.attach(_place[SS_FILL], 1,2, 0,1);
+    _table.attach(_stroke, 1,2, 1,2);
+
     _opacity_place.add(_opacity_value);
+    _table.attach(_opacity_place, 2,3, 0,2, Gtk::SHRINK, Gtk::SHRINK);
 
-#if WITH_GTKMM_3_0
-    _table->attach(_label[SS_FILL],   0, 0, 1, 1);
-    _table->attach(_label[SS_STROKE], 0, 1, 1, 1);
-    _table->attach(_place[SS_FILL],   1, 0, 1, 1);
-    _table->attach(_stroke,           1, 1, 1, 1);
-    _table->attach(_opacity_place,    2, 0, 1, 2);
-#else
-    _table->attach(_label[SS_FILL], 0,1, 0,1, Gtk::FILL, Gtk::SHRINK);
-    _table->attach(_label[SS_STROKE], 0,1, 1,2, Gtk::FILL, Gtk::SHRINK);
-    _table->attach(_place[SS_FILL], 1,2, 0,1);
-    _table->attach(_stroke, 1,2, 1,2);
-    _table->attach(_opacity_place, 2,3, 0,2, Gtk::SHRINK, Gtk::SHRINK);
-#endif
-
-    _swatch.add(*_table);
+    _swatch.add(_table);
     pack_start(_swatch, true, true, 0);
 
     set_size_request (STYLE_SWATCH_WIDTH, -1);
@@ -184,10 +160,7 @@ StyleSwatch::StyleSwatch(SPCSSAttr *css, gchar const *main_tip)
 
     _swatch.signal_button_press_event().connect(sigc::mem_fun(*this, &StyleSwatch::on_click));
 
-    if (main_tip)
-    {
-        _swatch.set_tooltip_text(main_tip);
-    }
+    _tooltips.set_tip(_swatch, main_tip);
 }
 
 void StyleSwatch::setClickVerb(sp_verb_t verb_t) {
@@ -203,7 +176,7 @@ StyleSwatch::on_click(GdkEventButton */*event*/)
 {
     if (this->_desktop && this->_verb_t != SP_VERB_NONE) {
         Inkscape::Verb *verb = Inkscape::Verb::get(this->_verb_t);
-        SPAction *action = verb->get_action(Inkscape::ActionContext((Inkscape::UI::View::View *) this->_desktop));
+        SPAction *action = verb->get_action((Inkscape::UI::View::View *) this->_desktop);
         sp_action_perform (action, NULL);
         return true;
     }
@@ -249,7 +222,8 @@ StyleSwatch::setWatchedTool(const char *path, bool synthesize)
 }
 
 
-void StyleSwatch::setStyle(SPCSSAttr *css)
+void
+StyleSwatch::setStyle(SPCSSAttr *css)
 {
     if (_css)
         sp_repr_css_attr_unref (_css);
@@ -260,17 +234,18 @@ void StyleSwatch::setStyle(SPCSSAttr *css)
     _css = sp_repr_css_attr_new();
     sp_repr_css_merge(_css, css);
 
-    Glib::ustring css_string;
-    sp_repr_css_write_string (_css, css_string);
+    gchar const *css_string = sp_repr_css_write_string (_css);
+    SPStyle *temp_spstyle = sp_style_new(SP_ACTIVE_DOCUMENT);
+    if (css_string)
+        sp_style_merge_from_style_string (temp_spstyle, css_string);
 
-    SPStyle style(SP_ACTIVE_DOCUMENT);
-    if (!css_string.empty()) {
-        style.mergeString(css_string.c_str());
-    }
-    setStyle (&style);
+    setStyle (temp_spstyle);
+
+    sp_style_unref (temp_spstyle);
 }
 
-void StyleSwatch::setStyle(SPStyle *query)
+void
+StyleSwatch::setStyle(SPStyle *query)
 {
     _place[SS_FILL].remove();
     _place[SS_STROKE].remove();
@@ -293,15 +268,15 @@ void StyleSwatch::setStyle(SPStyle *query)
             if (SP_IS_LINEARGRADIENT (server)) {
                 _value[i].set_markup(_("L Gradient"));
                 place->add(_value[i]);
-                place->set_tooltip_text((i == SS_FILL)? (_("Linear gradient fill")) : (_("Linear gradient stroke")));
+                _tooltips.set_tip(*place, (i == SS_FILL)? (_("Linear gradient fill")) : (_("Linear gradient stroke")));
             } else if (SP_IS_RADIALGRADIENT (server)) {
                 _value[i].set_markup(_("R Gradient"));
                 place->add(_value[i]);
-                place->set_tooltip_text((i == SS_FILL)? (_("Radial gradient fill")) : (_("Radial gradient stroke")));
+                _tooltips.set_tip(*place, (i == SS_FILL)? (_("Radial gradient fill")) : (_("Radial gradient stroke")));
             } else if (SP_IS_PATTERN (server)) {
                 _value[i].set_markup(_("Pattern"));
                 place->add(_value[i]);
-                place->set_tooltip_text((i == SS_FILL)? (_("Pattern fill")) : (_("Pattern stroke")));
+                _tooltips.set_tip(*place, (i == SS_FILL)? (_("Pattern fill")) : (_("Pattern stroke")));
             }
 
         } else if (paint->set && paint->isColor()) {
@@ -315,17 +290,17 @@ void StyleSwatch::setStyle(SPStyle *query)
             } else {
                 tip = g_strdup_printf (_("Stroke: %06x/%.3g"), color >> 8, SP_RGBA32_A_F(color));
             }
-            place->set_tooltip_text(tip);
+            _tooltips.set_tip(*place, tip);
             g_free (tip);
         } else if (paint->set && paint->isNone()) {
-            _value[i].set_markup(C_("Fill and stroke", "<i>None</i>"));
+            _value[i].set_markup(_("<i>None</i>"));
             place->add(_value[i]);
-            place->set_tooltip_text((i == SS_FILL)? (C_("Fill and stroke", "No fill")) : (C_("Fill and stroke", "No stroke")));
+            _tooltips.set_tip(*place, (i == SS_FILL)? (_("No fill")) : (_("No stroke")));
             if (i == SS_STROKE) has_stroke = false;
         } else if (!paint->set) {
             _value[i].set_markup(_("<b>Unset</b>"));
             place->add(_value[i]);
-            place->set_tooltip_text((i == SS_FILL)? (_("Unset fill")) : (_("Unset stroke")));
+            _tooltips.set_tip(*place, (i == SS_FILL)? (_("Unset fill")) : (_("Unset stroke")));
             if (i == SS_STROKE) has_stroke = false;
         }
     }
@@ -334,7 +309,7 @@ void StyleSwatch::setStyle(SPStyle *query)
     if (has_stroke) {
         double w;
         if (_sw_unit) {
-            w = Inkscape::Util::Quantity::convert(query->stroke_width.computed, "px", _sw_unit);
+            w = sp_pixels_get_units(query->stroke_width.computed, *_sw_unit);
         } else {
             w = query->stroke_width.computed;
         }
@@ -347,33 +322,34 @@ void StyleSwatch::setStyle(SPStyle *query)
         {
             gchar *str = g_strdup_printf(_("Stroke width: %.5g%s"),
                                          w,
-                                         _sw_unit? _sw_unit->abbr.c_str() : "px");
-            _stroke_width_place.set_tooltip_text(str);
+                                         _sw_unit? sp_unit_get_abbreviation(_sw_unit) : "px");
+            _tooltips.set_tip(_stroke_width_place, str);
             g_free (str);
         }
     } else {
-        _stroke_width_place.set_tooltip_text("");
-        _stroke_width.set_markup("");
-        _stroke_width.set_has_tooltip(false);
+        _tooltips.unset_tip(_stroke_width_place);
+        _stroke_width.set_markup ("");
     }
 
     gdouble op = SP_SCALE24_TO_FLOAT(query->opacity.value);
     if (op != 1) {
         {
             gchar *str;
-            str = g_strdup_printf(_("O: %2.0f"), (op*100.0));
+            if (op == 0)
+                str = g_strdup_printf(_("O:%.3g"), op);
+            else
+                str = g_strdup_printf(_("O:.%d"), (int) (op*10));
             _opacity_value.set_markup (str);
             g_free (str);
         }
         {
-            gchar *str = g_strdup_printf(_("Opacity: %2.1f %%"), (op*100.0));
-            _opacity_place.set_tooltip_text(str);
+            gchar *str = g_strdup_printf(_("Opacity: %.3g"), op);
+            _tooltips.set_tip(_opacity_place, str);
             g_free (str);
         }
     } else {
-        _opacity_place.set_tooltip_text("");
-        _opacity_value.set_markup("");
-        _opacity_value.set_has_tooltip(false);
+        _tooltips.unset_tip(_opacity_place);
+        _opacity_value.set_markup ("");
     }
 
     show_all();
@@ -387,9 +363,9 @@ void StyleSwatch::setStyle(SPStyle *query)
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  c-file-offsets:((innamespace . 0)(inline-open . 0))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

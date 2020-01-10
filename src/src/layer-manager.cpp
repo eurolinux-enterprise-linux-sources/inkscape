@@ -3,7 +3,6 @@
  *                          to a particular desktop
  *
  * Copyright 2006  MenTaLguY  <mental@rydia.net>
- *   Abhishek Sharma
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -11,11 +10,11 @@
 #include <set>
 #include <sigc++/functors/mem_fun.h>
 #include <sigc++/adaptors/hide.h>
-#include "inkgc/gc-managed.h"
+#include "gc-managed.h"
 #include "gc-finalized.h"
 #include "document.h"
 #include "desktop.h"
-
+#include "desktop-handles.h"
 #include "layer-manager.h"
 #include "preferences.h"
 #include "ui/view/view.h"
@@ -143,7 +142,7 @@ LayerManager::~LayerManager()
     _layer_connection.disconnect();
     _document_connection.disconnect();
     _resource_connection.disconnect();
-    _document = NULL;
+    _document = 0;
 }
 
 void LayerManager::setCurrentLayer( SPObject* obj )
@@ -154,69 +153,58 @@ void LayerManager::setCurrentLayer( SPObject* obj )
 
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         if (prefs->getBool("/options/selection/layerdeselect", true)) {
-            _desktop->getSelection()->clear();
+            sp_desktop_selection( _desktop )->clear();
         }
     }
-}
-
-/*
- * Return a unique layer name similar to param label
- * A unique name is made by substituting or appending the label's number suffix with
- * the next unique larger number suffix not already used for any layer name
- */
-Glib::ustring LayerManager::getNextLayerName( SPObject* obj, gchar const *label)
-{
-    Glib::ustring incoming( label ? label : "Layer 1" );
-    Glib::ustring result(incoming);
-    Glib::ustring base(incoming);
-    Glib::ustring split(" ");
-    guint startNum = 1;
-
-    gint pos = base.length()-1;
-    while (pos >= 0 && g_ascii_isdigit(base[pos])) {
-        pos-- ;
-    }
-
-    gchar* numpart = g_strdup(base.substr(pos+1).c_str());
-    if ( numpart ) {
-        gchar* endPtr = NULL;
-        guint64 val = g_ascii_strtoull( numpart, &endPtr, 10);
-        if ( ((val > 0) || (endPtr != numpart)) && (val < 65536) ) {
-            base.erase( pos+1);
-            result = incoming;
-            startNum = static_cast<int>(val);
-            split = "";
-        }
-        g_free(numpart);
-    }
-
-    std::set<Glib::ustring> currentNames;
-    std::vector<SPObject *> layers = _document->getResourceList("layer");
-    SPObject *root=_desktop->currentRoot();
-    if ( root ) {
-        for (std::vector<SPObject *>::const_iterator iter = layers.begin(); iter != layers.end(); ++iter) { 
-            if (*iter != obj)
-                currentNames.insert( (*iter)->label() ? Glib::ustring((*iter)->label()) : Glib::ustring() );
-        }
-    }
-
-    // Not sure if we need to cap it, but we'll just be paranoid for the moment
-    // Intentionally unsigned
-    guint endNum = startNum + 3000;
-    for ( guint i = startNum; (i < endNum) && (currentNames.find(result) != currentNames.end()); i++ ) {
-        result = Glib::ustring::format(base, split, i);
-    }
-
-    return result;
 }
 
 void LayerManager::renameLayer( SPObject* obj, gchar const *label, bool uniquify )
 {
     Glib::ustring incoming( label ? label : "" );
     Glib::ustring result(incoming);
+    Glib::ustring base(incoming);
+    guint startNum = 1;
 
     if (uniquify) {
-        result = getNextLayerName(obj, label);
+
+        Glib::ustring::size_type pos = base.rfind('#');
+        if ( pos != Glib::ustring::npos ) {
+            gchar* numpart = g_strdup(base.substr(pos+1).c_str());
+            if ( numpart ) {
+                gchar* endPtr = 0;
+                guint64 val = g_ascii_strtoull( numpart, &endPtr, 10);
+                if ( ((val > 0) || (endPtr != numpart)) && (val < 65536) ) {
+                    base.erase( pos );
+                    result = base;
+                    startNum = static_cast<int>(val);
+                }
+                g_free(numpart);
+            }
+        }
+
+        std::set<Glib::ustring> currentNames;
+        GSList const *layers=sp_document_get_resource_list(_document, "layer");
+        SPObject *root=_desktop->currentRoot();
+        if ( root ) {
+            for ( GSList const *iter=layers ; iter ; iter = iter->next ) {
+                SPObject *layer=static_cast<SPObject *>(iter->data);
+                if ( layer != obj ) {
+                    currentNames.insert( layer->label() ? Glib::ustring(layer->label()) : Glib::ustring() );
+                }
+            }
+        }
+
+        // Not sure if we need to cap it, but we'll just be paranoid for the moment
+        // Intentionally unsigned
+        guint endNum = startNum + 3000;
+        for ( guint i = startNum; (i < endNum) && (currentNames.find(result) != currentNames.end()); i++ ) {
+            gchar* suffix = g_strdup_printf("#%d", i);
+            result = base;
+            result += suffix;
+
+            g_free(suffix);
+        }
+
     }
 
     obj->setLabel( result.c_str() );
@@ -230,7 +218,7 @@ void LayerManager::_setDocument(SPDocument *document) {
     }
     _document = document;
     if (document) {
-        _resource_connection = document->connectResourcesChanged("layer", sigc::mem_fun(*this, &LayerManager::_rebuild));
+        _resource_connection = sp_document_resources_changed_connect(document, "layer", sigc::mem_fun(*this, &LayerManager::_rebuild));
     }
     _rebuild();
 }
@@ -247,7 +235,7 @@ void LayerManager::_rebuild() {
         LayerWatcher* one = _watchers.back();
         _watchers.pop_back();
         if ( one->_obj ) {
-            Node* node = one->_obj->getRepr();
+            Node* node = SP_OBJECT_REPR(one->_obj);
             if ( node ) {
                 node->removeObserver(*one);
             }
@@ -260,37 +248,34 @@ void LayerManager::_rebuild() {
     if (!_document) // http://sourceforge.net/mailarchive/forum.php?thread_name=5747bce9a7ed077c1b4fc9f0f4f8a5e0%40localhost&forum_name=inkscape-devel
         return;
 
-    std::vector<SPObject *> layers = _document->getResourceList("layer");
-
+    GSList const *layers = sp_document_get_resource_list(_document, "layer");
     SPObject *root=_desktop->currentRoot();
     if ( root ) {
         _addOne(root);
 
         std::set<SPGroup*> layersToAdd;
 
-        for ( std::vector<SPObject *>::const_iterator iter = layers.begin(); iter != layers.end(); ++iter ) {
-            SPObject *layer = *iter;
+        for ( GSList const *iter = layers; iter; iter = iter->next ) {
+            SPObject *layer = static_cast<SPObject *>(iter->data);
 //             Debug::EventTracker<DebugLayerNote> tracker(Util::format("Examining %s", layer->label()));
             bool needsAdd = false;
             std::set<SPGroup*> additional;
 
             if ( root->isAncestorOf(layer) ) {
                 needsAdd = true;
-                for ( SPObject* curr = layer; curr && (curr != root) && needsAdd; curr = curr->parent ) {
+                for ( SPObject* curr = layer; curr && (curr != root) && needsAdd; curr = SP_OBJECT_PARENT(curr) ) {
                     if ( SP_IS_GROUP(curr) ) {
                         SPGroup* group = SP_GROUP(curr);
                         if ( group->layerMode() == SPGroup::LAYER ) {
                             // If we have a layer-group as the one or a parent, ensure it is listed as a valid layer.
-                            needsAdd &= ( std::find(layers.begin(),layers.end(),curr) != layers.end() );
-							// XML Tree being used here directly while it shouldn't be...
-                            if ( (!(group->getRepr())) || (!(group->getRepr()->parent())) ) {
+                            needsAdd &= ( g_slist_find(const_cast<GSList *>(layers), curr) != NULL );
+                            if ( (!(group->repr)) || (!(group->repr->parent())) ) {
                                 needsAdd = false;
                             }
                         } else {
                             // If a non-layer group is a parent of layer groups, then show it also as a layer.
                             // TODO add the magic Inkscape group mode?
-							// XML Tree being used directly while it shouldn't be...
-                            if ( group->getRepr() && group->getRepr()->parent() ) {
+                            if ( group->repr && group->repr->parent() ) {
                                 additional.insert(group);
                             } else {
                                 needsAdd = false;
@@ -319,10 +304,10 @@ void LayerManager::_rebuild() {
             // See http://sourceforge.net/tracker/index.php?func=detail&aid=1339397&group_id=93438&atid=604306
 
             SPObject const *higher = layer;
-            while ( higher && (higher->parent != root) ) {
-                higher = higher->parent;
+            while ( higher && (SP_OBJECT_PARENT(higher) != root) ) {
+                higher = SP_OBJECT_PARENT(higher);
             }
-            Node const* node = higher ? higher->getRepr() : NULL;
+            Node* node = higher ? SP_OBJECT_REPR(higher) : 0;
             if ( node && node->parent() ) {
 //                 Debug::EventTracker<DebugAddLayer> tracker(*layer);
 
@@ -330,7 +315,7 @@ void LayerManager::_rebuild() {
 
                 LayerWatcher *eye = new LayerWatcher(this, layer, connection);
                 _watchers.push_back( eye );
-                layer->getRepr()->addObserver(*eye);
+                SP_OBJECT_REPR(layer)->addObserver(*eye);
 
                 _addOne(layer);
             }
@@ -356,4 +341,4 @@ void LayerManager::_selectedLayerChanged(SPObject *layer)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

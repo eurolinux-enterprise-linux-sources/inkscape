@@ -13,7 +13,7 @@
 
 #include "transf_mat_3x4.h"
 #include <gtk/gtk.h>
-#include <2geom/affine.h>
+#include <2geom/matrix.h>
 #include "svg/stringstream.h"
 #include "syseq.h"
 #include "document.h"
@@ -62,9 +62,11 @@ TransfMat3x4::image (Pt3 const &point) {
 
 Pt3
 TransfMat3x4::preimage (Geom::Point const &pt, double coord, Proj::Axis axis) {
-    const double init_val = std::numeric_limits<double>::quiet_NaN();
-    double x[4] = { init_val, init_val, init_val, init_val };
-    double v[3] = { pt[Geom::X], pt[Geom::Y], 1.0 };
+    double x[4];
+    double v[3];
+    v[0] = pt[Geom::X];
+    v[1] = pt[Geom::Y];
+    v[2] = 1.0;
     int index = (int) axis;
 
     SysEq::SolutionKind sol = SysEq::gaussjord_solve<3,4>(tmat, x, v, index, coord, true);
@@ -131,7 +133,7 @@ TransfMat3x4::operator==(const TransfMat3x4 &rhs) const
 /* Multiply a projective matrix by an affine matrix (by only multiplying the 'affine part' of the
  * projective matrix) */
 TransfMat3x4
-TransfMat3x4::operator*(Geom::Affine const &A) const {
+TransfMat3x4::operator*(Geom::Matrix const &A) const {
     TransfMat3x4 ret;
 
     for (int j = 0; j < 4; ++j) {
@@ -146,7 +148,7 @@ TransfMat3x4::operator*(Geom::Affine const &A) const {
 // FIXME: Shouldn't rather operator* call operator*= for efficiency? (Because in operator*=
 //        there is in principle no need to create a temporary object, which happens in the assignment)
 TransfMat3x4 &
-TransfMat3x4::operator*=(Geom::Affine const &A) {
+TransfMat3x4::operator*=(Geom::Matrix const &A) {
     *this = *this * A;
     return *this;
 }
@@ -191,4 +193,4 @@ TransfMat3x4::normalize_column (Proj::Axis axis) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

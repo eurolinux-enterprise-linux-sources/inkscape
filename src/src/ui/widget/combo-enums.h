@@ -1,4 +1,6 @@
-/*
+/**
+ * \brief Simplified management of enumerations in the UI as combobox.
+ *
  * Authors:
  *   Nicholas Bishop <nicholasbishop@gmail.com>
  *   Johan Engelen <j.b.c.engelen@ewi.utwente.nl>
@@ -11,21 +13,16 @@
 #ifndef INKSCAPE_UI_WIDGET_COMBO_ENUMS_H
 #define INKSCAPE_UI_WIDGET_COMBO_ENUMS_H
 
-#include "ui/widget/labelled.h"
 #include <gtkmm/combobox.h>
 #include <gtkmm/liststore.h>
 #include "attr-widget.h"
 #include "util/enums.h"
-
-#include <glibmm/i18n.h>
+#include "ui/widget/labelled.h"
 
 namespace Inkscape {
 namespace UI {
 namespace Widget {
 
-/**
- * Simplified management of enumerations in the UI as combobox.
- */
 template<typename E> class ComboBoxEnum : public Gtk::ComboBox, public AttrWidget
 {
 private:
@@ -179,9 +176,6 @@ private:
 };
 
 
-/**
- * Simplified management of enumerations in the UI as combobox.
- */
 template<typename E> class LabelledComboBoxEnum : public Labelled
 {
 public:
@@ -214,4 +208,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -10,17 +10,16 @@
  * Released under GNU GPL, read the file 'COPYING' for more information.
  */
 
-#include <cstddef>
-#include <sigc++/sigc++.h>
-
 #include "uri-references.h"
+#include <stddef.h>
+#include <sigc++/sigc++.h>
 #include "persp3d.h"
 
 class SPObject;
 
 namespace Inkscape {
 namespace XML {
-class Node;
+struct Node;
 }
 }
 
@@ -36,7 +35,7 @@ public:
     SPObject *owner;
 
     // concerning the Persp3D (we only use SPBox3D) that is refered to:
-    char *persp_href;
+    gchar *persp_href;
     Inkscape::XML::Node *persp_repr;
     Persp3D *persp;
 
@@ -65,4 +64,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

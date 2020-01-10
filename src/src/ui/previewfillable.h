@@ -15,7 +15,6 @@
 
 #include "previewable.h"
 #include "../widgets/eek-preview.h"
-#include "enums.h"
 
 namespace Inkscape {
 namespace UI {
@@ -28,12 +27,11 @@ public:
     virtual void addPreview( Previewable* preview ) = 0;
     virtual void freezeUpdates() = 0;
     virtual void thawUpdates() = 0;
-    virtual void setStyle( ::PreviewSize size, ViewType type, guint ratio, ::BorderStyle border ) = 0;
-    virtual void setOrientation(SPAnchorType how) = 0;
+    virtual void setStyle( ::PreviewSize size, ViewType type, guint ratio) = 0;
+    virtual void setOrientation( Gtk::AnchorType how ) = 0;
     virtual ::PreviewSize getPreviewSize() const = 0;
     virtual ViewType getPreviewType() const = 0;
     virtual guint getPreviewRatio() const = 0;
-    virtual ::BorderStyle getPreviewBorder() const = 0;
     virtual void setWrap( bool b ) = 0;
     virtual bool getWrap() const = 0;
 };
@@ -54,4 +52,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

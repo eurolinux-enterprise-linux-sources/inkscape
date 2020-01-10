@@ -1,41 +1,7 @@
-/**
- * \file
- * \brief Some two-dimensional SBasis operations
- *//*
- * Authors:
- *   MenTaLguy <mental@rydia.net>
- *   Jean-François Barraud <jf.barraud@gmail.com>
- *   Johan Engelen <j.b.c.engelen@alumnus.utwente.nl>
- *   
- * Copyright 2007-2012 Authors
- *
- * This library is free software; you can redistribute it and/or
- * modify it either under the terms of the GNU Lesser General Public
- * License version 2.1 as published by the Free Software Foundation
- * (the "LGPL") or, at your option, under the terms of the Mozilla
- * Public License Version 1.1 (the "MPL"). If you do not alter this
- * notice, a recipient may use your version of this file under either
- * the MPL or the LGPL.
- *
- * You should have received a copy of the LGPL along with this library
- * in the file COPYING-LGPL-2.1; if not, output to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- * You should have received a copy of the MPL along with this library
- * in the file COPYING-MPL-1.1
- *
- * The contents of this file are subject to the Mozilla Public License
- * Version 1.1 (the "License"); you may not use this file except in
- * compliance with the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
- * OF ANY KIND, either express or implied. See the LGPL or the MPL for
- * the specific language governing rights and limitations.
- *
- */
-
 #include <2geom/d2.h>
-#include <2geom/piecewise.h>
+/* One would think that we would include d2-sbasis.h, however,
+ * you cannot actually include it in anything - only d2 may import it.
+ * This is due to the trickinesses of template submatching. */
 
 namespace Geom {
 
@@ -155,7 +121,7 @@ Piecewise<SBasis> cross(Piecewise<D2<SBasis> > const &a,
   return result;
 }
 
-Piecewise<D2<SBasis> > operator*(Piecewise<D2<SBasis> > const &a, Affine const &m) {
+Piecewise<D2<SBasis> > operator*(Piecewise<D2<SBasis> > const &a, Matrix const &m) {
   Piecewise<D2<SBasis> > result;
   if(a.empty()) return result;
   result.push_cut(a.cuts[0]);
@@ -181,12 +147,12 @@ Piecewise<D2<SBasis> > force_continuity(Piecewise<D2<SBasis> > const &f, double 
                 SBasis &prev_sb=result.segs[prev][dim];
                 SBasis &cur_sb =result.segs[cur][dim];
                 Coord const c=pt0[dim];
-                if (prev_sb.isZero(0)) {
+                if (prev_sb.empty()) {
                   prev_sb = SBasis(Linear(0.0, c));
                 } else {
                   prev_sb[0][1] = c;
                 }
-                if (cur_sb.isZero(0)) {
+                if (cur_sb.empty()) {
                   cur_sb = SBasis(Linear(c, 0.0));
                 } else {
                   cur_sb[0][0] = c;
@@ -219,41 +185,36 @@ split_at_discontinuities (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwsbi
     return ret;
 }
 
-Point unitTangentAt(D2<SBasis> const & a, Coord t, unsigned n)
-{
-    std::vector<Point> derivs = a.valueAndDerivatives(t, n);
-    for (unsigned deriv_n = 1; deriv_n < derivs.size(); deriv_n++) {
-        Coord length = derivs[deriv_n].length();
-        if ( ! are_near(length, 0) ) {
-            // length of derivative is non-zero, so return unit vector
-            return derivs[deriv_n] / length;
+static void set_first_point(Piecewise<D2<SBasis> > &f, Point a){
+    if ( f.empty() ){
+        f.concat(Piecewise<D2<SBasis> >(D2<SBasis>(Linear(a[X]),Linear(a[Y]))));
+        return;
+    }
+    for (unsigned dim=0; dim<2; dim++){
+        if (f.segs.front()[dim].size() == 0){
+            f.segs.front()[dim] = SBasis(Linear(a[dim],0));
+        }else{
+            f.segs.front()[dim][0][0] = a[dim];
         }
     }
-    return Point (0,0);
 }
-
-static void set_first_point(Piecewise<D2<SBasis> > &f, Point const &a){
+static void set_last_point(Piecewise<D2<SBasis> > &f, Point a){
     if ( f.empty() ){
-        f.concat(Piecewise<D2<SBasis> >(D2<SBasis>(SBasis(Linear(a[X])), SBasis(Linear(a[Y])))));
+        f.concat(Piecewise<D2<SBasis> >(D2<SBasis>(Linear(a[X]),Linear(a[Y]))));
         return;
     }
     for (unsigned dim=0; dim<2; dim++){
-        f.segs.front()[dim][0][0] = a[dim];
-    }
-}
-static void set_last_point(Piecewise<D2<SBasis> > &f, Point const &a){
-    if ( f.empty() ){
-        f.concat(Piecewise<D2<SBasis> >(D2<SBasis>(SBasis(Linear(a[X])), SBasis(Linear(a[Y])))));
-        return;
-    }
-    for (unsigned dim=0; dim<2; dim++){
-        f.segs.back()[dim][0][1] = a[dim];
+        if (f.segs.back()[dim].size() == 0){
+            f.segs.back()[dim] = SBasis(Linear(0,a[dim]));
+        }else{
+            f.segs.back()[dim][0][1] = a[dim];
+        }
     }
 }
 
 std::vector<Piecewise<D2<SBasis> > > fuse_nearby_ends(std::vector<Piecewise<D2<SBasis> > > const &f, double tol){
 
-    if ( f.empty()) return f;
+    if ( f.size()==0 ) return f;
     std::vector<Piecewise<D2<SBasis> > > result;
     std::vector<std::vector<unsigned> > pre_result;
     for (unsigned i=0; i<f.size(); i++){
@@ -295,57 +256,7 @@ std::vector<Piecewise<D2<SBasis> > > fuse_nearby_ends(std::vector<Piecewise<D2<S
         result.push_back(comp);
     }
     return result;
-}
-
-/*
- *  Computes the intersection of two sets given as (ordered) union of intervals.
- */
-static std::vector<Interval> intersect( std::vector<Interval> const &a, std::vector<Interval> const &b){
-	std::vector<Interval> result;
-	//TODO: use order!
-	for (unsigned i=0; i < a.size(); i++){
-		for (unsigned j=0; j < b.size(); j++){
-			OptInterval c( a[i] );
-			c &= b[j];
-			if ( c ) {
-				result.push_back( *c );
-			}
-		}
-	}
-	return result;
-}
-
-std::vector<Interval> level_set( D2<SBasis> const &f, Rect region){
-	std::vector<Rect> regions( 1, region );
-	return level_sets( f, regions ).front();
-}
-std::vector<Interval> level_set( D2<SBasis> const &f, Point p, double tol){
-	Rect region(p, p);
-	region.expandBy( tol );
-	return level_set( f, region );
-}
-std::vector<std::vector<Interval> > level_sets( D2<SBasis> const &f, std::vector<Rect> regions){
-	std::vector<Interval> regsX (regions.size(), Interval() );
-	std::vector<Interval> regsY (regions.size(), Interval() );
-	for ( unsigned i=0; i < regions.size(); i++ ){
-		regsX[i] = regions[i][X];
-		regsY[i] = regions[i][Y];
-	}
-	std::vector<std::vector<Interval> > x_in_regs = level_sets( f[X], regsX );
-	std::vector<std::vector<Interval> > y_in_regs = level_sets( f[Y], regsY );
-	std::vector<std::vector<Interval> >result(regions.size(), std::vector<Interval>() );
-	for (unsigned i=0; i<regions.size(); i++){
-		result[i] = intersect ( x_in_regs[i], y_in_regs[i] );
-	}
-	return result;
-}
-std::vector<std::vector<Interval> > level_sets( D2<SBasis> const &f, std::vector<Point> pts, double tol){
-	std::vector<Rect> regions( pts.size(), Rect() );
-	for (unsigned i=0; i<pts.size(); i++){
-		regions[i] = Rect( pts[i], pts[i] );
-		regions[i].expandBy( tol );
-	}
-	return level_sets( f, regions );
+    return f;
 }
 
 
@@ -361,4 +272,4 @@ std::vector<std::vector<Interval> > level_sets( D2<SBasis> const &f, std::vector
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

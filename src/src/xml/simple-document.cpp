@@ -1,6 +1,5 @@
-/**
- * @file
- * Garbage collected XML document implementation.
+/** @file
+ * @brief Garbage collected XML document implementation
  */
 /* Copyright 2004-2005 MenTaLguY <mental@rydia.net>
  *
@@ -57,10 +56,6 @@ Node *SimpleDocument::createElement(char const *name) {
 
 Node *SimpleDocument::createTextNode(char const *content) {
     return new TextNode(Util::share_string(content), this);
-}
-
-Node *SimpleDocument::createTextNode(char const *content, bool const is_CData) {
-    return new TextNode(Util::share_string(content), this, is_CData);
 }
 
 Node *SimpleDocument::createComment(char const *content) {
@@ -131,4 +126,4 @@ void SimpleDocument::notifyAttributeChanged(Node &node,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

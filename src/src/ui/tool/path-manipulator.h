@@ -14,16 +14,15 @@
 #include <string>
 #include <memory>
 #include <2geom/pathvector.h>
-#include <2geom/affine.h>
+#include <2geom/matrix.h>
 #include <boost/shared_ptr.hpp>
 #include <boost/weak_ptr.hpp>
+#include "display/display-forward.h"
+#include "forward.h"
 #include "ui/tool/node.h"
 #include "ui/tool/manipulator.h"
-#include "live_effects/lpe-bspline.h"
 
 struct SPCanvasItem;
-class SPCurve;
-class SPPath;
 
 namespace Inkscape {
 namespace XML { class Node; }
@@ -54,24 +53,21 @@ class PathManipulator : public PointManipulator {
 public:
     typedef SPPath *ItemType;
 
-    PathManipulator(MultiPathManipulator &mpm, SPPath *path, Geom::Affine const &edit_trans,
+    PathManipulator(MultiPathManipulator &mpm, SPPath *path, Geom::Matrix const &edit_trans,
         guint32 outline_color, Glib::ustring lpe_key);
     ~PathManipulator();
-    virtual bool event(Inkscape::UI::Tools::ToolBase *, GdkEvent *);
+    virtual bool event(SPEventContext *, GdkEvent *);
 
     bool empty();
     void writeXML();
-    void update(bool alert_LPE = false); // update display, but don't commit
+    void update(); // update display, but don't commit
     void clear(); // remove all nodes from manipulator
     SPPath *item() { return _path; }
 
     void selectSubpaths();
     void invertSelectionInSubpaths();
 
-    void insertNodeAtExtremum(ExtremumType extremum);
     void insertNodes();
-    void insertNode(Geom::Point);
-    void insertNode(NodeList::iterator first, double t, bool take_selection);
     void duplicateNodes();
     void weldNodes(NodeList::iterator preserve_pos = NodeList::iterator());
     void weldSegments();
@@ -89,8 +85,7 @@ public:
     void showPathDirection(bool show);
     void setLiveOutline(bool set);
     void setLiveObjects(bool set);
-    void updateHandles();
-    void setControlsTransform(Geom::Affine const &);
+    void setControlsTransform(Geom::Matrix const &);
     void hideDragPoint();
     MultiPathManipulator &mpm() { return _multi_path_manipulator; }
 
@@ -98,7 +93,6 @@ public:
     NodeList::iterator extremeNode(NodeList::iterator origin, bool search_selected,
         bool search_unselected, bool closest);
 
-    int _bsplineGetSteps() const;
     // this is necessary for Tab-selection in MultiPathManipulator
     SubpathList &subpathList() { return _subpaths; }
 
@@ -108,13 +102,7 @@ private:
     typedef boost::shared_ptr<NodeList> SubpathPtr;
 
     void _createControlPointsFromGeometry();
-
-    void _recalculateIsBSpline();
-    bool _isBSpline() const;
-    double _bsplineHandlePosition(Handle *h, bool check_other = true);
-    Geom::Point _bsplineHandleReposition(Handle *h, bool check_other = true);
-    Geom::Point _bsplineHandleReposition(Handle *h, double pos);
-    void _createGeometryFromControlPoints(bool alert_LPE = false);
+    void _createGeometryFromControlPoints();
     unsigned _deleteStretch(NodeList::iterator first, NodeList::iterator last, bool keep_shape);
     std::string _createTypeString();
     void _updateOutline();
@@ -124,8 +112,7 @@ private:
     Glib::ustring _nodetypesKey();
     Inkscape::XML::Node *_getXMLNode();
 
-    void _selectionChangedM(std::vector<SelectableControlPoint *> pvec, bool selected);
-    void _selectionChanged(SelectableControlPoint * p, bool selected);
+    void _selectionChanged(SelectableControlPoint *p, bool selected);
     bool _nodeClicked(Node *, GdkEventButton *);
     void _handleGrabbed();
     bool _handleClicked(Handle *, GdkEventButton *);
@@ -135,28 +122,27 @@ private:
     void _removeNodesFromSelection();
     void _commit(Glib::ustring const &annotation);
     void _commit(Glib::ustring const &annotation, gchar const *key);
-    Geom::Coord _updateDragPoint(Geom::Point const &);
+    void _updateDragPoint(Geom::Point const &);
     void _updateOutlineOnZoomChange();
     double _getStrokeTolerance();
     Handle *_chooseHandle(Node *n, int which);
 
     SubpathList _subpaths;
     MultiPathManipulator &_multi_path_manipulator;
-    SPPath *_path; ///< can be an SPPath or an Inkscape::LivePathEffect::Effect  !!!
+    SPPath *_path;
     SPCurve *_spcurve; // in item coordinates
     SPCanvasItem *_outline;
-    CurveDragPoint *_dragpoint; // an invisible control point hovering over curve
+    CurveDragPoint *_dragpoint; // an invisible control point hoverng over curve
     PathManipulatorObserver *_observer;
-    Geom::Affine _d2i_transform; ///< desktop-to-item transform
-    Geom::Affine _i2d_transform; ///< item-to-desktop transform, inverse of _d2i_transform
-    Geom::Affine _edit_transform; ///< additional transform to apply to editing controls
+    Geom::Matrix _d2i_transform; ///< desktop-to-item transform
+    Geom::Matrix _i2d_transform; ///< item-to-desktop transform, inverse of _d2i_transform
+    Geom::Matrix _edit_transform; ///< additional transform to apply to editing controls
     unsigned _num_selected; ///< number of selected nodes
     bool _show_handles;
     bool _show_outline;
     bool _show_path_direction;
     bool _live_outline;
     bool _live_objects;
-    bool _is_bspline;
     Glib::ustring _lpe_key;
 
     friend class PathManipulatorObserver;
@@ -179,4 +165,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

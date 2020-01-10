@@ -10,7 +10,6 @@
 #include "extension/system.h"
 
 #include "wave.h"
-#include <Magick++.h>
 
 namespace Inkscape {
 namespace Extension {
@@ -37,14 +36,14 @@ Wave::init(void)
 		"<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
 			"<name>" N_("Wave") "</name>\n"
 			"<id>org.inkscape.effect.bitmap.wave</id>\n"
-			"<param name=\"amplitude\" _gui-text=\"" N_("Amplitude:") "\" type=\"float\" min=\"-720.0\" max=\"720.0\">25</param>\n"			
-			"<param name=\"wavelength\" _gui-text=\"" N_("Wavelength:") "\" type=\"float\" min=\"-720.0\" max=\"720.0\">150</param>\n"			
+			"<param name=\"amplitude\" gui-text=\"" N_("Amplitude") "\" type=\"float\" min=\"-720.0\" max=\"720.0\">25</param>\n"			
+			"<param name=\"wavelength\" gui-text=\"" N_("Wavelength") "\" type=\"float\" min=\"-720.0\" max=\"720.0\">150</param>\n"			
 			"<effect>\n"
 				"<object-type>all</object-type>\n"
 				"<effects-menu>\n"
 					"<submenu name=\"" N_("Raster") "\" />\n"
 				"</effects-menu>\n"
-				"<menu-tip>" N_("Alter selected bitmap(s) along sine wave") "</menu-tip>\n"
+				"<menu-tip>" N_("Alter selected bitmap(s) along sine wave.") "</menu-tip>\n"
 			"</effect>\n"
 		"</inkscape-extension>\n", new Wave());
 }

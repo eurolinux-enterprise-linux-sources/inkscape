@@ -8,42 +8,22 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include <gtkmm/widget.h>
+#include <xml/node.h>
+#include <document.h>
 #include "parameter.h"
 
-class SPDocument;
-
-namespace Gtk {
-	class Widget;
-}
-
 namespace Inkscape {
-namespace Xml {
-	class Node;
-}
-
 namespace Extension {
 
 /** \brief  A description parameter */
 class ParamDescription : public Parameter {
-public:
-    enum AppearanceMode {
-        DESC, HEADER
-    };
-    ParamDescription(const gchar * name,
-                     const gchar * guitext,
-                     const gchar * desc,
-                     const Parameter::_scope_t scope,
-                     bool gui_hidden,
-                     const gchar * gui_tip, 
-                     Inkscape::Extension::Extension * ext,
-                     Inkscape::XML::Node * xml,
-                     AppearanceMode mode);
-    Gtk::Widget * get_widget(SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal);
 private:
     /** \brief  Internal value. */
     gchar * _value;
-    AppearanceMode _mode;
-    int _indent;
+public:
+    ParamDescription(const gchar * name, const gchar * guitext, const gchar * desc, const Parameter::_scope_t scope, bool gui_hidden, const gchar * gui_tip, Inkscape::Extension::Extension * ext, Inkscape::XML::Node * xml);
+    Gtk::Widget * get_widget(SPDocument * doc, Inkscape::XML::Node * node, sigc::signal<void> * changeSignal);
 };
 
 }  /* namespace Extension */

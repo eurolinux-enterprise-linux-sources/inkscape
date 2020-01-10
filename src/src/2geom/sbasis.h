@@ -1,6 +1,7 @@
-/** @file
- * @brief Polynomial in symmetric power basis (S-basis)
- *//*
+/**
+ * \file
+ * \brief Defines S-power basis function class
+ *
  *  Authors:
  *   Nathan Hurst <njh@mail.csse.monash.edu.au>
  *   Michael Sloan <mgsloan@gmail.com>
@@ -31,8 +32,8 @@
  * the specific language governing rights and limitations.
  */
 
-#ifndef LIB2GEOM_SEEN_SBASIS_H
-#define LIB2GEOM_SEEN_SBASIS_H
+#ifndef SEEN_SBASIS_H
+#define SEEN_SBASIS_H
 #include <vector>
 #include <cassert>
 #include <iostream>
@@ -60,163 +61,87 @@ class SBasis : public SBasisN<1>;
 };
 #else
 
-namespace Geom {
+namespace Geom{
 
-/**
- * @brief Polynomial in symmetric power basis
- * @ingroup Fragments
- */
-class SBasis {
+/*** An empty SBasis is identically 0. */
+class SBasis{
     std::vector<Linear> d;
     void push_back(Linear const&l) { d.push_back(l); }
 
 public:
     // As part of our migration away from SBasis isa vector we provide this minimal set of vector interface methods.
     size_t size() const {return d.size();}
-    typedef std::vector<Linear>::iterator iterator;
-    typedef std::vector<Linear>::const_iterator const_iterator;
     Linear operator[](unsigned i) const {
         return d[i];
     }
     Linear& operator[](unsigned i) { return d.at(i); }
-    const_iterator begin() const { return d.begin();}
-    const_iterator end() const { return d.end();}
-    iterator begin() { return d.begin();}
-    iterator end() { return d.end();}
-    bool empty() const { return d.size() == 1 && d[0][0] == 0 && d[0][1] == 0; }
+    Linear const* begin() const { return (Linear const*)&*d.begin();}
+    Linear const* end() const { return (Linear const*)&*d.end();}
+    Linear* begin() { return (Linear*)&*d.begin();}
+    Linear* end() { return (Linear*)&*d.end();}
+    bool empty() const {return d.empty();}
     Linear &back() {return d.back();}
     Linear const &back() const {return d.back();}
-    void pop_back() {
-		if (d.size() > 1) {
-			d.pop_back();
-		} else {
-			d[0][0] = 0;
-			d[0][1] = 0;
-		}
-	}
-    void resize(unsigned n) { d.resize(std::max<unsigned>(n, 1));}
-    void resize(unsigned n, Linear const& l) { d.resize(std::max<unsigned>(n, 1), l);}
+    void pop_back() { d.pop_back();}
+    void resize(unsigned n) { d.resize(n);}
+    void resize(unsigned n, Linear const& l) { d.resize(n, l);}
     void reserve(unsigned n) { d.reserve(n);}
-    void clear() {
-    	d.resize(1);
-    	d[0][0] = 0;
-    	d[0][1] = 0;
-    }
-    void insert(iterator before, const_iterator src_begin, const_iterator src_end) { d.insert(before, src_begin, src_end);}
+    void clear() {d.clear();}
+    void insert(Linear* before, const Linear* src_begin, const Linear* src_end) { d.insert(std::vector<Linear>::iterator(before), src_begin, src_end);}
+    //void insert(Linear* aa, Linear* bb, Linear* cc} { d.insert(aa, bb, cc);}
     Linear& at(unsigned i) { return d.at(i);}
     //void insert(Linear* before, int& n, Linear const &l) { d.insert(std::vector<Linear>::iterator(before), n, l);}
     bool operator==(SBasis const&B) const { return d == B.d;}
     bool operator!=(SBasis const&B) const { return d != B.d;}
+    operator std::vector<Linear>() { return d;}
+
     
-    SBasis()
-		: d(1, Linear(0, 0))
-	{}
-    explicit SBasis(double a)
-        : d(1, Linear(a, a))
+    SBasis() {}
+    explicit SBasis(double a) {
+        push_back(Linear(a,a));
+    }
+    explicit SBasis(double a, double b) {
+        push_back(Linear(a,b));
+    }
+    SBasis(SBasis const & a) :
+        d(a.d)
     {}
-    explicit SBasis(double a, double b)
-        : d(1, Linear(a, b))
-    {}
-    SBasis(SBasis const &a)
-        : d(a.d)
-    {}
-    SBasis(std::vector<Linear> const &ls)
-        : d(ls)
-    {}
-    SBasis(Linear const &bo)
-		: d(1, bo)
-	{}
-    SBasis(Linear* bo)
-		: d(1, bo ? *bo : Linear(0, 0))
-    {}
+    SBasis(Linear const & bo) {
+        push_back(bo);
+    }
+    SBasis(Linear* bo) {
+        push_back(*bo);
+    }
     explicit SBasis(size_t n, Linear const&l) : d(n, l) {}
-
-    SBasis(Coord c0, Coord c1, Coord c2, Coord c3)
-        : d(2)
-    {
-        d[0][0] = c0;
-        d[1][0] = c1;
-        d[1][1] = c2;
-        d[0][1] = c3;
-    }
-    SBasis(Coord c0, Coord c1, Coord c2, Coord c3, Coord c4, Coord c5)
-        : d(3)
-    {
-        d[0][0] = c0;
-        d[1][0] = c1;
-        d[2][0] = c2;
-        d[2][1] = c3;
-        d[1][1] = c4;
-        d[0][1] = c5;
-    }
-    SBasis(Coord c0, Coord c1, Coord c2, Coord c3, Coord c4, Coord c5,
-           Coord c6, Coord c7)
-        : d(4)
-    {
-        d[0][0] = c0;
-        d[1][0] = c1;
-        d[2][0] = c2;
-        d[3][0] = c3;
-        d[3][1] = c4;
-        d[2][1] = c5;
-        d[1][1] = c6;
-        d[0][1] = c7;
-    }
-    SBasis(Coord c0, Coord c1, Coord c2, Coord c3, Coord c4, Coord c5,
-           Coord c6, Coord c7, Coord c8, Coord c9)
-        : d(5)
-    {
-        d[0][0] = c0;
-        d[1][0] = c1;
-        d[2][0] = c2;
-        d[3][0] = c3;
-        d[4][0] = c4;
-        d[4][1] = c5;
-        d[3][1] = c6;
-        d[2][1] = c7;
-        d[1][1] = c8;
-        d[0][1] = c9;
-    }
-
-    // construct from a sequence of coefficients
-    template <typename Iter>
-    SBasis(Iter first, Iter last) {
-        assert(std::distance(first, last) % 2 == 0);
-        assert(std::distance(first, last) >= 2);
-        for (; first != last; ++first) {
-            --last;
-            push_back(Linear(*first, *last));
-        }
-    }
 
     //IMPL: FragmentConcept
     typedef double output_type;
-    inline bool isZero(double eps=EPSILON) const {
-    	assert(size() > 0);
+    inline bool isZero() const {
+        if(empty()) return true;
         for(unsigned i = 0; i < size(); i++) {
-            if(!(*this)[i].isZero(eps)) return false;
+            if(!(*this)[i].isZero()) return false;
         }
         return true;
     }
-    inline bool isConstant(double eps=EPSILON) const {
-    	assert(size() > 0);
-        if(!(*this)[0].isConstant(eps)) return false;
-        for (unsigned i = 1; i < size(); i++) {
-            if(!(*this)[i].isZero(eps)) return false;
+    inline bool isConstant() const {
+        if (empty()) return true;
+        for (unsigned i = 0; i < size(); i++) {
+            if(!(*this)[i].isConstant()) return false;
         }
         return true;
     }
 
     bool isFinite() const;
-    inline Coord at0() const { return (*this)[0][0]; }
-    inline Coord &at0() { return (*this)[0][0]; }
-    inline Coord at1() const { return (*this)[0][1]; }
-    inline Coord &at1() { return (*this)[0][1]; }
+    inline double at0() const { 
+        if(empty()) return 0; else return (*this)[0][0];
+    }
+    inline double at1() const{
+        if(empty()) return 0; else return (*this)[0][1];
+    }
     
     int degreesOfFreedom() const { return size()*2;}
 
     double valueAt(double t) const {
-    	assert(size() > 0);
         double s = t*(1-t);
         double p0 = 0, p1 = 0;
         for(unsigned k = size(); k > 0; k--) {
@@ -244,11 +169,11 @@ public:
 //MUTATOR PRISON
     //remove extra zeros
     void normalize() {
-        while(size() > 1 && back().isZero(0))
+        while(!empty() && 0 == back()[0] && 0 == back()[1])
             pop_back();
     }
 
-    void truncate(unsigned k) { if(k < size()) resize(std::max<size_t>(k, 1)); }
+    void truncate(unsigned k) { if(k < size()) resize(k); }
 private:
     void derive(); // in place version
 };
@@ -263,7 +188,6 @@ OptInterval bounds_local(SBasis const &a, const OptInterval &t, int order = 0);
 
 /** Returns a function which reverses the domain of a.
  \param a sbasis function
- \relates SBasis
 
 useful for reversing a parameteric curve.
 */
@@ -388,8 +312,7 @@ inline SBasis& operator*=(SBasis& a, SBasis const & b) {
 /** Returns the degree of the first non zero coefficient.
  \param a sbasis function
  \param tol largest abs val considered 0
- \return first non zero coefficient
- \relates SBasis
+ \returns first non zero coefficient
 */
 inline unsigned 
 valuation(SBasis const &a, double tol=0){
@@ -410,13 +333,13 @@ SBasis inverse(SBasis a, int k);
 SBasis compose_inverse(SBasis const &f, SBasis const &g, unsigned order=2, double tol=1e-3);
 
 /** Returns the sbasis on domain [0,1] that was t on [from, to]
- \param t sbasis function
+ \param a sbasis function
  \param from,to interval
- \return sbasis
- \relates SBasis
+ \returns sbasis
+
 */
-SBasis portion(const SBasis &t, double from, double to);
-inline SBasis portion(const SBasis &t, Interval const &ivl) { return portion(t, ivl.min(), ivl.max()); }
+inline SBasis portion(const SBasis &t, double from, double to) { return compose(t, Linear(from, to)); }
+inline SBasis portion(const SBasis &t, Interval ivl) { return compose(t, Linear(ivl[0], ivl[1])); }
 
 // compute f(g)
 inline SBasis
@@ -431,10 +354,7 @@ inline std::ostream &operator<< (std::ostream &out_file, const Linear &bo) {
 
 inline std::ostream &operator<< (std::ostream &out_file, const SBasis & p) {
     for(unsigned i = 0; i < p.size(); i++) {
-        if (i != 0) {
-            out_file << " + ";
-        }
-        out_file << p[i] << "s^" << i;
+        out_file << p[i] << "s^" << i << " + ";
     }
     return out_file;
 }
@@ -444,75 +364,13 @@ SBasis sin(Linear bo, int k);
 SBasis cos(Linear bo, int k);
 
 std::vector<double> roots(SBasis const & s);
-std::vector<double> roots(SBasis const & s, Interval const inside);
 std::vector<std::vector<double> > multi_roots(SBasis const &f,
                                  std::vector<double> const &levels,
                                  double htol=1e-7,
                                  double vtol=1e-7,
                                  double a=0,
                                  double b=1);
-
-//--------- Levelset like functions -----------------------------------------------------
-
-/** Solve f(t) = v +/- tolerance. The collection of intervals where
- *     v - vtol <= f(t) <= v+vtol
- *   is returned (with a precision tol on the boundaries).
-    \param f sbasis function
-    \param level the value of v.
-    \param vtol: error tolerance on v.
-    \param a, b limit search on domain [a,b]
-    \param tol: tolerance on the result bounds.
-    \returns a vector of intervals.
-*/
-std::vector<Interval> level_set (SBasis const &f,
-		double level,
-		double vtol = 1e-5,
-		double a=0.,
-		double b=1.,
-		double tol = 1e-5);
-
-/** Solve f(t)\in I=[u,v], which defines a collection of intervals (J_k). More precisely,
- *  a collection (J'_k) is returned with J'_k = J_k up to a given tolerance.
-    \param f sbasis function
-    \param level: the given interval of deisred values for f.
-    \param a, b limit search on domain [a,b]
-    \param tol: tolerance on the bounds of the result.
-    \returns a vector of intervals.
-*/
-std::vector<Interval> level_set (SBasis const &f,
-		Interval const &level,
-		double a=0.,
-		double b=1.,
-		double tol = 1e-5);
-
-/** 'Solve' f(t) = v +/- tolerance for several values of v at once.
-    \param f sbasis function
-    \param levels vector of values, that should be sorted.
-    \param vtol: error tolerance on v.
-    \param a, b limit search on domain [a,b]
-    \param tol: the bounds of the returned intervals are exact up to that tolerance.
-    \returns a vector of vectors of intervals.
-*/
-std::vector<std::vector<Interval> > level_sets (SBasis const &f,
-		std::vector<double> const &levels,
-		double a=0.,
-		double b=1.,
-		double vtol = 1e-5,
-		double tol = 1e-5);
-
-/** 'Solve' f(t)\in I=[u,v] for several intervals I at once.
-    \param f sbasis function
-    \param levels vector of 'y' intervals, that should be disjoints and sorted.
-    \param a, b limit search on domain [a,b]
-    \param tol: the bounds of the returned intervals are exact up to that tolerance.
-    \returns a vector of vectors of intervals.
-*/
-std::vector<std::vector<Interval> > level_sets (SBasis const &f,
-		std::vector<Interval> const &levels,
-		double a=0.,
-		double b=1.,
-		double tol = 1e-5);
-
+    
 }
 #endif
 
@@ -525,5 +383,5 @@ std::vector<std::vector<Interval> > level_sets (SBasis const &f,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
 #endif

@@ -1,5 +1,5 @@
-#ifndef SEEN_SP_METADATA_H
-#define SEEN_SP_METADATA_H
+#ifndef __SP_METADATA_H__
+#define __SP_METADATA_H__
 
 /*
  * SVG <metadata> implementation
@@ -14,24 +14,24 @@
 
 #include "sp-object.h"
 
+
 /* Metadata base class */
 
-#define SP_METADATA(obj) (dynamic_cast<SPMetadata*>((SPObject*)obj))
-#define SP_IS_METADATA(obj) (dynamic_cast<const SPMetadata*>((SPObject*)obj) != NULL)
+#define SP_TYPE_METADATA (sp_metadata_get_type ())
+#define SP_METADATA(o) (G_TYPE_CHECK_INSTANCE_CAST ((o), SP_TYPE_METADATA, SPMetadata))
+#define SP_IS_METADATA(o) (G_TYPE_CHECK_INSTANCE_TYPE ((o), SP_TYPE_METADATA))
 
-class SPMetadata : public SPObject {
-public:
-	SPMetadata();
-	virtual ~SPMetadata();
+class SPMetadata;
+class SPMetadataClass;
 
-protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-
-	virtual void set(unsigned int key, const char* value);
-	virtual void update(SPCtx* ctx, unsigned int flags);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
+struct SPMetadata : public SPObject {
 };
+
+struct SPMetadataClass {
+	SPObjectClass parent_class;
+};
+
+GType sp_metadata_get_type (void);
 
 SPMetadata * sp_document_metadata (SPDocument *document);
 

@@ -1,16 +1,18 @@
+#define INKSCAPE_LIVEPATHEFFECT_PARAMETER_CPP
+
 /*
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "ui/widget/registered-widget.h"
-#include <glibmm/i18n.h>
-
 #include "live_effects/parameter/parameter.h"
 #include "live_effects/effect.h"
 #include "svg/svg.h"
+#include "libnr/nr-values.h"
 #include "xml/repr.h"
+#include <gtkmm.h>
+#include "ui/widget/registered-widget.h"
 
 #include "svg/stringstream.h"
 
@@ -36,17 +38,11 @@ Parameter::Parameter( const Glib::ustring& label, const Glib::ustring& tip,
 {
 }
 
+
 void
 Parameter::param_write_to_repr(const char * svgd)
 {
     param_effect->getRepr()->setAttribute(param_key.c_str(), svgd);
-}
-
-void Parameter::write_to_SVG(void)
-{
-    gchar * str = param_getSVGValue();
-    param_write_to_repr(str);
-    g_free(str);
 }
 
 /*###########################################
@@ -54,19 +50,16 @@ void Parameter::write_to_SVG(void)
  */
 ScalarParam::ScalarParam( const Glib::ustring& label, const Glib::ustring& tip,
                       const Glib::ustring& key, Inkscape::UI::Widget::Registry* wr,
-                      Effect* effect, gdouble default_value, bool no_widget)
+                      Effect* effect, gdouble default_value)
     : Parameter(label, tip, key, wr, effect),
       value(default_value),
-      min(-SCALARPARAM_G_MAXDOUBLE),
-      max(SCALARPARAM_G_MAXDOUBLE),
+      min(-NR_HUGE),
+      max(NR_HUGE),
       integer(false),
       defvalue(default_value),
       digits(2),
       inc_step(0.1),
-      inc_page(1),
-      add_slider(false),
-      overwrite_widget(false),
-      hide_widget(no_widget)
+      inc_page(1)
 {
 }
 
@@ -116,22 +109,8 @@ ScalarParam::param_set_value(gdouble val)
 void
 ScalarParam::param_set_range(gdouble min, gdouble max)
 {
-    // if you look at client code, you'll see that many effects
-    // has a tendency to set an upper range of Geom::infinity().
-    // Once again, in gtk2, this is not a problem. But in gtk3,
-    // widgets get allocated the amount of size they ask for,
-    // leading to excessively long widgets.
-
-    if (min >= -SCALARPARAM_G_MAXDOUBLE) {
-        this->min = min;
-    } else {
-        this->min = -SCALARPARAM_G_MAXDOUBLE;
-    }
-    if (max <= SCALARPARAM_G_MAXDOUBLE) {
-        this->max = max;
-    } else {
-	this->max = SCALARPARAM_G_MAXDOUBLE;
-    }
+    this->min = min;
+    this->max = max;
 
     param_set_value(value); // reset value to see whether it is in ranges
 }
@@ -145,34 +124,21 @@ ScalarParam::param_make_integer(bool yes)
     inc_page = 10;
 }
 
-void
-ScalarParam::param_overwrite_widget(bool overwrite_widget)
-{
-    this->overwrite_widget = overwrite_widget;
-}
-
 Gtk::Widget *
-ScalarParam::param_newWidget()
+ScalarParam::param_newWidget(Gtk::Tooltips * /*tooltips*/)
 {
-    if(!hide_widget){
-        Inkscape::UI::Widget::RegisteredScalar *rsu = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalar(
-            param_label, param_tooltip, param_key, *param_wr, param_effect->getRepr(), param_effect->getSPDoc() ) );
+    Inkscape::UI::Widget::RegisteredScalar *rsu = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalar(
+        param_label, param_tooltip, param_key, *param_wr, param_effect->getRepr(), param_effect->getSPDoc() ) );
 
-        rsu->setValue(value);
-        rsu->setDigits(digits);
-        rsu->setIncrements(inc_step, inc_page);
-        rsu->setRange(min, max);
-        rsu->setProgrammatically = false;
-        if (add_slider) {
-            rsu->addSlider();
-        }
-        if(!overwrite_widget){
-            rsu->set_undo_parameters(SP_VERB_DIALOG_LIVE_PATH_EFFECT, _("Change scalar parameter"));
-        }
-        return dynamic_cast<Gtk::Widget *> (rsu);
-    } else {
-        return NULL;
-    }
+    rsu->setValue(value);
+    rsu->setDigits(digits);
+    rsu->setIncrements(inc_step, inc_page);
+    rsu->setRange(min, max);
+    rsu->setProgrammatically = false;
+
+    rsu->set_undo_parameters(SP_VERB_DIALOG_LIVE_PATH_EFFECT, _("Change scalar parameter"));
+
+    return dynamic_cast<Gtk::Widget *> (rsu);
 }
 
 void

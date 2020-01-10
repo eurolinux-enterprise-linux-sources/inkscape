@@ -46,21 +46,14 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
-# standard library
-import sys
-import re
-from math import *
-# local library
+
 import inkex
-import simplestyle
-from simpletransform import computePointInNode
-
-# Initialize gettext for messages outside an inkex derived class
-inkex.localize() 
-
-# third party
+import simplestyle, sys, re
+from math import *
+import gettext
+_ = gettext.gettext
 try:
     from numpy import *
 except:
@@ -369,22 +362,22 @@ class Poly_3D(inkex.Effect):
 #VEIW SETTINGS
         self.OptionParser.add_option("--r1_ax",
             action="store", type="string", 
-            dest="r1_ax", default="X-Axis")
+            dest="r1_ax", default=0)
         self.OptionParser.add_option("--r2_ax",
             action="store", type="string", 
-            dest="r2_ax", default="X-Axis")
+            dest="r2_ax", default=0)
         self.OptionParser.add_option("--r3_ax",
             action="store", type="string", 
-            dest="r3_ax", default="X-Axis")
+            dest="r3_ax", default=0)
         self.OptionParser.add_option("--r4_ax",
             action="store", type="string", 
-            dest="r4_ax", default="X-Axis")
+            dest="r4_ax", default=0)
         self.OptionParser.add_option("--r5_ax",
             action="store", type="string", 
-            dest="r5_ax", default="X-Axis")
+            dest="r5_ax", default=0)
         self.OptionParser.add_option("--r6_ax",
             action="store", type="string", 
-            dest="r6_ax", default="X-Axis")
+            dest="r6_ax", default=0)
         self.OptionParser.add_option("--r1_ang",
             action="store", type="float", 
             dest="r1_ang", default=0)
@@ -461,7 +454,6 @@ class Poly_3D(inkex.Effect):
         get_obj_data(obj, file)#load data from the obj file
         obj.set_type(so)#set the type (face or edge) as per the settings
         
-        scale = self.unittouu('1px')    # convert to document units
         st = Style(so) #initialise style
         fill_col = (so.f_r, so.f_g, so.f_b) #colour tuple for the face fill
         lighting = normalise( (so.lv_x,-so.lv_y,so.lv_z) ) #unit light vector
@@ -469,17 +461,14 @@ class Poly_3D(inkex.Effect):
         #INKSCAPE GROUP TO CONTAIN THE POLYHEDRON
         
         #Put in in the centre of the current view
-        view_center = computePointInNode(list(self.view_center), self.current_layer)
-        poly_transform = 'translate(' + str( view_center[0]) + ',' + str( view_center[1]) + ')'
-        if scale != 1:
-            poly_transform += ' scale(' + str(scale) + ')'
+        poly_transform = 'translate(' + str( self.view_center[0]) + ',' + str( self.view_center[1]) + ')'
         #we will put all the rotations in the object name, so it can be repeated in 
         poly_name = obj.name+':'+make_rotation_log(so)
         poly_attribs = {inkex.addNS('label','inkscape'):poly_name,
                         'transform':poly_transform }
         poly = inkex.etree.SubElement(self.current_layer, 'g', poly_attribs)#the group to put everything in
         
-        #TRANSFORMATION OF THE OBJECT (ROTATION, SCALE, ETC)
+        #TRANFORMATION OF THE OBJECT (ROTATION, SCALE, ETC)
         
         trans_mat = mat(identity(3, float)) #init. trans matrix as identity matrix
         for i in range(1, 7):#for each rotation
@@ -531,4 +520,4 @@ if __name__ == '__main__':
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

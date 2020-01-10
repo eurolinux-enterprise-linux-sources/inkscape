@@ -1,10 +1,10 @@
 /**
  * \file
- * \brief Finding roots of Bernstein-Bezier polynomials
- *//*
+ * \brief  \todo brief description
+ *
  * Authors:
  *      ? <?@?.?>
- *
+ * 
  * Copyright ?-?  authors
  *
  * This library is free software; you can redistribute it and/or
@@ -32,17 +32,14 @@
  *
  */
 
-#ifndef LIB2GEOM_SEEN_SOLVER_H
-#define LIB2GEOM_SEEN_SOLVER_H
-
+#ifndef _SOLVE_SBASIS_H
+#define _SOLVE_SBASIS_H
 #include <2geom/point.h>
 #include <2geom/sbasis.h>
-#include <vector>
 
-namespace Geom {
+namespace Geom{
 
 	class Point;
-	class Bezier;
 
 unsigned
 crossing_count(Geom::Point const *V,	/*  Control pts of Bezier curve	*/
@@ -58,8 +55,6 @@ unsigned
 crossing_count(double const *V,	/*  Control pts of Bezier curve	*/
 	       unsigned degree,	/*  Degree of Bezier curve */
 	       double left_t, double right_t);
-
-
 void
 find_bernstein_roots(
     double const *w, /* The control points  */
@@ -69,13 +64,8 @@ find_bernstein_roots(
     double left_t=0, double right_t=1, bool use_secant=true);
 
 };
-
-void
-find_bernstein_roots(std::vector<double> &solutions, /* RETURN candidate t-values */
-                     Geom::Bezier const& bz,
-                     double left_t, double right_t);
-
 #endif
+
 /*
   Local Variables:
   mode:c++
@@ -85,4 +75,4 @@ find_bernstein_roots(std::vector<double> &solutions, /* RETURN candidate t-value
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

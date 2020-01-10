@@ -1,5 +1,10 @@
-#ifndef SEEN_SP_MISSING_GLYPH_H
-#define SEEN_SP_MISSING_GLYPH_H
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#ifdef ENABLE_SVG_FONTS
+#ifndef __SP_MISSING_GLYPH_H__
+#define __SP_MISSING_GLYPH_H__
 
 /*
  * SVG <missing-glyph> element implementation
@@ -14,27 +19,25 @@
 
 #include "sp-object.h"
 
-#define SP_MISSING_GLYPH(obj) (dynamic_cast<SPMissingGlyph*>((SPObject*)obj))
-#define SP_IS_MISSING_GLYPH(obj) (dynamic_cast<const SPMissingGlyph*>((SPObject*)obj) != NULL)
+#define SP_TYPE_MISSING_GLYPH (sp_missing_glyph_get_type ())
+#define SP_MISSING_GLYPH(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_MISSING_GLYPH, SPMissingGlyph))
+#define SP_MISSING_GLYPH_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_MISSING_GLYPH, SPMissingGlyphClass))
+#define SP_IS_MISSING_GLYPH(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_MISSING_GLYPH))
+#define SP_IS_MISSING_GLYPH_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_MISSING_GLYPH))
 
-class SPMissingGlyph : public SPObject {
-public:
-	SPMissingGlyph();
-	virtual ~SPMissingGlyph();
-
-	char* d;
-
-protected:
-    virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-	virtual void set(unsigned int key, char const* value);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
-
-private:
+struct SPMissingGlyph : public SPObject {
+    char* d;
     double horiz_adv_x;
     double vert_origin_x;
     double vert_origin_y;
     double vert_adv_y;
 };
 
+struct SPMissingGlyphClass {
+	SPObjectClass parent_class;
+};
+
+GType sp_missing_glyph_get_type (void);
+
 #endif //#ifndef __SP_MISSING_GLYPH_H__
+#endif //#ifdef ENABLE_SVG_FONTS

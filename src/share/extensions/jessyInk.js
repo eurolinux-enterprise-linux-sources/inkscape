@@ -1419,7 +1419,18 @@ function slideUpdateExportLayer()
 	}
 
 	// Serialise the new document.
-  window.location = 'data:application/svg+xml;base64;charset=utf-8,' + window.btoa(unescape(encodeURIComponent((new XMLSerializer()).serializeToString(newDoc))));
+	var serializer = new XMLSerializer();
+	var strm = 
+	{
+		content : "",
+		close : function() {},  
+		flush : function() {},  
+		write : function(str, count) { this.content += str; }  
+	};
+
+	var xml = serializer.serializeToStream(newDoc, strm, 'UTF-8');
+
+	window.location = 'data:application/svg+xml;base64;charset=utf-8,' + window.btoa(strm.content);
 
 	// Unsuspend redraw.
 	ROOT_NODE.unsuspendRedraw(suspendHandle);
@@ -2721,7 +2732,3 @@ String.prototype.trim = function()
 	return this.replace(/^\s+|\s+$/g, '');
 }
 
-/** SVGElement.getTransformToElement polyfill */
-SVGElement.prototype.getTransformToElement = SVGElement.prototype.getTransformToElement || function(elem) {
-    return elem.getScreenCTM().inverse().multiply(this.getScreenCTM());
-};

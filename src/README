@@ -14,31 +14,27 @@ and SVG XML editing. It also imports several formats like EPS, Postscript,
 JPEG, PNG, BMP, and TIFF and exports PNG as well as multiple vector-based
 formats.
 
-Inkscape's main motivations are to provide the Open Source community
-with a fully W3C compliant XML, SVG, and CSS2 drawing tool emphasizing a
-lightweight core with powerful features added as extensions, and the
-establishment of a friendly, open, community-oriented development
-processes.
+Inkscape's main motivation is to provide the Open Source community
+with a fully W3C compliant XML, SVG, and CSS2 drawing tool. Additional
+planned work includes conversion of the codebase from C/Gtk to C++/Gtkmm,
+emphasizing a lightweight core with powerful features added through
+an extension mechanism, and the establishment of a friendly, open,
+community-oriented development processes.
 
 
 Basic Installation
 ==================
 
-Inkscape version 0.92 and newer can be build using cmake:
+Inkscape uses the standard procedure for compilation and installation: 
 
-  mkdir build
-  cd build
-  cmake ..
-  make
-  make install
-
-We also still include autoconf in 0.92 as an alternate build system, in
-case anything goes haywire with the new cmake scripts:
-
-  ./autogen.sh   # Optional, use if configure doesn't exist
   ./configure
   make
   make install
+
+If a "./configure" file is not present, you can create it by running
+the "./autogen.sh" command, which calls in turn a number of other
+programs such as automake and autoconf.  See INSTALL for more
+details. 
 
 For platform specific instructions please read the README file that
 is associated with that platform (e.g. for Mac OS X read README.osx)

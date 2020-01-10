@@ -1,65 +1,77 @@
+#define INKSCAPE_LPE_ANGLE_BISECTOR_CPP
+/** \file
+ * LPE <angle_bisector> implementation, used as an example for a base starting class
+ * when implementing new LivePathEffects.
+ *
+ * In vi, three global search-and-replaces will let you rename everything
+ * in this and the .h file:
+ *
+ *   :%s/ANGLE_BISECTOR/YOURNAME/g
+ *   :%s/AngleBisector/Yourname/g
+ *   :%s/angle_bisector/yourname/g
+ */
 /*
  * Authors:
- *   Maximilian Albert <maximilian.albert@gmail.com>
- *   Johan Engelen <j.b.c.engelen@alumnus.utwente.nl>
+ *   Johan Engelen
  *
- * Copyright (C) Authors 2007-2012
+ * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glibmm/i18n.h>
-
 #include "live_effects/lpe-angle_bisector.h"
 
+// You might need to include other 2geom files. You can add them here:
 #include <2geom/path.h>
 #include <2geom/sbasis-to-bezier.h>
 
 #include "sp-lpe-item.h"
-#include "knot-holder-entity.h"
-#include "knotholder.h"
 
 namespace Inkscape {
 namespace LivePathEffect {
 
 namespace AB {
 
-class KnotHolderEntityLeftEnd : public LPEKnotHolderEntity {
+class KnotHolderEntityLeftEnd : public LPEKnotHolderEntity
+{
 public:
-    KnotHolderEntityLeftEnd(LPEAngleBisector* effect) : LPEKnotHolderEntity(effect) {};
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
-    virtual Geom::Point knot_get() const;
+    virtual Geom::Point knot_get();
 };
 
-class KnotHolderEntityRightEnd : public LPEKnotHolderEntity {
+class KnotHolderEntityRightEnd : public LPEKnotHolderEntity
+{
 public:
-    KnotHolderEntityRightEnd(LPEAngleBisector* effect) : LPEKnotHolderEntity(effect) {};
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
-    virtual Geom::Point knot_get() const;
+    virtual Geom::Point knot_get();
 };
 
-} // namespace AB
+} // namespace TtC
 
 LPEAngleBisector::LPEAngleBisector(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    length_left(_("Length left:"), _("Specifies the left end of the bisector"), "length-left", &wr, this, 0),
-    length_right(_("Length right:"), _("Specifies the right end of the bisector"), "length-right", &wr, this, 250)
+    length_left(_("Length left"), _("Specifies the left end of the bisector"), "length-left", &wr, this, 0),
+    length_right(_("Length right"), _("Specifies the right end of the bisector"), "length-right", &wr, this, 250)
 {
     show_orig_path = true;
-    _provides_knotholder_entities = true;
 
     registerParameter( dynamic_cast<Parameter *>(&length_left) );
     registerParameter( dynamic_cast<Parameter *>(&length_right) );
+
+    registerKnotHolderHandle(new AB::KnotHolderEntityLeftEnd(), _("Adjust the \"left\" end of the bisector"));
+    registerKnotHolderHandle(new AB::KnotHolderEntityRightEnd(), _("Adjust the \"right\" of the bisector"));
 }
 
 LPEAngleBisector::~LPEAngleBisector()
 {
 }
 
-Geom::PathVector
-LPEAngleBisector::doEffect_path (Geom::PathVector const & path_in)
+std::vector<Geom::Path>
+LPEAngleBisector::doEffect_path (std::vector<Geom::Path> const & path_in)
 {
     using namespace Geom;
+
+    std::vector<Geom::Path> path_out;
 
     // we assume that the path has >= 3 nodes
     ptA = path_in[0].pointAt(1);
@@ -73,66 +85,61 @@ LPEAngleBisector::doEffect_path (Geom::PathVector const & path_in)
     Geom::Point D = ptA - dir * length_left;
     Geom::Point E = ptA + dir * length_right;
 
-    Piecewise<D2<SBasis> > output = Piecewise<D2<SBasis> >(D2<SBasis>(SBasis(D[X], E[X]), SBasis(D[Y], E[Y])));
+    Piecewise<D2<SBasis> > output = Piecewise<D2<SBasis> >(D2<SBasis>(Linear(D[X], E[X]), Linear(D[Y], E[Y])));
 
     return path_from_piecewise(output, LPE_CONVERSION_TOLERANCE);
 }
-
-void
-LPEAngleBisector::addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item) {
-    {
-        KnotHolderEntity *e = new AB::KnotHolderEntityLeftEnd(this);
-        e->create( desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN,
-                   _("Adjust the \"left\" end of the bisector") );
-        knotholder->add(e);
-    }
-    {
-        KnotHolderEntity *e = new AB::KnotHolderEntityRightEnd(this);
-        e->create( desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN,
-                   _("Adjust the \"right\" end of the bisector") );
-        knotholder->add(e);
-    }
-};
-
 namespace AB {
 
-void
-KnotHolderEntityLeftEnd::knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint state)
+// TODO: make this more generic
+static LPEAngleBisector *
+get_effect(SPItem *item)
 {
-    LPEAngleBisector *lpe = dynamic_cast<LPEAngleBisector *>(_effect);
+    Effect *effect = sp_lpe_item_get_current_lpe(SP_LPE_ITEM(item));
+    if (effect->effectType() != ANGLE_BISECTOR) {
+        g_print ("Warning: Effect is not of type LPEAngleBisector!\n");
+        return NULL;
+    }
+    return static_cast<LPEAngleBisector *>(effect);
+}
 
-    Geom::Point const s = snap_knot_position(p, state);
+void
+KnotHolderEntityLeftEnd::knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint /*state*/)
+{
+    LPEAngleBisector *lpe = get_effect(item);
+    
+    Geom::Point const s = snap_knot_position(p);
 
-    double lambda = Geom::nearest_time(s, lpe->ptA, lpe->dir);
+    double lambda = Geom::nearest_point(s, lpe->ptA, lpe->dir);
     lpe->length_left.param_set_value(-lambda);
 
     sp_lpe_item_update_patheffect (SP_LPE_ITEM(item), false, true);
 }
 
 void
-KnotHolderEntityRightEnd::knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint state)
+KnotHolderEntityRightEnd::knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint /*state*/)
 {
-    LPEAngleBisector *lpe = dynamic_cast<LPEAngleBisector *>(_effect);
+    LPEAngleBisector *lpe = get_effect(item);
+    
+    Geom::Point const s = snap_knot_position(p);
 
-    Geom::Point const s = snap_knot_position(p, state);
-
-    double lambda = Geom::nearest_time(s, lpe->ptA, lpe->dir);
+    double lambda = Geom::nearest_point(s, lpe->ptA, lpe->dir);
     lpe->length_right.param_set_value(lambda);
 
     sp_lpe_item_update_patheffect (SP_LPE_ITEM(item), false, true);
 }
 
 Geom::Point
-KnotHolderEntityLeftEnd::knot_get() const
+KnotHolderEntityLeftEnd::knot_get()
 {
-    LPEAngleBisector const* lpe = dynamic_cast<LPEAngleBisector const*>(_effect);
+    LPEAngleBisector *lpe = get_effect(item);
     return lpe->ptA - lpe->dir * lpe->length_left;
 }
 
 Geom::Point
-KnotHolderEntityRightEnd::knot_get() const
+KnotHolderEntityRightEnd::knot_get()
 {
-    LPEAngleBisector const* lpe = dynamic_cast<LPEAngleBisector const*>(_effect);
+    LPEAngleBisector *lpe = get_effect(item);
     return lpe->ptA + lpe->dir * lpe->length_right;
 }
 

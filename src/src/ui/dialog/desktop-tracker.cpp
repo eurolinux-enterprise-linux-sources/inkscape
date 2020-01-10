@@ -1,3 +1,7 @@
+/**
+ * Glyph selector dialog.
+ */
+
 /* Authors:
  *   Jon A. Cruz
  *
@@ -5,13 +9,13 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "widgets/desktop-widget.h"
 #include <glib-object.h>
 
 #include "desktop-tracker.h"
 
 #include "inkscape.h"
 #include "desktop.h"
+#include "widgets/desktop-widget.h"
 
 namespace Inkscape {
 namespace UI {
@@ -22,6 +26,7 @@ DesktopTracker::DesktopTracker() :
     desktop(0),
     widget(0),
     hierID(0),
+    inkID(0),
     trackActive(false),
     desktopChangedSig()
 {
@@ -40,10 +45,7 @@ void DesktopTracker::connect(GtkWidget *widget)
 
     // Use C/gobject callbacks to avoid gtkmm rewrap-during-destruct issues:
     hierID = g_signal_connect( G_OBJECT(widget), "hierarchy-changed", G_CALLBACK(hierarchyChangeCB), this );
-    inkID = INKSCAPE.signal_activate_desktop.connect(
-              sigc::bind(
-              sigc::ptr_fun(&DesktopTracker::activateDesktopCB), this)
-    );
+    inkID = g_signal_connect( G_OBJECT(INKSCAPE), "activate_desktop", G_CALLBACK(activateDesktopCB), this );
 
     GtkWidget *wdgt = gtk_widget_get_ancestor(widget, SP_TYPE_DESKTOP_WIDGET);
     if (wdgt && !base) {
@@ -62,8 +64,11 @@ void DesktopTracker::disconnect()
         }
         hierID = 0;
     }
-    if (inkID.connected()) {
-        inkID.disconnect();
+    if (inkID) {
+        if (INKSCAPE) {
+            g_signal_handler_disconnect(G_OBJECT(INKSCAPE), inkID);
+        }
+        inkID = 0;
     }
 }
 
@@ -93,12 +98,12 @@ sigc::connection DesktopTracker::connectDesktopChanged( const sigc::slot<void, S
     return desktopChangedSig.connect(slot);
 }
 
-void DesktopTracker::activateDesktopCB(SPDesktop *desktop, DesktopTracker *self )
+gboolean DesktopTracker::activateDesktopCB(Inkscape::Application */*inkscape*/, SPDesktop *desktop, DesktopTracker *self )
 {
     if (self && self->trackActive) {
         self->setDesktop(desktop);
     }
-    //return FALSE;
+    return FALSE;
 }
 
 bool DesktopTracker::hierarchyChangeCB(GtkWidget * /*widget*/, GtkWidget* /*prev*/, DesktopTracker *self)
@@ -151,4 +156,4 @@ void DesktopTracker::setDesktop(SPDesktop *desktop)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

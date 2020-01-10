@@ -1,12 +1,11 @@
-#ifndef SEEN_SP_ITEM_RM_UNSATISFIED_CNS_H
-#define SEEN_SP_ITEM_RM_UNSATISFIED_CNS_H
-
-class SPItem;
+#ifndef __SP_ITEM_RM_UNSATISFIED_CNS_H__
+#define __SP_ITEM_RM_UNSATISFIED_CNS_H__
+#include <forward.h>
 
 void sp_item_rm_unsatisfied_cns(SPItem &item);
 
 
-#endif // SEEN_SP_ITEM_RM_UNSATISFIED_CNS_H
+#endif /* !__SP_ITEM_RM_UNSATISFIED_CNS_H__ */
 
 /*
   Local Variables:
@@ -17,4 +16,4 @@ void sp_item_rm_unsatisfied_cns(SPItem &item);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

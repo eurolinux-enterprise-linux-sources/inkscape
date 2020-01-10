@@ -25,7 +25,6 @@
 class SPDesktop;
 namespace Inkscape {
 class Selection;
-namespace XML { class Node; }
 namespace LivePathEffect { class PathParam; }
 
 namespace UI {
@@ -44,7 +43,6 @@ class ClipboardManager {
 public:
     virtual void copy(SPDesktop *desktop) = 0;
     virtual void copyPathParameter(Inkscape::LivePathEffect::PathParam *) = 0;
-    virtual void copySymbol(Inkscape::XML::Node* symbol, gchar const* style, bool user_symbol = true) = 0;
     virtual bool paste(SPDesktop *desktop, bool in_place = false) = 0;
     virtual bool pasteStyle(SPDesktop *desktop) = 0;
     virtual bool pasteSize(SPDesktop *desktop, bool separately, bool apply_x, bool apply_y) = 0;
@@ -77,4 +75,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

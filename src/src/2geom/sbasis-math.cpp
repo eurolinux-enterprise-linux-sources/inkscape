@@ -34,8 +34,9 @@
 //TODO: define a truncated compose(sb,sb, order) and extend it to pw<sb>.
 //TODO: in all these functions, compute 'order' according to 'tol'.
 
-#include <2geom/d2.h>
 #include <2geom/sbasis-math.h>
+
+#include <2geom/d2-sbasis.h>
 #include <stdio.h>
 #include <math.h>
 //#define ZERO 1e-3
@@ -296,11 +297,11 @@ Piecewise<SBasis> reciprocalOnDomain(Interval range, double tol){
     if (a<=tol){
         reciprocal_fn.push_cut(0);
         int i0=(int) floor(std::log(tol)/std::log(R));
-        a = std::pow(R,i0);
+        a=pow(R,i0);
         reciprocal_fn.push(Linear(1/a),a);
     }else{
         int i0=(int) floor(std::log(a)/std::log(R));
-        a = std::pow(R,i0);
+        a=pow(R,i0);
         reciprocal_fn.cuts.push_back(a);
     }  
 
@@ -348,7 +349,7 @@ Piecewise<SBasis> reciprocal(Piecewise<SBasis> const &f, double tol, int order){
  */
 Piecewise<SBasis> interpolate(std::vector<double> times, std::vector<double> values, unsigned smoothness){
     assert ( values.size() == times.size() );
-    if ( values.empty() ) return Piecewise<SBasis>();
+    if ( values.size() == 0 ) return Piecewise<SBasis>();
     if ( values.size() == 1 ) return Piecewise<SBasis>(values[0]);//what about time??
 
     SBasis sk = shift(Linear(1.),smoothness);
@@ -376,4 +377,4 @@ Piecewise<SBasis> interpolate(std::vector<double> times, std::vector<double> val
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

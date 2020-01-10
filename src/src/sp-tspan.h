@@ -5,11 +5,17 @@
  * tspan and textpath, based on the flowtext routines
  */
 
+#include <glib.h>
 #include "sp-item.h"
 #include "text-tag-attributes.h"
 
-#define SP_TSPAN(obj) (dynamic_cast<SPTSpan*>((SPObject*)obj))
-#define SP_IS_TSPAN(obj) (dynamic_cast<const SPTSpan*>((SPObject*)obj) != NULL)
+
+#define SP_TYPE_TSPAN (sp_tspan_get_type())
+#define SP_TSPAN(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), SP_TYPE_TSPAN, SPTSpan))
+#define SP_TSPAN_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), SP_TYPE_TSPAN, SPTSpanClass))
+#define SP_IS_TSPAN(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), SP_TYPE_TSPAN))
+#define SP_IS_TSPAN_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), SP_TYPE_TSPAN))
+
 
 enum {
     SP_TSPAN_ROLE_UNSPECIFIED,
@@ -17,24 +23,17 @@ enum {
     SP_TSPAN_ROLE_LINE
 };
 
-class SPTSpan : public SPItem {
-public:
-	SPTSpan();
-	virtual ~SPTSpan();
-
-    unsigned int role : 2;
+struct SPTSpan : public SPItem {
+    guint role : 2;
     TextTagAttributes attributes;
-
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-	virtual void set(unsigned int key, const char* value);
-	virtual void update(SPCtx* ctx, unsigned int flags);
-	virtual void modified(unsigned int flags);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
-
-	virtual Geom::OptRect bbox(Geom::Affine const &transform, SPItem::BBoxType type) const;
-        virtual const char* displayName() const;
 };
+
+struct SPTSpanClass {
+    SPItemClass parent_class;
+};
+
+GType sp_tspan_get_type();
+
 
 #endif /* !INKSCAPE_SP_TSPAN_H */
 
@@ -47,4 +46,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

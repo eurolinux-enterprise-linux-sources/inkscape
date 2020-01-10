@@ -10,7 +10,6 @@
 #include "extension/system.h"
 
 #include "spread.h"
-#include <Magick++.h>
 
 namespace Inkscape {
 namespace Extension {
@@ -36,7 +35,7 @@ Spread::init(void)
 		"<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
 			"<name>" N_("Dither") "</name>\n"
 			"<id>org.inkscape.effect.bitmap.spread</id>\n"
-			"<param name=\"amount\" _gui-text=\"" N_("Amount:") "\" type=\"int\" min=\"0\" max=\"100\">3</param>\n"
+			"<param name=\"amount\" gui-text=\"" N_("Amount") "\" type=\"int\" min=\"0\" max=\"100\">3</param>\n"
 			"<effect>\n"
 				"<object-type>all</object-type>\n"
 				"<effects-menu>\n"

@@ -204,6 +204,12 @@ class ShiftSegment
 };
 typedef std::list<ShiftSegment> ShiftSegmentList;
 
+bool cmpShiftSegment(const ShiftSegment& u, const ShiftSegment& v)
+{
+    return u < v;
+}
+
+
 struct Node;
 struct CmpNodePos { bool operator()(const Node* u, const Node* v) const; };
 
@@ -482,7 +488,7 @@ Event **events;
 
 
 // Used for quicksort.  Must return <0, 0, or >0.
-static int compare_events(const void *a, const void *b)
+int compare_events(const void *a, const void *b)
 {
 	Event *ea = *(Event**) a;
 	Event *eb = *(Event**) b;
@@ -1510,7 +1516,7 @@ extern void generateStaticOrthogonalVisGraph(Router *router)
         const int pass = 1;
         processEventVert(router, scanline, segments, events[i], pass);
     }
-    COLA_ASSERT(scanline.empty());
+    COLA_ASSERT(scanline.size() == 0);
     for (unsigned i = 0; i < totalEvents; ++i)
     {
         delete events[i];
@@ -1548,6 +1554,7 @@ extern void generateStaticOrthogonalVisGraph(Router *router)
     // Process the horizontal sweep
     thisPos = (totalEvents > 0) ? events[0]->pos : 0;
     posStartIndex = 0;
+    posFinishIndex = 0;
     for (unsigned i = 0; i <= totalEvents; ++i)
     {
         // If we have finished the current scanline or all events, then we
@@ -1588,7 +1595,7 @@ extern void generateStaticOrthogonalVisGraph(Router *router)
         const int pass = 1;
         processEventHori(router, scanline, vertSegments, events[i], pass);
     }
-    COLA_ASSERT(scanline.empty());
+    COLA_ASSERT(scanline.size() == 0);
     for (unsigned i = 0; i < totalEvents; ++i)
     {
         delete events[i];
@@ -1878,7 +1885,7 @@ static void buildOrthogonalChannelInfo(Router *router,
         processShiftEvent(router, scanline, segmentList, events[i],
                 dim, pass);
     }
-    COLA_ASSERT(scanline.empty());
+    COLA_ASSERT(scanline.size() == 0);
     for (unsigned i = 0; i < totalEvents; ++i)
     {
         delete events[i];

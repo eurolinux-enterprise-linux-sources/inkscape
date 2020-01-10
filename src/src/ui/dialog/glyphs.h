@@ -1,3 +1,7 @@
+/**
+ * Glyph selector dialog.
+ */
+
 /* Authors:
  *   Jon A. Cruz
  *
@@ -7,8 +11,8 @@
 #ifndef SEEN_DIALOGS_GLYPHS_H
 #define SEEN_DIALOGS_GLYPHS_H
 
-#include "ui/widget/panel.h"
 #include <gtkmm/treemodel.h>
+#include "ui/widget/panel.h"
 #include "ui/dialog/desktop-tracker.h"
 
 
@@ -20,12 +24,14 @@ class Label;
 class ListStore;
 }
 
-struct SPFontSelector;
+class SPFontSelector;
 class font_instance;
 
 
 namespace Inkscape {
 namespace UI {
+
+class PreviewHolder;
 
 namespace Dialog {
 
@@ -34,6 +40,7 @@ class GlyphColumns;
 /**
  * A panel that displays character glyphs.
  */
+
 class GlyphsPanel : public Inkscape::UI::Widget::Panel
 {
 public:
@@ -52,7 +59,7 @@ private:
 
     static GlyphColumns *getColumns();
 
-    static void fontChangeCB(SPFontSelector *fontsel, Glib::ustring fontspec, GlyphsPanel *self);
+    static void fontChangeCB(SPFontSelector *fontsel, font_instance *font, GlyphsPanel *self);
 
     void rebuild();
 
@@ -70,7 +77,9 @@ private:
     Gtk::Entry *entry;
     Gtk::Label *label;
     Gtk::Button *insertBtn;
+#if GLIB_CHECK_VERSION(2,14,0)
     Gtk::ComboBoxText *scriptCombo;
+#endif //GLIB_CHECK_VERSION(2,14,0)
     Gtk::ComboBoxText *rangeCombo;
     SPFontSelector *fsel;
     SPDesktop *targetDesktop;
@@ -95,4 +104,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

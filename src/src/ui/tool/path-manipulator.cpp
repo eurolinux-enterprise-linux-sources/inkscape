@@ -1,18 +1,13 @@
-/**
- * @file
- * Path manipulator - implementation.
+/** @file
+ * Path manipulator - implementation
  */
 /* Authors:
  *   Krzysztof Kosiński <tweenk.pl@gmail.com>
- *   Abhishek Sharma
  *
  * Copyright (C) 2009 Authors
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "live_effects/lpe-powerstroke.h"
-#include "live_effects/lpe-bspline.h"
-#include "live_effects/lpe-fillet-chamfer.h"
 #include <string>
 #include <sstream>
 #include <deque>
@@ -20,11 +15,12 @@
 #include <boost/shared_ptr.hpp>
 #include <2geom/bezier-curve.h>
 #include <2geom/bezier-utils.h>
-#include <2geom/path-sink.h>
+#include <2geom/svg-path.h>
+#include <glibmm.h>
 #include <glibmm/i18n.h>
 #include "ui/tool/path-manipulator.h"
 #include "desktop.h"
-
+#include "desktop-handles.h"
 #include "display/sp-canvas.h"
 #include "display/sp-canvas-util.h"
 #include "display/curve.h"
@@ -32,7 +28,6 @@
 #include "document.h"
 #include "live_effects/effect.h"
 #include "live_effects/lpeobject.h"
-#include "live_effects/lpeobject-reference.h"
 #include "live_effects/parameter/path.h"
 #include "sp-path.h"
 #include "helper/geom.h"
@@ -56,10 +51,6 @@ enum PathChange {
 };
 
 } // anonymous namespace
-const double HANDLE_CUBIC_GAP = 0.001;
-const double NO_POWER = 0.0;
-const double DEFAULT_START_POWER = 1.0/3.0;
-
 
 /**
  * Notifies the path manipulator when something changes the path being edited
@@ -108,15 +99,16 @@ private:
 };
 
 void build_segment(Geom::PathBuilder &, Node *, Node *);
+
 PathManipulator::PathManipulator(MultiPathManipulator &mpm, SPPath *path,
-        Geom::Affine const &et, guint32 outline_color, Glib::ustring lpe_key)
+        Geom::Matrix const &et, guint32 outline_color, Glib::ustring lpe_key)
     : PointManipulator(mpm._path_data.node_data.desktop, *mpm._path_data.node_data.selection)
     , _subpaths(*this)
     , _multi_path_manipulator(mpm)
     , _path(path)
     , _spcurve(new SPCurve())
     , _dragpoint(new CurveDragPoint(*this))
-    , /* XML Tree being used here directly while it shouldn't be*/_observer(new PathManipulatorObserver(this, path->getRepr()))
+    , _observer(new PathManipulatorObserver(this, SP_OBJECT(path)->repr))
     , _edit_transform(et)
     , _num_selected(0)
     , _show_handles(true)
@@ -124,11 +116,10 @@ PathManipulator::PathManipulator(MultiPathManipulator &mpm, SPPath *path,
     , _show_path_direction(false)
     , _live_outline(true)
     , _live_objects(true)
-    , _is_bspline(false)
     , _lpe_key(lpe_key)
 {
     if (_lpe_key.empty()) {
-        _i2d_transform = path->i2dt_affine();
+        _i2d_transform = sp_item_i2d_affine(SP_ITEM(path));
     } else {
         _i2d_transform = Geom::identity();
     }
@@ -144,28 +135,26 @@ PathManipulator::PathManipulator(MultiPathManipulator &mpm, SPPath *path,
     sp_canvas_bpath_set_fill(SP_CANVAS_BPATH(_outline), 0, SP_WIND_RULE_NONZERO);
 
     _selection.signal_update.connect(
-        sigc::bind(sigc::mem_fun(*this, &PathManipulator::update), false));
-    _selection.signal_selection_changed.connect(
-        sigc::mem_fun(*this, &PathManipulator::_selectionChangedM));
+        sigc::mem_fun(*this, &PathManipulator::update));
+    _selection.signal_point_changed.connect(
+        sigc::mem_fun(*this, &PathManipulator::_selectionChanged));
     _desktop->signal_zoom_changed.connect(
         sigc::hide( sigc::mem_fun(*this, &PathManipulator::_updateOutlineOnZoomChange)));
 
     _createControlPointsFromGeometry();
-    //Define if the path is BSpline on construction
-    _recalculateIsBSpline();
 }
 
 PathManipulator::~PathManipulator()
 {
     delete _dragpoint;
     delete _observer;
-    sp_canvas_item_destroy(_outline);
+    gtk_object_destroy(_outline);
     _spcurve->unref();
     clear();
 }
 
 /** Handle motion events to update the position of the curve drag point. */
-bool PathManipulator::event(Inkscape::UI::Tools::ToolBase * /*event_context*/, GdkEvent *event)
+bool PathManipulator::event(SPEventContext *event_context, GdkEvent *event)
 {
     if (empty()) return false;
 
@@ -174,8 +163,7 @@ bool PathManipulator::event(Inkscape::UI::Tools::ToolBase * /*event_context*/, G
     case GDK_MOTION_NOTIFY:
         _updateDragPoint(event_point(event->motion));
         break;
-    default:
-        break;
+    default: break;
     }
     return false;
 }
@@ -185,12 +173,10 @@ bool PathManipulator::empty() {
     return !_path || _subpaths.empty();
 }
 
-/** Update the display and the outline of the path.
- * \param alert_LPE if true, alerts an applied LPE to what the path is going to be changed to, so it can adjust its parameters for nicer user interfacing
- */
-void PathManipulator::update(bool alert_LPE)
+/** Update the display and the outline of the path. */
+void PathManipulator::update()
 {
-    _createGeometryFromControlPoints(alert_LPE);
+    _createGeometryFromControlPoints();
 }
 
 /** Store the changes to the path in XML. */
@@ -204,7 +190,7 @@ void PathManipulator::writeXML()
     if (!_path) return;
     _observer->block();
     if (!empty()) {
-        _path->updateRepr();
+        SP_OBJECT(_path)->updateRepr();
         _getXMLNode()->setAttribute(_nodetypesKey().data(), _createTypeString().data());
     } else {
         // this manipulator will have to be destroyed right after this call
@@ -212,7 +198,7 @@ void PathManipulator::writeXML()
         sp_object_ref(_path);
         _path->deleteObject(true, true);
         sp_object_unref(_path);
-        _path = NULL;
+        _path = 0;
     }
     _observer->unblock();
 }
@@ -275,88 +261,6 @@ void PathManipulator::insertNodes()
         }
     }
 }
-
-void PathManipulator::insertNode(Geom::Point pt)
-{
-    Geom::Coord dist = _updateDragPoint(pt);
-    if (dist < 1e-5) { // 1e-6 is too small, as observed occasionally when inserting a node at a snapped intersection of paths
-        insertNode(_dragpoint->getIterator(), _dragpoint->getTimeValue(), true);
-    }
-}
-
-void PathManipulator::insertNode(NodeList::iterator first, double t, bool take_selection)
-{
-    NodeList::iterator inserted = subdivideSegment(first, t);
-    if (take_selection) {
-        _selection.clear();
-    }
-    _selection.insert(inserted.ptr());
-
-    update(true);
-    _commit(_("Add node"));
-}
-
-
-static void
-add_or_replace_if_extremum(std::vector< std::pair<NodeList::iterator, double> > &vec,
-                           double & extrvalue, double testvalue, NodeList::iterator const& node, double t)
-{
-    if (testvalue > extrvalue) {
-        // replace all extreme nodes with the new one
-        vec.clear();
-        vec.push_back( std::pair<NodeList::iterator, double>( node, t ) );
-        extrvalue = testvalue;
-    } else if ( Geom::are_near(testvalue, extrvalue) ) {
-        // very rare but: extremum node at the same extreme value!!! so add it to the list
-        vec.push_back( std::pair<NodeList::iterator, double>( node, t ) );
-    }
-}
-
-/** Insert a new node at the extremum of the selected segments. */
-void PathManipulator::insertNodeAtExtremum(ExtremumType extremum)
-{
-    if (_num_selected < 2) return;
-
-    double sign    = (extremum == EXTR_MIN_X || extremum == EXTR_MIN_Y) ? -1. : 1.;
-    Geom::Dim2 dim = (extremum == EXTR_MIN_X || extremum == EXTR_MAX_X) ? Geom::X : Geom::Y;
-
-    for (SubpathList::iterator subp = _subpaths.begin(); subp != _subpaths.end(); ++subp) {
-        Geom::Coord extrvalue = - Geom::infinity();
-        std::vector< std::pair<NodeList::iterator, double> > extremum_vector;
-
-        for (NodeList::iterator first = (*subp)->begin(); first != (*subp)->end(); ++first) {
-            NodeList::iterator second = first.next();
-            if (second && first->selected() && second->selected()) {
-                add_or_replace_if_extremum(extremum_vector, extrvalue, sign * first->position()[dim], first, 0.);
-                add_or_replace_if_extremum(extremum_vector, extrvalue, sign * second->position()[dim], first, 1.);
-                if (first->front()->isDegenerate() && second->back()->isDegenerate()) {
-                    // a line segment has is extrema at the start and end, no node should be added
-                    continue;
-                } else {
-                    // build 1D cubic bezier curve
-                    Geom::Bezier temp1d(first->position()[dim], first->front()->position()[dim],
-                                        second->back()->position()[dim], second->position()[dim]);
-                    // and determine extremum
-                    Geom::Bezier deriv1d = derivative(temp1d);
-                    std::vector<double> rs = deriv1d.roots();
-                    for (std::vector<double>::iterator it = rs.begin(); it != rs.end(); ++it) {
-                        add_or_replace_if_extremum(extremum_vector, extrvalue, sign * temp1d.valueAt(*it), first, *it);
-                    }
-                }
-            }
-        }
-
-        for (unsigned i = 0; i < extremum_vector.size(); ++i) {
-            // don't insert node at the start or end of a segment, i.e. round values for extr_t
-            double t = extremum_vector[i].second;
-            if ( !Geom::are_near(t - std::floor(t+0.5),0.) )  //  std::floor(t+0.5) is another way of writing round(t)
-            {
-                _selection.insert( subdivideSegment(extremum_vector[i].first, t).ptr() );
-            }
-        }
-    }
-}
-
 
 /** Insert new nodes exactly at the positions of selected nodes while preserving shape.
  * This is equivalent to breaking, except that it doesn't split into subpaths. */
@@ -489,10 +393,7 @@ void PathManipulator::weldSegments()
             if (j->selected()) ++num_selected;
             else ++num_unselected;
         }
-
-        // if 2 or fewer nodes are selected, there can't be any middle points to remove.
-        if (num_selected <= 2) continue;
-
+        if (num_selected < 3) continue;
         if (num_unselected == 0 && sp->closed()) {
             // if all nodes in a closed subpath are selected, the operation doesn't make much sense
             continue;
@@ -522,16 +423,14 @@ void PathManipulator::weldSegments()
             }
             if (num_points > 2) {
                 // remove nodes in the middle
-                // TODO: fit bezier to the former shape
                 sel_beg = sel_beg.next();
                 while (sel_beg != sel_end.prev()) {
                     NodeList::iterator next = sel_beg.next();
                     sp->erase(sel_beg);
                     sel_beg = next;
                 }
+                sel_beg = sel_end;
             }
-            sel_beg = sel_end;
-            // decrease num_selected by the number of points processed
             num_selected -= num_points;
         }
     }
@@ -634,15 +533,13 @@ void PathManipulator::deleteNodes(bool keep_shape)
     }
 }
 
-/**
- * Delete nodes between the two iterators.
+/** @brief Delete nodes between the two iterators.
  * The given range can cross the beginning of the subpath in closed subpaths.
  * @param start      Beginning of the range to delete
  * @param end        End of the range
  * @param keep_shape Whether to fit the handles at surrounding nodes to approximate
  *                   the shape before deletion
- * @return Number of deleted nodes
- */
+ * @return Number of deleted nodes */
 unsigned PathManipulator::_deleteStretch(NodeList::iterator start, NodeList::iterator end, bool keep_shape)
 {
     unsigned const samples_per_segment = 10;
@@ -691,17 +588,6 @@ unsigned PathManipulator::_deleteStretch(NodeList::iterator start, NodeList::ite
         NodeList::iterator next = start.next();
         nl.erase(start);
         start = next;
-    }
-    // if we are removing, we readjust the handlers
-    if(_isBSpline()){
-        if(start.prev()){
-            double bspline_weight = _bsplineHandlePosition(start.prev()->back(), false);
-            start.prev()->front()->setPosition(_bsplineHandleReposition(start.prev()->front(), bspline_weight));
-        }
-        if(end){
-            double bspline_weight = _bsplineHandlePosition(end->front(), false);
-            end->back()->setPosition(_bsplineHandleReposition(end->back(),bspline_weight));
-        }
     }
 
     return del_len;
@@ -840,7 +726,7 @@ void PathManipulator::scaleHandle(Node *n, int which, int dir, bool pixel)
         length_change = 1.0 / _desktop->current_zoom() * dir;
     } else {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-        length_change = prefs->getDoubleLimited("/options/defaultscale/value", 2, 1, 1000, "px");
+        length_change = prefs->getDoubleLimited("/options/defaultscale/value", 2, 1, 1000);
         length_change *= dir;
     }
 
@@ -857,6 +743,7 @@ void PathManipulator::scaleHandle(Node *n, int which, int dir, bool pixel)
     }
     h->setRelativePos(relpos);
     update();
+
     gchar const *key = which < 0 ? "handle:scale:left" : "handle:scale:right";
     _commit(_("Scale handle"), key);
 }
@@ -959,18 +846,9 @@ void PathManipulator::setLiveObjects(bool set)
     _live_objects = set;
 }
 
-void PathManipulator::updateHandles()
+void PathManipulator::setControlsTransform(Geom::Matrix const &tnew)
 {
-    for (SubpathList::iterator i = _subpaths.begin(); i != _subpaths.end(); ++i) {
-        for (NodeList::iterator j = (*i)->begin(); j != (*i)->end(); ++j) {
-            j->updateHandles();
-        }
-    }
-}
-
-void PathManipulator::setControlsTransform(Geom::Affine const &tnew)
-{
-    Geom::Affine delta = _i2d_transform.inverse() * _edit_transform.inverse() * tnew * _i2d_transform;
+    Geom::Matrix delta = _i2d_transform.inverse() * _edit_transform.inverse() * tnew * _i2d_transform;
     _edit_transform = tnew;
     for (SubpathList::iterator i = _subpaths.begin(); i != _subpaths.end(); ++i) {
         for (NodeList::iterator j = (*i)->begin(); j != (*i)->end(); ++j) {
@@ -997,10 +875,6 @@ NodeList::iterator PathManipulator::subdivideSegment(NodeList::iterator first, d
     NodeList &list = NodeList::get(first);
     NodeList::iterator second = first.next();
     if (!second) throw std::invalid_argument("Subdivide after last node in open path");
-    if (first->type() == NODE_SYMMETRIC)
-        first->setType(NODE_SMOOTH, false);
-    if (second->type() == NODE_SYMMETRIC)
-        second->setType(NODE_SMOOTH, false);
 
     // We need to insert the segment after 'first'. We can't simply use 'second'
     // as the point of insertion, because when 'first' is the last node of closed path,
@@ -1020,40 +894,13 @@ NodeList::iterator PathManipulator::subdivideSegment(NodeList::iterator first, d
         Geom::CubicBezier temp(first->position(), first->front()->position(),
             second->back()->position(), second->position());
         std::pair<Geom::CubicBezier, Geom::CubicBezier> div = temp.subdivide(t);
-        std::vector<Geom::Point> seg1 = div.first.controlPoints(), seg2 = div.second.controlPoints();
+        std::vector<Geom::Point> seg1 = div.first.points(), seg2 = div.second.points();
 
         // set new handle positions
         Node *n = new Node(_multi_path_manipulator._path_data.node_data, seg2[0]);
-        if(!_isBSpline()){
-            n->back()->setPosition(seg1[2]);
-            n->front()->setPosition(seg2[1]);
-            n->setType(NODE_SMOOTH, false);
-        } else {
-            Geom::D2< Geom::SBasis > sbasis_inside_nodes;
-            SPCurve *line_inside_nodes = new SPCurve();
-            if(second->back()->isDegenerate()){
-                line_inside_nodes->moveto(n->position());
-                line_inside_nodes->lineto(second->position());
-                sbasis_inside_nodes = line_inside_nodes->first_segment()->toSBasis();
-                Geom::Point next = sbasis_inside_nodes.valueAt(DEFAULT_START_POWER);
-                next = Geom::Point(next[Geom::X] + HANDLE_CUBIC_GAP,next[Geom::Y] + HANDLE_CUBIC_GAP);
-                line_inside_nodes->reset();
-                n->front()->setPosition(next);
-            }else{
-                n->front()->setPosition(seg2[1]);
-            }
-            if(first->front()->isDegenerate()){
-                line_inside_nodes->moveto(n->position());
-                line_inside_nodes->lineto(first->position());
-                sbasis_inside_nodes = line_inside_nodes->first_segment()->toSBasis();
-                Geom::Point previous = sbasis_inside_nodes.valueAt(DEFAULT_START_POWER);
-                previous = Geom::Point(previous[Geom::X] + HANDLE_CUBIC_GAP,previous[Geom::Y] + HANDLE_CUBIC_GAP);
-                n->back()->setPosition(previous);
-            }else{
-                n->back()->setPosition(seg1[2]);
-            }
-            n->setType(NODE_CUSP, false);
-        }
+        n->back()->setPosition(seg1[2]);
+        n->front()->setPosition(seg2[1]);
+        n->setType(NODE_SMOOTH, false);
         inserted = list.insert(insert_at, n);
 
         first->front()->move(seg1[1]);
@@ -1127,8 +974,8 @@ void PathManipulator::_externalChange(unsigned type)
         _updateOutline();
         } break;
     case PATH_CHANGE_TRANSFORM: {
-        Geom::Affine i2d_change = _d2i_transform;
-        _i2d_transform = _path->i2dt_affine();
+        Geom::Matrix i2d_change = _d2i_transform;
+        _i2d_transform = sp_item_i2d_affine(SP_ITEM(_path));
         _d2i_transform = _i2d_transform.inverse();
         i2d_change *= _i2d_transform;
         for (SubpathList::iterator i = _subpaths.begin(); i != _subpaths.end(); ++i) {
@@ -1155,7 +1002,7 @@ void PathManipulator::_createControlPointsFromGeometry()
         // When we erase an element, the next one slides into position,
         // so we do not increment the iterator even though it is theoretically invalidated.
         if (i->empty()) {
-            i = pathv.erase(i);
+            pathv.erase(i);
         } else {
             ++i;
         }
@@ -1165,22 +1012,23 @@ void PathManipulator::_createControlPointsFromGeometry()
     pathv *= (_edit_transform * _i2d_transform);
 
     // in this loop, we know that there are no zero-segment subpaths
-    for (Geom::PathVector::iterator pit = pathv.begin(); pit != pathv.end(); ++pit) {
+    for (Geom::PathVector::const_iterator pit = pathv.begin(); pit != pathv.end(); ++pit) {
         // prepare new subpath
         SubpathPtr subpath(new NodeList(_subpaths));
         _subpaths.push_back(subpath);
 
         Node *previous_node = new Node(_multi_path_manipulator._path_data.node_data, pit->initialPoint());
         subpath->push_back(previous_node);
+        Geom::Curve const &cseg = pit->back_closed();
+        bool fuse_ends = pit->closed()
+            && Geom::are_near(cseg.initialPoint(), cseg.finalPoint());
 
-        bool closed = pit->closed();
-
-        for (Geom::Path::iterator cit = pit->begin(); cit != pit->end(); ++cit) {
+        for (Geom::Path::const_iterator cit = pit->begin(); cit != pit->end_open(); ++cit) {
             Geom::Point pos = cit->finalPoint();
             Node *current_node;
             // if the closing segment is degenerate and the path is closed, we need to move
             // the handle of the first node instead of creating a new one
-            if (closed && cit == --(pit->end())) {
+            if (fuse_ends && cit == --(pit->end_open())) {
                 current_node = subpath->begin().get_pointer();
             } else {
                 /* regardless of segment type, create a new node at the end
@@ -1190,14 +1038,13 @@ void PathManipulator::_createControlPointsFromGeometry()
                 subpath->push_back(current_node);
             }
             // if this is a bezier segment, move handles appropriately
-            // TODO: I don't know why the dynamic cast below doesn't want to work
-            //       when I replace BezierCurve with CubicBezier. Might be a bug
-            //       somewhere in pathv_to_linear_and_cubic_beziers
-            Geom::BezierCurve const *bezier = dynamic_cast<Geom::BezierCurve const*>(&*cit);
-            if (bezier && bezier->order() == 3)
+            if (Geom::CubicBezier const *cubic_bezier =
+                dynamic_cast<Geom::CubicBezier const*>(&*cit))
             {
-                previous_node->front()->setPosition((*bezier)[1]);
-                current_node ->back() ->setPosition((*bezier)[2]);
+                std::vector<Geom::Point> points = cubic_bezier->points();
+
+                previous_node->front()->setPosition(points[1]);
+                current_node ->back() ->setPosition(points[2]);
             }
             previous_node = current_node;
         }
@@ -1209,9 +1056,7 @@ void PathManipulator::_createControlPointsFromGeometry()
     // so that pickBestType works correctly
     // TODO maybe migrate to inkscape:node-types?
     // TODO move this into SPPath - do not manipulate directly
-
-    //XML Tree being used here directly while it shouldn't be.
-    gchar const *nts_raw = _path ? _path->getRepr()->attribute(_nodetypesKey().data()) : 0;
+    gchar const *nts_raw = _path ? _path->repr->attribute(_nodetypesKey().data()) : 0;
     std::string nodetype_string = nts_raw ? nts_raw : "";
     /* Calculate the needed length of the nodetype string.
      * For closed paths, the entry is duplicated for the starting node,
@@ -1241,106 +1086,11 @@ void PathManipulator::_createControlPointsFromGeometry()
     }
 }
 
-//determines if the trace has a bspline effect and the number of steps that it takes
-int PathManipulator::_bsplineGetSteps() const {
-
-    LivePathEffect::LPEBSpline const *lpe_bsp = NULL;
-
-    SPLPEItem * path = dynamic_cast<SPLPEItem *>(_path);
-    if (path){
-        if(path->hasPathEffect()){
-            Inkscape::LivePathEffect::Effect const *this_effect = path->getPathEffectOfType(Inkscape::LivePathEffect::BSPLINE);
-            if(this_effect){
-                lpe_bsp = dynamic_cast<LivePathEffect::LPEBSpline const*>(this_effect->getLPEObj()->get_lpe());
-            }
-        }
-    }
-    int steps = 0;
-    if(lpe_bsp){
-        steps = lpe_bsp->steps+1;
-    }
-    return steps;
-}
-
-// determines if the trace has bspline effect
-void PathManipulator::_recalculateIsBSpline(){
-    if (SP_IS_LPE_ITEM(_path) && _path->hasPathEffect()) {
-        Inkscape::LivePathEffect::Effect const *this_effect = _path->getPathEffectOfType(Inkscape::LivePathEffect::BSPLINE);
-        if(this_effect){
-            _is_bspline = true;
-            return;
-        }
-    }
-    _is_bspline = false;
-}
-
-bool PathManipulator::_isBSpline() const {
-    return  _is_bspline;
-}
-
-// returns the corresponding strength to the position of the handlers
-double PathManipulator::_bsplineHandlePosition(Handle *h, bool check_other)
-{
-    using Geom::X;
-    using Geom::Y;
-    double pos = NO_POWER;
-    Node *n = h->parent();
-    Node * next_node = NULL;
-    next_node = n->nodeToward(h);
-    if(next_node){
-        SPCurve *line_inside_nodes = new SPCurve();
-        line_inside_nodes->moveto(n->position());
-        line_inside_nodes->lineto(next_node->position());
-        if(!are_near(h->position(), n->position())){
-            pos = Geom::nearest_time(Geom::Point(h->position()[X] - HANDLE_CUBIC_GAP, h->position()[Y] - HANDLE_CUBIC_GAP), *line_inside_nodes->first_segment());
-        }
-    }
-    if (pos == NO_POWER && check_other){
-        return _bsplineHandlePosition(h->other(), false);
-    }
-    return pos;
-}
-
-// give the location for the handler in the corresponding position
-Geom::Point PathManipulator::_bsplineHandleReposition(Handle *h, bool check_other)
-{
-    double pos = this->_bsplineHandlePosition(h, check_other);
-    return _bsplineHandleReposition(h,pos);
-}
-
-// give the location for the handler to the specified position
-Geom::Point PathManipulator::_bsplineHandleReposition(Handle *h,double pos){
-    using Geom::X;
-    using Geom::Y;
-    Geom::Point ret = h->position();
-    Node *n = h->parent();
-    Geom::D2< Geom::SBasis > sbasis_inside_nodes;
-    SPCurve *line_inside_nodes = new SPCurve();
-    Node * next_node = NULL;
-    next_node = n->nodeToward(h);
-    if(next_node && pos != NO_POWER){
-        line_inside_nodes->moveto(n->position());
-        line_inside_nodes->lineto(next_node->position());
-        sbasis_inside_nodes = line_inside_nodes->first_segment()->toSBasis();
-        ret = sbasis_inside_nodes.valueAt(pos);
-        ret = Geom::Point(ret[X] + HANDLE_CUBIC_GAP, ret[Y] + HANDLE_CUBIC_GAP);
-    }else{
-        if(pos == NO_POWER){
-            ret = n->position();
-        }
-    }
-    return ret;
-}
-
 /** Construct the geometric representation of nodes and handles, update the outline
- * and display
- * \param alert_LPE if true, first the LPE is warned what the new path is going to be before updating it
- */
-void PathManipulator::_createGeometryFromControlPoints(bool alert_LPE)
+ * and display */
+void PathManipulator::_createGeometryFromControlPoints()
 {
     Geom::PathBuilder builder;
-    //Refresh if is bspline some times -think on path change selection, this value get lost
-    _recalculateIsBSpline();
     for (std::list<SubpathPtr>::iterator spi = _subpaths.begin(); spi != _subpaths.end(); ) {
         SubpathPtr subpath = *spi;
         if (subpath->empty()) {
@@ -1349,6 +1099,7 @@ void PathManipulator::_createGeometryFromControlPoints(bool alert_LPE)
         }
         NodeList::iterator prev = subpath->begin();
         builder.moveTo(prev->position());
+
         for (NodeList::iterator i = ++subpath->begin(); i != subpath->end(); ++i) {
             build_segment(builder, prev.ptr(), i.ptr());
             prev = i;
@@ -1364,29 +1115,8 @@ void PathManipulator::_createGeometryFromControlPoints(bool alert_LPE)
         }
         ++spi;
     }
-    builder.flush();
-    Geom::PathVector pathv = builder.peek() * (_edit_transform * _i2d_transform).inverse();
-    _spcurve->set_pathvector(pathv);
-    if (alert_LPE) {
-        /// \todo note that _path can be an Inkscape::LivePathEffect::Effect* too, kind of confusing, rework member naming?
-        if (SP_IS_LPE_ITEM(_path) && _path->hasPathEffect()) {
-            Inkscape::LivePathEffect::Effect* this_effect = _path->getPathEffectOfType(Inkscape::LivePathEffect::POWERSTROKE);
-            if(this_effect){
-                LivePathEffect::LPEPowerStroke *lpe_pwr = dynamic_cast<LivePathEffect::LPEPowerStroke*>(this_effect->getLPEObj()->get_lpe());
-                if (lpe_pwr) {
-                    lpe_pwr->adjustForNewPath(pathv);
-                }
-            }
-            this_effect = _path->getPathEffectOfType(Inkscape::LivePathEffect::FILLET_CHAMFER);
-            if(this_effect){
-                LivePathEffect::LPEFilletChamfer *lpe_fll = dynamic_cast<LivePathEffect::LPEFilletChamfer*>(this_effect->getLPEObj()->get_lpe());
-                if (lpe_fll) {
-                    lpe_fll->adjustForNewPath(pathv);
-                }
-            }
-        }
-    }
-
+    builder.finish();
+    _spcurve->set_pathvector(builder.peek() * (_edit_transform * _i2d_transform).inverse());
     if (_live_outline)
         _updateOutline();
     if (_live_objects)
@@ -1446,7 +1176,7 @@ void PathManipulator::_updateOutline()
         Geom::PathVector arrows;
         for (Geom::PathVector::iterator i = pv.begin(); i != pv.end(); ++i) {
             Geom::Path &path = *i;
-            for (Geom::Path::iterator j = path.begin(); j != path.end_default(); ++j) {
+            for (Geom::Path::const_iterator j = path.begin(); j != path.end_default(); ++j) {
                 Geom::Point at = j->pointAt(0.5);
                 Geom::Point ut = j->unitTangentAt(0.5);
                 // rotate the point 
@@ -1480,11 +1210,7 @@ void PathManipulator::_getGeometry()
         }
     } else {
         _spcurve->unref();
-        _spcurve = _path->get_curve_for_edit();
-        // never allow NULL to sneak in here!
-        if (_spcurve == NULL) {
-            _spcurve = new SPCurve();
-        }
+        _spcurve = sp_path_get_curve_for_edit(_path);
     }
 }
 
@@ -1492,6 +1218,7 @@ void PathManipulator::_getGeometry()
 void PathManipulator::_setGeometry()
 {
     using namespace Inkscape::LivePathEffect;
+    if (empty()) return;
 
     if (!_lpe_key.empty()) {
         // copied from nodepath.cpp
@@ -1504,15 +1231,10 @@ void PathManipulator::_setGeometry()
             LIVEPATHEFFECT(_path)->requestModified(SP_OBJECT_MODIFIED_FLAG);
         }
     } else {
-        if (empty()) return;
-        if (SPCurve * original = _path->get_original_curve()){
-            if(!_spcurve->is_equal(original)) {
-                _path->set_original_curve(_spcurve, false, false);
-                delete original;
-            }
-        } else if(!_spcurve->is_equal(_path->get_curve())) {
-            _path->setCurve(_spcurve, false);
-        }
+        if (_path->repr->attribute("inkscape:original-d"))
+            sp_path_set_original_curve(_path, _spcurve, false, false);
+        else
+            sp_shape_set_curve(SP_SHAPE(_path), _spcurve, false);
     }
 }
 
@@ -1527,10 +1249,8 @@ Glib::ustring PathManipulator::_nodetypesKey()
  * This method is wrong but necessary at the moment. */
 Inkscape::XML::Node *PathManipulator::_getXMLNode()
 {
-    //XML Tree being used here directly while it shouldn't be.
-    if (_lpe_key.empty()) return _path->getRepr();
-    //XML Tree being used here directly while it shouldn't be.
-    return LIVEPATHEFFECT(_path)->getRepr();
+    if (_lpe_key.empty()) return _path->repr;
+    return LIVEPATHEFFECT(_path)->repr;
 }
 
 bool PathManipulator::_nodeClicked(Node *n, GdkEventButton *event)
@@ -1551,9 +1271,8 @@ bool PathManipulator::_nodeClicked(Node *n, GdkEventButton *event)
         }
 
         if (!empty()) { 
-            update(true);
+            update();
         }
-
         // We need to call MPM's method because it could have been our last node
         _multi_path_manipulator._doneWithCleanup(_("Delete node"));
 
@@ -1591,12 +1310,6 @@ bool PathManipulator::_handleClicked(Handle *h, GdkEventButton *event)
         return true;
     }
     return false;
-}
-
-void PathManipulator::_selectionChangedM(std::vector<SelectableControlPoint *> pvec, bool selected) {
-    for (size_t n = 0, e = pvec.size(); n < e; ++n) {
-        _selectionChanged(pvec[n], selected);
-    }
 }
 
 void PathManipulator::_selectionChanged(SelectableControlPoint *p, bool selected)
@@ -1655,52 +1368,45 @@ void PathManipulator::_removeNodesFromSelection()
 void PathManipulator::_commit(Glib::ustring const &annotation)
 {
     writeXML();
-    DocumentUndo::done(_desktop->getDocument(), SP_VERB_CONTEXT_NODE, annotation.data());
+    sp_document_done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_NODE, annotation.data());
 }
 
 void PathManipulator::_commit(Glib::ustring const &annotation, gchar const *key)
 {
     writeXML();
-    DocumentUndo::maybeDone(_desktop->getDocument(), key, SP_VERB_CONTEXT_NODE,
-                            annotation.data());
+    sp_document_maybe_done(sp_desktop_document(_desktop), key, SP_VERB_CONTEXT_NODE,
+            annotation.data());
 }
 
 /** Update the position of the curve drag point such that it is over the nearest
  * point of the path. */
-Geom::Coord PathManipulator::_updateDragPoint(Geom::Point const &evp)
+void PathManipulator::_updateDragPoint(Geom::Point const &evp)
 {
-    Geom::Coord dist = HUGE_VAL;
-
-    Geom::Affine to_desktop = _edit_transform * _i2d_transform;
+    Geom::Matrix to_desktop = _edit_transform * _i2d_transform;
     Geom::PathVector pv = _spcurve->get_pathvector();
-
-    boost::optional<Geom::PathVectorTime> pvp =
-        pv.nearestTime(_desktop->w2d(evp) * to_desktop.inverse());
-    if (!pvp) return dist;
-    Geom::Point nearest_pt = _desktop->d2w(pv.pointAt(*pvp) * to_desktop);
-
-    double fracpart = pvp->t;
-    std::list<SubpathPtr>::iterator spi = _subpaths.begin();
-    for (unsigned i = 0; i < pvp->path_index; ++i, ++spi) {}
-    NodeList::iterator first = (*spi)->before(pvp->asPathTime());
+    boost::optional<Geom::PathVectorPosition> pvp
+        = Geom::nearestPoint(pv, _desktop->w2d(evp) * to_desktop.inverse());
+    if (!pvp) return;
+    Geom::Point nearest_point = _desktop->d2w(pv.at(pvp->path_nr).pointAt(pvp->t) * to_desktop);
     
-    dist = Geom::distance(evp, nearest_pt);
-
+    double fracpart;
+    std::list<SubpathPtr>::iterator spi = _subpaths.begin();
+    for (unsigned i = 0; i < pvp->path_nr; ++i, ++spi) {}
+    NodeList::iterator first = (*spi)->before(pvp->t, &fracpart);
+    
     double stroke_tolerance = _getStrokeTolerance();
     if (first && first.next() &&
         fracpart != 0.0 &&
-        dist < stroke_tolerance)
+        Geom::distance(evp, nearest_point) < stroke_tolerance)
     {
         _dragpoint->setVisible(true);
-        _dragpoint->setPosition(_desktop->w2d(nearest_pt));
+        _dragpoint->setPosition(_desktop->w2d(nearest_point));
         _dragpoint->setSize(2 * stroke_tolerance);
         _dragpoint->setTimeValue(fracpart);
         _dragpoint->setIterator(first);
     } else {
         _dragpoint->setVisible(false);
     }
-
-    return dist;
 }
 
 /// This is called on zoom change to update the direction arrows
@@ -1717,8 +1423,8 @@ double PathManipulator::_getStrokeTolerance()
      * drag tolerance setting.  */
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     double ret = prefs->getIntLimited("/options/dragtolerance/value", 2, 0, 100);
-    if (_path && _path->style && !_path->style->stroke.isNone()) {
-        ret += _path->style->stroke_width.computed * 0.5
+    if (_path && SP_OBJECT_STYLE(_path) && !SP_OBJECT_STYLE(_path)->stroke.isNone()) {
+        ret += SP_OBJECT_STYLE(_path)->stroke_width.computed * 0.5
             * (_edit_transform * _i2d_transform).descrim() // scale to desktop coords
             * _desktop->current_zoom(); // == _d2w.descrim() - scale to window coords
     }
@@ -1737,4 +1443,4 @@ double PathManipulator::_getStrokeTolerance()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

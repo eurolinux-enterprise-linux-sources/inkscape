@@ -18,13 +18,10 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
-# local library
-import inkex
-import cubicsuperpath
-import bezmisc
-import simplestyle
+
+import inkex, cubicsuperpath, bezmisc, simplestyle
 
 def tpoint((x1,y1), (x2,y2), t = 0.5):
     return [x1+t*(x2-x1),y1+t*(y2-y1)]
@@ -47,41 +44,22 @@ def cspseglength(sp1,sp2, tolerance = 0.001):
 class SplitIt(inkex.Effect):
     def __init__(self):
         inkex.Effect.__init__(self)
-        self.not_converted = []
 
     def effect(self):
-        for i, node in self.selected.iteritems():
-            self.convert2dash(node)
-        if len(self.not_converted):
-            inkex.errormsg(_('Total number of objects not converted: {}\n').format(len(self.not_converted)))
-            # return list of IDs in case the user needs to find a specific object
-            inkex.debug(self.not_converted)
-
-    def convert2dash(self, node):
-        if node.tag == inkex.addNS('g', 'svg'):
-            for child in node:
-                self.convert2dash(child)
-        else:
+        for id, node in self.selected.iteritems():
             if node.tag == inkex.addNS('path','svg'):
                 dashes = []
-                offset = 0
                 style = simplestyle.parseStyle(node.get('style'))
                 if style.has_key('stroke-dasharray'):
                     if style['stroke-dasharray'].find(',') > 0:
                         dashes = [float (dash) for dash in style['stroke-dasharray'].split(',')]
-                if style.has_key('stroke-dashoffset'):
-                    offset = style['stroke-dashoffset']
                 if dashes:
                     p = cubicsuperpath.parsePath(node.get('d'))
                     new = []
                     for sub in p:
                         idash = 0
                         dash = dashes[0]
-                        length = float (offset)
-                        while dash < length:
-                            length = length - dash
-                            idash = (idash + 1) % len(dashes)
-                            dash = dashes[idash]
+                        length = 0
                         new.append([sub[0][:]])
                         i = 1
                         while i < len(sub):
@@ -104,10 +82,6 @@ class SplitIt(inkex.Effect):
                     node.set('d',cubicsuperpath.formatPath(new))
                     del style['stroke-dasharray']
                     node.set('style', simplestyle.formatStyle(style))
-                    if node.get(inkex.addNS('type','sodipodi')):
-                        del node.attrib[inkex.addNS('type', 'sodipodi')]
-            else:
-                self.not_converted.append(node.get('id'))
 
 if __name__ == '__main__':
     e = SplitIt()

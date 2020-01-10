@@ -4,21 +4,19 @@
  * Copyright (C) 2003  Ettore Perazzoli,
  *               2007  Naba Kumar
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of version 2 of the GNU General Public
+ * License as published by the Free Software Foundation.
  *
- * This library is distributed in the hope that it will be useful,
+ * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Library General Public License for more details.
+ * General Public License for more details.
  *
- * You should have received a copy of the GNU Library General Public
- * License along with this library; if not, write to the
+ * You should have received a copy of the GNU General Public
+ * License along with this program; if not, write to the
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
- *
  *
  * Copied and adapted from ESidebar.[ch] from evolution
  * 
@@ -32,10 +30,15 @@
 
 #include "gdl-i18n.h"
 #include "gdl-switcher.h"
+#include "gdl-tools.h"
 #include "libgdlmarshal.h"
 #include "libgdltypebuiltins.h"
 
 #include <gtk/gtk.h>
+
+#if HAVE_GNOME
+#include <gconf/gconf-client.h>
+#endif
 
 static void gdl_switcher_set_property  (GObject            *object,
                                         guint               prop_id,
@@ -50,10 +53,9 @@ static void gdl_switcher_add_button  (GdlSwitcher *switcher,
                                       const gchar *label,
                                       const gchar *tooltips,
                                       const gchar *stock_id,
-                                      GdkPixbuf *pixbuf_icon,
-                                      gint switcher_id,
-                                      GtkWidget *page);
-/* static void gdl_switcher_remove_button (GdlSwitcher *switcher, gint switcher_id); */
+                                      const GdkPixbuf *pixbuf_icon,
+                                      gint switcher_id);
+static void gdl_switcher_remove_button (GdlSwitcher *switcher, gint switcher_id);
 static void gdl_switcher_select_page (GdlSwitcher *switcher, gint switcher_id);
 static void gdl_switcher_select_button (GdlSwitcher *switcher, gint switcher_id);
 static void gdl_switcher_set_show_buttons (GdlSwitcher *switcher, gboolean show);
@@ -72,7 +74,7 @@ typedef struct {
     GtkWidget *icon;
     GtkWidget *arrow;
     GtkWidget *hbox;
-    GtkWidget *page;
+    GtkTooltips *tooltips;
     int id;
 } Button;
 
@@ -88,7 +90,7 @@ struct _GdlSwitcherPrivate {
     gboolean in_toggle;
 };
 
-G_DEFINE_TYPE (GdlSwitcher, gdl_switcher, GTK_TYPE_NOTEBOOK)
+GDL_CLASS_BOILERPLATE (GdlSwitcher, gdl_switcher, GtkNotebook, GTK_TYPE_NOTEBOOK)
 
 #define INTERNAL_MODE(switcher)  (switcher->priv->switcher_style == \
             GDL_SWITCHER_STYLE_TOOLBAR ? switcher->priv->toolbar_style : \
@@ -99,36 +101,9 @@ G_DEFINE_TYPE (GdlSwitcher, gdl_switcher, GTK_TYPE_NOTEBOOK)
 
 /* Utility functions.  */
 
-static void
-gdl_switcher_long_name_changed (GObject* object,
-                                GParamSpec* spec,
-                                gpointer user_data)
-{
-    Button* button = user_data;
-    gchar* label;
-
-    g_object_get (object, "long-name", &label, NULL);
-    gtk_label_set_text (GTK_LABEL (button->label), label);
-    g_free (label);
-}
-
-static void
-gdl_switcher_stock_id_changed (GObject* object,
-                               GParamSpec* spec,
-                               gpointer user_data)
-{
-    Button* button = user_data;
-    gchar* id;
-
-    g_object_get (object, "stock-id", &id, NULL);
-    gtk_image_set_from_stock (GTK_IMAGE(button->icon), id, GTK_ICON_SIZE_MENU);
-    g_free (id);
-}
-
-
 static Button *
 button_new (GtkWidget *button_widget, GtkWidget *label, GtkWidget *icon,
-            GtkWidget *arrow, GtkWidget *hbox, int id, GtkWidget *page)
+            GtkTooltips *tooltips, GtkWidget *arrow, GtkWidget *hbox, int id)
 {
     Button *button = g_new (Button, 1);
 
@@ -137,19 +112,15 @@ button_new (GtkWidget *button_widget, GtkWidget *label, GtkWidget *icon,
     button->icon = icon;
     button->arrow = arrow;
     button->hbox = hbox;
+    button->tooltips = tooltips;
     button->id = id;
-    button->page = page;
 
-    g_signal_connect (page, "notify::long-name", G_CALLBACK (gdl_switcher_long_name_changed), 
-                      button);
-    g_signal_connect (page, "notify::stock-id", G_CALLBACK (gdl_switcher_stock_id_changed), 
-                      button);
-    
     g_object_ref (button_widget);
     g_object_ref (label);
     g_object_ref (icon);
     g_object_ref (arrow);
     g_object_ref (hbox);
+    g_object_ref (tooltips);
 
     return button;
 }
@@ -157,17 +128,11 @@ button_new (GtkWidget *button_widget, GtkWidget *label, GtkWidget *icon,
 static void
 button_free (Button *button)
 {
-    g_signal_handlers_disconnect_by_func (button->page,
-                                          gdl_switcher_long_name_changed,
-                                          button);
-    g_signal_handlers_disconnect_by_func (button->page,
-                                          gdl_switcher_stock_id_changed,
-                                          button);    
-    
     g_object_unref (button->button_widget);
     g_object_unref (button->label);
     g_object_unref (button->icon);
     g_object_unref (button->hbox);
+    g_object_unref (button->tooltips);
     g_free (button);
 }
 
@@ -255,12 +220,12 @@ button_toggled_callback (GtkToggleButton *toggle_button,
 static int
 layout_buttons (GdlSwitcher *switcher)
 {
-    GtkRequisition client_requisition = {0,0};
-    GtkAllocation allocation;
+    GtkRequisition client_requisition;
+    GtkAllocation *allocation = & GTK_WIDGET (switcher)->allocation;
     GdlSwitcherStyle switcher_style;
     gboolean icons_only;
     int num_btns = g_slist_length (switcher->priv->buttons);
-    unsigned int btns_per_row;
+    int btns_per_row;
     GSList **rows, *p;
     Button *button;
     int row_number;
@@ -271,14 +236,13 @@ layout_buttons (GdlSwitcher *switcher)
     int i;
     int rows_count;
     int last_buttons_height;
-
-    gtk_widget_get_allocation (GTK_WIDGET (switcher), &allocation);
     
     last_buttons_height = switcher->priv->buttons_height_request;
     
-    GTK_WIDGET_CLASS (gdl_switcher_parent_class)->size_request (GTK_WIDGET (switcher), &client_requisition);
+    GDL_CALL_PARENT (GTK_WIDGET_CLASS, size_request,
+                     (GTK_WIDGET (switcher), &client_requisition));
 
-    y = allocation.y + allocation.height - V_PADDING - 1;
+    y = allocation->y + allocation->height - V_PADDING - 1;
 
     if (num_btns == 0)
         return y;
@@ -300,12 +264,12 @@ layout_buttons (GdlSwitcher *switcher)
     }
 
     /* Figure out how many rows and columns we'll use. */
-    btns_per_row = allocation.width / (max_btn_width + H_PADDING);
+    btns_per_row = allocation->width / (max_btn_width + H_PADDING);
     /* Use at least one column */
     if (btns_per_row == 0) btns_per_row = 1;
     
     /* If all the buttons could fit in the single row, have it so */
-    if (allocation.width >= optimal_layout_width)
+    if (allocation->width >= optimal_layout_width)
     {
         btns_per_row = num_btns;
     }
@@ -320,8 +284,8 @@ layout_buttons (GdlSwitcher *switcher)
 
     rows_count = num_btns / btns_per_row;
     if (num_btns % btns_per_row != 0)
-	rows_count++;
-    
+        rows_count++;
+     
     /* Assign buttons to rows */
     rows = g_new0 (GSList *, rows_count);
 
@@ -370,67 +334,62 @@ layout_buttons (GdlSwitcher *switcher)
     if (last_buttons_height > switcher->priv->buttons_height_request)
     {
         gtk_widget_queue_resize (GTK_WIDGET (switcher));
-        y = -1; // set return value
+        return -1;
     }
-    else
-    {
-        /* Layout the buttons. */
-        for (i = row_last; i >= 0; i --) {
-            int len, extra_width;
-            
-            y -= max_btn_height;
+    
+    /* Layout the buttons. */
+    for (i = row_last; i >= 0; i --) {
+        int len, extra_width;
+        
+        y -= max_btn_height;
 
-            /* Check for possible size over flow (taking into account client
-             * requisition
-             */
-            if (y < (allocation.y + client_requisition.height)) {
-                /* We have an overflow: Insufficient allocation */
-                if (last_buttons_height < switcher->priv->buttons_height_request) {
-                    /* Request for a new resize */
-                    gtk_widget_queue_resize (GTK_WIDGET (switcher));
-                    y = -1; // set return value
-                    goto exit;
-                }
+        /* Check for possible size over flow (taking into account client
+         * requisition
+         */
+        if (y < (allocation->y + client_requisition.height)) {
+            /* We have an overflow: Insufficient allocation */
+            if (last_buttons_height < switcher->priv->buttons_height_request) {
+                /* Request for a new resize */
+                gtk_widget_queue_resize (GTK_WIDGET (switcher));
+                return -1;
             }
-            x = H_PADDING + allocation.x;
-            len = g_slist_length (rows[i]);
-            if (switcher_style == GDL_SWITCHER_STYLE_TEXT ||
-                switcher_style == GDL_SWITCHER_STYLE_BOTH)
-                extra_width = (allocation.width - (len * max_btn_width )
-                               - (len * H_PADDING)) / len;
-            else
-                extra_width = 0;
-            for (p = rows [i]; p != NULL; p = p->next) {
-                GtkAllocation child_allocation;
-                
-                child_allocation.x = x;
-                child_allocation.y = y;
-                if (rows_count == 1 && row_number == 0)
-                {
-                    GtkRequisition child_requisition;
-                    gtk_widget_size_request (GTK_WIDGET (p->data),
-                                             &child_requisition);
-                    child_allocation.width = child_requisition.width;
-                }
-                else
-                {
-                    child_allocation.width = max_btn_width + extra_width;
-                }
-                child_allocation.height = max_btn_height;
-
-                gtk_widget_size_allocate (GTK_WIDGET (p->data), &child_allocation);
-
-                x += child_allocation.width + H_PADDING;
-            }
-
-            y -= V_PADDING;
         }
-    }
+        x = H_PADDING + allocation->x;
+        len = g_slist_length (rows[i]);
+        if (switcher_style == GDL_SWITCHER_STYLE_TEXT ||
+            switcher_style == GDL_SWITCHER_STYLE_BOTH)
+            extra_width = (allocation->width - (len * max_btn_width )
+                           - (len * H_PADDING)) / len;
+        else
+            extra_width = 0;
+        for (p = rows [i]; p != NULL; p = p->next) {
+            GtkAllocation child_allocation;
+            
+            child_allocation.x = x;
+            child_allocation.y = y;
+            if (rows_count == 1 && row_number == 0)
+            {
+                GtkRequisition child_requisition;
+                gtk_widget_size_request (GTK_WIDGET (p->data),
+                                         &child_requisition);
+                child_allocation.width = child_requisition.width;
+            }
+            else
+            {
+                child_allocation.width = max_btn_width + extra_width;
+            }
+            child_allocation.height = max_btn_height;
 
-  exit:
-    for (i = 0; i <= row_last; i ++) {
-        g_slist_free (rows [i]);
+            gtk_widget_size_allocate (GTK_WIDGET (p->data), &child_allocation);
+
+            x += child_allocation.width + H_PADDING;
+        }
+
+        y -= V_PADDING;
     }
+    
+    for (i = 0; i <= row_last; i ++)
+        g_slist_free (rows [i]);
     g_free (rows);
 
     return y;
@@ -439,27 +398,26 @@ layout_buttons (GdlSwitcher *switcher)
 static void
 do_layout (GdlSwitcher *switcher)
 {
-    GtkAllocation allocation;
+    GtkAllocation *allocation = & GTK_WIDGET (switcher)->allocation;
     GtkAllocation child_allocation;
     int y;
 
-    gtk_widget_get_allocation (GTK_WIDGET (switcher), &allocation);
-    
     if (switcher->priv->show) {
         y = layout_buttons (switcher);
         if (y < 0) /* Layout did not happen and a resize was requested */
             return;
     }
     else
-        y = allocation.y + allocation.height;
+        y = allocation->y + allocation->height;
     
     /* Place the parent widget.  */
-    child_allocation.x = allocation.x;
-    child_allocation.y = allocation.y;
-    child_allocation.width = allocation.width;
-    child_allocation.height = y - allocation.y;
+    child_allocation.x = allocation->x;
+    child_allocation.y = allocation->y;
+    child_allocation.width = allocation->width;
+    child_allocation.height = y - allocation->y;
     
-    GTK_WIDGET_CLASS (gdl_switcher_parent_class)->size_allocate (GTK_WIDGET (switcher), &child_allocation);
+    GDL_CALL_PARENT (GTK_WIDGET_CLASS, size_allocate,
+                     (GTK_WIDGET (switcher), &child_allocation));
 }
 
 /* GtkContainer methods.  */
@@ -472,9 +430,9 @@ gdl_switcher_forall (GtkContainer *container, gboolean include_internals,
         GDL_SWITCHER (container);
     GSList *p;
     
-    GTK_CONTAINER_CLASS (gdl_switcher_parent_class)->forall (GTK_CONTAINER (switcher), 
-                                                             include_internals,
-                                                             callback, callback_data);
+    GDL_CALL_PARENT (GTK_CONTAINER_CLASS, forall,
+                     (GTK_CONTAINER (switcher), include_internals,
+                      callback, callback_data));
     if (include_internals) {
         for (p = switcher->priv->buttons; p != NULL; p = p->next) {
             GtkWidget *widget = ((Button *) p->data)->button_widget;
@@ -504,7 +462,8 @@ gdl_switcher_remove (GtkContainer *container, GtkWidget *widget)
             break;
         }
     }
-    GTK_CONTAINER_CLASS (gdl_switcher_parent_class)->remove (GTK_CONTAINER (switcher), widget);
+    GDL_CALL_PARENT (GTK_CONTAINER_CLASS, remove,
+                     (GTK_CONTAINER (switcher), widget));
 }
 
 /* GtkWidget methods.  */
@@ -516,7 +475,8 @@ gdl_switcher_size_request (GtkWidget *widget, GtkRequisition *requisition)
     GSList *p;
     gint button_height = 0;
     
-    GTK_WIDGET_CLASS (gdl_switcher_parent_class)->size_request (GTK_WIDGET (switcher), requisition);
+    GDL_CALL_PARENT (GTK_WIDGET_CLASS, size_request,
+                     (GTK_WIDGET (switcher), requisition));
 
     if (!switcher->priv->show)
         return;
@@ -543,7 +503,7 @@ gdl_switcher_size_request (GtkWidget *widget, GtkRequisition *requisition)
 static void
 gdl_switcher_size_allocate (GtkWidget *widget, GtkAllocation *allocation)
 {
-    gtk_widget_set_allocation (widget, allocation);
+    widget->allocation = *allocation;
     do_layout (GDL_SWITCHER (widget));
 }
 
@@ -559,7 +519,8 @@ gdl_switcher_expose (GtkWidget *widget, GdkEventExpose *event)
                                             button, event);
         }
     }
-    return GTK_WIDGET_CLASS (gdl_switcher_parent_class)->expose_event (widget, event);
+    return GDL_CALL_PARENT_WITH_DEFAULT (GTK_WIDGET_CLASS, expose_event,
+                                  (widget, event), FALSE);
 }
 
 static void
@@ -574,7 +535,7 @@ gdl_switcher_map (GtkWidget *widget)
             gtk_widget_map (button);
         }
     }
-    GTK_WIDGET_CLASS (gdl_switcher_parent_class)->map (widget);
+    GDL_CALL_PARENT (GTK_WIDGET_CLASS, map, (widget));
 }
 
 /* GObject methods.  */
@@ -634,7 +595,7 @@ gdl_switcher_dispose (GObject *object)
     g_slist_free (priv->buttons);
     priv->buttons = NULL;
 
-    G_OBJECT_CLASS (gdl_switcher_parent_class)->dispose (object);
+    GDL_CALL_PARENT (G_OBJECT_CLASS, dispose, (object));
 }
 
 static void
@@ -644,7 +605,7 @@ gdl_switcher_finalize (GObject *object)
 
     g_free (priv);
 
-    G_OBJECT_CLASS (gdl_switcher_parent_class)->finalize (object);
+    GDL_CALL_PARENT (G_OBJECT_CLASS, finalize, (object));
 }
 
 /* Signal handlers */
@@ -653,15 +614,22 @@ static void
 gdl_switcher_notify_cb (GObject *g_object, GParamSpec *pspec,
                         GdlSwitcher *switcher) 
 {
+    gboolean show_tabs;
+    g_return_if_fail (switcher != NULL && GDL_IS_SWITCHER (switcher));
+    show_tabs = gtk_notebook_get_show_tabs (GTK_NOTEBOOK (switcher));
+    gdl_switcher_set_show_buttons (switcher, !show_tabs);
 }
 
 static void
-gdl_switcher_switch_page_cb (GtkNotebook *nb, GtkWidget *page_widget,
+gdl_switcher_switch_page_cb (GtkNotebook *nb, GtkNotebookPage *page,
                              gint page_num, GdlSwitcher *switcher)
 {
+    GtkWidget       *page_widget;
+    GtkWidget       *tablabel;
     gint             switcher_id;
     
     /* Change switcher button */
+    page_widget = gtk_notebook_get_nth_page (nb, page_num);
     switcher_id = gdl_switcher_get_page_id (page_widget);
     gdl_switcher_select_button (GDL_SWITCHER (switcher), switcher_id);
 }
@@ -671,13 +639,11 @@ gdl_switcher_page_added_cb (GtkNotebook *nb, GtkWidget *page,
                             gint page_num, GdlSwitcher *switcher)
 {
     gint         switcher_id;
-
-    (void)nb;
-    (void)page_num;
+ 
     switcher_id = gdl_switcher_get_page_id (page);
     
     gdl_switcher_add_button (GDL_SWITCHER (switcher), NULL, NULL, NULL, NULL,
-                             switcher_id, page);
+                             switcher_id);
     gdl_switcher_select_button (GDL_SWITCHER (switcher), switcher_id);
 }
 
@@ -715,6 +681,7 @@ gdl_switcher_select_page (GdlSwitcher *switcher, gint id)
 static void
 gdl_switcher_class_init (GdlSwitcherClass *klass)
 {
+    GtkNotebookClass *notebook_class = GTK_NOTEBOOK_CLASS (klass);
     GtkContainerClass *container_class = GTK_CONTAINER_CLASS (klass);
     GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
     GObjectClass *object_class = G_OBJECT_CLASS (klass);
@@ -739,23 +706,14 @@ gdl_switcher_class_init (GdlSwitcherClass *klass)
                            GDL_TYPE_SWITCHER_STYLE,
                            GDL_SWITCHER_STYLE_BOTH,
                            G_PARAM_READWRITE));
-    
-    gtk_rc_parse_string ("style \"gdl-button-style\"\n"
-                         "{\n"
-                         "GtkWidget::focus-padding = 1\n"
-                         "GtkWidget::focus-line-width = 1\n"
-                         "xthickness = 0\n"
-                         "ythickness = 0\n"
-                         "}\n"
-                         "widget \"*.gdl-button\" style \"gdl-button-style\"");
 }
 
 static void
-gdl_switcher_init (GdlSwitcher *switcher)
+gdl_switcher_instance_init (GdlSwitcher *switcher)
 {
     GdlSwitcherPrivate *priv;
 
-    gtk_widget_set_has_window (GTK_WIDGET (switcher), FALSE);
+    GTK_WIDGET_SET_FLAGS (switcher, GTK_NO_WINDOW);
   
     priv = g_new0 (GdlSwitcherPrivate, 1);
     switcher->priv = priv;
@@ -784,21 +742,19 @@ gdl_switcher_new (void)
     return GTK_WIDGET (switcher);
 }
 
-static void
+void
 gdl_switcher_add_button (GdlSwitcher *switcher, const gchar *label,
                          const gchar *tooltips, const gchar *stock_id,
-			 GdkPixbuf *pixbuf_icon,
-                         gint switcher_id, GtkWidget* page)
+                         const GdkPixbuf *pixbuf_icon, gint switcher_id)
 {
     GtkWidget *button_widget;
     GtkWidget *hbox;
     GtkWidget *icon_widget;
     GtkWidget *label_widget;
     GtkWidget *arrow;
+    GtkTooltips *button_tooltips;
     
     button_widget = gtk_toggle_button_new ();
-    gtk_widget_set_name (button_widget, "gdl-button");
-    gtk_button_set_relief (GTK_BUTTON(button_widget), GTK_RELIEF_HALF);
     if (switcher->priv->show)
         gtk_widget_show (button_widget);
     g_signal_connect (button_widget, "toggled",
@@ -809,13 +765,12 @@ gdl_switcher_add_button (GdlSwitcher *switcher, const gchar *label,
     gtk_container_add (GTK_CONTAINER (button_widget), hbox);
     gtk_widget_show (hbox);
 
-    if (stock_id) {
-        icon_widget = gtk_image_new_from_stock (stock_id, GTK_ICON_SIZE_MENU);
-    } else if (pixbuf_icon) {
+    if (stock_id)
+        icon_widget = gtk_image_new_from_stock (stock_id, GTK_ICON_SIZE_BUTTON);
+    else if (pixbuf_icon)
         icon_widget = gtk_image_new_from_pixbuf (pixbuf_icon);
-    } else {
-        icon_widget = gtk_image_new_from_stock (GTK_STOCK_NEW, GTK_ICON_SIZE_MENU);
-    }
+    else
+        icon_widget = gtk_image_new_from_stock (GTK_STOCK_NEW, GTK_ICON_SIZE_BUTTON);
 
     gtk_widget_show (icon_widget);
     
@@ -828,22 +783,24 @@ gdl_switcher_add_button (GdlSwitcher *switcher, const gchar *label,
     }
     gtk_misc_set_alignment (GTK_MISC (label_widget), 0.0, 0.5);
     gtk_widget_show (label_widget);
-    
-    
-    gtk_widget_set_tooltip_text (button_widget,
-                                 tooltips);
-    
+    button_tooltips = gtk_tooltips_new();
+    gtk_tooltips_set_tip (GTK_TOOLTIPS (button_tooltips), button_widget,
+                          tooltips, NULL);        
+
     switch (INTERNAL_MODE (switcher)) {
     case GDL_SWITCHER_STYLE_TEXT:
         gtk_box_pack_start (GTK_BOX (hbox), label_widget, TRUE, TRUE, 0);
+        gtk_tooltips_disable (button_tooltips);
         break;
     case GDL_SWITCHER_STYLE_ICON:
         gtk_box_pack_start (GTK_BOX (hbox), icon_widget, TRUE, TRUE, 0);
+        gtk_tooltips_enable (button_tooltips);
         break;
     case GDL_SWITCHER_STYLE_BOTH:
     default:
         gtk_box_pack_start (GTK_BOX (hbox), icon_widget, FALSE, TRUE, 0);
         gtk_box_pack_start (GTK_BOX (hbox), label_widget, TRUE, TRUE, 0);
+        gtk_tooltips_disable (button_tooltips);
         break;
     }
     arrow = gtk_arrow_new (GTK_ARROW_UP, GTK_SHADOW_NONE);
@@ -853,14 +810,13 @@ gdl_switcher_add_button (GdlSwitcher *switcher, const gchar *label,
     switcher->priv->buttons =
         g_slist_append (switcher->priv->buttons,
                         button_new (button_widget, label_widget,
-                                    icon_widget,
-                                    arrow, hbox, switcher_id, page));
-    
+                                    icon_widget, button_tooltips,
+                                    arrow, hbox, switcher_id));
     gtk_widget_set_parent (button_widget, GTK_WIDGET (switcher));
+
     gtk_widget_queue_resize (GTK_WIDGET (switcher));
 }
 
-#if 0
 static void
 gdl_switcher_remove_button (GdlSwitcher *switcher, gint switcher_id)
 {
@@ -878,7 +834,6 @@ gdl_switcher_remove_button (GdlSwitcher *switcher, gint switcher_id)
     }
     gtk_widget_queue_resize (GTK_WIDGET (switcher));
 }
-#endif
 
 static void
 gdl_switcher_select_button (GdlSwitcher *switcher, gint switcher_id)
@@ -888,13 +843,12 @@ gdl_switcher_select_button (GdlSwitcher *switcher, gint switcher_id)
     /* Select the notebook page associated with this button */
     gdl_switcher_select_page (switcher, switcher_id);
 }
-   
 
 gint
 gdl_switcher_insert_page (GdlSwitcher *switcher, GtkWidget *page,
                           GtkWidget *tab_widget, const gchar *label,
                           const gchar *tooltips, const gchar *stock_id,
-                          GdkPixbuf *pixbuf_icon, gint position)
+                          const GdkPixbuf *pixbuf_icon, gint position)
 {
     gint ret_position;
     gint switcher_id;
@@ -907,98 +861,191 @@ gdl_switcher_insert_page (GdlSwitcher *switcher, GtkWidget *page,
         gtk_widget_show (tab_widget);
     }
     switcher_id = gdl_switcher_get_page_id (page);
-    gdl_switcher_add_button (switcher, label, tooltips, stock_id, pixbuf_icon, switcher_id, page);
-    
+    gdl_switcher_add_button (switcher, label, tooltips, stock_id, pixbuf_icon, switcher_id);
     ret_position = gtk_notebook_insert_page (GTK_NOTEBOOK (switcher), page,
                                              tab_widget, position);
     g_signal_handlers_unblock_by_func (switcher,
                                        gdl_switcher_page_added_cb,
                                        switcher);
-    
     return ret_position;
 }
 
 static void
-set_switcher_style_toolbar (GdlSwitcher *switcher,
-                            GdlSwitcherStyle switcher_style)
+set_switcher_style_internal (GdlSwitcher *switcher,
+                             GdlSwitcherStyle switcher_style )
 {
     GSList *p;
     
-    if (switcher_style == GDL_SWITCHER_STYLE_NONE
-        || switcher_style == GDL_SWITCHER_STYLE_TABS)
+    if (switcher_style == GDL_SWITCHER_STYLE_TABS &&
+        switcher->priv->show == FALSE)
         return;
 
-    if (switcher_style == GDL_SWITCHER_STYLE_TOOLBAR)
-        switcher_style = GDL_SWITCHER_STYLE_BOTH;
-
+    if (switcher_style == GDL_SWITCHER_STYLE_TABS)
+    {
+        gtk_notebook_set_show_tabs (GTK_NOTEBOOK (switcher), TRUE);
+        return;
+    }
+    
+    gtk_notebook_set_show_tabs (GTK_NOTEBOOK (switcher), FALSE);
+    
     if (switcher_style == INTERNAL_MODE (switcher))
         return;
-
-    gtk_notebook_set_show_tabs (GTK_NOTEBOOK (switcher), FALSE);
-
+    
     for (p = switcher->priv->buttons; p != NULL; p = p->next) {
         Button *button = p->data;
 
         gtk_container_remove (GTK_CONTAINER (button->hbox), button->arrow);
-
-        if (gtk_widget_get_parent (button->icon))
-            gtk_container_remove (GTK_CONTAINER (button->hbox), button->icon);
-        if (gtk_widget_get_parent (button->label))
-            gtk_container_remove (GTK_CONTAINER (button->hbox), button->label);
-
         switch (switcher_style) {
         case GDL_SWITCHER_STYLE_TEXT:
-            gtk_box_pack_start (GTK_BOX (button->hbox), button->label,
-                                TRUE, TRUE, 0);
-            gtk_widget_show (button->label);
+            gtk_container_remove (GTK_CONTAINER (button->hbox), button->icon);
+            if (INTERNAL_MODE (switcher)
+                == GDL_SWITCHER_STYLE_ICON) {
+                gtk_box_pack_start (GTK_BOX (button->hbox), button->label,
+                                    TRUE, TRUE, 0);
+                gtk_widget_show (button->label);
+                gtk_tooltips_disable (button->tooltips);
+            }
             break;
-
         case GDL_SWITCHER_STYLE_ICON:
-            gtk_box_pack_start (GTK_BOX (button->hbox), button->icon,
-                                TRUE, TRUE, 0);
-            gtk_widget_show (button->icon);
+            gtk_container_remove(GTK_CONTAINER (button->hbox), button->label);
+            if (INTERNAL_MODE (switcher)
+                == GDL_SWITCHER_STYLE_TEXT) {
+                gtk_box_pack_start (GTK_BOX (button->hbox), button->icon,
+                                    TRUE, TRUE, 0);
+                gtk_widget_show (button->icon);
+            } else
+                gtk_container_child_set (GTK_CONTAINER (button->hbox),
+                                         button->icon, "expand", TRUE, NULL);
+            gtk_tooltips_enable (button->tooltips);
             break;
-
         case GDL_SWITCHER_STYLE_BOTH:
-            gtk_box_pack_start (GTK_BOX (button->hbox), button->icon,
-                                FALSE, TRUE, 0);
-            gtk_box_pack_start (GTK_BOX (button->hbox), button->label,
-                                TRUE, TRUE, 0);
-            gtk_widget_show (button->icon);
+            if (INTERNAL_MODE (switcher)
+                == GDL_SWITCHER_STYLE_TEXT) {
+                gtk_container_remove (GTK_CONTAINER (button->hbox),
+                                      button->label);
+                gtk_box_pack_start (GTK_BOX (button->hbox), button->icon,
+                                    FALSE, TRUE, 0);
+                gtk_widget_show (button->icon);
+            } else {
+                gtk_container_child_set (GTK_CONTAINER (button->hbox),
+                                         button->icon, "expand", FALSE, NULL);
+            }
+
+            gtk_tooltips_disable (button->tooltips);
+            gtk_box_pack_start (GTK_BOX (button->hbox), button->label, TRUE,
+                                TRUE, 0);
             gtk_widget_show (button->label);
             break;
-
         default:
             break;
         }
-
-        gtk_box_pack_start (GTK_BOX (button->hbox), button->arrow,
-                            FALSE, FALSE, 0);
+        gtk_box_pack_start (GTK_BOX (button->hbox), button->arrow, FALSE,
+                            FALSE, 0);
     }
+}
 
-    gdl_switcher_set_show_buttons (switcher, TRUE);
+#if HAVE_GNOME
+static GConfEnumStringPair toolbar_styles[] = {
+    { GDL_SWITCHER_STYLE_TEXT, "text" },
+    { GDL_SWITCHER_STYLE_ICON, "icons" },
+    { GDL_SWITCHER_STYLE_BOTH, "both" },
+    { GDL_SWITCHER_STYLE_BOTH, "both-horiz" },
+    { GDL_SWITCHER_STYLE_BOTH, "both_horiz" },
+    { -1, NULL }
+};
+
+static void
+style_changed_notify (GConfClient *gconf, guint id, GConfEntry *entry,
+                      void *data)
+{
+    GdlSwitcher *switcher = data;
+    char *val;
+    int switcher_style;    
+    
+    val = gconf_client_get_string (gconf,
+                                   "/desktop/gnome/interface/toolbar_style",
+                                   NULL);
+    if (val == NULL || !gconf_string_to_enum (toolbar_styles, val,
+                                              &switcher_style))
+        switcher_style = GDL_SWITCHER_STYLE_BOTH;
+    g_free(val);
+
+    set_switcher_style_internal (GDL_SWITCHER (switcher), switcher_style);
+    switcher->priv->toolbar_style = switcher_style;
+
+    gtk_widget_queue_resize (GTK_WIDGET (switcher));
 }
 
 static void
 gdl_switcher_set_style (GdlSwitcher *switcher, GdlSwitcherStyle switcher_style)
 {
-    if (switcher->priv->switcher_style == switcher_style)
+    GConfClient *gconf_client = gconf_client_get_default ();
+    
+    if (switcher_style == GDL_SWITCHER_STYLE_TABS &&
+        switcher->priv->show == FALSE)
+        return;
+    
+    if (switcher->priv->switcher_style == switcher_style &&
+        switcher->priv->show == TRUE)
         return;
 
-    if (switcher_style == GDL_SWITCHER_STYLE_NONE) {
-        gdl_switcher_set_show_buttons (switcher, FALSE);
-        gtk_notebook_set_show_tabs (GTK_NOTEBOOK (switcher), FALSE);
+    if (switcher->priv->switcher_style == GDL_SWITCHER_STYLE_TOOLBAR) {
+        if (switcher->priv->style_changed_id) {
+            gconf_client_notify_remove (gconf_client,
+                                switcher->priv->style_changed_id);
+            switcher->priv->style_changed_id = 0;
+        }        
     }
-    else if (switcher_style == GDL_SWITCHER_STYLE_TABS) {
-        gdl_switcher_set_show_buttons (switcher, FALSE);
-        gtk_notebook_set_show_tabs (GTK_NOTEBOOK (switcher), TRUE);
-    }
-    else
-        set_switcher_style_toolbar (switcher, switcher_style);
+    
+    if (switcher_style != GDL_SWITCHER_STYLE_TOOLBAR) {
+        set_switcher_style_internal (switcher, switcher_style);
 
-    gtk_widget_queue_resize (GTK_WIDGET (switcher));
-    switcher->priv->switcher_style = switcher_style;
+        gtk_widget_queue_resize (GTK_WIDGET (switcher));
+    } else {
+        /* This is a little bit tricky, toolbar style is more
+         * of a meta-style where the actual style is dictated by
+         * the gnome toolbar setting, so that is why we have
+         * the is_toolbar_style bool - it tracks the toolbar
+         * style while the switcher_style member is the actual look and
+         * feel */
+        switcher->priv->style_changed_id =
+            gconf_client_notify_add (gconf_client,
+                                     "/desktop/gnome/interface/toolbar_style",
+                                     style_changed_notify, switcher,
+                                     NULL, NULL);
+        style_changed_notify (gconf_client, 0, NULL, switcher);
+    }
+    
+    g_object_unref (gconf_client);
+
+    if (switcher_style != GDL_SWITCHER_STYLE_TABS)
+        switcher->priv->switcher_style = switcher_style;
 }
+
+#else /* HAVE_GNOME */
+
+static void
+gdl_switcher_set_style (GdlSwitcher *switcher, GdlSwitcherStyle switcher_style)
+{
+    if (switcher_style == GDL_SWITCHER_STYLE_TABS &&
+        switcher->priv->show == FALSE)
+        return;
+    
+    if (switcher->priv->switcher_style == switcher_style &&
+        switcher->priv->show == TRUE)
+        return;
+
+    set_switcher_style_internal (switcher,
+                                 ((switcher_style ==
+                                   GDL_SWITCHER_STYLE_TOOLBAR)?
+                                  GDL_SWITCHER_STYLE_BOTH : switcher_style));
+    gtk_widget_queue_resize (GTK_WIDGET (switcher));
+    
+    if (switcher_style != GDL_SWITCHER_STYLE_TABS)
+        switcher->priv->switcher_style = switcher_style;
+}
+
+#endif /* HAVE_GNOME */
 
 static void
 gdl_switcher_set_show_buttons (GdlSwitcher *switcher, gboolean show)

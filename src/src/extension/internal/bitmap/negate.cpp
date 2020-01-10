@@ -10,7 +10,6 @@
 #include "extension/system.h"
 
 #include "negate.h"
-#include <Magick++.h>
 
 namespace Inkscape {
 namespace Extension {
@@ -23,7 +22,7 @@ Negate::applyEffect(Magick::Image* image) {
 }
 
 void
-Negate::refreshParameters(Inkscape::Extension::Effect* /*module*/) {	
+Negate::refreshParameters(Inkscape::Extension::Effect* module) {	
 }
 
 #include "../clear-n_.h"
@@ -40,7 +39,7 @@ Negate::init(void)
 				"<effects-menu>\n"
 					"<submenu name=\"" N_("Raster") "\" />\n"
 				"</effects-menu>\n"
-				"<menu-tip>" N_("Negate (take inverse) selected bitmap(s)") "</menu-tip>\n"
+				"<menu-tip>" N_("Negate (take inverse) selected bitmap(s).") "</menu-tip>\n"
 			"</effect>\n"
 		"</inkscape-extension>\n", new Negate());
 }

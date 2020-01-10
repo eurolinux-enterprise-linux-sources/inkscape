@@ -1,6 +1,10 @@
-/** @file
- * @brief SVG offset filter effect
- *//*
+#ifndef SP_FEOFFSET_H_SEEN
+#define SP_FEOFFSET_H_SEEN
+
+/** \file
+ * SVG <feOffset> implementation, see Offset.cpp.
+ */
+/*
  * Authors:
  *   Hugo Rodrigues <haa.rodrigues@gmail.com>
  *
@@ -9,33 +13,23 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifndef SP_FEOFFSET_H_SEEN
-#define SP_FEOFFSET_H_SEEN
+#include "sp-filter.h"
+#include "offset-fns.h"
 
-#include "sp-filter-primitive.h"
+/* FeOffset base class */
+class SPFeOffsetClass;
 
-#define SP_FEOFFSET(obj) (dynamic_cast<SPFeOffset*>((SPObject*)obj))
-#define SP_IS_FEOFFSET(obj) (dynamic_cast<const SPFeOffset*>((SPObject*)obj) != NULL)
-
-class SPFeOffset : public SPFilterPrimitive {
-public:
-	SPFeOffset();
-	virtual ~SPFeOffset();
-
+struct SPFeOffset : public SPFilterPrimitive {
+    /** OFFSET ATTRIBUTES HERE */
     double dx, dy;
-
-protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-
-	virtual void set(unsigned int key, const gchar* value);
-
-	virtual void update(SPCtx* ctx, unsigned int flags);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
-
-	virtual void build_renderer(Inkscape::Filters::Filter* filter);
 };
+
+struct SPFeOffsetClass {
+    SPFilterPrimitiveClass parent_class;
+};
+
+GType sp_feOffset_get_type();
+
 
 #endif /* !SP_FEOFFSET_H_SEEN */
 
@@ -48,4 +42,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

@@ -1,3 +1,5 @@
+#define __SP_METADATA_C__
+
 /*
  * SVG <metadata> implementation
  *
@@ -18,7 +20,6 @@
 #include "document.h"
 
 #include "sp-item-group.h"
-#include "sp-root.h"
 
 #define noDEBUG_METADATA
 #ifdef DEBUG_METADATA
@@ -33,10 +34,58 @@
 
 /* Metadata base class */
 
-SPMetadata::SPMetadata() : SPObject() {
+static void sp_metadata_class_init (SPMetadataClass *klass);
+static void sp_metadata_init (SPMetadata *metadata);
+
+static void sp_metadata_build (SPObject * object, SPDocument * document, Inkscape::XML::Node * repr);
+static void sp_metadata_release (SPObject *object);
+static void sp_metadata_set (SPObject *object, unsigned int key, const gchar *value);
+static void sp_metadata_update(SPObject *object, SPCtx *ctx, guint flags);
+static Inkscape::XML::Node *sp_metadata_write(SPObject *object, Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags);
+
+static SPObjectClass *metadata_parent_class;
+
+GType
+sp_metadata_get_type (void)
+{
+    static GType metadata_type = 0;
+
+    if (!metadata_type) {
+        GTypeInfo metadata_info = {
+            sizeof (SPMetadataClass),
+            NULL, NULL,
+            (GClassInitFunc) sp_metadata_class_init,
+            NULL, NULL,
+            sizeof (SPMetadata),
+            16,
+            (GInstanceInitFunc) sp_metadata_init,
+            NULL,    /* value_table */
+        };
+        metadata_type = g_type_register_static (SP_TYPE_OBJECT, "SPMetadata", &metadata_info, (GTypeFlags)0);
+    }
+    return metadata_type;
 }
 
-SPMetadata::~SPMetadata() {
+static void
+sp_metadata_class_init (SPMetadataClass *klass)
+{
+    //GObjectClass *gobject_class = (GObjectClass *)klass;
+    SPObjectClass *sp_object_class = (SPObjectClass *)klass;
+
+    metadata_parent_class = (SPObjectClass*)g_type_class_peek_parent (klass);
+
+    sp_object_class->build = sp_metadata_build;
+    sp_object_class->release = sp_metadata_release;
+    sp_object_class->write = sp_metadata_write;
+    sp_object_class->set = sp_metadata_set;
+    sp_object_class->update = sp_metadata_update;
+}
+
+static void
+sp_metadata_init (SPMetadata *metadata)
+{
+    (void)metadata;
+    debug("0x%08x",(unsigned int)metadata);
 }
 
 namespace {
@@ -53,43 +102,70 @@ void strip_ids_recursively(Inkscape::XML::Node *node) {
 
 }
 
-
-void SPMetadata::build(SPDocument* doc, Inkscape::XML::Node* repr) {
+/*
+ * \brief Reads the Inkscape::XML::Node, and initializes SPMetadata variables.
+ *        For this to get called, our name must be associated with
+ *        a repr via "sp_object_type_register".  Best done through
+ *        sp-object-repr.cpp's repr_name_entries array.
+ */
+static void
+sp_metadata_build (SPObject *object, SPDocument *document, Inkscape::XML::Node *repr)
+{
     using Inkscape::XML::NodeSiblingIterator;
 
-    debug("0x%08x",(unsigned int)this);
+    debug("0x%08x",(unsigned int)object);
 
     /* clean up our mess from earlier versions; elements under rdf:RDF should not
      * have id= attributes... */
-    static GQuark const rdf_root_name = g_quark_from_static_string("rdf:RDF");
-
+    static GQuark const rdf_root_name=g_quark_from_static_string("rdf:RDF");
     for ( NodeSiblingIterator iter=repr->firstChild() ; iter ; ++iter ) {
         if ( (GQuark)iter->code() == rdf_root_name ) {
             strip_ids_recursively(iter);
         }
     }
 
-    SPObject::build(doc, repr);
+    if (((SPObjectClass *) metadata_parent_class)->build)
+        ((SPObjectClass *) metadata_parent_class)->build (object, document, repr);
 }
 
-void SPMetadata::release() {
-    debug("0x%08x",(unsigned int)this);
+/*
+ * \brief Drops any allocated memory
+ */
+static void
+sp_metadata_release (SPObject *object)
+{
+    debug("0x%08x",(unsigned int)object);
 
-    // handle ourself
+    /* handle ourself */
 
-    SPObject::release();
+    if (((SPObjectClass *) metadata_parent_class)->release)
+        ((SPObjectClass *) metadata_parent_class)->release (object);
 }
 
-void SPMetadata::set(unsigned int key, const gchar* value) {
-    debug("0x%08x %s(%u): '%s'",(unsigned int)this,
-          sp_attribute_name(key),key,value);
+/*
+ * \brief Sets a specific value in the SPMetadata
+ */
+static void
+sp_metadata_set (SPObject *object, unsigned int key, const gchar *value)
+{
+    debug("0x%08x %s(%u): '%s'",(unsigned int)object,
+            sp_attribute_name(key),key,value);
+    SPMetadata * metadata;
 
-    // see if any parents need this value
-    SPObject::set(key, value);
+    metadata = SP_METADATA (object);
+
+    /* see if any parents need this value */
+    if (((SPObjectClass *) metadata_parent_class)->set)
+        ((SPObjectClass *) metadata_parent_class)->set (object, key, value);
 }
 
-void SPMetadata::update(SPCtx* /*ctx*/, unsigned int flags) {
-    debug("0x%08x",(unsigned int)this);
+/*
+ * \brief Receives update notifications
+ */
+static void
+sp_metadata_update(SPObject *object, SPCtx *ctx, guint flags)
+{
+    debug("0x%08x",(unsigned int)object);
     //SPMetadata *metadata = SP_METADATA(object);
 
     if (flags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_STYLE_MODIFIED_FLAG |
@@ -99,35 +175,45 @@ void SPMetadata::update(SPCtx* /*ctx*/, unsigned int flags) {
 
     }
 
-//    SPObject::onUpdate(ctx, flags);
+    if (((SPObjectClass *) metadata_parent_class)->update)
+        ((SPObjectClass *) metadata_parent_class)->update(object, ctx, flags);
 }
 
-Inkscape::XML::Node* SPMetadata::write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags) {
-    debug("0x%08x",(unsigned int)this);
+/*
+ * \brief Writes it's settings to an incoming repr object, if any
+ */
+static Inkscape::XML::Node *
+sp_metadata_write(SPObject *object, Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags)
+{
+    debug("0x%08x",(unsigned int)object);
+    //SPMetadata *metadata = SP_METADATA(object);
 
-    if ( repr != this->getRepr() ) {
+    if ( repr != SP_OBJECT_REPR(object) ) {
         if (repr) {
-            repr->mergeFrom(this->getRepr(), "id");
+            repr->mergeFrom(SP_OBJECT_REPR (object), "id");
         } else {
-            repr = this->getRepr()->duplicate(doc);
+            repr = SP_OBJECT_REPR (object)->duplicate(doc);
         }
     }
 
-    SPObject::write(doc, repr, flags);
+    if (((SPObjectClass *) metadata_parent_class)->write) {
+        ((SPObjectClass *) metadata_parent_class)->write(object, doc, repr, flags);
+    }
 
     return repr;
 }
 
-/**
- * Retrieves the metadata object associated with a document.
+/*
+ * \brief Retrieves the metadata object associated with a document
  */
-SPMetadata *sp_document_metadata(SPDocument *document)
+SPMetadata *
+sp_document_metadata (SPDocument *document)
 {
     SPObject *nv;
 
     g_return_val_if_fail (document != NULL, NULL);
 
-    nv = sp_item_group_get_child_by_name( document->getRoot(), NULL,
+    nv = sp_item_group_get_child_by_name ((SPGroup *) document->root, NULL,
                                         "metadata");
     g_assert (nv != NULL);
 
@@ -135,13 +221,4 @@ SPMetadata *sp_document_metadata(SPDocument *document)
 }
 
 
-/*
-  Local Variables:
-  mode:c++
-  c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
-  indent-tabs-mode:nil
-  fill-column:99
-  End:
-*/
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

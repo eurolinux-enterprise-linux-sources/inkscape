@@ -4,7 +4,6 @@
 /* Authors:
  *   Bruno Dilly <bruno.dilly@gmail.com>
  *   Inkscape Guys
- *   Andrew Higginson
  *
  * Copyright (C) 2007 Bruno Dilly <bruno.dilly@gmail.com>
  * Released under GNU GPL, read the file 'COPYING' for more information
@@ -13,36 +12,46 @@
 #ifndef __OCAL_DIALOG_H__
 #define __OCAL_DIALOG_H__
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
+#include <glibmm.h>
+#include <vector>
+#include <gtkmm.h>
+#include "filedialogimpl-gtkmm.h"
+
+//General includes
+#include <unistd.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <set>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+
 
 //Gtk includes
-#include <gtkmm/box.h>
-#include <gtkmm/eventbox.h>
-#include <gtkmm/listviewtext.h>
-#include <gtkmm/scrolledwindow.h>
-#include <gtkmm/window.h>
+#include <glibmm/i18n.h>
+#include <glib/gstdio.h>
 
-#include <cairomm/refptr.h>
+//Temporary ugly hack
+//Remove this after the get_filter() calls in
+//show() on both classes are fixed
+#include <gtk/gtk.h>
 
-#if GTK_CHECK_VERSION(3,0,0)
-# include <gtkmm/searchentry.h>
+//Another hack
+#ifdef WITH_GNOME_VFS
+#include <libgnomevfs/gnome-vfs-init.h>  // gnome_vfs_initialized
+#include<libgnomevfs/gnome-vfs.h>
 #endif
 
-#include <giomm/file.h>
-
 //Inkscape includes
-#include "ui/dialog/filedialog.h"
-#include "ui/dialog-events.h"
+#include <extension/input.h>
+#include <extension/output.h>
+#include <extension/db.h>
+#include "inkscape.h"
+#include "svg-view-widget.h"
+#include "gc-core.h"
 
-struct _xmlNode;
-typedef _xmlNode xmlNode;
+//For export dialog
+#include "ui/widget/scalar-unit.h"
 
-namespace Gtk {
-class Notebook;
-class Spinner;
-}
 
 namespace Inkscape
 {
@@ -50,11 +59,7 @@ namespace UI
 {   
 namespace Dialog
 {   
-
-class SVGPreview;
     
-namespace OCAL
-{
 /*#########################################################################
 ### F I L E     D I A L O G    O C A L    B A S E    C L A S S
 #########################################################################*/
@@ -62,32 +67,20 @@ namespace OCAL
 /**
  * This class is the base implementation for export to OCAL.
  */
-class FileDialogBase : public Gtk::Window
+class FileDialogOCALBase : public Gtk::Dialog
 {
 public:
 
     /**
      * Constructor
      */
-    FileDialogBase(const Glib::ustring &title, Gtk::Window& /*parent*/) : Gtk::Window(Gtk::WINDOW_TOPLEVEL)
-    {
-        set_title(title);
-        sp_transientize(GTK_WIDGET(gobj()));
-        
-        // Allow shrinking of window so labels wrap correctly
-        set_resizable(true);
-
-        Gdk::Geometry geom;
-        geom.min_width = 480;
-        geom.min_height = 320;
-
-        set_geometry_hints(*this, geom, Gdk::HINT_MIN_SIZE);
-    }
+    FileDialogOCALBase(const Glib::ustring &title, Gtk::Window& parent) : Gtk::Dialog(title, parent, true)
+    {}
 
     /*
      * Destructor
      */
-    virtual ~FileDialogBase()
+    virtual ~FileDialogOCALBase()
     {}
 
 protected:
@@ -108,10 +101,10 @@ protected:
 
 
 /**
- * Our implementation of the ExportDialog interface.
+ * Our implementation of the FileExportToOCALDialog interface.
  */
 /*
-class ExportDialog : public FileDialogBase
+class FileExportToOCALDialog : public FileDialogOCALBase
 {
 
 public:
@@ -123,7 +116,7 @@ public:
      * @param key a list of file types from which the user can select
      */
 /*
-    ExportDialog(Gtk::Window& parentWindow, 
+    FileExportToOCALDialog(Gtk::Window& parentWindow, 
                              FileDialogType fileTypes,
                  const Glib::ustring &title);
 */
@@ -132,7 +125,7 @@ public:
      * Perform any necessary cleanups.
      */
 /*
-    ~ExportDialog();
+    ~FileExportToOCALDialog();
 */
     /**
      * Show an SaveAs file selector.
@@ -188,7 +181,7 @@ private:
 /*
     std::set<Glib::ustring> knownExtensions;
 
-}; //ExportDialog
+}; //FileExportToOCAL
 */
 
 //########################################################################
@@ -197,10 +190,10 @@ private:
 
 
 /**
- * Our implementation of the ExportPasswordDialog interface.
+ * Our implementation of the FileExportToOCALPasswordDialog interface.
  */
 /*
-class ExportPasswordDialog : public FileDialogBase
+class FileExportToOCALPasswordDialog : public FileDialogOCALBase
 {
 
 public:
@@ -210,7 +203,7 @@ public:
      * @param title the title of the dialog
      */
 /*
-    ExportPasswordDialog(Gtk::Window& parentWindow, 
+    FileExportToOCALPasswordDialog(Gtk::Window& parentWindow, 
                                 const Glib::ustring &title);
 */
     /**
@@ -218,7 +211,7 @@ public:
      * Perform any necessary cleanups.
      */
 /*
-    ~ExportPasswordDialog();
+    ~FileExportToOCALPasswordDialog();
 */
 
     /**
@@ -253,7 +246,7 @@ private:
     Gtk::HBox userBox;
     Gtk::HBox passBox;
     
-}; //ExportPasswordDialog
+}; //FileExportToOCALPassword
 */
 
 
@@ -261,165 +254,34 @@ private:
 //### F I L E   I M P O R T   F R O M   O C A L
 //#########################################################################
 
-class WrapLabel : public Gtk::Label
+/**
+ * Our implementation class for filesListView
+ */
+class FileListViewText : public Gtk::ListViewText
 {
 public:
-    WrapLabel();
-
+    FileListViewText(guint columns_count, SVGPreview& filesPreview, Gtk::Label& description, Gtk::Button& okButton)
+                :ListViewText(columns_count)
+    {
+        myPreview = &filesPreview;
+        myLabel = &description;
+        myButton = &okButton;
+    }
+    Glib::ustring getFilename();
+protected:
+    void on_row_activated(const Gtk::TreeModel::Path& path, Gtk::TreeViewColumn* column);
+    void on_cursor_changed();
 private:
-    void _on_size_allocate(Gtk::Allocation& allocation);
-};
-
-class LoadingBox : public Gtk::EventBox
-{
-public:
-    LoadingBox();
-
-    void start();
-    void stop();
-
-private:
-    unsigned int spinner_step;
-    sigc::connection timeout;
-    bool draw_spinner;
-
-#if !WITH_GTKMM_3_0
-    bool _on_expose_event(GdkEventExpose* event);
-#endif
-
-    bool _on_draw(const Cairo::RefPtr<Cairo::Context>& cr);
-    bool on_timeout();
-};
-
-class PreviewWidget : public Gtk::VBox
-{
-public:
-    PreviewWidget();
-
-    void set_metadata(Glib::ustring description, Glib::ustring creator, Glib::ustring time);
-    void show_box_loading();
-    void hide_box_loading();
-    void set_image(std::string path);
-    void clear();
-
-private:
-    LoadingBox* box_loading;
-    Gtk::Image* image;
-
-    WrapLabel* label_title;
-    WrapLabel* label_description;
-    WrapLabel* label_time;
-    
-#if !WITH_GTKMM_3_0
-    bool _on_expose_event(GdkEventExpose* event);
-#endif
-
-    bool _on_draw(const Cairo::RefPtr<Cairo::Context>& cr);
+    Glib::ustring myFilename;
+    SVGPreview *myPreview;
+    Gtk::Label *myLabel;
+    Gtk::Button *myButton;
 };
 
 /**
- * A Widget that contains an status icon and a message
+ * Our implementation class for the FileImportFromOCALDialog interface..
  */
-class StatusWidget : public Gtk::HBox
-{
-public:
-    StatusWidget();
-
-    void clear();
-    void set_error(Glib::ustring text);
-    void set_info(Glib::ustring text);
-    void start_process(Glib::ustring text);
-    void end_process();
-
-    Gtk::Spinner* spinner;
-    Gtk::Image* image;
-    Gtk::Label* label;
-};
-
-#if !GTK_CHECK_VERSION(3,0,0)
-/**
- * A Gtk::Entry with search & clear icons
- */
-class SearchEntry : public Gtk::Entry
-{
-public:
-    SearchEntry();
-    
-private:
-    void _on_icon_pressed(Gtk::EntryIconPosition icon_position, const GdkEventButton* event);
-    void _on_changed();
-};
-#endif
-
-/**
- * A box which paints an overlay of the OCAL logo
- */
-class LogoArea : public Gtk::EventBox
-{
-public:
-    LogoArea();
-private:
-#if !WITH_GTKMM_3_0
-    bool _on_expose_event(GdkEventExpose* event);
-#endif
-    bool _on_draw(const Cairo::RefPtr<Cairo::Context>& cr);
-    bool draw_logo;
-    Cairo::RefPtr<Cairo::ImageSurface> logo_mask;
-};
-
-/**
- * A box filled with the Base colour from the user's GTK theme, and a border
- */
-class BaseBox : public Gtk::EventBox
-{
-public:
-    BaseBox();
-private:
-#if !WITH_GTKMM_3_0
-    bool _on_expose_event(GdkEventExpose* event);
-#endif
-    bool _on_draw(const Cairo::RefPtr<Cairo::Context>& cr);
-};
-
-enum {
-    RESULTS_COLUMN_MARKUP,
-    RESULTS_COLUMN_TITLE,
-    RESULTS_COLUMN_DESCRIPTION,
-    RESULTS_COLUMN_CREATOR,
-    RESULTS_COLUMN_DATE,
-    RESULTS_COLUMN_FILENAME,
-    RESULTS_COLUMN_THUMBNAIL_FILENAME,
-    RESULTS_COLUMN_URL,
-    RESULTS_COLUMN_THUMBNAIL_URL,
-    RESULTS_COLUMN_GUID,
-    RESULTS_COLUMN_LENGTH,
-};
-
-enum {
-    NOTEBOOK_PAGE_LOGO,
-    NOTEBOOK_PAGE_RESULTS,
-    NOTEBOOK_PAGE_NOT_FOUND,
-};
-
-enum ResourceType {
-    TYPE_THUMBNAIL,
-    TYPE_IMAGE,
-};
-
-/**
- * The TreeView which holds the search results
- */
-class SearchResultList : public Gtk::ListViewText
-{
-public:
-    SearchResultList(guint columns_count);
-    void populate_from_xml(xmlNode* a_node);
-};
-
-/**
- * The Import Dialog
- */
-class ImportDialog : public FileDialogBase
+class FileImportFromOCALDialog : public FileDialogOCALBase
 {
 public:
     /**
@@ -428,14 +290,16 @@ public:
      * @param fileTypes one of FileDialogTypes
      * @param title the title of the dialog
      */
-    ImportDialog(Gtk::Window& parent_window, FileDialogType file_types,
-                const Glib::ustring &title);
+    FileImportFromOCALDialog(Gtk::Window& parentWindow,
+    		       const Glib::ustring &dir,
+                       FileDialogType fileTypes,
+                       const Glib::ustring &title);
 
     /**
      * Destructor.
      * Perform any necessary cleanups.
      */
-    ~ImportDialog();
+    ~FileImportFromOCALDialog();
 
     /**
      * Show an OpenFile file selector.
@@ -448,79 +312,51 @@ public:
      * @return a pointer to a string if successful (which must
      * be later freed with g_free(), else NULL.
      */
-    Inkscape::Extension::Extension *get_selection_type();
-    
-    typedef sigc::signal<void, Glib::ustring> type_signal_response;
-    type_signal_response signal_response();
-    
-protected:
-  type_signal_response m_signal_response;
+    Inkscape::Extension::Extension *getSelectionType();
+
+    Glib::ustring getFilename();
 
 private:
-    Glib::ustring filename_image;
-    Glib::ustring filename_thumbnail;
 
-#if GTK_CHECK_VERSION(3,0,0)
-    Gtk::SearchEntry *entry_search;
-#else
-    SearchEntry *entry_search;
-#endif
-
-    LogoArea *drawingarea_logo;
-    SearchResultList *list_results;
-    PreviewWidget *preview_files;
-    Gtk::Label *label_not_found;
-    Gtk::Label *label_description;
-    Gtk::Button *button_search;
-    Gtk::Button *button_import;
-    Gtk::Button *button_close;
-    Gtk::Button *button_cancel;
-    StatusWidget *widget_status;
+    /**
+     * Allow the user to type the tag to be searched
+     */
+    Gtk::Entry *searchTagEntry;
+    FileListViewText *filesList;
+    SVGPreview *filesPreview;
+    Gtk::Label *notFoundLabel;
+    Gtk::Label *descriptionLabel;
+    Gtk::Button *searchButton;
+    Gtk::Button *okButton;
 
     // Child widgets
-    Gtk::Notebook *notebook_content;
-    Gtk::HBox hbox_tags;
-    Gtk::HBox hbox_files;
-    Gtk::ScrolledWindow scrolledwindow_list;
+    Gtk::HBox tagBox;
+    Gtk::HBox filesBox;
+    Gtk::HBox messageBox;
+    Gtk::HBox descriptionBox;
+    Gtk::ScrolledWindow listScrolledWindow;
     Glib::RefPtr<Gtk::TreeSelection> selection;
 
-    Glib::RefPtr<Gio::Cancellable> cancellable_image;
-    Glib::RefPtr<Gio::Cancellable> cancellable_thumbnail;
-    bool downloading_thumbnail;
-    bool cancelled_thumbnail;
-    bool cancelled_image;
+    /**
+     * Callback for user input into searchTagEntry
+     */
+    void searchTagEntryChangedCallback();
 
-    void update_label_no_search_results();
-    void update_preview(int row);
-    void on_list_results_cursor_changed();
-    
-    void download_resource(ResourceType type, int row);
-    void on_resource_downloaded(const Glib::RefPtr<Gio::AsyncResult>& result,
-        Glib::RefPtr<Gio::File> file_remote, Glib::ustring path, ResourceType resource);
-    void on_image_downloaded(Glib::ustring path, bool success);
-    void on_thumbnail_downloaded(Glib::ustring path, bool success);
-    void on_list_results_row_activated(const Gtk::TreeModel::Path& path, Gtk::TreeViewColumn* column);
-    void on_button_import_clicked();
-    void on_button_close_clicked();
-    void on_button_cancel_clicked();
-    void on_button_search_clicked();
-    void on_entry_search_activated();
-    void on_list_results_selection_changed();
-    void on_xml_file_read(const Glib::RefPtr<Gio::AsyncResult>& result,
-        Glib::RefPtr<Gio::File> xml_file, Glib::ustring xml_uri);
-    void create_temporary_dirs();
-    std::string get_temporary_dir(ResourceType type);
 
+    /**
+     * Prints the names of the all the xml elements 
+     * that are siblings or children of a given xml node
+     */
+    void print_xml_element_names(xmlNode * a_node);
 
     /**
      * The extension to use to write this file
      */
     Inkscape::Extension::Extension *extension;
 
-}; //ImportDialog
+}; //FileImportFromOCALDialog
 
 
-} //namespace OCAL
 } //namespace Dialog
 } //namespace UI
 } //namespace Inkscape
@@ -537,4 +373,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

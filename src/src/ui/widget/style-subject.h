@@ -1,16 +1,17 @@
 /**
- * @file
- * Abstraction for different style widget operands.
- */
-/*
+ * \brief Abstraction for different style widget operands
+ *
  * Copyright (C) 2007 MenTaLguY <mental@rydia.net>
  *
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
+
 #ifndef SEEN_INKSCAPE_UI_WIDGET_STYLE_SUBJECT_H
 #define SEEN_INKSCAPE_UI_WIDGET_STYLE_SUBJECT_H
 
+#include "util/glib-list-iterators.h"
 #include <boost/optional.hpp>
+#include "libnr/nr-rect.h"
 #include <2geom/rect.h>
 #include "sp-item.h"
 #include <stddef.h>
@@ -34,6 +35,7 @@ public:
     class Selection;
     class CurrentLayer;
 
+    typedef Util::GSListConstIterator<SPObject *> iterator;
 
     StyleSubject();
     virtual ~StyleSubject();
@@ -41,10 +43,11 @@ public:
     void setDesktop(SPDesktop *desktop);
     SPDesktop *getDesktop() const { return _desktop; }
 
-    virtual Geom::OptRect getBounds(SPItem::BBoxType type) = 0;
+    virtual iterator begin() = 0;
+    virtual iterator end() { return iterator(NULL); }
+    virtual Geom::OptRect getBounds(SPItem::BBoxType type = SPItem::APPROXIMATE_BBOX) = 0;
     virtual int queryStyle(SPStyle *query, int property) = 0;
     virtual void setCSS(SPCSSAttr *css) = 0;
-    virtual std::vector<SPObject*> list(){return std::vector<SPObject*>();};
 
     sigc::connection connectChanged(sigc::signal<void>::slot_type slot) {
         return _changed_signal.connect(slot);
@@ -64,10 +67,10 @@ public:
     Selection();
     ~Selection();
 
-    virtual Geom::OptRect getBounds(SPItem::BBoxType type);
+    virtual iterator begin();
+    virtual Geom::OptRect getBounds(SPItem::BBoxType type = SPItem::APPROXIMATE_BBOX);
     virtual int queryStyle(SPStyle *query, int property);
     virtual void setCSS(SPCSSAttr *css);
-    virtual std::vector<SPObject*> list();
 
 protected:
     virtual void _afterDesktopSwitch(SPDesktop *desktop);
@@ -85,10 +88,10 @@ public:
     CurrentLayer();
     ~CurrentLayer();
 
-    virtual Geom::OptRect getBounds(SPItem::BBoxType type);
+    virtual iterator begin();
+    virtual Geom::OptRect getBounds(SPItem::BBoxType type = SPItem::APPROXIMATE_BBOX);
     virtual int queryStyle(SPStyle *query, int property);
     virtual void setCSS(SPCSSAttr *css);
-    virtual std::vector<SPObject*> list();
 
 protected:
     virtual void _afterDesktopSwitch(SPDesktop *desktop);
@@ -96,19 +99,19 @@ protected:
 private:
     SPObject *_getLayer() const;
     void _setLayer(SPObject *layer);
-    SPObject *_getLayerSList() const;
+    GSList *_getLayerSList() const;
 
     sigc::connection _layer_switched;
     sigc::connection _layer_release;
     sigc::connection _layer_modified;
-    mutable SPObject* _element;
+    mutable GSList _element;
 };
 
 }
 }
 }
 
-#endif // SEEN_INKSCAPE_UI_WIDGET_STYLE_SUBJECT_H
+#endif
 
 /*
   Local Variables:
@@ -119,4 +122,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

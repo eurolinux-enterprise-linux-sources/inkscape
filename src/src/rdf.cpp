@@ -1,12 +1,11 @@
 /** @file
- * RDF manipulation functions.
+ * @brief  RDF manipulation functions
  *
  * @todo move these to xml/ instead of dialogs/
  */
 /* Authors:
  *   Kees Cook <kees@outflux.net>
  *   Jon Phillips <jon@rejon.org>
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2004 Kees Cook <kees@outflux.net>
  * Copyright (C) 2006 Jon Phillips <jon@rejon.org>
@@ -18,8 +17,6 @@
 #include "rdf.h"
 #include "sp-item-group.h"
 #include "inkscape.h"
-#include "sp-root.h"
-#include "preferences.h"
 
 /*
    Example RDF XML from various places...
@@ -39,7 +36,7 @@
    </Agent></dc:rights>
    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
    <dc:source rdf:resource="source"/>
-   <license rdf:resource="http://creativecommons.org/licenses/by/4.0/" 
+   <license rdf:resource="http://creativecommons.org/licenses/by/2.0/" 
 />
 </Work>
 
@@ -173,37 +170,37 @@ struct rdf_double_t rdf_license_ofl [] = {
 
 struct rdf_license_t rdf_licenses [] = {
     { N_("CC Attribution"), 
-      "http://creativecommons.org/licenses/by/4.0/",
+      "http://creativecommons.org/licenses/by/3.0/",
       rdf_license_cc_a,
     },
 
     { N_("CC Attribution-ShareAlike"), 
-      "http://creativecommons.org/licenses/by-sa/4.0/",
+      "http://creativecommons.org/licenses/by-sa/3.0/",
       rdf_license_cc_a_sa,
     },
 
     { N_("CC Attribution-NoDerivs"), 
-      "http://creativecommons.org/licenses/by-nd/4.0/",
+      "http://creativecommons.org/licenses/by-nd/3.0/",
       rdf_license_cc_a_nd,
     },
 
     { N_("CC Attribution-NonCommercial"), 
-      "http://creativecommons.org/licenses/by-nc/4.0/",
+      "http://creativecommons.org/licenses/by-nc/3.0/",
       rdf_license_cc_a_nc,
     },
 
     { N_("CC Attribution-NonCommercial-ShareAlike"), 
-      "http://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "http://creativecommons.org/licenses/by-nc-sa/3.0/",
       rdf_license_cc_a_nc_sa,
     },
 
     { N_("CC Attribution-NonCommercial-NoDerivs"), 
-      "http://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "http://creativecommons.org/licenses/by-nc-nd/3.0/",
       rdf_license_cc_a_nc_nd,
     },
 
-    { N_("CC0 Public Domain Dedication"),
-      "http://creativecommons.org/publicdomain/zero/1.0/",
+    { N_("Public Domain"),
+      "http://creativecommons.org/licenses/publicdomain/",
       rdf_license_pd,
     },
 
@@ -225,135 +222,87 @@ struct rdf_license_t rdf_licenses [] = {
 #define XML_TAG_NAME_RDF      "rdf:RDF"
 #define XML_TAG_NAME_WORK     "cc:Work"
 #define XML_TAG_NAME_LICENSE  "cc:License"
-// Note the lowercase L!
-#define XML_TAG_NAME_LICENSE_PROP  "cc:license"
-
 
 // Remember when using the "title" and "tip" elements to pass them through
 // the localization functions when you use them!
 struct rdf_work_entity_t rdf_work_entities [] = {
-    { "title", N_("Title:"), "dc:title", RDF_CONTENT,
-      N_("A name given to the resource"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    { "title", N_("Title"), "dc:title", RDF_CONTENT,
+      N_("Name by which this document is formally known."), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
     },
-    { "date", N_("Date:"), "dc:date", RDF_CONTENT,
-      N_("A point or period of time associated with an event in the lifecycle of the resource"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    { "date", N_("Date"), "dc:date", RDF_CONTENT,
+      N_("Date associated with the creation of this document (YYYY-MM-DD)."), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
     },
-    { "format", N_("Format:"), "dc:format", RDF_CONTENT,
-      N_("The file format, physical medium, or dimensions of the resource"), RDF_FORMAT_LINE, RDF_EDIT_HARDCODED,
+    { "format", N_("Format"), "dc:format", RDF_CONTENT,
+      N_("The physical or digital manifestation of this document (MIME type)."), RDF_FORMAT_LINE, RDF_EDIT_HARDCODED,
     },
-    { "type", N_("Type:"), "dc:type", RDF_RESOURCE,
-      N_("The nature or genre of the resource"), RDF_FORMAT_LINE, RDF_EDIT_HARDCODED,
-    },
-
-    { "creator", N_("Creator:"), "dc:creator", RDF_AGENT,
-      N_("An entity primarily responsible for making the resource"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
-    },
-    { "rights", N_("Rights:"), "dc:rights", RDF_AGENT,
-      N_("Information about rights held in and over the resource"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
-    },
-    { "publisher", N_("Publisher:"), "dc:publisher", RDF_AGENT,
-      N_("An entity responsible for making the resource available"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    { "type", N_("Type"), "dc:type", RDF_RESOURCE,
+      N_("Type of document (DCMI Type)."), RDF_FORMAT_LINE, RDF_EDIT_HARDCODED,
     },
 
-    { "identifier", N_("Identifier:"), "dc:identifier", RDF_CONTENT,
-      N_("An unambiguous reference to the resource within a given context"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    { "creator", N_("Creator"), "dc:creator", RDF_AGENT,
+      N_("Name of entity primarily responsible for making the content of this document."), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
     },
-    { "source", N_("Source:"), "dc:source", RDF_CONTENT,
-      N_("A related resource from which the described resource is derived"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    { "rights", N_("Rights"), "dc:rights", RDF_AGENT,
+      N_("Name of entity with rights to the Intellectual Property of this document."), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
     },
-    { "relation", N_("Relation:"), "dc:relation", RDF_CONTENT,
-      N_("A related resource"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    { "publisher", N_("Publisher"), "dc:publisher", RDF_AGENT,
+      N_("Name of entity responsible for making this document available."), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
     },
-    { "language", N_("Language:"), "dc:language", RDF_CONTENT,
-      N_("A language of the resource"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+
+    { "identifier", N_("Identifier"), "dc:identifier", RDF_CONTENT,
+      N_("Unique URI to reference this document."), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
     },
-    { "subject", N_("Keywords:"), "dc:subject", RDF_BAG,
-      N_("The topic of the resource"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    { "source", N_("Source"), "dc:source", RDF_CONTENT,
+      N_("Unique URI to reference the source of this document."), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    },
+    { "relation", N_("Relation"), "dc:relation", RDF_CONTENT,
+      N_("Unique URI to a related document."), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    },
+    { "language", N_("Language"), "dc:language", RDF_CONTENT,
+      N_("Two-letter language tag with optional subtags for the language of this document.  (e.g. 'en-GB')"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    },
+    { "subject", N_("Keywords"), "dc:subject", RDF_BAG,
+      N_("The topic of this document as comma-separated key words, phrases, or classifications."), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
     },
     // TRANSLATORS: "Coverage": the spatial or temporal characteristics of the content.
     // For info, see Appendix D of http://www.w3.org/TR/1998/WD-rdf-schema-19980409/
-    { "coverage", N_("Coverage:"), "dc:coverage", RDF_CONTENT,
-      N_("The spatial or temporal topic of the resource, the spatial applicability of the resource, or the jurisdiction under which the resource is relevant"), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
+    { "coverage", N_("Coverage"), "dc:coverage", RDF_CONTENT,
+      N_("Extent or scope of this document."), RDF_FORMAT_LINE, RDF_EDIT_GENERIC,
     },
 
-    { "description", N_("Description:"), "dc:description", RDF_CONTENT,
-      N_("An account of the resource"), RDF_FORMAT_MULTILINE, RDF_EDIT_GENERIC,
+    { "description", N_("Description"), "dc:description", RDF_CONTENT,
+      N_("A short account of the content of this document."), RDF_FORMAT_MULTILINE, RDF_EDIT_GENERIC,
     },
 
     // FIXME: need to handle 1 agent per line of input
-    { "contributor", N_("Contributors:"), "dc:contributor", RDF_AGENT,
-      N_("An entity responsible for making contributions to the resource"), RDF_FORMAT_MULTILINE, RDF_EDIT_GENERIC,
+    { "contributor", N_("Contributors"), "dc:contributor", RDF_AGENT,
+      N_("Names of entities responsible for making contributions to the content of this document."), RDF_FORMAT_MULTILINE, RDF_EDIT_GENERIC,
     },
 
     // TRANSLATORS: URL to a page that defines the license for the document
-    { "license_uri", N_("URI:"), "cc:license", RDF_RESOURCE,
+    { "license_uri", N_("URI"), "cc:license", RDF_RESOURCE,
       // TRANSLATORS: this is where you put a URL to a page that defines the license
-      N_("URI to this document's license's namespace definition"), RDF_FORMAT_LINE, RDF_EDIT_SPECIAL,
+      N_("URI to this document's license's namespace definition."), RDF_FORMAT_LINE, RDF_EDIT_SPECIAL,
     },
 
       // TRANSLATORS: fragment of XML representing the license of the document
-    { "license_fragment", N_("Fragment:"), "License", RDF_XML,
-      N_("XML fragment for the RDF 'License' section"), RDF_FORMAT_MULTILINE, RDF_EDIT_SPECIAL,
+    { "license_fragment", N_("Fragment"), "License", RDF_XML,
+      N_("XML fragment for the RDF 'License' section."), RDF_FORMAT_MULTILINE, RDF_EDIT_SPECIAL,
     },
-
+    
     { NULL, NULL, NULL, RDF_CONTENT,
       NULL, RDF_FORMAT_LINE, RDF_EDIT_HARDCODED,
     }
 };
 
-
-// Simple start of C++-ification:
-class RDFImpl
-{
-public:
-    /**
-     * Some implementations do not put RDF stuff inside <metadata>,
-     * so we need to check for it and add it if we don't see it.
-     */
-    static void ensureParentIsMetadata( SPDocument *doc, Inkscape::XML::Node *node );
-
-    static Inkscape::XML::Node const *getRdfRootRepr( SPDocument const * doc );
-    static Inkscape::XML::Node *ensureRdfRootRepr( SPDocument * doc );
-
-    static Inkscape::XML::Node const *getXmlRepr( SPDocument const * doc, gchar const * name );
-    static Inkscape::XML::Node *getXmlRepr( SPDocument * doc, gchar const * name );
-    static Inkscape::XML::Node *ensureXmlRepr( SPDocument * doc, gchar const * name );
-
-    static Inkscape::XML::Node const *getWorkRepr( SPDocument const * doc, gchar const * name );
-    static Inkscape::XML::Node *ensureWorkRepr( SPDocument * doc, gchar const * name );
-
-    static const gchar *getWorkEntity(SPDocument const * doc, struct rdf_work_entity_t & entity);
-    static unsigned int setWorkEntity(SPDocument * doc, struct rdf_work_entity_t & entity, gchar const * text);
-
-    static void setDefaults( SPDocument * doc );
-
-    /**
-     *  Pull the text out of an RDF entity, depends on how it's stored.
-     *
-     *  @return  A pointer to the entity's static contents as a string
-     *  @param   repr    The XML element to extract from
-     *  @param   entity  The desired RDF/Work entity
-     *  
-     */
-    static const gchar *getReprText( Inkscape::XML::Node const * repr, struct rdf_work_entity_t const & entity );
-
-    static unsigned int setReprText( Inkscape::XML::Node * repr,
-                                     struct rdf_work_entity_t const & entity,
-                                     gchar const * text );
-
-    static struct rdf_license_t *getLicense(SPDocument *document);
-
-    static void setLicense(SPDocument * doc, struct rdf_license_t const * license);
-};
-
 /**
- *  Retrieves a known RDF/Work entity by name.
- *
- *  @return  A pointer to an RDF/Work entity
- *  @param   name  The desired RDF/Work entity
+ *  \brief   Retrieves a known RDF/Work entity by name
+ *  \return  A pointer to an RDF/Work entity
+ *  \param   name  The desired RDF/Work entity
  *  
  */
-struct rdf_work_entity_t *rdf_find_entity(gchar const * name)
+struct rdf_work_entity_t *
+rdf_find_entity(gchar const * name)
 {
     struct rdf_work_entity_t *entity;
     for (entity=rdf_work_entities; entity->name; entity++) {
@@ -482,16 +431,25 @@ rdf_string(struct rdf_t * rdf)
 */
 
 
-const gchar *RDFImpl::getReprText( Inkscape::XML::Node const * repr, struct rdf_work_entity_t const & entity )
+/**
+ *  \brief   Pull the text out of an RDF entity, depends on how it's stored
+ *  \return  A pointer to the entity's static contents as a string
+ *  \param   repr    The XML element to extract from
+ *  \param   entity  The desired RDF/Work entity
+ *  
+ */
+const gchar *
+rdf_get_repr_text ( Inkscape::XML::Node * repr, struct rdf_work_entity_t * entity )
 {
     g_return_val_if_fail (repr != NULL, NULL);
+    g_return_val_if_fail (entity != NULL, NULL);
     static gchar * bag = NULL;
     gchar * holder = NULL;
 
-    Inkscape::XML::Node const * temp = NULL;
-    switch (entity.datatype) {
+    Inkscape::XML::Node * temp=NULL;
+    switch (entity->datatype) {
         case RDF_CONTENT:
-            temp = repr->firstChild();
+            temp = sp_repr_children(repr);
             if ( temp == NULL ) return NULL;
             
             return temp->content();
@@ -503,7 +461,7 @@ const gchar *RDFImpl::getReprText( Inkscape::XML::Node const * repr, struct rdf_
             temp = sp_repr_lookup_name ( temp, "dc:title", 1 );
             if ( temp == NULL ) return NULL;
 
-            temp = temp->firstChild();
+            temp = sp_repr_children(temp);
             if ( temp == NULL ) return NULL;
 
             return temp->content();
@@ -522,15 +480,15 @@ const gchar *RDFImpl::getReprText( Inkscape::XML::Node const * repr, struct rdf_
             temp = sp_repr_lookup_name ( repr, "rdf:Bag", 1 );
             if ( temp == NULL ) {
                 /* backwards compatible: read contents */
-                temp = repr->firstChild();
+                temp = sp_repr_children(repr);
                 if ( temp == NULL ) return NULL;
             
                 return temp->content();
             }
 
-            for ( temp = temp->firstChild() ;
+            for ( temp = sp_repr_children(temp) ;
                   temp ;
-                  temp = temp->next() ) {
+                  temp = sp_repr_next(temp) ) {
                 if (!strcmp(temp->name(),"rdf:li") &&
                     temp->firstChild()) {
                     const gchar * str = temp->firstChild()->content();
@@ -552,33 +510,34 @@ const gchar *RDFImpl::getReprText( Inkscape::XML::Node const * repr, struct rdf_
     return NULL;
 }
 
-unsigned int RDFImpl::setReprText( Inkscape::XML::Node * repr,
-                                   struct rdf_work_entity_t const & entity,
-                                   gchar const * text )
+unsigned int
+rdf_set_repr_text ( Inkscape::XML::Node * repr,
+                    struct rdf_work_entity_t * entity,
+                    gchar const * text )
 {
     g_return_val_if_fail ( repr != NULL, 0);
+    g_return_val_if_fail ( entity != NULL, 0);
     g_return_val_if_fail ( text != NULL, 0);
     gchar * str = NULL;
     gchar** strlist = NULL;
     int i;
 
     Inkscape::XML::Node * temp=NULL;
+    Inkscape::XML::Node * child=NULL;
     Inkscape::XML::Node * parent=repr;
 
     Inkscape::XML::Document * xmldoc = parent->document();
     g_return_val_if_fail (xmldoc != NULL, FALSE);
 
     // set document's title element to the RDF title
-    if (!strcmp(entity.name, "title")) {
+    if (!strcmp(entity->name, "title")) {
         SPDocument *doc = SP_ACTIVE_DOCUMENT;
-        if (doc && doc->getRoot()) {
-            doc->getRoot()->setTitle(text);
-        }
+        if(doc && doc->root) doc->root->setTitle(text);
     }
 
-    switch (entity.datatype) {
+    switch (entity->datatype) {
         case RDF_CONTENT:
-            temp = parent->firstChild();
+            temp = sp_repr_children(parent);
             if ( temp == NULL ) {
                 temp = xmldoc->createTextNode( text );
                 g_return_val_if_fail (temp != NULL, FALSE);
@@ -614,7 +573,7 @@ unsigned int RDFImpl::setReprText( Inkscape::XML::Node * repr,
             }
             parent = temp;
 
-            temp = parent->firstChild();
+            temp = sp_repr_children(parent);
             if ( temp == NULL ) {
                 temp = xmldoc->createTextNode( text );
                 g_return_val_if_fail (temp != NULL, FALSE);
@@ -641,7 +600,7 @@ unsigned int RDFImpl::setReprText( Inkscape::XML::Node * repr,
             temp = sp_repr_lookup_name ( parent, "rdf:Bag", 1 );
             if ( temp == NULL ) {
                 /* backward compatibility: drop the dc:subject contents */
-                while ( (temp = parent->firstChild()) ) {
+                while ( (temp = sp_repr_children( parent )) ) {
                     parent->removeChild(temp);
                 }
 
@@ -654,7 +613,7 @@ unsigned int RDFImpl::setReprText( Inkscape::XML::Node * repr,
             parent = temp;
 
             /* toss all the old list items */
-            while ( (temp = parent->firstChild()) ) {
+            while ( (temp = sp_repr_children( parent )) ) {
                 parent->removeChild(temp);
             }
 
@@ -668,7 +627,7 @@ unsigned int RDFImpl::setReprText( Inkscape::XML::Node * repr,
                 parent->appendChild(temp);
                 Inkscape::GC::release(temp);
 
-                Inkscape::XML::Node * child = xmldoc->createTextNode( g_strstrip(str) );
+                child = xmldoc->createTextNode( g_strstrip(str) );
                 g_return_val_if_fail (child != NULL, 0);
 
                 temp->appendChild(child);
@@ -684,262 +643,186 @@ unsigned int RDFImpl::setReprText( Inkscape::XML::Node * repr,
     return 0;
 }
 
-void RDFImpl::ensureParentIsMetadata( SPDocument *doc, Inkscape::XML::Node *node )
+Inkscape::XML::Node *
+rdf_get_rdf_root_repr ( SPDocument * doc, bool build )
 {
-    if ( !node ) {
-        g_critical("Null node passed to ensureParentIsMetadata().");
-    } else if ( !node->parent() ) {
-        g_critical( "No parent node when verifying <metadata> placement." );
-    } else {
-        Inkscape::XML::Node * currentParent = node->parent();
-        if ( strcmp( currentParent->name(), XML_TAG_NAME_METADATA ) != 0 ) {
-            Inkscape::XML::Node * metadata = doc->getReprDoc()->createElement( XML_TAG_NAME_METADATA );
-            if ( !metadata ) {
-                g_critical("Unable to create metadata element.");
-            } else {
-                // attach the metadata node
-                currentParent->appendChild( metadata );
-                Inkscape::GC::release( metadata );
+    g_return_val_if_fail (doc        != NULL, NULL);
+    g_return_val_if_fail (doc->rroot != NULL, NULL);
 
-                // move the node into it
-                Inkscape::GC::anchor( node );
-                sp_repr_unparent( node );
-                metadata->appendChild( node );
-                Inkscape::GC::release( node );
-            }
+    Inkscape::XML::Document * xmldoc = sp_document_repr_doc(doc);
+    g_return_val_if_fail (xmldoc != NULL, NULL);
+
+    Inkscape::XML::Node * rdf = sp_repr_lookup_name ( doc->rroot, XML_TAG_NAME_RDF );
+
+    if (rdf == NULL) {
+        //printf("missing XML '%s'\n",XML_TAG_NAME_RDF);
+        if (!build) return NULL;
+
+        Inkscape::XML::Node * svg = sp_repr_lookup_name ( doc->rroot, XML_TAG_NAME_SVG );
+        g_return_val_if_fail ( svg != NULL, NULL );
+
+        Inkscape::XML::Node * parent = sp_repr_lookup_name ( svg, XML_TAG_NAME_METADATA );
+        if ( parent == NULL ) {
+            parent = xmldoc->createElement( XML_TAG_NAME_METADATA );
+            g_return_val_if_fail ( parent != NULL, NULL);
+
+            svg->appendChild(parent);
+            Inkscape::GC::release(parent);
         }
-    }
-}
 
-Inkscape::XML::Node const *RDFImpl::getRdfRootRepr( SPDocument const * doc )
-{
-    Inkscape::XML::Node const *rdf = 0;
-    if ( !doc ) {
-        g_critical("Null doc passed to getRdfRootRepr()");
-    } else if ( !doc->getReprDoc() ) {
-        g_critical("XML doc is null.");
-    } else {
-        rdf = sp_repr_lookup_name( doc->getReprDoc(), XML_TAG_NAME_RDF );
-    }
+        Inkscape::XML::Document * xmldoc = parent->document();
+        g_return_val_if_fail (xmldoc != NULL, FALSE);
 
-    return rdf;
-}
+        rdf = xmldoc->createElement( XML_TAG_NAME_RDF );
+        g_return_val_if_fail (rdf != NULL, NULL);
 
-Inkscape::XML::Node *RDFImpl::ensureRdfRootRepr( SPDocument * doc )
-{
-    Inkscape::XML::Node *rdf = 0;
-    if ( !doc ) {
-        g_critical("Null doc passed to ensureRdfRootRepr()");
-    } else if ( !doc->getReprDoc() ) {
-        g_critical("XML doc is null.");
-    } else {
-        rdf = sp_repr_lookup_name( doc->getReprDoc(), XML_TAG_NAME_RDF );
-        if ( !rdf ) {
-            Inkscape::XML::Node * svg = sp_repr_lookup_name( doc->getReprRoot(), XML_TAG_NAME_SVG );
-            if ( !svg ) {
-                g_critical("Unable to locate svg element.");
-            } else {
-                Inkscape::XML::Node * parent = sp_repr_lookup_name( svg, XML_TAG_NAME_METADATA );
-                if ( parent == NULL ) {
-                    parent = doc->getReprDoc()->createElement( XML_TAG_NAME_METADATA );
-                    if ( !parent ) {
-                        g_critical("Unable to create metadata element");
-                    } else {
-                        svg->appendChild(parent);
-                        Inkscape::GC::release(parent);
-                    }
-                }
-
-                if ( parent && !parent->document() ) {
-                    g_critical("Parent has no document");
-                } else if ( parent ) {
-                    rdf = parent->document()->createElement( XML_TAG_NAME_RDF );
-                    if ( !rdf ) {
-                        g_critical("Unable to create root RDF element.");
-                    } else {
-                        parent->appendChild(rdf);
-                        Inkscape::GC::release(rdf);
-                    }
-                }
-            }
-        }
-    }
-
-    if ( rdf ) {
-        ensureParentIsMetadata( doc, rdf );
-    }
-
-    return rdf;
-}
-
-Inkscape::XML::Node const *RDFImpl::getXmlRepr( SPDocument const * doc, gchar const * name )
-{
-    Inkscape::XML::Node const * xml = 0;
-    if ( !doc ) {
-        g_critical("Null doc passed to getXmlRepr()");
-    } else if ( !doc->getReprDoc() ) {
-        g_critical("XML doc is null.");
-    } else if (!name) {
-        g_critical("Null name passed to getXmlRepr()");        
-    } else {
-        Inkscape::XML::Node const * rdf = getRdfRootRepr( doc );
-        if ( rdf ) {
-            xml = sp_repr_lookup_name( rdf, name );
-        }
-    }
-    return xml;
-}
-
-Inkscape::XML::Node *RDFImpl::getXmlRepr( SPDocument * doc, gchar const * name )
-{
-    Inkscape::XML::Node const *xml = getXmlRepr( const_cast<SPDocument const *>(doc), name );
-
-    return const_cast<Inkscape::XML::Node *>(xml);
-}
-
-Inkscape::XML::Node *RDFImpl::ensureXmlRepr( SPDocument * doc, gchar const * name )
-{
-    Inkscape::XML::Node * xml = 0;
-    if ( !doc ) {
-        g_critical("Null doc passed to ensureXmlRepr()");
-    } else if ( !doc->getReprDoc() ) {
-        g_critical("XML doc is null.");
-    } else if (!name) {
-        g_critical("Null name passed to ensureXmlRepr()");        
-    } else {
-        Inkscape::XML::Node * rdf = ensureRdfRootRepr( doc );
-        if ( rdf ) {
-            xml = sp_repr_lookup_name( rdf, name );
-            if ( !xml ) {
-                xml = doc->getReprDoc()->createElement( name );
-                if ( !xml ) {
-                    g_critical("Unable to create xml element <%s>.", name);
-                } else {
-                    xml->setAttribute("rdf:about", "" );
-
-                    rdf->appendChild(xml);
-                    Inkscape::GC::release(xml);
-                }
-            }
-        }
-    }
-    return xml;
-}
-
-Inkscape::XML::Node const *RDFImpl::getWorkRepr( SPDocument const * doc, gchar const * name )
-{
-    Inkscape::XML::Node const * item = 0;
-    if ( !doc ) {
-        g_critical("Null doc passed to getWorkRepr()");
-    } else if ( !doc->getReprDoc() ) {
-        g_critical("XML doc is null.");
-    } else if (!name) {
-        g_critical("Null name passed to getWorkRepr()");        
-    } else {
-        Inkscape::XML::Node const* work = getXmlRepr( doc, XML_TAG_NAME_WORK );
-        if ( work ) {
-            item = sp_repr_lookup_name( work, name, 1 );
-        }
-    }
-    return item;
-}
-
-Inkscape::XML::Node *RDFImpl::ensureWorkRepr( SPDocument * doc, gchar const * name )
-{
-    Inkscape::XML::Node * item = 0;
-    if ( !doc ) {
-        g_critical("Null doc passed to ensureWorkRepr()");
-    } else if ( !doc->getReprDoc() ) {
-        g_critical("XML doc is null.");
-    } else if (!name) {
-        g_critical("Null name passed to ensureWorkRepr()");        
-    } else {
-        Inkscape::XML::Node * work = ensureXmlRepr( doc, XML_TAG_NAME_WORK );
-        if ( work ) {
-            item = sp_repr_lookup_name( work, name, 1 );
-            if ( !item ) {
-                //printf("missing XML '%s'\n",name);
-                item = doc->getReprDoc()->createElement( name );
-                if ( !item ) {
-                    g_critical("Unable to create xml element <%s>", name);
-                } else {
-                    work->appendChild(item);
-                    Inkscape::GC::release(item);
-                }
-            }
-        }
-    }
-    return item;
-}
-
-
-// Public API:
-const gchar *rdf_get_work_entity(SPDocument const * doc, struct rdf_work_entity_t * entity)
-{
-    const gchar *result = 0;
-    if ( !doc ) {
-        g_critical("Null doc passed to rdf_get_work_entity()");
-    } else if ( entity ) {
-        //g_message("want '%s'\n",entity->title);
-
-        result = RDFImpl::getWorkEntity( doc, *entity );
-
-        //g_message("found '%s' == '%s'\n", entity->title, result );
-    }
-    return result;
-}
-
-const gchar *RDFImpl::getWorkEntity(SPDocument const * doc, struct rdf_work_entity_t & entity)
-{
-    gchar const *result = 0;
-
-    Inkscape::XML::Node const * item = getWorkRepr( doc, entity.tag );
-    if ( item ) {
-        result = getReprText( item, entity );
-        // TODO note that this is the location that used to set the title if needed. Ensure code it not required.
-    }
-
-    return result;
-}
-
-// Public API:
-unsigned int rdf_set_work_entity(SPDocument * doc, struct rdf_work_entity_t * entity,
-                                 const gchar * text)
-{
-    unsigned int result = 0;
-    if ( !doc ) {
-        g_critical("Null doc passed to rdf_set_work_entity()");
-    } else if ( entity ) {
-        result = RDFImpl::setWorkEntity( doc, *entity, text );
-    }
-
-    return result;
-}
-
-unsigned int RDFImpl::setWorkEntity(SPDocument * doc, struct rdf_work_entity_t & entity, const gchar * text)
-{
-    int result = 0;
-    if ( !text ) {
-        // FIXME: on a "NULL" text, delete the entity.  For now, blank it.
-        text = "";
+        parent->appendChild(rdf);
+        Inkscape::GC::release(rdf);
     }
 
     /*
-      printf("changing '%s' (%s) to '%s'\n",
-      entity->title,
-      entity->tag,
-      text);
-    */
+     * some implementations do not put RDF stuff inside <metadata>,
+     * so we need to check for it and add it if we don't see it
+     */
+    Inkscape::XML::Node * want_metadata = sp_repr_parent ( rdf );
+    g_return_val_if_fail (want_metadata != NULL, NULL);
+    if (strcmp( want_metadata->name(), XML_TAG_NAME_METADATA )) {
+            Inkscape::XML::Node * metadata = xmldoc->createElement( XML_TAG_NAME_METADATA );
+            g_return_val_if_fail (metadata != NULL, NULL);
 
-    Inkscape::XML::Node * item = ensureWorkRepr( doc, entity.tag );
-    if ( !item ) {
-        g_critical("Unable to get work element");
-    } else {
-        result = setReprText( item, entity, text );
+            /* attach the metadata node */
+            want_metadata->appendChild(metadata);
+            Inkscape::GC::release(metadata);
+
+            /* move the RDF into it */
+            Inkscape::GC::anchor(rdf);
+            sp_repr_unparent ( rdf );
+            metadata->appendChild(rdf);
+            Inkscape::GC::release(rdf);
     }
+    
+    return rdf;
+}
+
+Inkscape::XML::Node *
+rdf_get_xml_repr( SPDocument * doc, gchar const * name, bool build )
+{
+    g_return_val_if_fail (name       != NULL, NULL);
+    g_return_val_if_fail (doc        != NULL, NULL);
+    g_return_val_if_fail (doc->rroot != NULL, NULL);
+
+    Inkscape::XML::Node * rdf = rdf_get_rdf_root_repr ( doc, build );
+    if (!rdf) return NULL;
+
+    Inkscape::XML::Node * xml = sp_repr_lookup_name ( rdf, name );
+    if (xml == NULL) {
+        //printf("missing XML '%s'\n",name);
+        if (!build) return NULL;
+
+        Inkscape::XML::Document * xmldoc = sp_document_repr_doc(doc);
+        g_return_val_if_fail (xmldoc != NULL, NULL);
+
+        xml = xmldoc->createElement( name );
+        g_return_val_if_fail (xml != NULL, NULL);
+
+        xml->setAttribute("rdf:about", "" );
+
+        rdf->appendChild(xml);
+        Inkscape::GC::release(xml);
+    }
+
+    return xml;
+}
+
+Inkscape::XML::Node *
+rdf_get_work_repr( SPDocument * doc, gchar const * name, bool build )
+{
+    g_return_val_if_fail (name       != NULL, NULL);
+    g_return_val_if_fail (doc        != NULL, NULL);
+    g_return_val_if_fail (doc->rroot != NULL, NULL);
+
+    Inkscape::XML::Node * work = rdf_get_xml_repr ( doc, XML_TAG_NAME_WORK, build );
+    if (!work) return NULL;
+
+    Inkscape::XML::Node * item = sp_repr_lookup_name ( work, name, 1 );
+    if (item == NULL) {
+        //printf("missing XML '%s'\n",name);
+        if (!build) return NULL;
+
+        Inkscape::XML::Document * xmldoc = sp_document_repr_doc(doc);
+        g_return_val_if_fail (xmldoc != NULL, NULL);
+
+        item = xmldoc->createElement( name );
+        g_return_val_if_fail (item != NULL, NULL);
+
+        work->appendChild(item);
+        Inkscape::GC::release(item);
+    }
+
+    return item;
+}
+
+
+
+/**
+ *  \brief   Retrieves a known RDF/Work entity's contents from the document XML by name
+ *  \return  A pointer to the entity's static contents as a string, or NULL if no entity exists
+ *  \param   entity  The desired RDF/Work entity
+ *  
+ */
+const gchar *
+rdf_get_work_entity(SPDocument * doc, struct rdf_work_entity_t * entity)
+{
+    g_return_val_if_fail (doc    != NULL, NULL);
+    if ( entity == NULL ) return NULL;
+    //printf("want '%s'\n",entity->title);
+    bool bIsTitle = !strcmp(entity->name, "title");
+
+    Inkscape::XML::Node * item;
+    if ( entity->datatype == RDF_XML ) {
+        item = rdf_get_xml_repr ( doc, entity->tag, FALSE );
+    }
+    else {
+        item = rdf_get_work_repr( doc, entity->tag, bIsTitle ); // build title if necessary
+    }
+    if ( item == NULL ) return NULL;
+    const gchar * result = rdf_get_repr_text ( item, entity );
+    if(!result && bIsTitle && doc->root) {         // if RDF title not set
+        result = doc->root->title();               // get the document's <title>
+        rdf_set_work_entity(doc, entity, result);  // and set the RDF
+    }
+    //printf("found '%s' == '%s'\n", entity->title, result );
     return result;
 }
 
+/**
+ *  \brief   Stores a string into a named RDF/Work entity in the document XML
+ *  \param   entity The desired RDF/Work entity to replace
+ *  \param   string The string to replace the entity contents with
+ *  
+ */
+unsigned int
+rdf_set_work_entity(SPDocument * doc, struct rdf_work_entity_t * entity,
+                    const gchar * text)
+{
+    g_return_val_if_fail ( entity != NULL, 0 );
+    if (text == NULL) {
+        // FIXME: on a "NULL" text, delete the entity.  For now, blank it.
+        text="";
+    }
+
+    /*
+    printf("changing '%s' (%s) to '%s'\n",
+        entity->title,
+        entity->tag,
+        text);
+    */
+
+    Inkscape::XML::Node * item = rdf_get_work_repr( doc, entity->tag, TRUE );
+    g_return_val_if_fail ( item != NULL, 0 );
+
+    return rdf_set_repr_text ( item, entity, text );
+}
 
 #undef DEBUG_MATCH
 
@@ -961,9 +844,9 @@ rdf_match_license(Inkscape::XML::Node const *repr, struct rdf_license_t const *l
     }
     bool * matched = (bool*)calloc(count,sizeof(bool));
 
-    for (Inkscape::XML::Node const *current = repr->firstChild();
+    for (Inkscape::XML::Node const *current = sp_repr_children(repr);
          current;
-         current = current->next() ) {
+         current = sp_repr_next ( current ) ) {
 
         gchar const * attr = current->attribute("rdf:resource");
         if ( attr == NULL ) continue;
@@ -1029,137 +912,61 @@ rdf_match_license(Inkscape::XML::Node const *repr, struct rdf_license_t const *l
     return result;
 }
 
-// Public API:
-struct rdf_license_t *rdf_get_license(SPDocument *document)
+/**
+ *  \brief   Attempts to match and retrieve a known RDF/License from the document XML
+ *  \return  A pointer to the static RDF license structure
+ *  
+ */
+struct rdf_license_t *
+rdf_get_license(SPDocument * document)
 {
-    return RDFImpl::getLicense(document);
-}
-
-struct rdf_license_t *RDFImpl::getLicense(SPDocument *document)
-{
-    // Base license lookup on the URI of cc:license rather than the license
-    // properties, per instructions from the ccREL gurus.
-    // (Fixes https://bugs.launchpad.net/inkscape/+bug/372427)
-
-    struct rdf_work_entity_t *entity = rdf_find_entity("license_uri");
-    if (entity == NULL) {
-        g_critical("Can't find internal entity structure for 'license_uri'");
-        return NULL;
-    }
-
-    const gchar *uri = getWorkEntity(document, *entity);
-    struct rdf_license_t * license_by_uri = NULL;
-
-    if (uri != NULL) {
-        for (struct rdf_license_t * license = rdf_licenses; license->name; license++) {
-            if (g_strcmp0(uri, license->uri) == 0) {
-                license_by_uri = license;
-                break;
-            }
-        }
-    }
-
-    // To improve backward compatibility, the old license matching code is
-    // kept as fallback and to warn about and fix discrepancies.
-
-    // TODO: would it be better to do this code on document load?  Is
-    // sp_metadata_build() then the right place to put the call to sort out
-    // any RDF mess?
-    
-    struct rdf_license_t * license_by_properties = NULL;
-    
-    Inkscape::XML::Node const *repr = getXmlRepr( document, XML_TAG_NAME_LICENSE );
+    Inkscape::XML::Node const *repr = rdf_get_xml_repr ( document, XML_TAG_NAME_LICENSE, FALSE );
     if (repr) {
-        for ( struct rdf_license_t * license = rdf_licenses; license->name; license++ ) {
-            if ( rdf_match_license( repr, license ) ) {
-                license_by_properties = license;
-                break;
-            }
+        for (struct rdf_license_t * license = rdf_licenses;
+             license->name; license++ ) {
+            if ( rdf_match_license ( repr, license ) ) return license;
         }
     }
-
-    if (license_by_uri != NULL && license_by_properties != NULL) {
-        // Both property and structure, use property
-        if (license_by_uri != license_by_properties) {
-            // TODO: this should be a user-visible warning, but how?
-            g_warning("Mismatch between %s and %s metadata:\n"
-                      "%s value URI:   %s (using this one!)\n"
-                      "%s derived URI: %s",
-                      XML_TAG_NAME_LICENSE_PROP,
-                      XML_TAG_NAME_LICENSE,
-                      XML_TAG_NAME_LICENSE_PROP,
-                      license_by_uri->uri,
-                      XML_TAG_NAME_LICENSE,
-                      license_by_properties->uri);
-        }
-
-        // Reset license structure to match so the document is consistent
-        // (and this will also silence the warning above on repeated calls).
-        setLicense(document, license_by_uri);
-
-        return license_by_uri;
+#ifdef DEBUG_MATCH
+    else {
+        printf("no license XML\n");
     }
-    else if (license_by_uri != NULL) {
-        // Only cc:license property, set structure for backward compatiblity
-        setLicense(document, license_by_uri);
-
-        return license_by_uri;
-    }
-    else if (license_by_properties != NULL) {
-        // Only cc:License structure
-        // TODO: this could be a user-visible warning too
-        g_warning("No %s metadata found, derived license URI from %s: %s",
-                  XML_TAG_NAME_LICENSE_PROP, XML_TAG_NAME_LICENSE,
-                  license_by_properties->uri);
-        
-        // Set license property to match
-        setWorkEntity(document, *entity, license_by_properties->uri);
-
-        return license_by_properties;
-    }
-
-    // No license info at all
+#endif
     return NULL;
 }
 
-// Public API:
-void rdf_set_license(SPDocument * doc, struct rdf_license_t const * license)
+/**
+ *  \brief   Stores an RDF/License XML in the document XML
+ *  \param   document  Which document to update
+ *  \param   license   The desired RDF/License structure to store; NULL drops old license, so can be used for proprietary license. 
+ *  
+ */
+void
+rdf_set_license(SPDocument * doc, struct rdf_license_t const * license)
 {
-    RDFImpl::setLicense( doc, license );
-}
-
-void RDFImpl::setLicense(SPDocument * doc, struct rdf_license_t const * license)
-{
-    // When basing license check on only the license URI (see fix for
-    // https://bugs.launchpad.net/inkscape/+bug/372427 above) we should
-    // really drop this license section, but keep writing it for a while for
-    // compatibility with older versions.
-
     // drop old license section
-    Inkscape::XML::Node * repr = getXmlRepr( doc, XML_TAG_NAME_LICENSE );
-    if (repr) {
-        sp_repr_unparent(repr);
-    }
+    Inkscape::XML::Node * repr = rdf_get_xml_repr ( doc, XML_TAG_NAME_LICENSE, FALSE );
+    if (repr) sp_repr_unparent(repr);
 
-    if ( !license ) {
-        // All done
-    } else if ( !doc->getReprDoc() ) {
-        g_critical("XML doc is null.");
-    } else {
-        // build new license section
-        repr = ensureXmlRepr( doc, XML_TAG_NAME_LICENSE );
-        g_assert( repr );
+    if (!license) return;
 
-        repr->setAttribute("rdf:about", license->uri );
+    // build new license section
+    repr = rdf_get_xml_repr ( doc, XML_TAG_NAME_LICENSE, TRUE );
+    g_assert ( repr );
 
-        for (struct rdf_double_t const * detail = license->details; detail->name; detail++) {
-            Inkscape::XML::Node * child = doc->getReprDoc()->createElement( detail->name );
-            g_assert ( child != NULL );
+    repr->setAttribute("rdf:about", license->uri );
 
-            child->setAttribute("rdf:resource", detail->resource );
-            repr->appendChild(child);
-            Inkscape::GC::release(child);
-        }
+    Inkscape::XML::Document * xmldoc = sp_document_repr_doc(doc);
+    g_return_if_fail (xmldoc != NULL);
+
+    for (struct rdf_double_t const * detail = license->details;
+         detail->name; detail++) {
+        Inkscape::XML::Node * child = xmldoc->createElement( detail->name );
+        g_assert ( child != NULL );
+
+        child->setAttribute("rdf:resource", detail->resource );
+        repr->appendChild(child);
+        Inkscape::GC::release(child);
     }
 }
 
@@ -1173,72 +980,33 @@ struct rdf_entity_default_t rdf_defaults[] = {
     { NULL,          NULL, }
 };
 
-// Public API:
-void rdf_set_defaults( SPDocument * doc )
+void
+rdf_set_defaults ( SPDocument * doc )
 {
-    RDFImpl::setDefaults( doc );
-
-}
-
-void RDFImpl::setDefaults( SPDocument * doc )
-{
-    g_assert( doc != NULL );
+    g_assert ( doc != NULL );
 
     // Create metadata node if it doesn't already exist
-    if (!sp_item_group_get_child_by_name( doc->getRoot(), NULL,
+    if (!sp_item_group_get_child_by_name ((SPGroup *) doc->root, NULL,
                                           XML_TAG_NAME_METADATA)) {
-        if ( !doc->getReprDoc()) {
-            g_critical("XML doc is null.");
-        } else {
-            // create repr
-            Inkscape::XML::Node * rnew = doc->getReprDoc()->createElement(XML_TAG_NAME_METADATA);
-
-            // insert into the document
-            doc->getReprRoot()->addChild(rnew, NULL);
-
-            // clean up
-            Inkscape::GC::release(rnew);
-        }
+        // create repr
+        Inkscape::XML::Document * xmldoc = sp_document_repr_doc(doc);
+        g_return_if_fail (xmldoc != NULL);
+        Inkscape::XML::Node * rnew = xmldoc->createElement (XML_TAG_NAME_METADATA);
+        // insert into the document
+        doc->rroot->addChild(rnew, NULL);
+        // clean up
+        Inkscape::GC::release(rnew);
     }
 
-    // install defaults
-    for ( struct rdf_entity_default_t * rdf_default = rdf_defaults; rdf_default->name; rdf_default++) {
-        struct rdf_work_entity_t * entity = rdf_find_entity( rdf_default->name );
-        g_assert( entity != NULL );
+    /* install defaults */
+    for ( struct rdf_entity_default_t * rdf_default = rdf_defaults;
+          rdf_default->name;
+          rdf_default++) {
+        struct rdf_work_entity_t * entity = rdf_find_entity ( rdf_default->name );
+        g_assert ( entity != NULL );
 
-        if ( getWorkEntity( doc, *entity ) == NULL ) {
-            setWorkEntity( doc, *entity, rdf_default->text );
-        }
-    }
-}
-
-/*
- * Add the metadata stored in the users preferences to the document if
- *   a) the preference 'Input/Output->Add default metatdata to new documents' is true, and
- *   b) there is no metadata already in the file (such as from a template)
- */
-void rdf_add_from_preferences(SPDocument *doc)
-{
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    if (!prefs->getBool("/metadata/addToNewFile")) {
-        return;
-    }
-
-    // If there is already some metadata in the doc (from a template) dont add default metadata
-    for (struct rdf_work_entity_t *entity = rdf_work_entities; entity && entity->name; entity++) {
-        if ( entity->editable == RDF_EDIT_GENERIC &&
-                rdf_get_work_entity (doc, entity)) {
-            return;
-        }
-    }
-
-    // Put the metadata from user preferences into the doc
-    for (struct rdf_work_entity_t *entity = rdf_work_entities; entity && entity->name; entity++) {
-        if ( entity->editable == RDF_EDIT_GENERIC ) {
-            Glib::ustring text = prefs->getString(PREFS_METADATA + Glib::ustring(entity->name));
-            if (text.length() > 0) {
-                rdf_set_work_entity (doc, entity, text.c_str());
-            }
+        if ( rdf_get_work_entity ( doc, entity ) == NULL ) {
+            rdf_set_work_entity ( doc, entity, rdf_default->text );
         }
     }
 }
@@ -1252,4 +1020,4 @@ void rdf_add_from_preferences(SPDocument *doc)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

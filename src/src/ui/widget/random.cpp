@@ -1,4 +1,10 @@
-/*
+/**
+ * \brief Scalar Widget - A labelled text box, with spin buttons and optional
+ *        icon or suffix, for entering arbitrary number values. It adds an extra
+ *       number called "startseed", that is not UI edittable, but should be put in SVG.
+ *      This does NOT generate a random number, but provides merely the saving of 
+ *      the startseed value.
+ *
  * Authors:
  *   Carl Hetherington <inkscape@carlh.net>
  *   Derek P. Moore <derekm@hackunix.org>
@@ -19,12 +25,20 @@
 
 #include <glibmm/i18n.h>
 
-#include <gtkmm/button.h>
-
 namespace Inkscape {
 namespace UI {
 namespace Widget {
 
+/**
+ * Construct a Random scalar Widget.
+ *
+ * \param label     Label.
+ * \param suffix    Suffix, placed after the widget (defaults to "").
+ * \param icon      Icon filename, placed before the label (defaults to "").
+ * \param mnemonic  Mnemonic toggle; if true, an underscore (_) in the label
+ *                  indicates the next character should be used for the
+ *                  mnemonic accelerator key (defaults to false).
+ */
 Random::Random(Glib::ustring const &label, Glib::ustring const &tooltip,
                Glib::ustring const &suffix,
                Glib::ustring const &icon,
@@ -35,6 +49,17 @@ Random::Random(Glib::ustring const &label, Glib::ustring const &tooltip,
     addReseedButton();
 }
 
+/**
+ * Construct a  Random Scalar Widget.
+ *
+ * \param label     Label.
+ * \param digits    Number of decimal digits to display.
+ * \param suffix    Suffix, placed after the widget (defaults to "").
+ * \param icon      Icon filename, placed before the label (defaults to "").
+ * \param mnemonic  Mnemonic toggle; if true, an underscore (_) in the label
+ *                  indicates the next character should be used for the
+ *                  mnemonic accelerator key (defaults to false).
+ */
 Random::Random(Glib::ustring const &label, Glib::ustring const &tooltip,
                unsigned digits,
                Glib::ustring const &suffix,
@@ -46,12 +71,20 @@ Random::Random(Glib::ustring const &label, Glib::ustring const &tooltip,
     addReseedButton();
 }
 
+/**
+ * Construct a Random Scalar Widget.
+ *
+ * \param label     Label.
+ * \param adjust    Adjustment to use for the SpinButton.
+ * \param digits    Number of decimal digits to display (defaults to 0).
+ * \param suffix    Suffix, placed after the widget (defaults to "").
+ * \param icon      Icon filename, placed before the label (defaults to "").
+ * \param mnemonic  Mnemonic toggle; if true, an underscore (_) in the label
+ *                  indicates the next character should be used for the
+ *                  mnemonic accelerator key (defaults to true).
+ */
 Random::Random(Glib::ustring const &label, Glib::ustring const &tooltip,
-#if WITH_GTKMM_3_0
-               Glib::RefPtr<Gtk::Adjustment> &adjust,
-#else
                Gtk::Adjustment &adjust,
-#endif
                unsigned digits,
                Glib::ustring const &suffix,
                Glib::ustring const &icon,
@@ -62,17 +95,23 @@ Random::Random(Glib::ustring const &label, Glib::ustring const &tooltip,
     addReseedButton();
 }
 
-long Random::getStartSeed() const
+/** Gets the startseed  */
+long
+Random::getStartSeed() const
 {
     return startseed;
 }
 
-void Random::setStartSeed(long newseed)
+/** Sets the startseed number */
+void
+Random::setStartSeed(long newseed)
 {
     startseed = newseed;
 }
 
-void Random::addReseedButton()
+/** Add reseed button to the widget */
+void
+Random::addReseedButton()
 {
     Gtk::Widget*  pIcon = Gtk::manage( sp_icon_get_icon( "randomize", Inkscape::ICON_SIZE_BUTTON) );
     Gtk::Button * pButton = Gtk::manage(new Gtk::Button());
@@ -81,7 +120,7 @@ void Random::addReseedButton()
     pButton->add(*pIcon);
     pButton->show();
     pButton->signal_clicked().connect(sigc::mem_fun(*this, &Random::onReseedButtonClick));
-    pButton->set_tooltip_text(_("Reseed the random number generator; this creates a different sequence of random numbers."));
+    _tooltips.set_tip(*pButton, _("Reseed the random number generator; this creates a different sequence of random numbers."));
 
     pack_start(*pButton, Gtk::PACK_SHRINK, 0);
 }
@@ -106,4 +145,4 @@ Random::onReseedButtonClick()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

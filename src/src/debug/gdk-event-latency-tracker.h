@@ -12,7 +12,7 @@
 #ifndef SEEN_INKSCAPE_DEBUG_GDK_EVENT_LATENCY_TRACKER_H
 #define SEEN_INKSCAPE_DEBUG_GDK_EVENT_LATENCY_TRACKER_H
 
-typedef union _GdkEvent GdkEvent;
+#include <gdk/gdk.h>
 #include <glibmm/timer.h>
 #include <boost/optional.hpp>
 
@@ -53,4 +53,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

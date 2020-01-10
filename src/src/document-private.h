@@ -1,12 +1,11 @@
-#ifndef SEEN_SP_DOCUMENT_PRIVATE_H
-#define SEEN_SP_DOCUMENT_PRIVATE_H
+#ifndef __SP_DOCUMENT_PRIVATE_H__
+#define __SP_DOCUMENT_PRIVATE_H__
 
 /*
  * Seldom needed document data
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 1999-2002 Lauris Kaplinski
  * Copyright (C) 2001-2002 Ximian, Inc.
@@ -15,8 +14,6 @@
  */
 
 #include <map>
-#include <set>
-#include <string>
 #include <stddef.h>
 #include <sigc++/sigc++.h>
 #include "xml/event-fns.h"
@@ -26,9 +23,12 @@
 
 #include "composite-undo-stack-observer.h"
 
+#include "event-log.h"
 
 // XXX only for testing!
 #include "console-output-undo-observer.h"
+
+#define SP_DOCUMENT_DEFS(d) ((SPObject *) SP_ROOT (SP_DOCUMENT_ROOT (d))->defs)
 
 namespace Inkscape {
 namespace XML {
@@ -36,12 +36,13 @@ class Event;
 }
 }
 
+
 struct SPDocumentPrivate {
 	typedef std::map<GQuark, SPDocument::IDChangedSignal> IDChangedSignalMap;
 	typedef std::map<GQuark, SPDocument::ResourcesChangedSignal> ResourcesChangedSignalMap;
 
-        std::map<std::string, SPObject *> iddef;
-        std::map<Inkscape::XML::Node *, SPObject *> reprdef;
+	GHashTable *iddef;	/**< Dictionary of id -> SPObject mappings */
+	GHashTable *reprdef;   /**< Dictionary of Inkscape::XML::Node -> SPObject mappings */
 
 	unsigned long serial;
 
@@ -49,10 +50,10 @@ struct SPDocumentPrivate {
 	IDChangedSignalMap id_changed_signals;
 
 	/* Resources */
-        std::map<std::string, std::vector<SPObject *> > resources;
+	/* It is GHashTable of GSLists */
+	GHashTable *resources;
 	ResourcesChangedSignalMap resources_changed_signals;
 
-        sigc::signal<void> destroySignal;
 	SPDocument::ModifiedSignal modified_signal;
 	SPDocument::URISetSignal uri_set_signal;
 	SPDocument::ResizedSignal resized_signal;
@@ -61,11 +62,11 @@ struct SPDocumentPrivate {
   SPDocument::CommitSignal commit_signal;
 
 	/* Undo/Redo state */
-	bool sensitive; /* If we save actions to undo stack */
+	bool sensitive: true; /* If we save actions to undo stack */
 	Inkscape::XML::Event * partial; /* partial undo log when interrupted */
 	int history_size;
-        std::vector<Inkscape::Event *> undo; /* Undo stack of reprs */
-        std::vector<Inkscape::Event *> redo; /* Redo stack of reprs */
+	GSList * undo; /* Undo stack of reprs */
+	GSList * redo; /* Redo stack of reprs */
 
 	/* Undo listener */
 	Inkscape::CompositeUndoStackObserver undoStackObservers;
@@ -74,8 +75,6 @@ struct SPDocumentPrivate {
 	Inkscape::ConsoleOutputUndoObserver console_output_undo_observer;
 
 	bool seeking;
-    sigc::connection selChangeConnection;
-    sigc::connection desktopActivatedConnection;
 };
 
-#endif // SEEN_SP_DOCUMENT_PRIVATE_H
+#endif

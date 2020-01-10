@@ -1,47 +1,73 @@
+#define __INKSCAPE_CTRLQUADR_C__
+
 /*
  * Quadrilateral
  *
  * Authors:
  *   bulia byak
- *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2005 authors
  *
  * Released under GNU GPL
  */
 
+#include "display-forward.h"
+#include "sp-canvas-util.h"
+#include "sp-ctrlquadr.h"
+
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
-
-#include "sp-canvas-item.h"
-#include "sp-canvas.h"
-#include "sp-canvas-util.h"
-#include "sp-ctrlquadr.h"
-#include "display/cairo-utils.h"
+#include "display/inkscape-cairo.h"
 #include "color.h"
 
 struct SPCtrlQuadr : public SPCanvasItem{
     guint32 rgba;
     Geom::Point p1, p2, p3, p4;
-    Geom::Affine affine;    
+    Geom::Matrix affine;    
 };
 
 struct SPCtrlQuadrClass : public SPCanvasItemClass{};
 
-static void sp_ctrlquadr_destroy(SPCanvasItem *object);
+static void sp_ctrlquadr_class_init (SPCtrlQuadrClass *klass);
+static void sp_ctrlquadr_init (SPCtrlQuadr *ctrlquadr);
+static void sp_ctrlquadr_destroy (GtkObject *object);
 
-static void sp_ctrlquadr_update (SPCanvasItem *item, Geom::Affine const &affine, unsigned int flags);
+static void sp_ctrlquadr_update (SPCanvasItem *item, Geom::Matrix const &affine, unsigned int flags);
 static void sp_ctrlquadr_render (SPCanvasItem *item, SPCanvasBuf *buf);
 
-G_DEFINE_TYPE(SPCtrlQuadr, sp_ctrlquadr, SP_TYPE_CANVAS_ITEM);
+static SPCanvasItemClass *parent_class;
+
+GType
+sp_ctrlquadr_get_type (void)
+{
+    static GType type = 0;
+    if (!type) {
+        GTypeInfo info = {
+            sizeof(SPCtrlQuadrClass),
+            NULL, NULL,
+            (GClassInitFunc) sp_ctrlquadr_class_init,
+            NULL, NULL,
+            sizeof(SPCtrlQuadr),
+            0,
+            (GInstanceInitFunc) sp_ctrlquadr_init,
+            NULL
+        };
+        type = g_type_register_static(SP_TYPE_CANVAS_ITEM, "SPCtrlQuadr", &info, (GTypeFlags)0);
+    }
+    return type;
+}
 
 static void
 sp_ctrlquadr_class_init (SPCtrlQuadrClass *klass)
 {
-    SPCanvasItemClass *item_class = SP_CANVAS_ITEM_CLASS(klass);
+    GtkObjectClass *object_class = (GtkObjectClass *) klass;
+    SPCanvasItemClass *item_class = (SPCanvasItemClass *) klass;
 
-    item_class->destroy = sp_ctrlquadr_destroy;
+    parent_class = (SPCanvasItemClass*)gtk_type_class (SP_TYPE_CANVAS_ITEM);
+
+    object_class->destroy = sp_ctrlquadr_destroy;
+
     item_class->update = sp_ctrlquadr_update;
     item_class->render = sp_ctrlquadr_render;
 }
@@ -56,13 +82,14 @@ sp_ctrlquadr_init (SPCtrlQuadr *ctrlquadr)
     ctrlquadr->p4 = Geom::Point(0, 0);
 }
 
-static void sp_ctrlquadr_destroy(SPCanvasItem *object)
+static void
+sp_ctrlquadr_destroy (GtkObject *object)
 {
     g_return_if_fail (object != NULL);
     g_return_if_fail (SP_IS_CTRLQUADR (object));
 
-    if (SP_CANVAS_ITEM_CLASS(sp_ctrlquadr_parent_class)->destroy)
-        (* SP_CANVAS_ITEM_CLASS(sp_ctrlquadr_parent_class)->destroy) (object);
+    if (GTK_OBJECT_CLASS (parent_class)->destroy)
+        (* GTK_OBJECT_CLASS (parent_class)->destroy) (object);
 }
 
 static void
@@ -70,13 +97,15 @@ sp_ctrlquadr_render (SPCanvasItem *item, SPCanvasBuf *buf)
 {
     SPCtrlQuadr *cq = SP_CTRLQUADR (item);
 
+    //Geom::Rect area (Geom::Point(buf->rect.x0, buf->rect.y0), Geom::Point(buf->rect.x1, buf->rect.y1));
+
     if (!buf->ct)
         return;
 
     // RGB / BGR
     cairo_new_path(buf->ct);
 
-    Geom::Point min = buf->rect.min();
+    Geom::Point min = Geom::Point(buf->rect.x0, buf->rect.y0);
 
     Geom::Point p1 = (cq->p1 * cq->affine) - min;
     Geom::Point p2 = (cq->p2 * cq->affine) - min;
@@ -109,15 +138,15 @@ sp_ctrlquadr_render (SPCanvasItem *item, SPCanvasBuf *buf)
     d )
 
 
-static void sp_ctrlquadr_update(SPCanvasItem *item, Geom::Affine const &affine, unsigned int flags)
+static void
+sp_ctrlquadr_update (SPCanvasItem *item, Geom::Matrix const &affine, unsigned int flags)
 {
-    SPCtrlQuadr *cq = SP_CTRLQUADR(item);
+    SPCtrlQuadr *cq = SP_CTRLQUADR (item);
 
-    item->canvas->requestRedraw((int)item->x1, (int)item->y1, (int)item->x2, (int)item->y2);
+    sp_canvas_request_redraw (item->canvas, (int)item->x1, (int)item->y1, (int)item->x2, (int)item->y2);
 
-    if (SP_CANVAS_ITEM_CLASS(sp_ctrlquadr_parent_class)->update) {
-        SP_CANVAS_ITEM_CLASS(sp_ctrlquadr_parent_class)->update(item, affine, flags);
-    }
+    if (parent_class->update)
+        (* parent_class->update) (item, affine, flags);
 
     sp_canvas_item_reset_bounds (item);
 
@@ -133,7 +162,7 @@ static void sp_ctrlquadr_update(SPCanvasItem *item, Geom::Affine const &affine, 
     item->x2 = (int)(MAX4(p1[Geom::X], p2[Geom::X], p3[Geom::X], p4[Geom::X]));
     item->y2 = (int)(MAX4(p1[Geom::Y], p2[Geom::Y], p3[Geom::Y], p4[Geom::Y]));
 
-    item->canvas->requestRedraw((int)item->x1, (int)item->y1, (int)item->x2, (int)item->y2);
+    sp_canvas_request_redraw (item->canvas, (int)item->x1, (int)item->y1, (int)item->x2, (int)item->y2);
 }
 
 void
@@ -146,7 +175,7 @@ sp_ctrlquadr_set_rgba32 (SPCtrlQuadr *cl, guint32 rgba)
         SPCanvasItem *item;
         cl->rgba = rgba;
         item = SP_CANVAS_ITEM (cl);
-        item->canvas->requestRedraw((int)item->x1, (int)item->y1, (int)item->x2, (int)item->y2);
+        sp_canvas_request_redraw (item->canvas, (int)item->x1, (int)item->y1, (int)item->x2, (int)item->y2);
     }
 }
 
@@ -174,4 +203,4 @@ sp_ctrlquadr_set_coords (SPCtrlQuadr *cl, Geom::Point p1, Geom::Point p2, Geom::
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

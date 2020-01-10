@@ -1,7 +1,9 @@
+/**
+ * Glyph selector dialog.
+ */
+
 /* Authors:
  *   Jon A. Cruz
- *   Abhishek Sharma
- *   Tavmjong Bah
  *
  * Copyright (C) 2010 Jon A. Cruz
  * Released under GNU GPL, read the file 'COPYING' for more information
@@ -9,36 +11,28 @@
 
 #include <vector>
 
-#include "glyphs.h"
-
 #include <glibmm/i18n.h>
-#include <gtkmm/alignment.h>
-#include <gtkmm/comboboxtext.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/iconview.h>
 #include <gtkmm/label.h>
 #include <gtkmm/liststore.h>
 #include <gtkmm/scrolledwindow.h>
-
-#if WITH_GTKMM_3_0
-# include <gtkmm/grid.h>
-#else
-# include <gtkmm/table.h>
-#endif
-
+#include <gtkmm/table.h>
 #include <gtkmm/treemodelcolumn.h>
 #include <gtkmm/widget.h>
 
+#include <gtk/gtk.h>
+
+#include "glyphs.h"
+
 #include "desktop.h"
-#include "document.h" // for SPDocumentUndo::done()
-#include "document-undo.h"
+#include "document.h" // for sp_document_done()
 #include "libnrtype/font-instance.h"
 #include "sp-flowtext.h"
 #include "sp-text.h"
 #include "verbs.h"
 #include "widgets/font-selector.h"
 #include "text-editing.h"
-#include "selection.h"
 
 namespace Inkscape {
 namespace UI {
@@ -51,6 +45,7 @@ GlyphsPanel &GlyphsPanel::getInstance()
 }
 
 
+#if GLIB_CHECK_VERSION(2,14,0)
 static std::map<GUnicodeScript, Glib::ustring> & getScriptToName()
 {
     static bool init = false;
@@ -125,6 +120,8 @@ static std::map<GUnicodeScript, Glib::ustring> & getScriptToName()
         mappings[G_UNICODE_SCRIPT_PHOENICIAN]           = _("Phoenician");
         mappings[G_UNICODE_SCRIPT_PHAGS_PA]             = _("Phags-pa");
         mappings[G_UNICODE_SCRIPT_NKO]                  = _("N'Ko");
+
+#if GLIB_CHECK_VERSION(2,14,0)
         mappings[G_UNICODE_SCRIPT_KAYAH_LI]             = _("Kayah Li");
         mappings[G_UNICODE_SCRIPT_LEPCHA]               = _("Lepcha");
         mappings[G_UNICODE_SCRIPT_REJANG]               = _("Rejang");
@@ -136,9 +133,11 @@ static std::map<GUnicodeScript, Glib::ustring> & getScriptToName()
         mappings[G_UNICODE_SCRIPT_CARIAN]               = _("Carian");
         mappings[G_UNICODE_SCRIPT_LYCIAN]               = _("Lycian");
         mappings[G_UNICODE_SCRIPT_LYDIAN]               = _("Lydian");
+#endif // GLIB_CHECK_VERSION(2,14,0)
     }
     return mappings;
 }
+#endif // GLIB_CHECK_VERSION(2,14,0)
 
 typedef std::pair<gunichar, gunichar> Range;
 typedef std::pair<Range, Glib::ustring> NamedRange;
@@ -335,19 +334,16 @@ GlyphsPanel::GlyphsPanel(gchar const *prefsPath) :
     entry(0),
     label(0),
     insertBtn(0),
+#if GLIB_CHECK_VERSION(2,14,0)
     scriptCombo(0),
+#endif // GLIB_CHECK_VERSION(2,14,0)
     fsel(0),
     targetDesktop(0),
     deskTrack(),
     instanceConns(),
     desktopConns()
 {
-#if WITH_GTKMM_3_0
-    Gtk::Grid *table = new Gtk::Grid();
-#else
     Gtk::Table *table = new Gtk::Table(3, 1, false);
-#endif
-
     _getContents()->pack_start(*Gtk::manage(table), Gtk::PACK_EXPAND_WIDGET);
     guint row = 0;
 
@@ -355,91 +351,67 @@ GlyphsPanel::GlyphsPanel(gchar const *prefsPath) :
 
     GtkWidget *fontsel = sp_font_selector_new();
     fsel = SP_FONT_SELECTOR(fontsel);
-    sp_font_selector_set_fontspec( fsel, sp_font_selector_get_fontspec(fsel), 12.0 );
-
+    sp_font_selector_set_font(fsel, sp_font_selector_get_font(fsel), 12.0);
     gtk_widget_set_size_request (fontsel, 0, 150);
     g_signal_connect( G_OBJECT(fontsel), "font_set", G_CALLBACK(fontChangeCB), this );
 
-#if WITH_GTKMM_3_0
-    table->attach(*Gtk::manage(Glib::wrap(fontsel)), 0, row, 3, 1);
-#else
     table->attach(*Gtk::manage(Glib::wrap(fontsel)),
                   0, 3, row, row + 1,
                   Gtk::SHRINK|Gtk::FILL, Gtk::SHRINK|Gtk::FILL);
-#endif
-
     row++;
 
 
 // -------------------------------
 
+#if GLIB_CHECK_VERSION(2,14,0)
     {
         Gtk::Label *label = new Gtk::Label(_("Script: "));
-
-#if WITH_GTKMM_3_0
-        table->attach( *Gtk::manage(label), 0, row, 1, 1);
-#else
         table->attach( *Gtk::manage(label),
                        0, 1, row, row + 1,
                        Gtk::SHRINK, Gtk::SHRINK);
-#endif
 
         scriptCombo = new Gtk::ComboBoxText();
         for (std::map<GUnicodeScript, Glib::ustring>::iterator it = getScriptToName().begin(); it != getScriptToName().end(); ++it)
         {
-            scriptCombo->append(it->second);
+            scriptCombo->append_text(it->second);
         }
 
         scriptCombo->set_active_text(getScriptToName()[G_UNICODE_SCRIPT_INVALID_CODE]);
         sigc::connection conn = scriptCombo->signal_changed().connect(sigc::mem_fun(*this, &GlyphsPanel::rebuild));
         instanceConns.push_back(conn);
-        Gtk::Alignment *align = Gtk::manage(new Gtk::Alignment(Gtk::ALIGN_START, Gtk::ALIGN_START, 0.0, 0.0));
-        align->add(*Gtk::manage(scriptCombo));
 
-#if WITH_GTKMM_3_0
-        align->set_hexpand();
-        table->attach( *align, 1, row, 1, 1);
-#else
-        table->attach( *align,
+        Gtk::Alignment *align = new Gtk::Alignment(Gtk::ALIGN_LEFT, Gtk::ALIGN_TOP, 0.0, 0.0);
+        align->add(*Gtk::manage(scriptCombo));
+        table->attach( *Gtk::manage(align),
                        1, 2, row, row + 1,
                        Gtk::FILL|Gtk::EXPAND, Gtk::SHRINK);
-#endif
     }
 
     row++;
+#endif // GLIB_CHECK_VERSION(2,14,0)
 
 // -------------------------------
 
     {
         Gtk::Label *label = new Gtk::Label(_("Range: "));
-
-#if WITH_GTKMM_3_0
-        table->attach( *Gtk::manage(label), 0, row, 1, 1);
-#else
         table->attach( *Gtk::manage(label),
                        0, 1, row, row + 1,
                        Gtk::SHRINK, Gtk::SHRINK);
-#endif
 
         rangeCombo = new Gtk::ComboBoxText();
         for ( std::vector<NamedRange>::iterator it = getRanges().begin(); it != getRanges().end(); ++it ) {
-            rangeCombo->append(it->second);
+            rangeCombo->append_text(it->second);
         }
 
         rangeCombo->set_active_text(getRanges()[1].second);
         sigc::connection conn = rangeCombo->signal_changed().connect(sigc::mem_fun(*this, &GlyphsPanel::rebuild));
         instanceConns.push_back(conn);
-        Gtk::Alignment *align = new Gtk::Alignment(Gtk::ALIGN_START, Gtk::ALIGN_START, 0.0, 0.0);
-        align->add(*Gtk::manage(rangeCombo));
 
-#if WITH_GTKMM_3_0
-        align->set_hexpand();
-        table->attach( *Gtk::manage(align), 1, row, 1, 1);
-#else
+        Gtk::Alignment *align = new Gtk::Alignment(Gtk::ALIGN_LEFT, Gtk::ALIGN_TOP, 0.0, 0.0);
+        align->add(*Gtk::manage(rangeCombo));
         table->attach( *Gtk::manage(align),
                        1, 2, row, row + 1,
                        Gtk::FILL|Gtk::EXPAND, Gtk::SHRINK);
-#endif
     }
 
     row++;
@@ -448,7 +420,7 @@ GlyphsPanel::GlyphsPanel(gchar const *prefsPath) :
 
     GlyphColumns *columns = getColumns();
 
-    iconView = new Gtk::IconView(static_cast<Glib::RefPtr<Gtk::TreeModel> >(store));
+    iconView = new Gtk::IconView(store);
     iconView->set_text_column(columns->name);
     //iconView->set_columns(16);
 
@@ -462,17 +434,9 @@ GlyphsPanel::GlyphsPanel(gchar const *prefsPath) :
     Gtk::ScrolledWindow *scroller = new Gtk::ScrolledWindow();
     scroller->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_ALWAYS);
     scroller->add(*Gtk::manage(iconView));
-
-#if WITH_GTKMM_3_0
-    scroller->set_hexpand();
-    scroller->set_vexpand();
-    table->attach(*Gtk::manage(scroller), 0, row, 3, 1);
-#else
     table->attach(*Gtk::manage(scroller),
                   0, 3, row, row + 1,
                   Gtk::EXPAND|Gtk::FILL, Gtk::EXPAND|Gtk::FILL);
-#endif
-
     row++;
 
 // -------------------------------
@@ -497,20 +461,17 @@ GlyphsPanel::GlyphsPanel(gchar const *prefsPath) :
     insertBtn = new Gtk::Button(_("Append"));
     conn = insertBtn->signal_clicked().connect(sigc::mem_fun(*this, &GlyphsPanel::insertText));
     instanceConns.push_back(conn);
+#if GTK_CHECK_VERSION(2,18,0)
+    //gtkmm 2.18
     insertBtn->set_can_default();
+#endif
     insertBtn->set_sensitive(false);
 
     box->pack_end(*Gtk::manage(insertBtn), Gtk::PACK_SHRINK);
 
-#if WITH_GTKMM_3_0
-    box->set_hexpand();
-    table->attach( *Gtk::manage(box), 0, row, 3, 1);
-#else
     table->attach( *Gtk::manage(box),
                    0, 3, row, row + 1,
                    Gtk::EXPAND|Gtk::FILL, Gtk::SHRINK);
-#endif
-
     row++;
 
 // -------------------------------
@@ -574,14 +535,12 @@ void GlyphsPanel::setTargetDesktop(SPDesktop *desktop)
     }
 }
 
-// Append selected glyphs to selected text
 void GlyphsPanel::insertText()
 {
     SPItem *textItem = 0;
-    std::vector<SPItem*> itemlist=targetDesktop->selection->itemList();
-        for(std::vector<SPItem*>::const_iterator i=itemlist.begin(); itemlist.end() != i; ++i) {
-            if (SP_IS_TEXT(*i) || SP_IS_FLOWTEXT(*i)) {
-            textItem = *i;
+    for (const GSList *item = targetDesktop->selection->itemList(); item; item = item->next ) {
+        if (SP_IS_TEXT(item->data) || SP_IS_FLOWTEXT(item->data)) {
+            textItem = SP_ITEM(item->data);
             break;
         }
     }
@@ -591,13 +550,7 @@ void GlyphsPanel::insertText()
         if (entry->get_text_length() > 0) {
             glyphs = entry->get_text();
         } else {
-
-#if WITH_GTKMM_3_0
-            std::vector<Gtk::TreePath> itemArray = iconView->get_selected_items();
-#else
             Gtk::IconView::ArrayHandle_TreePaths itemArray = iconView->get_selected_items();
-#endif
-
             if (!itemArray.empty()) {
                 Gtk::TreeModel::Path const & path = *itemArray.begin();
                 Gtk::ListStore::iterator row = store->get_iter(path);
@@ -616,7 +569,7 @@ void GlyphsPanel::insertText()
             }
             combined += glyphs;
             sp_te_set_repr_text_multiline(textItem, combined.c_str());
-            DocumentUndo::done(targetDesktop->doc(), SP_VERB_CONTEXT_TEXT, _("Append text"));
+            sp_document_done(targetDesktop->doc(), SP_VERB_CONTEXT_TEXT, _("Append text"));
         }
     }
 }
@@ -641,12 +594,7 @@ void GlyphsPanel::glyphActivated(Gtk::TreeModel::Path const & path)
 
 void GlyphsPanel::glyphSelectionChanged()
 {
-#if WITH_GTKMM_3_0
-    std::vector<Gtk::TreePath> itemArray = iconView->get_selected_items();
-#else
     Gtk::IconView::ArrayHandle_TreePaths itemArray = iconView->get_selected_items();
-#endif
-
     if (itemArray.empty()) {
         label->set_text("      ");
     } else {
@@ -656,18 +604,20 @@ void GlyphsPanel::glyphSelectionChanged()
 
 
         Glib::ustring scriptName;
+#if GLIB_CHECK_VERSION(2,14,0)
         GUnicodeScript script = g_unichar_get_script(ch);
         std::map<GUnicodeScript, Glib::ustring> mappings = getScriptToName();
         if (mappings.find(script) != mappings.end()) {
             scriptName = mappings[script];
         }
+#endif
         gchar * tmp = g_strdup_printf("U+%04X %s", ch, scriptName.c_str());
         label->set_text(tmp);
     }
     calcCanInsert();
 }
 
-void GlyphsPanel::fontChangeCB(SPFontSelector * /*fontsel*/, Glib::ustring /*fontspec*/, GlyphsPanel *self)
+void GlyphsPanel::fontChangeCB(SPFontSelector * /*fontsel*/, font_instance * /*font*/, GlyphsPanel *self)
 {
     if (self) {
         self->rebuild();
@@ -688,9 +638,8 @@ void GlyphsPanel::selectionModifiedCB(guint flags)
 void GlyphsPanel::calcCanInsert()
 {
     int items = 0;
-    std::vector<SPItem*> itemlist=targetDesktop->selection->itemList();
-    for(std::vector<SPItem*>::const_iterator i=itemlist.begin(); itemlist.end() != i; ++i) {
-        if (SP_IS_TEXT(*i) || SP_IS_FLOWTEXT(*i)) {
+    for (const GSList *item = targetDesktop->selection->itemList(); item; item = item->next ) {
+        if (SP_IS_TEXT(item->data) || SP_IS_FLOWTEXT(item->data)) {
             ++items;
         }
     }
@@ -711,28 +660,24 @@ void GlyphsPanel::readSelection( bool updateStyle, bool /*updateContent*/ )
     calcCanInsert();
 
     if (targetDesktop && updateStyle) {
-        //SPStyle query(SP_ACTIVE_DOCUMENT);
+        //SPStyle *query = sp_style_new(SP_ACTIVE_DOCUMENT);
 
-        //int result_family = sp_desktop_query_style(targetDesktop, &query, QUERY_STYLE_PROPERTY_FONTFAMILY);
-        //int result_style = sp_desktop_query_style(targetDesktop, &query, QUERY_STYLE_PROPERTY_FONTSTYLE);
-        //int result_numbers = sp_desktop_query_style(targetDesktop, &query, QUERY_STYLE_PROPERTY_FONTNUMBERS);
+        //int result_family = sp_desktop_query_style(targetDesktop, query, QUERY_STYLE_PROPERTY_FONTFAMILY);
+        //int result_style = sp_desktop_query_style(targetDesktop, query, QUERY_STYLE_PROPERTY_FONTSTYLE);
+        //int result_numbers = sp_desktop_query_style(targetDesktop, query, QUERY_STYLE_PROPERTY_FONTNUMBERS);
 
+        //sp_style_unref(query);
     }
 }
 
 
 void GlyphsPanel::rebuild()
 {
-    Glib::ustring fontspec = fsel ? sp_font_selector_get_fontspec(fsel) : "";
-
-    font_instance* font = 0;
-    if( !fontspec.empty() ) {
-        font = font_factory::Default()->FaceFromFontSpecification( fontspec.c_str() );
-    }
-
+    font_instance *font = fsel ? sp_font_selector_get_font(fsel) : 0;
     if (font) {
         //double  sp_font_selector_get_size (SPFontSelector *fsel);
 
+#if GLIB_CHECK_VERSION(2,14,0)
         GUnicodeScript script = G_UNICODE_SCRIPT_INVALID_CODE;
         Glib::ustring scriptName = scriptCombo->get_active_text();
         std::map<GUnicodeScript, Glib::ustring> items = getScriptToName();
@@ -742,6 +687,7 @@ void GlyphsPanel::rebuild()
                 break;
             }
         }
+#endif // GLIB_CHECK_VERSION(2,14,0)
 
         // Disconnect the model while we update it. Simple work-around for 5x+ performance boost.
         Glib::RefPtr<Gtk::ListStore> tmp = Gtk::ListStore::create(*getColumns());
@@ -758,9 +704,13 @@ void GlyphsPanel::rebuild()
         for (gunichar ch = lower; ch <= upper; ch++) {
             int glyphId = font->MapUnicodeChar(ch);
             if (glyphId > 0) {
+#if GLIB_CHECK_VERSION(2,14,0)
                 if ((script == G_UNICODE_SCRIPT_INVALID_CODE) || (script == g_unichar_get_script(ch))) {
                     present.push_back(ch);
                 }
+#else
+                present.push_back(ch);
+#endif
             }
         }
 
@@ -794,4 +744,4 @@ void GlyphsPanel::rebuild()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

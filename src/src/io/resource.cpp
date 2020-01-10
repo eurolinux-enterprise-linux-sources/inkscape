@@ -1,4 +1,4 @@
-/*
+/** \file
  * Inkscape::IO::Resource - simple resource API
  *
  * Copyright 2006 MenTaLguY <mental@rydia.net>
@@ -16,7 +16,7 @@
 #include "config.h"
 #endif
 
-#include <glib.h> // g_assert()
+#include <glib.h>
 #include "path-prefix.h"
 #include "inkscape.h"
 #include "io/resource.h"
@@ -73,7 +73,7 @@ Util::ptr_shared<char> get_path(Domain domain, Type type, char const *filename)
                 case TEMPLATES: name = "templates"; break;
                 default: return get_path(SYSTEM, type, filename);
             }
-            path = Inkscape::Application::profile_path(name);
+            path = profile_path(name);
         } break;
     }
 
@@ -103,4 +103,4 @@ Util::ptr_shared<char> get_path(Domain domain, Type type, char const *filename)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

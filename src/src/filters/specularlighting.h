@@ -1,6 +1,10 @@
-/** @file
- * @brief SVG specular lighting filter effect
- *//*
+#ifndef SP_FESPECULARLIGHTING_H_SEEN
+#define SP_FESPECULARLIGHTING_H_SEEN
+
+/** \file
+ * SVG <feSpecularLighting> implementation, see SpecularLighting.cpp.
+ */
+/*
  * Authors:
  *   Hugo Rodrigues <haa.rodrigues@gmail.com>
  *   Jean-Rene Reinhard <jr@komite.net>
@@ -11,16 +15,8 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifndef SP_FESPECULARLIGHTING_H_SEEN
-#define SP_FESPECULARLIGHTING_H_SEEN
-
-#include "sp-filter-primitive.h"
-#include "number-opt-number.h"
-
-#define SP_FESPECULARLIGHTING(obj) (dynamic_cast<SPFeSpecularLighting*>((SPObject*)obj))
-#define SP_IS_FESPECULARLIGHTING(obj) (dynamic_cast<const SPFeSpecularLighting*>((SPObject*)obj) != NULL)
-
-struct SVGICCColor;
+#include "sp-filter.h"
+#include "specularlighting-fns.h"
 
 namespace Inkscape {
 namespace Filters {
@@ -28,41 +24,35 @@ class FilterSpecularLighting;
 }
 }
 
-class SPFeSpecularLighting : public SPFilterPrimitive {
-public:
-	SPFeSpecularLighting();
-	virtual ~SPFeSpecularLighting();
+/* FeSpecularLighting base class */
+class SPFeSpecularLightingClass;
 
+struct SPFeSpecularLighting : public SPFilterPrimitive {
+    /** SPECULARLIGHTING ATTRIBUTES HERE */
+    /** surfaceScale attribute */
     gfloat surfaceScale;
     guint surfaceScale_set : 1;
+    /** specularConstant attribute */
     gfloat specularConstant;
     guint specularConstant_set : 1;
+    /** specularConstant attribute */
     gfloat specularExponent;
     guint specularExponent_set : 1;
+    /** kernelUnitLenght attribute */
     NumberOptNumber kernelUnitLength;
+    /** lighting-color property */
     guint32 lighting_color;
     guint lighting_color_set : 1;
-    SVGICCColor *icc;
 
     Inkscape::Filters::FilterSpecularLighting *renderer;
-
-protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-
-	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
-	virtual void remove_child(Inkscape::XML::Node* child);
-
-	virtual void order_changed(Inkscape::XML::Node* child, Inkscape::XML::Node* old_repr, Inkscape::XML::Node* new_repr);
-
-	virtual void set(unsigned int key, const gchar* value);
-
-	virtual void update(SPCtx* ctx, unsigned int flags);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
-
-	virtual void build_renderer(Inkscape::Filters::Filter* filter);
 };
+
+struct SPFeSpecularLightingClass {
+    SPFilterPrimitiveClass parent_class;
+};
+
+GType sp_feSpecularLighting_get_type();
+
 
 #endif /* !SP_FESPECULARLIGHTING_H_SEEN */
 
@@ -75,4 +65,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

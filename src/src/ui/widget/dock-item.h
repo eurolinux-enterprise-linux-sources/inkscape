@@ -1,4 +1,6 @@
-/*
+/**
+ * \brief A custom wrapper around gdl-dock-item
+ *
  * Author:
  *   Gustav Broberg <broberg@kth.se>
  *
@@ -11,23 +13,13 @@
 #ifndef INKSCAPE_UI_WIGET_DOCK_ITEM_H
 #define INKSCAPE_UI_WIGET_DOCK_ITEM_H
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
-#include <gtkmm/box.h>
+#include <gtkmm/button.h>
+#include <gtkmm/buttonbox.h>
 #include <gtkmm/frame.h>
+#include <gtkmm/paned.h>
 #include <gtkmm/window.h>
 
-#if WITH_EXT_GDL
-#include <gdl/gdl.h>
-#else
-#include "libgdl/gdl.h"
-#endif
-
-namespace Gtk {
-	class HButtonBox;
-}
+#include "libgdl/libgdl.h"
 
 namespace Inkscape {
 namespace UI {
@@ -35,19 +27,14 @@ namespace Widget {
 
 class Dock;
 
-/**
- * A custom wrapper around gdl-dock-item.
- */
 class DockItem {
 
 public:
 
-    enum State { UNATTACHED,                // item not bound to the dock (a temporary state)
-                 FLOATING_STATE,            // item not in its dock (but can be docked in other,
-                                            // e.g. floating, docks)
-                 DOCKED_STATE,              // item in its assigned dock
-                 ICONIFIED_DOCKED_STATE,    // item iconified in its assigned dock from dock
-                 ICONIFIED_FLOATING_STATE}; // item iconified in its assigned dock from float
+    enum State { UNATTACHED,     // item not bound to the dock (a temporary state)
+                 FLOATING_STATE, // item not in its dock (but can be docked in other,
+                                 // e.g. floating, docks)
+                 DOCKED_STATE }; // item in its assigned dock
 
     enum Placement { 
         NONE     = GDL_DOCK_NONE,
@@ -60,7 +47,7 @@ public:
     };
 
     DockItem(Dock& dock, const Glib::ustring& name, const Glib::ustring& long_name, 
-             const Glib::ustring& icon_name, State state, Placement placement);
+             const Glib::ustring& icon_name, State state);
 
     ~DockItem();
 
@@ -90,7 +77,6 @@ public:
 
     void hide();
     void show();
-    void iconify();
     void show_all();
 
     void present();
@@ -174,4 +160,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

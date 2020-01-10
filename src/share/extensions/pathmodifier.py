@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 barraud@math.univ-lille1.fr
 
 This code defines a basic class (PathModifier) of effects whose purpose is
@@ -27,17 +27,11 @@ to implement deformations of the form X=f(x,y), Y=g(x,y)...
 TODO: Several handy functions are defined, that might in fact be of general
 interest and that should be shipped out in separate files...
 '''
-# standard library
-import copy
-import math
-import re
-import random
-# local library
-import inkex
-import cubicsuperpath
-import bezmisc
-import simplestyle
+import inkex, cubicsuperpath, bezmisc, simplestyle
 from simpletransform import *
+import copy, math, re, random
+import gettext
+_ = gettext.gettext
 
 ####################################################################
 ##-- zOrder computation...
@@ -313,4 +307,4 @@ class Diffeo(PathModifier):
 #e.affect()
 
     
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

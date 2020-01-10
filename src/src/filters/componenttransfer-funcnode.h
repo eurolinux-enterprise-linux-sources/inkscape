@@ -18,17 +18,28 @@
 #include "sp-object.h"
 #include "display/nr-filter-component-transfer.h"
 
-#define SP_FEFUNCNODE(obj) (dynamic_cast<SPFeFuncNode*>((SPObject*)obj))
+#define SP_TYPE_FEFUNCR (sp_fefuncR_get_type())
+#define SP_TYPE_FEFUNCG (sp_fefuncG_get_type())
+#define SP_TYPE_FEFUNCB (sp_fefuncB_get_type())
+#define SP_TYPE_FEFUNCA (sp_fefuncA_get_type())
 
-class SPFeFuncNode : public SPObject {
-public:
-    enum Channel {
-        R, G, B, A
-    };
+#define SP_IS_FEFUNCR(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), SP_TYPE_FEFUNCR))
+#define SP_IS_FEFUNCG(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), SP_TYPE_FEFUNCG))
+#define SP_IS_FEFUNCB(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), SP_TYPE_FEFUNCB))
+#define SP_IS_FEFUNCA(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), SP_TYPE_FEFUNCA))
 
-	SPFeFuncNode(Channel channel);
-	virtual ~SPFeFuncNode();
+#define SP_FEFUNCNODE(obj) (SP_IS_FEFUNCR(obj) ? G_TYPE_CHECK_INSTANCE_CAST((obj), SP_TYPE_FEFUNCR, SPFeFuncNode) : (SP_IS_FEFUNCG(obj) ? G_TYPE_CHECK_INSTANCE_CAST((obj), SP_TYPE_FEFUNCG, SPFeFuncNode) : (SP_IS_FEFUNCB(obj) ? G_TYPE_CHECK_INSTANCE_CAST((obj), SP_TYPE_FEFUNCB, SPFeFuncNode):(SP_IS_FEFUNCA(obj) ? G_TYPE_CHECK_INSTANCE_CAST((obj), SP_TYPE_FEFUNCA, SPFeFuncNode): NULL))))
 
+#define SP_FEFUNCNODE_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), SP_TYPE_FEFUNCNODE, SPFeFuncNodeClass))
+
+#define SP_IS_FEFUNCNODE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), SP_TYPE_FEFUNCNODE))
+
+/* Component Transfer funcNode class */
+
+class SPFeFuncNode;
+class SPFeFuncNodeClass;
+
+struct SPFeFuncNode : public SPObject {
     Inkscape::Filters::FilterComponentTransferType type;
     std::vector<double> tableValues;
     double slope;
@@ -36,18 +47,16 @@ public:
     double amplitude;
     double exponent;
     double offset;
-    Channel channel;
-
-protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
-
-	virtual void set(unsigned int key, const gchar* value);
-
-	virtual void update(SPCtx* ctx, unsigned int flags);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
 };
+
+struct SPFeFuncNodeClass {
+    SPObjectClass parent_class;
+};
+
+GType sp_fefuncR_get_type();
+GType sp_fefuncG_get_type();
+GType sp_fefuncB_get_type();
+GType sp_fefuncA_get_type();
 
 #endif /* !SP_FECOMPONENTTRANSFER_FUNCNODE_H_SEEN */
 
@@ -60,4 +69,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

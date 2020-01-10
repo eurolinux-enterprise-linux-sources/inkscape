@@ -1,12 +1,11 @@
-#ifndef SEEN_SP_OBJECTGROUP_H
-#define SEEN_SP_OBJECTGROUP_H
+#ifndef __SP_OBJECTGROUP_H__
+#define __SP_OBJECTGROUP_H__
 
 /*
  * Abstract base class for non-item groups
  *
  * Author:
  *   Lauris Kaplinski <lauris@kaplinski.com>
- *   Abhishek Sharma
  *
  * Copyright (C) 1999-2003 Authors
  * Copyright (C) 2001-2002 Ximian, Inc.
@@ -16,31 +15,19 @@
 
 #include "sp-object.h"
 
-#define SP_OBJECTGROUP(obj) (dynamic_cast<SPObjectGroup*>((SPObject*)obj))
-#define SP_IS_OBJECTGROUP(obj) (dynamic_cast<const SPObjectGroup*>((SPObject*)obj) != NULL)
+#define SP_TYPE_OBJECTGROUP (sp_objectgroup_get_type ())
+#define SP_OBJECTGROUP(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_OBJECTGROUP, SPObjectGroup))
+#define SP_OBJECTGROUP_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_OBJECTGROUP, SPObjectGroupClass))
+#define SP_IS_OBJECTGROUP(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_OBJECTGROUP))
+#define SP_IS_OBJECTGROUP_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_OBJECTGROUP))
 
-class SPObjectGroup : public SPObject {
-public:
-	SPObjectGroup();
-	virtual ~SPObjectGroup();
-
-protected:
-	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
-	virtual void remove_child(Inkscape::XML::Node* child);
-
-	virtual void order_changed(Inkscape::XML::Node* child, Inkscape::XML::Node* old, Inkscape::XML::Node* new_repr);
-
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
+struct SPObjectGroup : public SPObject {
 };
 
-#endif // SEEN_SP_OBJECTGROUP_H
-/*
-  Local Variables:
-  mode:c++
-  c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
-  indent-tabs-mode:nil
-  fill-column:99
-  End:
-*/
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+struct SPObjectGroupClass {
+	SPObjectClass parent_class;
+};
+
+GType sp_objectgroup_get_type (void);
+
+#endif

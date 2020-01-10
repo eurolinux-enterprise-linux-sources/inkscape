@@ -40,6 +40,12 @@ GrayMap *grayMapCanny(GrayMap *gmap,
 /**
  *
  */
+GdkPixbuf *gdkCanny(GdkPixbuf *img,
+            double lowThreshold, double highThreshold);
+
+/**
+ *
+ */
 GrayMap *quantizeBand(RgbMap *rgbmap, int nrColors);
 
 

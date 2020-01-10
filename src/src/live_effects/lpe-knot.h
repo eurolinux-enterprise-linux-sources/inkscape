@@ -3,9 +3,9 @@
  */
 /* Authors:
  *   Jean-Francois Barraud <jf.barraud@gmail.com>
- *   Johan Engelen <j.b.c.engelen@alumnus.utwente.nl>
+ *   Johan Engelen <j.b.c.engelen@utwente.nl>
  *
- * Copyright (C) Authors 2007-2012
+ * Copyright (C) Johan Engelen 2007
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -42,8 +42,8 @@ struct CrossingPoint {
 class CrossingPoints : public  std::vector<CrossingPoint>{
 public:
   CrossingPoints() : std::vector<CrossingPoint>() {}
-  CrossingPoints(Geom::CrossingSet const &cs, Geom::PathVector const &path);//for self crossings only!
-  CrossingPoints(Geom::PathVector const &paths);
+  CrossingPoints(Geom::CrossingSet const &cs, std::vector<Geom::Path> const &path);//for self crossings only!
+  CrossingPoints(std::vector<Geom::Path> const &paths);
   CrossingPoints(std::vector<double> const &input);
   std::vector<double> to_vector();
   CrossingPoint get(unsigned const i, unsigned const ni);
@@ -56,16 +56,14 @@ public:
   LPEKnot(LivePathEffectObject *lpeobject);
   virtual ~LPEKnot();
   
-  virtual void doBeforeEffect (SPLPEItem const* lpeitem);
-  virtual Geom::PathVector doEffect_path (Geom::PathVector const & input_path);
+  virtual void doBeforeEffect (SPLPEItem *lpeitem);
+  virtual std::vector<Geom::Path> doEffect_path (std::vector<Geom::Path> const & input_path);
   
   /* the knotholder entity classes must be declared friends */
   friend class KnotHolderEntityCrossingSwitcher;
-  void addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item);
 
 protected:
-  virtual void addCanvasIndicators(SPLPEItem const *lpeitem, std::vector<Geom::PathVector> &hp_vec);
-  Geom::PathVector supplied_path; //for knotholder business
+    virtual void addCanvasIndicators(SPLPEItem *lpeitem, std::vector<Geom::PathVector> &hp_vec);
   
 private:
   void updateSwitcher();
@@ -75,11 +73,12 @@ private:
   BoolParam  add_stroke_width;
   BoolParam  add_other_stroke_width;
   ScalarParam switcher_size;
+  double stroke_width;
   ArrayParam<double> crossing_points_vector;//svg storage of crossing_points
   
   LPEKnotNS::CrossingPoints crossing_points;//topology representation of the knot.
   
-  Geom::PathVector gpaths;//the collection of all the paths in the object or group.
+  std::vector<Geom::Path> gpaths;//the collection of all the paths in the object or group.
   std::vector<double> gstroke_widths;//the collection of all the stroke widths in the object or group.
 
   //UI: please, someone, help me to improve this!!

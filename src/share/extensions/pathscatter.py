@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 barraud@math.univ-lille1.fr
 
 Quick description:
@@ -30,19 +30,13 @@ as painted on these lines.
 Now move and bend L to make it fit a skeleton, and see what happens to the normals:
 they move and rotate, deforming the pattern.
 '''
-# standard library
-import copy
-import math
-import re
-import random
-# third party
+
+import inkex, cubicsuperpath, bezmisc
+import pathmodifier, simpletransform 
 from lxml import etree
-# local library
-import inkex
-import cubicsuperpath
-import bezmisc
-import pathmodifier
-import simpletransform 
+import copy, math, re, random
+import gettext
+_ = gettext.gettext
 
 def zSort(inNode,idList):
     sortedList=[]
@@ -78,7 +72,7 @@ def stretch(pathcomp,xscale,yscale,org):
 
 def linearize(p,tolerance=0.001):
     '''
-    This function receives a component of a 'cubicsuperpath' and returns two things:
+    This function recieves a component of a 'cubicsuperpath' and returns two things:
     The path subdivided in many straight segments, and an array containing the length of each segment.
     
     We could work with bezier path as well, but bezier arc lengths are (re)computed for each point 
@@ -117,14 +111,6 @@ class PathScatter(pathmodifier.Diffeo):
         self.OptionParser.add_option("-t", "--toffset",
                         action="store", type="float", 
                         dest="toffset", default=0.0, help="tangential offset")
-        self.OptionParser.add_option("-g", "--grouppick",
-                        action="store", type="inkbool", 
-                        dest="grouppick", default=False,
-                        help="if pattern is a group then randomly pick group members")
-        self.OptionParser.add_option("-m", "--pickmode",
-                        action="store", type="string", 
-                        dest="pickmode", default="rand",
-                        help="group pick mode (rand=random seq=sequentially)")
         self.OptionParser.add_option("-f", "--follow",
                         action="store", type="inkbool", 
                         dest="follow", default=True,
@@ -148,10 +134,6 @@ class PathScatter(pathmodifier.Diffeo):
                         action="store", type="string", 
                         dest="copymode", default="clone",
                         help="duplicate pattern before deformation")
-        self.OptionParser.add_option("--tab",
-                        action="store", type="string",
-                        dest="tab",
-                        help="The selected UI-tab when OK was pressed")
 
     def prepareSelectionList(self):
 
@@ -162,7 +144,7 @@ class PathScatter(pathmodifier.Diffeo):
         #id = self.options.ids[-1]
         id = idList[-1]
         self.patternNode=self.selected[id]
-		
+
         self.gNode = etree.Element('{http://www.w3.org/2000/svg}g')
         self.patternNode.getparent().append(self.gNode)
 
@@ -184,7 +166,7 @@ class PathScatter(pathmodifier.Diffeo):
     def lengthtotime(self,l):
         '''
         Recieves an arc length l, and returns the index of the segment in self.skelcomp 
-        containing the corresponding point, to gether with the position of the point on this segment.
+        containing the coresponding point, to gether with the position of the point on this segment.
 
         If the deformer is closed, do computations modulo the toal length.
         '''
@@ -201,7 +183,7 @@ class PathScatter(pathmodifier.Diffeo):
 
     def localTransformAt(self,s,follow=True):
         '''
-        receives a length, and returns the coresponding point and tangent of self.skelcomp
+        recieves a length, and returns the coresponding point and tangent of self.skelcomp
         if follow is set to false, returns only the translation
         '''
         i,t=self.lengthtotime(s)
@@ -226,7 +208,7 @@ class PathScatter(pathmodifier.Diffeo):
             inkex.errormsg(_("This extension requires two selected paths."))
             return
         self.prepareSelectionList()
-        
+
         #center at (0,0)
         bbox=pathmodifier.computeBBox([self.patternNode])
         mat=[[1,0,-(bbox[0]+bbox[1])/2],[0,1,-(bbox[2]+bbox[3])/2]]
@@ -239,18 +221,6 @@ class PathScatter(pathmodifier.Diffeo):
         width=bbox[1]-bbox[0]
         dx=width+self.options.space
 
-		#check if group and expand it
-        patternList = []
-        if self.options.grouppick and (self.patternNode.tag == inkex.addNS('g','svg') or self.patternNode.tag=='g') :
-            mat=simpletransform.parseTransform(self.patternNode.get("transform"))
-            for child in self.patternNode:
-                simpletransform.applyTransformToNode(mat,child)
-                patternList.append(child)
-        else :
-            patternList.append(self.patternNode)
-        #inkex.debug(patternList)
-                
-        counter=0
         for skelnode in self.skeletons.itervalues(): 
             self.curSekeleton=cubicsuperpath.parsePath(skelnode.get('d'))
             for comp in self.curSekeleton:
@@ -272,16 +242,11 @@ class PathScatter(pathmodifier.Diffeo):
                 s=self.options.toffset
                 while s<=length:
                     mat=self.localTransformAt(s,self.options.follow)
-                    if self.options.pickmode=="rand":
-                        clone=copy.deepcopy(patternList[random.randint(0, len(patternList)-1)])
 
-                    if self.options.pickmode=="seq":
-                        clone=copy.deepcopy(patternList[counter])
-                        counter=(counter+1)%len(patternList)
-                        
+                    clone=copy.deepcopy(self.patternNode)
                     #!!!--> should it be given an id?
                     #seems to work without this!?!
-                    myid = patternList[random.randint(0, len(patternList)-1)].tag.split('}')[-1]
+                    myid = self.patternNode.tag.split('}')[-1]
                     clone.set("id", self.uniqueId(myid))
                     self.gNode.append(clone)
                     
@@ -295,4 +260,4 @@ if __name__ == '__main__':
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99

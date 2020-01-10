@@ -12,21 +12,25 @@
 #define INKSCAPE_EXTENSION_EFFECT_H__
 
 #include <config.h>
+
 #include <glibmm/i18n.h>
+#include <gtkmm/dialog.h>
+#include <gtk/gtk.h>
 #include "verbs.h"
+
+#include "prefdialog.h"
 #include "extension.h"
 
-namespace Gtk {
-	class VBox;
-}
-
-class SPDocument;
+struct SPDocument;
 
 namespace Inkscape {
-
+namespace UI {
+namespace View {
+typedef View View;
+};
+};
 
 namespace Extension {
-class PrefDialog;
 
 /** \brief  Effects are extensions that take a document and do something
             to it in place.  This class adds the extra functions required
@@ -49,7 +53,9 @@ class Effect : public Extension {
                 back to the effect that created it.  */
     class EffectVerb : public Inkscape::Verb {
         private:
-            static void perform (SPAction * action, void * mydata);
+            static void perform (SPAction * action, void * mydata, void * otherdata);
+            /** \brief  Function to call for specific actions */
+            static SPActionEventVector vector;
 
             /** \brief  The effect that this verb represents. */
             Effect * _effect;
@@ -58,7 +64,7 @@ class Effect : public Extension {
             /** \brief  Name with elipses if that makes sense */
             gchar * _elip_name;
         protected:
-            virtual SPAction * make_action (Inkscape::ActionContext const & context);
+            virtual SPAction * make_action (Inkscape::UI::View::View * view);
         public:
             /** \brief Use the Verb initializer with the same parameters. */
             EffectVerb(gchar const * id,
@@ -67,7 +73,7 @@ class Effect : public Extension {
                        gchar const * image,
                        Effect *      effect,
                        bool          showPrefs) :
-                    Verb(id, _(name), _(tip), image, _("Extensions")),
+                    Verb(id, _(name), _(tip), image), 
                     _effect(effect), 
                     _showPrefs(showPrefs),
                     _elip_name(NULL) {

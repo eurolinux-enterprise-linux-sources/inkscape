@@ -1,4 +1,6 @@
-/*
+/** \file
+ * SPViewWidget implementation.
+ *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Ralf Stephan <ralf@ark.in-berlin.de>
@@ -14,19 +16,48 @@
 
 //using namespace Inkscape::UI::View;
 
-// SPViewWidget
-static void sp_view_widget_dispose(GObject *object);
+/* SPViewWidget */
 
-G_DEFINE_TYPE(SPViewWidget, sp_view_widget, GTK_TYPE_EVENT_BOX);
+static void sp_view_widget_class_init(SPViewWidgetClass *vwc);
+static void sp_view_widget_init(SPViewWidget *widget);
+static void sp_view_widget_destroy(GtkObject *object);
+
+static GtkEventBoxClass *widget_parent_class;
+
+/**
+ * Registers the SPViewWidget class with Glib and returns its type number.
+ */
+GtkType sp_view_widget_get_type(void)
+{
+    static GtkType type = 0;
+    //TODO: switch to GObject
+    // GtkType and such calls were deprecated a while back with the
+    // introduction of GObject as a separate layer, with GType instead. --JonCruz
+    if (!type) {
+        GtkTypeInfo info = {
+            (gchar*) "SPViewWidget",
+            sizeof(SPViewWidget),
+            sizeof(SPViewWidgetClass),
+            (GtkClassInitFunc) sp_view_widget_class_init,
+            (GtkObjectInitFunc) sp_view_widget_init,
+            NULL, NULL, NULL
+        };
+        type = gtk_type_unique(GTK_TYPE_EVENT_BOX, &info);
+    }
+    
+    return type;
+}
 
 /**
  * Callback to initialize the SPViewWidget vtable.
  */
 static void sp_view_widget_class_init(SPViewWidgetClass *vwc)
 {
-    GObjectClass *object_class = G_OBJECT_CLASS(vwc);
+    GtkObjectClass *object_class = GTK_OBJECT_CLASS(vwc);
+
+    widget_parent_class = (GtkEventBoxClass*) gtk_type_class(GTK_TYPE_EVENT_BOX);
     
-    object_class->dispose = sp_view_widget_dispose;
+    object_class->destroy = sp_view_widget_destroy;
 }
 
 /**
@@ -42,7 +73,7 @@ static void sp_view_widget_init(SPViewWidget *vw)
  *
  * Apparently, this gets only called when a desktop is closed, but then twice!
  */
-static void sp_view_widget_dispose(GObject *object)
+static void sp_view_widget_destroy(GtkObject *object)
 {
     SPViewWidget *vw = SP_VIEW_WIDGET(object);
 
@@ -52,13 +83,17 @@ static void sp_view_widget_dispose(GObject *object)
         vw->view = NULL;
     }
 
-    if (G_OBJECT_CLASS(sp_view_widget_parent_class)->dispose) {
-        G_OBJECT_CLASS(sp_view_widget_parent_class)->dispose(object);
+    if (((GtkObjectClass *) (widget_parent_class))->destroy) {
+        (* ((GtkObjectClass *) (widget_parent_class))->destroy)(object);
     }
 
     Inkscape::GC::request_early_collection();
 }
 
+/**
+ * Connects widget to view's 'resized' signal and calls virtual set_view()
+ * function.
+ */
 void sp_view_widget_set_view(SPViewWidget *vw, Inkscape::UI::View::View *view)
 {
     g_return_if_fail(vw != NULL);
@@ -75,6 +110,9 @@ void sp_view_widget_set_view(SPViewWidget *vw, Inkscape::UI::View::View *view)
     }
 }
 
+/**
+ * Calls the virtual shutdown() function of the SPViewWidget.
+ */
 bool sp_view_widget_shutdown(SPViewWidget *vw)
 {
     g_return_val_if_fail(vw != NULL, TRUE);

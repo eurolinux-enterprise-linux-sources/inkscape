@@ -1,9 +1,10 @@
+#define __SP_CONDITIONS_CPP__
+
 /*
  * SVG conditional attribute evaluation
  *
  * Authors:
  *   Andrius R. <knutux@gmail.com>
- *   Abhishek Sharma
  *
  * Copyright (C) 2006 authors
  *
@@ -38,16 +39,20 @@ static Condition _condition_handlers[] = {
     { "requiredExtensions", evaluateRequiredExtensions },
 };
 
-// function which evaluates if item should be displayed
+/* function which evaluates if item should be displayed */
 bool sp_item_evaluate(SPItem const *item) {
-    bool needDisplay = true;
-    for ( unsigned int i = 0 ; needDisplay && (i < sizeof(_condition_handlers) / sizeof(_condition_handlers[0])) ; i++ ) {
-        gchar const *value = item->getAttribute(_condition_handlers[i].attribute);
-        if ( value && !_condition_handlers[i].evaluator(item, value) ) {
-            needDisplay = false;
-        }
+    Inkscape::XML::Node *grepr = SP_OBJECT_REPR (item);
+    
+    for ( unsigned int i = 0 ; i < sizeof(_condition_handlers)/sizeof(_condition_handlers[0]) ; i++ ) {
+        gchar const *value = grepr->attribute(_condition_handlers[i].attribute);
+        if ( NULL == value )
+            continue;
+
+        if (!_condition_handlers[i].evaluator(item, value))
+            return false;
     }
-    return needDisplay;
+
+    return true;
 }
 
 #define ISALNUM(c)    (((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z') || ((c) >= '0' && (c) <= '9'))
@@ -103,7 +108,7 @@ static bool evaluateSystemLanguage(SPItem const *item, gchar const *value) {
     if (language_codes.empty())
         return false;
 
-    SPDocument *document = item->document;
+    SPDocument *document = SP_OBJECT_DOCUMENT(item);
     Glib::ustring document_language = document->getLanguage();
 
     if (document_language.size() == 0)
@@ -258,11 +263,9 @@ static bool evaluateRequiredFeatures(SPItem const */*item*/, gchar const *value)
         return true;
 
     std::vector<Glib::ustring> parts = splitByWhitespace(value);
-    if (parts.empty())
-    {
+    if ( 0 == parts.size() )
         return false;
-    }
-    
+
     for ( unsigned int i = 0 ; i < parts.size() ; i++ ) {
         if (!evaluateSingleFeature(parts[i].c_str())) {
             return false;
@@ -456,4 +459,4 @@ zu Zulu
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :

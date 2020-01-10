@@ -1,6 +1,7 @@
-/*
+/**
+ * \brief Abstraction for different style widget operands
+ *
  * Copyright (C) 2007 MenTaLguY <mental@rydia.net>
- *   Abhishek Sharma
  *
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
@@ -11,7 +12,7 @@
 #include "sp-object.h"
 #include "xml/sp-css-attr.h"
 #include "desktop-style.h"
-
+#include "desktop-handles.h"
 #include "selection.h"
 #include "style.h"
 
@@ -49,17 +50,19 @@ StyleSubject::Selection::~Selection() {
 Inkscape::Selection *StyleSubject::Selection::_getSelection() const {
     SPDesktop *desktop = getDesktop();
     if (desktop) {
-        return desktop->getSelection();
+        return sp_desktop_selection(desktop);
     } else {
         return NULL;
     }
 }
 
-std::vector<SPObject*> StyleSubject::Selection::list(){
+StyleSubject::iterator StyleSubject::Selection::begin() {
     Inkscape::Selection *selection = _getSelection();
-    if(selection)
-        return selection->list();
-    else return std::vector<SPObject*>();
+    if (selection) {
+        return iterator(selection->list());
+    } else {
+        return iterator(NULL);
+    }
 }
 
 Geom::OptRect StyleSubject::Selection::getBounds(SPItem::BBoxType type) {
@@ -86,7 +89,7 @@ void StyleSubject::Selection::_afterDesktopSwitch(SPDesktop *desktop) {
     _sel_modified.disconnect();
     if (desktop) {
         _subsel_changed = desktop->connectToolSubselectionChanged(sigc::hide(sigc::mem_fun(*this, &Selection::_emitChanged)));
-        Inkscape::Selection *selection = desktop->getSelection();
+        Inkscape::Selection *selection = sp_desktop_selection(desktop);
         if (selection) {
             _sel_changed = selection->connectChanged(sigc::hide(sigc::mem_fun(*this, &Selection::_emitChanged)));
             _sel_modified = selection->connectModified(sigc::hide(sigc::hide(sigc::mem_fun(*this, &Selection::_emitChanged))));
@@ -102,7 +105,8 @@ void StyleSubject::Selection::setCSS(SPCSSAttr *css) {
 }
 
 StyleSubject::CurrentLayer::CurrentLayer() {
-    _element = NULL;
+    _element.data = NULL;
+    _element.next = NULL;
 }
 
 StyleSubject::CurrentLayer::~CurrentLayer() {
@@ -111,10 +115,10 @@ StyleSubject::CurrentLayer::~CurrentLayer() {
 void StyleSubject::CurrentLayer::_setLayer(SPObject *layer) {
     _layer_release.disconnect();
     _layer_modified.disconnect();
-    if (_element) {
-        sp_object_unref(_element, NULL);
+    if (_element.data) {
+        sp_object_unref(static_cast<SPObject *>(_element.data), NULL);
     }
-    _element = layer;
+    _element.data = layer;
     if (layer) {
         sp_object_ref(layer, NULL);
         _layer_release = layer->connectRelease(sigc::hide(sigc::bind(sigc::mem_fun(*this, &CurrentLayer::_setLayer), (SPObject *)NULL)));
@@ -124,34 +128,33 @@ void StyleSubject::CurrentLayer::_setLayer(SPObject *layer) {
 }
 
 SPObject *StyleSubject::CurrentLayer::_getLayer() const {
-    return _element;
+    return static_cast<SPObject *>(_element.data);
 }
 
-SPObject *StyleSubject::CurrentLayer::_getLayerSList() const {
-        return _element;
-
+GSList *StyleSubject::CurrentLayer::_getLayerSList() const {
+    if (_element.data) {
+        return &_element;
+    } else {
+        return NULL;
+    }
 }
 
-std::vector<SPObject*> StyleSubject::CurrentLayer::list(){
-    std::vector<SPObject*> list;
-    list.push_back(_element);
-    return list;
+StyleSubject::iterator StyleSubject::CurrentLayer::begin() {
+    return iterator(_getLayerSList());
 }
 
 Geom::OptRect StyleSubject::CurrentLayer::getBounds(SPItem::BBoxType type) {
     SPObject *layer = _getLayer();
     if (layer && SP_IS_ITEM(layer)) {
-        return SP_ITEM(layer)->desktopBounds(type);
+        return sp_item_bbox_desktop(SP_ITEM(layer), type);
     } else {
         return Geom::OptRect();
     }
 }
 
 int StyleSubject::CurrentLayer::queryStyle(SPStyle *query, int property) {
-	std::vector<SPItem*> list;
-    SPObject* i=_getLayerSList();
-    if (i) {
-		list.push_back((SPItem*)i);
+    GSList *list = _getLayerSList();
+    if (list) {
         return sp_desktop_query_style_from_list(list, query, property);
     } else {
         return QUERY_STYLE_NOTHING;
@@ -188,4 +191,4 @@ void StyleSubject::CurrentLayer::_afterDesktopSwitch(SPDesktop *desktop) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
