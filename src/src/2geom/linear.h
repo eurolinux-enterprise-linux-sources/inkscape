@@ -35,7 +35,7 @@
 #ifndef SEEN_LINEAR_H
 #define SEEN_LINEAR_H
 #include <2geom/interval.h>
-#include <2geom/isnan.h>
+#include <2geom/math-utils.h>
 
 
 //#define USE_SBASIS_OF
@@ -55,7 +55,7 @@ class SBasis;
 class Linear{
 public:
     double a[2];
-    Linear() {}
+    Linear() {a[0]=0; a[1]=0;}
     Linear(double aa, double b) {a[0] = aa; a[1] = b;}
     Linear(double aa) {a[0] = aa; a[1] = aa;}
 
@@ -72,8 +72,8 @@ public:
 
     //IMPL: FragmentConcept
     typedef double output_type;
-    inline bool isZero() const { return a[0] == 0 && a[1] == 0; }
-    inline bool isConstant() const { return a[0] == a[1]; }
+    inline bool isZero(double eps=EPSILON) const { return are_near(a[0], 0., eps) && are_near(a[1], 0., eps); }
+    inline bool isConstant(double eps=EPSILON) const { return are_near(a[0], a[1], eps); }
     inline bool isFinite() const { return IS_FINITE(a[0]) && IS_FINITE(a[1]); }
 
     inline double at0() const { return a[0]; }
@@ -169,4 +169,4 @@ inline Linear operator/=(Linear & a, double b) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

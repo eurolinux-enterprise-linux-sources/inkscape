@@ -1,7 +1,4 @@
-/**
- * \file
- * \brief Classes for representing and manipulating URIs as per RFC 2396.
- *
+/*
  * Authors:
  *   MenTaLguY <mental@rydia.net>
  *   Jon A. Cruz <jon@joncruz.org>
@@ -13,19 +10,22 @@
 
 #include <glib.h>
 #include "uri.h"
+#include <string>
 #include <glibmm/ustring.h>
+#include <glibmm/miscutils.h>
 
 namespace Inkscape {
 
-/** \brief Copy constructor. */
+URI::URI() {
+    const gchar *in = "";
+    _impl = Impl::create(xmlParseURI(in));
+}
+
 URI::URI(const URI &uri) {
     uri._impl->reference();
     _impl = uri._impl;
 }
 
-/** \brief Constructor from a C-style ASCII string.
-    \param preformed Properly quoted C-style string to be represented.
- */
 URI::URI(gchar const *preformed) throw(BadURIException) {
     xmlURIPtr uri;
     if (!preformed) {
@@ -38,13 +38,10 @@ URI::URI(gchar const *preformed) throw(BadURIException) {
     _impl = Impl::create(uri);
 }
 
-
-/** \brief Destructor. */
 URI::~URI() {
     _impl->unreference();
 }
 
-/** \brief Assignment operator. */
 URI &URI::operator=(URI const &uri) {
 // No check for self-assignment needed, as _impl refcounting increments first.
     uri._impl->reference();
@@ -77,32 +74,15 @@ void URI::Impl::unreference() {
     }
 }
 
-/** \fn bool URI::isOpaque() const
-    \brief Determines if the URI represented is an 'opaque' URI.
-    \return \c true if the URI is opaque, \c false if hierarchial.
-*/
 bool URI::Impl::isOpaque() const {
     bool opq = !isRelative() && (getOpaque() != NULL);
     return opq;
 }
 
-/** \fn bool URI::isRelative() const
-    \brief Determines if the URI represented is 'relative' as per RFC 2396.
-    \return \c true if the URI is relative, \c false if it is absolute.
-
-    Relative URI references are distinguished by not begining with a
-    scheme name.
-*/
 bool URI::Impl::isRelative() const {
     return !_uri->scheme;
 }
 
-/** \fn bool URI::isNetPath() const
-    \brief Determines if the relative URI represented is a 'net-path' as per RFC 2396.
-    \return \c true if the URI is relative and a net-path, \c false otherwise.
-
-    A net-path is one that starts with "\\".
-*/
 bool URI::Impl::isNetPath() const {
     bool isNet = false;
     if ( isRelative() )
@@ -113,12 +93,6 @@ bool URI::Impl::isNetPath() const {
     return isNet;
 }
 
-/** \fn bool URI::isRelativePath() const
-    \brief Determines if the relative URI represented is a 'relative-path' as per RFC 2396.
-    \return \c true if the URI is relative and a relative-path, \c false otherwise.
-
-    A relative-path is one that starts with no slashes.
-*/
 bool URI::Impl::isRelativePath() const {
     bool isRel = false;
     if ( isRelative() )
@@ -129,12 +103,6 @@ bool URI::Impl::isRelativePath() const {
     return isRel;
 }
 
-/** \fn bool URI::isAbsolutePath() const
-    \brief Determines if the relative URI represented is a 'absolute-path' as per RFC 2396.
-    \return \c true if the URI is relative and an absolute-path, \c false otherwise.
-
-    An absolute-path is one that starts with a single "\".
-*/
 bool URI::Impl::isAbsolutePath() const {
     bool isAbs = false;
     if ( isRelative() )
@@ -172,6 +140,31 @@ gchar *URI::to_native_filename(gchar const* uri) throw(BadURIException)
     filename = tmp.toNativeFilename();
     return filename;
 }
+/*
+ * Returns the absolute path to an existing file referenced in this URI,
+ * if the uri is data, the path is empty or the file doesn't exist, then
+ * an empty string is returned.
+ *
+ * Does not check if the returned path is the local document's path (local)
+ * and thus redundent. Caller is expected to check against the document's path.
+ */
+const std::string URI::getFullPath(std::string const base) const {
+    if (!_impl->getPath()) {
+        return "";
+    }
+    std::string path = std::string(_impl->getPath());
+    // Calculate the absolute path from an available base
+    if(!base.empty() && !path.empty() && path[0] != '/') {
+        path = Glib::build_filename(base, path);
+    }
+    // Check the existance of the file
+    if(! g_file_test(path.c_str(), G_FILE_TEST_EXISTS) 
+      || g_file_test(path.c_str(), G_FILE_TEST_IS_DIR) ) {
+        path.clear();
+    }
+    return path;
+}
+
 
 /* TODO !!! proper error handling */
 gchar *URI::toNativeFilename() const throw(BadURIException) {
@@ -230,12 +223,6 @@ URI URI::from_native_filename(gchar const *path) throw(BadURIException) {
     return result;
 }
 
-/** \fn gchar *URI::toString() const
-    \brief Returns a glib string version of this URI.
-    \return a glib string version of this URI.
-
-    The returned string must be freed with \c g_free().
-*/
 gchar *URI::Impl::toString() const {
     xmlChar *string = xmlSaveUri(_uri);
     if (string) {
@@ -260,4 +247,4 @@ gchar *URI::Impl::toString() const {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,9 +1,11 @@
-/** @file
- * @brief Interface between Inkscape code (SPItem) and graphlayout functions.
+/**
+ * @file
+ * Interface between Inkscape code (SPItem) and graphlayout functions.
  */
 /*
  * Authors:
  *   Tim Dwyer <Tim.Dwyer@infotech.monash.edu.au>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2005 Authors
  *
@@ -18,6 +20,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <float.h>
+#include <2geom/transforms.h>
 
 #include "desktop.h"
 #include "inkscape.h"
@@ -103,7 +106,7 @@ void graphlayout(GSList const *const items) {
         return;
     }
 
-    using Inkscape::Util::GSListConstIterator;
+    using Inkscape::Util::GSListIterator;
     list<SPItem *> selected;
     filterConnectors(items,selected);
     if (selected.empty()) return;
@@ -126,7 +129,7 @@ void graphlayout(GSList const *const items) {
          ++i)
     {
         SPItem *u=*i;
-        Geom::OptRect const item_box(sp_item_bbox_desktop(u));
+        Geom::OptRect const item_box = u->desktopVisualBounds();
         if(item_box) {
             Geom::Point ll(item_box->min());
             Geom::Point ur(item_box->max());
@@ -164,7 +167,7 @@ void graphlayout(GSList const *const items) {
         GSList *nlist=iu->avoidRef->getAttachedConnectors(Avoid::runningFrom);
         list<SPItem *> connectors;
 
-        connectors.insert<GSListConstIterator<SPItem *> >(connectors.end(),nlist,NULL);
+        connectors.insert<GSListIterator<SPItem *> >(connectors.end(),nlist,NULL);
         for (list<SPItem *>::iterator j(connectors.begin());
                 j != connectors.end();
                 ++j) {
@@ -192,8 +195,8 @@ void graphlayout(GSList const *const items) {
                 unsigned v=v_pair->second;
                 //cout << "Edge: (" << u <<","<<v<<")"<<endl;
                 es.push_back(make_pair(u,v));
-                if(conn->style->marker[SP_MARKER_LOC_END].set) {
-                    if(directed && strcmp(conn->style->marker[SP_MARKER_LOC_END].value,"none")) {
+                if(conn->style->marker_end.set) {
+                    if(directed && strcmp(conn->style->marker_end.value,"none")) {
                         scy.push_back(new SimpleConstraint(v, u,
                                     (ideal_connector_length * directed_edge_height_modifier)));
                     }
@@ -229,8 +232,8 @@ void graphlayout(GSList const *const items) {
             map<string,unsigned>::iterator i=nodelookup.find(u->getId());
             if(i!=nodelookup.end()) {
                 Rectangle* r=rs[i->second];
-                Geom::OptRect item_box(sp_item_bbox_desktop(u));
-                if(item_box) {
+                Geom::OptRect item_box = u->desktopVisualBounds();
+                if (item_box) {
                     Geom::Point const curr(item_box->midpoint());
                     Geom::Point const dest(r->getCentreX(),r->getCentreY());
                     sp_item_move_rel(u, Geom::Translate(dest - curr));
@@ -260,4 +263,4 @@ void graphlayout(GSList const *const items) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

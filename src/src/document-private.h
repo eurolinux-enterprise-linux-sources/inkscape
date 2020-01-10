@@ -1,11 +1,12 @@
-#ifndef __SP_DOCUMENT_PRIVATE_H__
-#define __SP_DOCUMENT_PRIVATE_H__
+#ifndef SEEN_SP_DOCUMENT_PRIVATE_H
+#define SEEN_SP_DOCUMENT_PRIVATE_H
 
 /*
  * Seldom needed document data
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 1999-2002 Lauris Kaplinski
  * Copyright (C) 2001-2002 Ximian, Inc.
@@ -23,12 +24,9 @@
 
 #include "composite-undo-stack-observer.h"
 
-#include "event-log.h"
 
 // XXX only for testing!
 #include "console-output-undo-observer.h"
-
-#define SP_DOCUMENT_DEFS(d) ((SPObject *) SP_ROOT (SP_DOCUMENT_ROOT (d))->defs)
 
 namespace Inkscape {
 namespace XML {
@@ -54,6 +52,7 @@ struct SPDocumentPrivate {
 	GHashTable *resources;
 	ResourcesChangedSignalMap resources_changed_signals;
 
+        sigc::signal<void> destroySignal;
 	SPDocument::ModifiedSignal modified_signal;
 	SPDocument::URISetSignal uri_set_signal;
 	SPDocument::ResizedSignal resized_signal;
@@ -62,7 +61,7 @@ struct SPDocumentPrivate {
   SPDocument::CommitSignal commit_signal;
 
 	/* Undo/Redo state */
-	bool sensitive: true; /* If we save actions to undo stack */
+	bool sensitive; /* If we save actions to undo stack */
 	Inkscape::XML::Event * partial; /* partial undo log when interrupted */
 	int history_size;
 	GSList * undo; /* Undo stack of reprs */
@@ -77,4 +76,4 @@ struct SPDocumentPrivate {
 	bool seeking;
 };
 
-#endif
+#endif // SEEN_SP_DOCUMENT_PRIVATE_H

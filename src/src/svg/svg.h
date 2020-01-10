@@ -17,7 +17,6 @@
 #include <string>
 
 #include "svg/svg-length.h"
-#include "libnr/nr-forward.h"
 #include <2geom/forward.h>
 
 /* Generic */
@@ -54,10 +53,10 @@ unsigned int sp_svg_length_read_ldd( const gchar *str, SVGLength::Unit *unit, do
 
 std::string sp_svg_length_write_with_units(SVGLength const &length);
 
-bool sp_svg_transform_read(gchar const *str, Geom::Matrix *transform);
+bool sp_svg_transform_read(gchar const *str, Geom::Affine *transform);
 
-gchar *sp_svg_transform_write(Geom::Matrix const &transform);
-gchar *sp_svg_transform_write(Geom::Matrix const *transform);
+gchar *sp_svg_transform_write(Geom::Affine const &transform);
+gchar *sp_svg_transform_write(Geom::Affine const *transform);
 
 double sp_svg_read_percentage( const char * str, double def );
 
@@ -78,4 +77,4 @@ gchar * sp_svg_write_path( Geom::Path const &p );
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

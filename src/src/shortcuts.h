@@ -10,6 +10,15 @@
  * This code is in public domain
  */
 
+#include <vector>
+#include <gdkmm/types.h>
+
+typedef struct _GtkAccelGroup GtkAccelGroup;
+typedef struct _GtkWidget     GtkWidget;
+
+struct _GtkAccelGroup;
+struct _GtkWidget;
+
 namespace Inkscape {
     class Verb;
     namespace UI {
@@ -24,29 +33,31 @@ namespace Inkscape {
 #define SP_SHORTCUT_SHIFT_MASK (1 << 24)
 #define SP_SHORTCUT_CONTROL_MASK (1 << 25)
 #define SP_SHORTCUT_ALT_MASK (1 << 26)
-#define SP_SHORTCUT_MODIFIER_MASK (SP_SHORTCUT_SHIFT_MASK | SP_SHORTCUT_CONTROL_MASK | SP_SHORTCUT_ALT_MASK)
+#define SP_SHORTCUT_MODIFIER_MASK (SP_SHORTCUT_SHIFT_MASK|SP_SHORTCUT_CONTROL_MASK|SP_SHORTCUT_ALT_MASK)
+
 
 /* Returns true if action was performed */
 bool sp_shortcut_invoke (unsigned int shortcut, Inkscape::UI::View::View *view);
 
-Inkscape::Verb * sp_shortcut_get_verb( unsigned int shortcut );
-
-/**
- * Returns the associated shortcut, or GDK_VoidSymbol.
- * @param verb the verb to look up a shortcut for.
- *
- * @return the appropriate shortcut, or GDK_VoidSymbol if no shortcut is found.
- */
-unsigned int sp_shortcut_get_primary( Inkscape::Verb * verb );
-
-/**
- * Return the human readable form of the shortcut, or NULL.
- * @param shortcut the shortcut value.
- *
- * @return a human readable form of the shortcut, or NULL (e.g. Shift+Ctrl+F).
- *         Free the returned string with g_free.
- */
-char* sp_shortcut_get_label( unsigned int shortcut );
+void sp_shortcut_init();
+Inkscape::Verb * sp_shortcut_get_verb (unsigned int shortcut);
+unsigned int sp_shortcut_get_primary (Inkscape::Verb * verb); // Returns GDK_VoidSymbol if no shortcut is found.
+gchar* sp_shortcut_get_label (unsigned int shortcut); // Returns the human readable form of the shortcut (or NULL), for example Shift+Ctrl+F. Free the returned string with g_free.
+void sp_shortcut_set(unsigned int const shortcut, Inkscape::Verb *const verb, bool const is_primary, bool const is_user_set=false);
+void sp_shortcut_unset(unsigned int const shortcut);
+void sp_shortcut_add_to_file(char const *action, unsigned int const shortcut);
+void sp_shortcut_delete_from_file(char const *action, unsigned int const shortcut);
+void sp_shortcuts_delete_all_from_file();
+Glib::ustring sp_shortcut_to_label(unsigned int const shortcut);
+unsigned int sp_gdkmodifier_to_shortcut(guint accel_key, Gdk::ModifierType gdkmodifier, guint hardware_keycode);
+void sp_shortcut_get_file_names(std::vector<Glib::ustring> *names, std::vector<Glib::ustring> *paths);
+bool sp_shortcut_is_user_set(Inkscape::Verb *verb);
+void sp_shortcut_file_export();
+bool sp_shortcut_file_import();
+void sp_shortcut_file_import_do(char const *importname);
+void sp_shortcut_file_export_do(char const *exportname);
+GtkAccelGroup *sp_shortcut_get_accel_group();
+void sp_shortcut_add_accelerator(GtkWidget *item, unsigned int const shortcut);
 
 #endif
 
@@ -59,4 +70,4 @@ char* sp_shortcut_get_label( unsigned int shortcut );
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,7 +1,9 @@
-#define CANVAS_AXONOMGRID_C
-
 /*
- * Copyright (C) 2006-2008 Johan Engelen <johan@shouraizou.nl>
+ * Authors:
+ *    Johan Engelen <j.b.c.engelen@alumnus.utwente.nl>
+ *
+ * Copyright (C) 2006-2012 Authors
+ * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
  /*
@@ -11,140 +13,74 @@
   * to the right). The x-axis will always have an angle between 0 and 90 degrees.
   */
 
- /*
-  * TODO:
-  * THIS FILE AND THE HEADER FILE NEED CLEANING UP. PLEASE DO NOT HESISTATE TO DO SO.
-  * For example: the line drawing code should not be here. There _must_ be a function somewhere else that can provide this functionality...
-  */
+#if HAVE_CONFIG_H
+# include "config.h"
+#endif
 
-#include "sp-canvas-util.h"
-#include "canvas-axonomgrid.h"
-#include "util/mathfns.h"
-#include "2geom/line.h"
-#include "display-forward.h"
-#include <libnr/nr-pixops.h>
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
 
-#include "canvas-grid.h"
-#include "desktop-handles.h"
-#include "helper/units.h"
-#include "svg/svg-color.h"
-#include "xml/node-event-vector.h"
-#include "sp-object.h"
+#include <gtkmm/box.h>
+#include <gtkmm/label.h>
 
-#include "sp-namedview.h"
-#include "inkscape.h"
+#if WITH_GTKMM_3_0
+# include <gtkmm/grid.h>
+#else
+# include <gtkmm/table.h>
+#endif
+
+#include <glibmm/i18n.h>
+
+#include "display/canvas-axonomgrid.h"
+
+#include "ui/widget/registered-widget.h"
 #include "desktop.h"
-
+#include "desktop-handles.h"
+#include "display/cairo-utils.h"
+#include "display/canvas-grid.h"
+#include "display/sp-canvas-util.h"
+#include "display/sp-canvas.h"
 #include "document.h"
+#include "inkscape.h"
 #include "preferences.h"
+#include "sp-namedview.h"
+#include "sp-object.h"
+#include "sp-root.h"
+#include "svg/svg-color.h"
+#include "2geom/line.h"
+#include "2geom/angle.h"
+#include "util/mathfns.h"
+#include "round.h"
+#include "util/units.h"
 
-#define SAFE_SETPIXEL   //undefine this when it is certain that setpixel is never called with invalid params
+using Inkscape::Util::unit_table;
 
 enum Dim3 { X=0, Y, Z };
 
-#ifndef M_PI
-# define M_PI 3.14159265358979323846
-#endif
-
-static double deg_to_rad(double deg) { return deg*M_PI/180.0;}
-
-
 /**
-    \brief  This function renders a pixel on a particular buffer.
-
-    The topleft of the buffer equals
-                        ( rect.x0 , rect.y0 )  in screen coordinates
-                        ( 0 , 0 )  in setpixel coordinates
-    The bottomright of the buffer equals
-                        ( rect.x1 , rect,y1 )  in screen coordinates
-                        ( rect.x1 - rect.x0 , rect.y1 - rect.y0 )  in setpixel coordinates
-*/
-static void
-sp_caxonomgrid_setpixel (SPCanvasBuf *buf, gint x, gint y, guint32 rgba)
-{
-#ifdef SAFE_SETPIXEL
-    if ( (x >= buf->rect.x0) && (x < buf->rect.x1) && (y >= buf->rect.y0) && (y < buf->rect.y1) ) {
-#endif
-        guint r, g, b, a;
-        r = NR_RGBA32_R (rgba);
-        g = NR_RGBA32_G (rgba);
-        b = NR_RGBA32_B (rgba);
-        a = NR_RGBA32_A (rgba);
-        guchar * p = buf->buf + (y - buf->rect.y0) * buf->buf_rowstride + (x - buf->rect.x0) * 4;
-        p[0] = NR_COMPOSEN11_1111 (r, a, p[0]);
-        p[1] = NR_COMPOSEN11_1111 (g, a, p[1]);
-        p[2] = NR_COMPOSEN11_1111 (b, a, p[2]);
-#ifdef SAFE_SETPIXEL
-    }
-#endif
-}
-
-/**
-    \brief  This function renders a line on a particular canvas buffer,
-            using Bresenham's line drawing function.
-            http://www.cs.unc.edu/~mcmillan/comp136/Lecture6/Lines.html
-            Coordinates are interpreted as SCREENcoordinates
-*/
+ * This function calls Cairo to render a line on a particular canvas buffer.
+ * Coordinates are interpreted as SCREENcoordinates
+ */
 static void
 sp_caxonomgrid_drawline (SPCanvasBuf *buf, gint x0, gint y0, gint x1, gint y1, guint32 rgba)
 {
-    int dy = y1 - y0;
-    int dx = x1 - x0;
-    int stepx, stepy;
-
-    if (dy < 0) { dy = -dy;  stepy = -1; } else { stepy = 1; }
-    if (dx < 0) { dx = -dx;  stepx = -1; } else { stepx = 1; }
-    dy <<= 1;                                                  // dy is now 2*dy
-    dx <<= 1;                                                  // dx is now 2*dx
-
-    sp_caxonomgrid_setpixel(buf, x0, y0, rgba);
-    if (dx > dy) {
-        int fraction = dy - (dx >> 1);                         // same as 2*dy - dx
-        while (x0 != x1) {
-            if (fraction >= 0) {
-                y0 += stepy;
-                fraction -= dx;                                // same as fraction -= 2*dx
-            }
-            x0 += stepx;
-            fraction += dy;                                    // same as fraction -= 2*dy
-            sp_caxonomgrid_setpixel(buf, x0, y0, rgba);
-        }
-    } else {
-        int fraction = dx - (dy >> 1);
-        while (y0 != y1) {
-            if (fraction >= 0) {
-                x0 += stepx;
-                fraction -= dy;
-            }
-            y0 += stepy;
-            fraction += dx;
-            sp_caxonomgrid_setpixel(buf, x0, y0, rgba);
-        }
-    }
-
+    cairo_move_to(buf->ct, 0.5 + x0, 0.5 + y0);
+    cairo_line_to(buf->ct, 0.5 + x1, 0.5 + y1);
+    ink_cairo_set_source_rgba32(buf->ct, rgba);
+    cairo_stroke(buf->ct);
 }
 
 static void
 sp_grid_vline (SPCanvasBuf *buf, gint x, gint ys, gint ye, guint32 rgba)
 {
-    if ((x >= buf->rect.x0) && (x < buf->rect.x1)) {
-        guint r, g, b, a;
-        gint y0, y1, y;
-        guchar *p;
-        r = NR_RGBA32_R(rgba);
-        g = NR_RGBA32_G (rgba);
-        b = NR_RGBA32_B (rgba);
-        a = NR_RGBA32_A (rgba);
-        y0 = MAX (buf->rect.y0, ys);
-        y1 = MIN (buf->rect.y1, ye + 1);
-        p = buf->buf + (y0 - buf->rect.y0) * buf->buf_rowstride + (x - buf->rect.x0) * 4;
-        for (y = y0; y < y1; y++) {
-            p[0] = NR_COMPOSEN11_1111 (r, a, p[0]);
-            p[1] = NR_COMPOSEN11_1111 (g, a, p[1]);
-            p[2] = NR_COMPOSEN11_1111 (b, a, p[2]);
-            p += buf->buf_rowstride;
-        }
-    }
+    if ((x < buf->rect.left()) || (x >= buf->rect.right()))
+        return;
+
+    cairo_move_to(buf->ct, 0.5 + x, 0.5 + ys);
+    cairo_line_to(buf->ct, 0.5 + x, 0.5 + ye);
+    ink_cairo_set_source_rgba32(buf->ct, rgba);
+    cairo_stroke(buf->ct);
 }
 
 namespace Inkscape {
@@ -162,28 +98,60 @@ namespace Inkscape {
 #define SPACE_SIZE_X 15
 #define SPACE_SIZE_Y 10
 static inline void
+#if WITH_GTKMM_3_0
+attach_all(Gtk::Grid &table, Gtk::Widget const *const arr[], unsigned size, int start = 0)
+#else
 attach_all(Gtk::Table &table, Gtk::Widget const *const arr[], unsigned size, int start = 0)
+#endif
 {
     for (unsigned i=0, r=start; i<size/sizeof(Gtk::Widget*); i+=2) {
         if (arr[i] && arr[i+1]) {
+#if WITH_GTKMM_3_0
+            (const_cast<Gtk::Widget&>(*arr[i])).set_hexpand();
+            (const_cast<Gtk::Widget&>(*arr[i])).set_valign(Gtk::ALIGN_CENTER);
+            table.attach(const_cast<Gtk::Widget&>(*arr[i]),   1, r, 1, 1);
+
+            (const_cast<Gtk::Widget&>(*arr[i+1])).set_hexpand();
+            (const_cast<Gtk::Widget&>(*arr[i+1])).set_valign(Gtk::ALIGN_CENTER);
+            table.attach(const_cast<Gtk::Widget&>(*arr[i+1]), 2, r, 1, 1);
+#else
             table.attach (const_cast<Gtk::Widget&>(*arr[i]),   1, 2, r, r+1,
                           Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
             table.attach (const_cast<Gtk::Widget&>(*arr[i+1]), 2, 3, r, r+1,
                           Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
+#endif
         } else {
             if (arr[i+1]) {
+#if WITH_GTKMM_3_0
+                (const_cast<Gtk::Widget&>(*arr[i+1])).set_hexpand();
+                (const_cast<Gtk::Widget&>(*arr[i+1])).set_valign(Gtk::ALIGN_CENTER);
+                table.attach(const_cast<Gtk::Widget&>(*arr[i+1]), 1, r, 2, 1);
+#else
                 table.attach (const_cast<Gtk::Widget&>(*arr[i+1]), 1, 3, r, r+1,
                               Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
+#endif
             } else if (arr[i]) {
                 Gtk::Label& label = reinterpret_cast<Gtk::Label&> (const_cast<Gtk::Widget&>(*arr[i]));
                 label.set_alignment (0.0);
+#if WITH_GTKMM_3_0
+                label.set_hexpand();
+                label.set_valign(Gtk::ALIGN_CENTER);
+                table.attach(label, 0, r, 3, 1);
+#else
                 table.attach (label, 0, 3, r, r+1,
                               Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
+#endif
             } else {
-                Gtk::HBox *space = manage (new Gtk::HBox);
+                Gtk::HBox *space = Gtk::manage (new Gtk::HBox);
                 space->set_size_request (SPACE_SIZE_X, SPACE_SIZE_Y);
+#if WITH_GTKMM_3_0
+                space->set_halign(Gtk::ALIGN_CENTER);
+                space->set_valign(Gtk::ALIGN_CENTER);
+                table.attach(*space, 0, r, 1, 1);
+#else
                 table.attach (*space, 0, 1, r, r+1,
                               (Gtk::AttachOptions)0, (Gtk::AttachOptions)0,0,0);
+#endif
             }
         }
         ++r;
@@ -194,22 +162,23 @@ CanvasAxonomGrid::CanvasAxonomGrid (SPNamedView * nv, Inkscape::XML::Node * in_r
     : CanvasGrid(nv, in_repr, in_doc, GRID_AXONOMETRIC)
 {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    gridunit = sp_unit_get_by_abbreviation( prefs->getString("/options/grids/axonom/units").data() );
-    if (!gridunit)
-        gridunit = &sp_unit_get_by_id(SP_UNIT_PX);
-    origin[Geom::X] = sp_units_get_pixels( prefs->getDouble("/options/grids/axonom/origin_x", 0.0), *gridunit );
-    origin[Geom::Y] = sp_units_get_pixels( prefs->getDouble("/options/grids/axonom/origin_y", 0.0), *gridunit );
+    gridunit = unit_table.getUnit(prefs->getString("/options/grids/axonom/units"));
+    if (!gridunit) {
+        gridunit = unit_table.getUnit("px");
+    }
+    origin[Geom::X] = Inkscape::Util::Quantity::convert(prefs->getDouble("/options/grids/axonom/origin_x", 0.0), gridunit, "px");
+    origin[Geom::Y] = Inkscape::Util::Quantity::convert(prefs->getDouble("/options/grids/axonom/origin_y", 0.0), gridunit, "px");
     color = prefs->getInt("/options/grids/axonom/color", 0x0000ff20);
     empcolor = prefs->getInt("/options/grids/axonom/empcolor", 0x0000ff40);
     empspacing = prefs->getInt("/options/grids/axonom/empspacing", 5);
-    lengthy = sp_units_get_pixels( prefs->getDouble("/options/grids/axonom/spacing_y", 1.0), *gridunit );
+    lengthy = Inkscape::Util::Quantity::convert(prefs->getDouble("/options/grids/axonom/spacing_y", 1.0), gridunit, "px");
     angle_deg[X] = prefs->getDouble("/options/grids/axonom/angle_x", 30.0);
     angle_deg[Z] = prefs->getDouble("/options/grids/axonom/angle_z", 30.0);
     angle_deg[Y] = 0;
 
-    angle_rad[X] = deg_to_rad(angle_deg[X]);
+    angle_rad[X] = Geom::deg_to_rad(angle_deg[X]);
     tan_angle[X] = tan(angle_rad[X]);
-    angle_rad[Z] = deg_to_rad(angle_deg[Z]);
+    angle_rad[Z] = Geom::deg_to_rad(angle_deg[Z]);
     tan_angle[Z] = tan(angle_rad[Z]);
 
     snapper = new CanvasAxonomGridSnapper(this, &namedview->snap_manager, 0);
@@ -220,63 +189,6 @@ CanvasAxonomGrid::CanvasAxonomGrid (SPNamedView * nv, Inkscape::XML::Node * in_r
 CanvasAxonomGrid::~CanvasAxonomGrid ()
 {
     if (snapper) delete snapper;
-}
-
-
-/* fixme: Collect all these length parsing methods and think common sane API */
-
-static gboolean sp_nv_read_length(gchar const *str, guint base, gdouble *val, SPUnit const **unit)
-{
-    if (!str) {
-        return FALSE;
-    }
-
-    gchar *u;
-    gdouble v = g_ascii_strtod(str, &u);
-    if (!u) {
-        return FALSE;
-    }
-    while (isspace(*u)) {
-        u += 1;
-    }
-
-    if (!*u) {
-        /* No unit specified - keep default */
-        *val = v;
-        return TRUE;
-    }
-
-    if (base & SP_UNIT_DEVICE) {
-        if (u[0] && u[1] && !isalnum(u[2]) && !strncmp(u, "px", 2)) {
-            *unit = &sp_unit_get_by_id(SP_UNIT_PX);
-            *val = v;
-            return TRUE;
-        }
-    }
-
-    if (base & SP_UNIT_ABSOLUTE) {
-        if (!strncmp(u, "pt", 2)) {
-            *unit = &sp_unit_get_by_id(SP_UNIT_PT);
-        } else if (!strncmp(u, "mm", 2)) {
-            *unit = &sp_unit_get_by_id(SP_UNIT_MM);
-        } else if (!strncmp(u, "cm", 2)) {
-            *unit = &sp_unit_get_by_id(SP_UNIT_CM);
-        } else if (!strncmp(u, "m", 1)) {
-            *unit = &sp_unit_get_by_id(SP_UNIT_M);
-        } else if (!strncmp(u, "in", 2)) {
-            *unit = &sp_unit_get_by_id(SP_UNIT_IN);
-        } else if (!strncmp(u, "ft", 2)) {
-            *unit = &sp_unit_get_by_id(SP_UNIT_FT);
-        } else if (!strncmp(u, "pc", 2)) {
-            *unit = &sp_unit_get_by_id(SP_UNIT_PC);
-        } else {
-            return FALSE;
-        }
-        *val = v;
-        return TRUE;
-    }
-
-    return FALSE;
 }
 
 static gboolean sp_nv_read_opacity(gchar const *str, guint32 *color)
@@ -302,35 +214,69 @@ static gboolean sp_nv_read_opacity(gchar const *str, guint32 *color)
 void
 CanvasAxonomGrid::readRepr()
 {
-    gchar const *value;
-    if ( (value = repr->attribute("originx")) ) {
-        sp_nv_read_length(value, SP_UNIT_ABSOLUTE | SP_UNIT_DEVICE, &origin[Geom::X], &gridunit);
-        origin[Geom::X] = sp_units_get_pixels(origin[Geom::X], *(gridunit));
+    SPRoot *root = doc->getRoot();
+    double scale_x = 1.0;
+    double scale_y = 1.0;
+    if( root->viewBox_set ) {
+        scale_x = root->width.computed  / root->viewBox.width();
+        scale_y = root->height.computed / root->viewBox.height();
     }
+
+    gchar const *value;
+
+    if ( (value = repr->attribute("originx")) ) {
+
+        Inkscape::Util::Quantity q = unit_table.parseQuantity(value);
+
+        if( q.unit->type == UNIT_TYPE_LINEAR ) {
+            // Legacy grid not in 'user units'
+            origin[Geom::X] = q.value("px");
+        } else {
+            // Grid in 'user units'
+            origin[Geom::X] = q.quantity * scale_x;
+        }
+    }
+
     if ( (value = repr->attribute("originy")) ) {
-        sp_nv_read_length(value, SP_UNIT_ABSOLUTE | SP_UNIT_DEVICE, &origin[Geom::Y], &gridunit);
-        origin[Geom::Y] = sp_units_get_pixels(origin[Geom::Y], *(gridunit));
+
+        Inkscape::Util::Quantity q = unit_table.parseQuantity(value);
+
+        if( q.unit->type == UNIT_TYPE_LINEAR ) {
+            // Legacy grid not in 'user units'
+            origin[Geom::Y] = q.value("px");
+        } else {
+            // Grid in 'user units'
+            origin[Geom::Y] = q.quantity * scale_y;
+        }
     }
 
     if ( (value = repr->attribute("spacingy")) ) {
-        sp_nv_read_length(value, SP_UNIT_ABSOLUTE | SP_UNIT_DEVICE, &lengthy, &gridunit);
-        lengthy = sp_units_get_pixels(lengthy, *(gridunit));
+
+        Inkscape::Util::Quantity q = unit_table.parseQuantity(value);
+
+        if( q.unit->type == UNIT_TYPE_LINEAR ) {
+            // Legacy grid not in 'user units'
+            lengthy = q.value("px");
+        } else {
+            // Grid in 'user units'
+            lengthy = q.quantity * scale_y; // We do not handle scale_x != scale_y
+        }
         if (lengthy < 0.0500) lengthy = 0.0500;
     }
 
     if ( (value = repr->attribute("gridanglex")) ) {
         angle_deg[X] = g_ascii_strtod(value, NULL);
-        if (angle_deg[X] < 1.0) angle_deg[X] = 1.0;
+        if (angle_deg[X] < 0.) angle_deg[X] = 0.;
         if (angle_deg[X] > 89.0) angle_deg[X] = 89.0;
-        angle_rad[X] = deg_to_rad(angle_deg[X]);
+        angle_rad[X] = Geom::deg_to_rad(angle_deg[X]);
         tan_angle[X] = tan(angle_rad[X]);
     }
 
     if ( (value = repr->attribute("gridanglez")) ) {
         angle_deg[Z] = g_ascii_strtod(value, NULL);
-        if (angle_deg[Z] < 1.0) angle_deg[Z] = 1.0;
+        if (angle_deg[Z] < 0.) angle_deg[Z] = 0.;
         if (angle_deg[Z] > 89.0) angle_deg[Z] = 89.0;
-        angle_rad[Z] = deg_to_rad(angle_deg[Z]);
+        angle_rad[Z] = Geom::deg_to_rad(angle_deg[Z]);
         tan_angle[Z] = tan(angle_rad[Z]);
     }
 
@@ -367,6 +313,10 @@ CanvasAxonomGrid::readRepr()
         snapper->setSnapVisibleOnly(strcmp(value,"false") != 0 && strcmp(value, "0") != 0);
     }
 
+    if ( (value = repr->attribute("units")) ) {
+        gridunit = unit_table.getUnit(value); // Display unit identifier in grid menu
+    }
+
     for (GSList *l = canvasitems; l != NULL; l = l->next) {
         sp_canvas_item_request_update ( SP_CANVAS_ITEM(l->data) );
     }
@@ -385,25 +335,31 @@ CanvasAxonomGrid::onReprAttrChanged(Inkscape::XML::Node */*repr*/, gchar const *
         updateWidgets();
 }
 
-
-
-
 Gtk::Widget *
 CanvasAxonomGrid::newSpecificWidget()
 {
+#if WITH_GTKMM_3_0
+    Gtk::Grid *table = Gtk::manage(new Gtk::Grid());
+    table->set_row_spacing(2);
+    table->set_column_spacing(2);
+#else
     Gtk::Table * table = Gtk::manage( new Gtk::Table(1,1) );
     table->set_spacings(2);
+#endif
 
 _wr.setUpdating (true);
 
     Inkscape::UI::Widget::RegisteredUnitMenu *_rumg = Gtk::manage( new Inkscape::UI::Widget::RegisteredUnitMenu(
             _("Grid _units:"), "units", _wr, repr, doc) );
     Inkscape::UI::Widget::RegisteredScalarUnit *_rsu_ox = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalarUnit(
-            _("_Origin X:"), _("X coordinate of grid origin"), "originx", *_rumg, _wr, repr, doc) );
+            _("_Origin X:"), _("X coordinate of grid origin"), "originx",
+            *_rumg, _wr, repr, doc, Inkscape::UI::Widget::RSU_x) );
     Inkscape::UI::Widget::RegisteredScalarUnit *_rsu_oy = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalarUnit(
-            _("O_rigin Y:"), _("Y coordinate of grid origin"), "originy", *_rumg, _wr, repr, doc) );
+            _("O_rigin Y:"), _("Y coordinate of grid origin"), "originy",
+            *_rumg, _wr, repr, doc, Inkscape::UI::Widget::RSU_y) );
     Inkscape::UI::Widget::RegisteredScalarUnit *_rsu_sy = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalarUnit(
-            _("Spacing _Y:"), _("Base length of z-axis"), "spacingy", *_rumg, _wr, repr, doc) );
+            _("Spacing _Y:"), _("Base length of z-axis"), "spacingy",
+            *_rumg, _wr, repr, doc, Inkscape::UI::Widget::RSU_y) );
     Inkscape::UI::Widget::RegisteredScalar *_rsu_ax = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalar(
             _("Angle X:"), _("Angle of x-axis"), "gridanglex", _wr, repr, doc ) );
     Inkscape::UI::Widget::RegisteredScalar *_rsu_az = Gtk::manage(  new Inkscape::UI::Widget::RegisteredScalar(
@@ -411,7 +367,7 @@ _wr.setUpdating (true);
 
     Inkscape::UI::Widget::RegisteredColorPicker *_rcp_gcol = Gtk::manage(
         new Inkscape::UI::Widget::RegisteredColorPicker(
-            _("Grid line _color:"), _("Grid line color"), _("Color of grid lines"),
+            _("Minor grid line _color:"), _("Minor grid line color"), _("Color of the minor grid lines"),
             "color", "opacity", _wr, repr, doc));
 
     Inkscape::UI::Widget::RegisteredColorPicker *_rcp_gmcol = Gtk::manage(
@@ -423,13 +379,13 @@ _wr.setUpdating (true);
     Inkscape::UI::Widget::RegisteredSuffixedInteger *_rsi = Gtk::manage( new Inkscape::UI::Widget::RegisteredSuffixedInteger(
             _("_Major grid line every:"), "", _("lines"), "empspacing", _wr, repr, doc ) );
 
-    _rsu_ox->setDigits(4);
+    _rsu_ox->setDigits(5);
     _rsu_ox->setIncrements(0.1, 1.0);
 
-    _rsu_oy->setDigits(4);
+    _rsu_oy->setDigits(5);
     _rsu_oy->setIncrements(0.1, 1.0);
 
-    _rsu_sy->setDigits(4);
+    _rsu_sy->setDigits(5);
     _rsu_sy->setIncrements(0.1, 1.0);
 
 _wr.setUpdating (false);
@@ -450,17 +406,17 @@ _wr.setUpdating (false);
     attach_all (*table, widget_array, sizeof(widget_array));
 
     // set widget values
-    _rumg->setUnit (gridunit);
+    _rumg->setUnit (gridunit->abbr);
 
     gdouble val;
     val = origin[Geom::X];
-    val = sp_pixels_get_units (val, *(gridunit));
+    val = Inkscape::Util::Quantity::convert(val, "px", gridunit);
     _rsu_ox->setValue (val);
     val = origin[Geom::Y];
-    val = sp_pixels_get_units (val, *(gridunit));
+    val = Inkscape::Util::Quantity::convert(val, "px", gridunit);
     _rsu_oy->setValue (val);
     val = lengthy;
-    double gridy = sp_pixels_get_units (val, *(gridunit));
+    double gridy = Inkscape::Util::Quantity::convert(val, "px", gridunit);
     _rsu_sy->setValue (gridy);
 
     _rsu_ax->setValue(angle_deg[X]);
@@ -469,6 +425,9 @@ _wr.setUpdating (false);
     _rcp_gcol->setRgba32 (color);
     _rcp_gmcol->setRgba32 (empcolor);
     _rsi->setValue (empspacing);
+
+    _rsu_ox->setProgrammatically = false;
+    _rsu_oy->setProgrammatically = false;
 
     return table;
 }
@@ -489,17 +448,17 @@ CanvasAxonomGrid::updateWidgets()
         _rcb_enabled.setActive(snapper->getEnabled());
     }
 
-    _rumg.setUnit (gridunit);
+    _rumg.setUnit (gridunit->abbr);
 
     gdouble val;
     val = origin[Geom::X];
-    val = sp_pixels_get_units (val, *(gridunit));
+    val = Inkscape::Util::Quantity::convert(val, &px, gridunit);
     _rsu_ox.setValue (val);
     val = origin[Geom::Y];
-    val = sp_pixels_get_units (val, *(gridunit));
+    val = Inkscape::Util::Quantity::convert(val, &px, gridunit);
     _rsu_oy.setValue (val);
     val = lengthy;
-    double gridy = sp_pixels_get_units (val, *(gridunit));
+    double gridy = Inkscape::Util::Quantity::convert(val, &px, gridunit);
     _rsu_sy.setValue (gridy);
 
     _rsu_ax.setValue(angle_deg[X]);
@@ -518,7 +477,7 @@ CanvasAxonomGrid::updateWidgets()
 
 
 void
-CanvasAxonomGrid::Update (Geom::Matrix const &affine, unsigned int /*flags*/)
+CanvasAxonomGrid::Update (Geom::Affine const &affine, unsigned int /*flags*/)
 {
     ow = origin * affine;
     sw = Geom::Point(fabs(affine[0]),fabs(affine[3]));
@@ -546,13 +505,12 @@ CanvasAxonomGrid::Update (Geom::Matrix const &affine, unsigned int /*flags*/)
 
     spacing_ylines = sw[Geom::X] /(tan_angle[X] + tan_angle[Z]);
     lyw            = sw[Geom::Y];
-    lxw_x          = sw[Geom::X] / tan_angle[X];
-    lxw_z          = sw[Geom::X] / tan_angle[Z];
+    lxw_x          = Geom::are_near(tan_angle[X],0.) ? Geom::infinity() : sw[Geom::X] / tan_angle[X];
+    lxw_z          = Geom::are_near(tan_angle[Z],0.) ? Geom::infinity() : sw[Geom::X] / tan_angle[Z];
 
     if (empspacing == 0) {
         scaled = true;
     }
-
 }
 
 void
@@ -568,34 +526,40 @@ CanvasAxonomGrid::Render (SPCanvasBuf *buf)
         _empcolor = empcolor;
     }
 
+    cairo_save(buf->ct);
+    cairo_translate(buf->ct, -buf->rect.left(), -buf->rect.top());
+    cairo_set_line_width(buf->ct, 1.0);
+    cairo_set_line_cap(buf->ct, CAIRO_LINE_CAP_SQUARE);
+
     // gc = gridcoordinates (the coordinates calculated from the grids origin 'grid->ow'.
-    // sc = screencoordinates ( for example "buf->rect.x0" is in screencoordinates )
-    // bc = buffer patch coordinates
+    // sc = screencoordinates ( for example "buf->rect.left()" is in screencoordinates )
+    // bc = buffer patch coordinates (x=0 on left side of page, y=0 on bottom of page)
 
     // tl = topleft ; br = bottomright
     Geom::Point buf_tl_gc;
     Geom::Point buf_br_gc;
-    buf_tl_gc[Geom::X] = buf->rect.x0 - ow[Geom::X];
-    buf_tl_gc[Geom::Y] = buf->rect.y0 - ow[Geom::Y];
-    buf_br_gc[Geom::X] = buf->rect.x1 - ow[Geom::X];
-    buf_br_gc[Geom::Y] = buf->rect.y1 - ow[Geom::Y];
-
-    gdouble x;
-    gdouble y;
+    buf_tl_gc[Geom::X] = buf->rect.left()   - ow[Geom::X];
+    buf_tl_gc[Geom::Y] = buf->rect.top()    - ow[Geom::Y];
+    buf_br_gc[Geom::X] = buf->rect.right()  - ow[Geom::X];
+    buf_br_gc[Geom::Y] = buf->rect.bottom() - ow[Geom::Y];
 
     // render the three separate line groups representing the main-axes
 
     // x-axis always goes from topleft to bottomright. (0,0) - (1,1)
     gdouble const xintercept_y_bc = (buf_tl_gc[Geom::X] * tan_angle[X]) - buf_tl_gc[Geom::Y] ;
-    gdouble const xstart_y_sc = ( xintercept_y_bc - floor(xintercept_y_bc/lyw)*lyw ) + buf->rect.y0;
-    gint const xlinestart = (gint) Inkscape::round( (xstart_y_sc - buf_tl_gc[Geom::X]*tan_angle[X] -ow[Geom::Y]) / lyw );
+    gdouble const xstart_y_sc = ( xintercept_y_bc - floor(xintercept_y_bc/lyw)*lyw ) + buf->rect.top();
+    gint const xlinestart = round( (xstart_y_sc - buf_tl_gc[Geom::X]*tan_angle[X] - ow[Geom::Y]) / lyw );
     gint xlinenum = xlinestart;
     // lines starting on left side.
-    for (y = xstart_y_sc; y < buf->rect.y1; y += lyw, xlinenum++) {
-        gint const x0 = buf->rect.x0;
-        gint const y0 = (gint) Inkscape::round(y);
-        gint const x1 = x0 + (gint) Inkscape::round( (buf->rect.y1 - y) / tan_angle[X] );
-        gint const y1 = buf->rect.y1;
+    for (gdouble y = xstart_y_sc; y < buf->rect.bottom(); y += lyw, xlinenum++) {
+        gint const x0 = buf->rect.left();
+        gint const y0 = round(y);
+        gint x1 = x0 + round( (buf->rect.bottom() - y) / tan_angle[X] );
+        gint y1 = buf->rect.bottom();
+        if ( Geom::are_near(tan_angle[X],0.) ) {
+            x1 = buf->rect.right();
+            y1 = y0;
+        }
 
         if (!scaled && (xlinenum % empspacing) != 0) {
             sp_caxonomgrid_drawline (buf, x0, y0, x1, y1, color);
@@ -604,46 +568,54 @@ CanvasAxonomGrid::Render (SPCanvasBuf *buf)
         }
     }
     // lines starting from top side
-    gdouble const xstart_x_sc = buf->rect.x0 + (lxw_x - (xstart_y_sc - buf->rect.y0) / tan_angle[X]) ;
-    xlinenum = xlinestart-1;
-    for (x = xstart_x_sc; x < buf->rect.x1; x += lxw_x, xlinenum--) {
-        gint const y0 = buf->rect.y0;
-        gint const y1 = buf->rect.y1;
-        gint const x0 = (gint) Inkscape::round(x);
-        gint const x1 = x0 + (gint) Inkscape::round( (y1 - y0) / tan_angle[X] );
+    if (!Geom::are_near(tan_angle[X],0.))
+    {
+        gdouble const xstart_x_sc = buf->rect.left() + (lxw_x - (xstart_y_sc - buf->rect.top()) / tan_angle[X]) ;
+        xlinenum = xlinestart-1;
+        for (gdouble x = xstart_x_sc; x < buf->rect.right(); x += lxw_x, xlinenum--) {
+            gint const y0 = buf->rect.top();
+            gint const y1 = buf->rect.bottom();
+            gint const x0 = round(x);
+            gint const x1 = x0 + round( (y1 - y0) / tan_angle[X] );
 
-        if (!scaled && (xlinenum % empspacing) != 0) {
-            sp_caxonomgrid_drawline (buf, x0, y0, x1, y1, color);
-        } else {
-            sp_caxonomgrid_drawline (buf, x0, y0, x1, y1, _empcolor);
+            if (!scaled && (xlinenum % empspacing) != 0) {
+                sp_caxonomgrid_drawline (buf, x0, y0, x1, y1, color);
+            } else {
+                sp_caxonomgrid_drawline (buf, x0, y0, x1, y1, _empcolor);
+            }
         }
     }
 
     // y-axis lines (vertical)
     gdouble const ystart_x_sc = floor (buf_tl_gc[Geom::X] / spacing_ylines) * spacing_ylines + ow[Geom::X];
-    gint const  ylinestart = (gint) Inkscape::round((ystart_x_sc - ow[Geom::X]) / spacing_ylines);
+    gint const  ylinestart = round((ystart_x_sc - ow[Geom::X]) / spacing_ylines);
     gint ylinenum = ylinestart;
-    for (x = ystart_x_sc; x < buf->rect.x1; x += spacing_ylines, ylinenum++) {
-        gint const x0 = (gint) Inkscape::round(x);
+    for (gdouble x = ystart_x_sc; x < buf->rect.right(); x += spacing_ylines, ylinenum++) {
+        gint const x0 = round(x);
 
         if (!scaled && (ylinenum % empspacing) != 0) {
-            sp_grid_vline (buf, x0, buf->rect.y0, buf->rect.y1 - 1, color);
+            sp_grid_vline (buf, x0, buf->rect.top(), buf->rect.bottom() - 1, color);
         } else {
-            sp_grid_vline (buf, x0, buf->rect.y0, buf->rect.y1 - 1, _empcolor);
+            sp_grid_vline (buf, x0, buf->rect.top(), buf->rect.bottom() - 1, _empcolor);
         }
     }
 
     // z-axis always goes from bottomleft to topright. (0,1) - (1,0)
     gdouble const zintercept_y_bc = (buf_tl_gc[Geom::X] * -tan_angle[Z]) - buf_tl_gc[Geom::Y] ;
-    gdouble const zstart_y_sc = ( zintercept_y_bc - floor(zintercept_y_bc/lyw)*lyw ) + buf->rect.y0;
-    gint const  zlinestart = (gint) Inkscape::round( (zstart_y_sc + buf_tl_gc[Geom::X]*tan_angle[Z] - ow[Geom::Y]) / lyw );
+    gdouble const zstart_y_sc = ( zintercept_y_bc - floor(zintercept_y_bc/lyw)*lyw ) + buf->rect.top();
+    gint const  zlinestart = round( (zstart_y_sc + buf_tl_gc[Geom::X]*tan_angle[Z] - ow[Geom::Y]) / lyw );
     gint zlinenum = zlinestart;
     // lines starting from left side
-    for (y = zstart_y_sc; y < buf->rect.y1; y += lyw, zlinenum++) {
-        gint const x0 = buf->rect.x0;
-        gint const y0 = (gint) Inkscape::round(y);
-        gint const x1 = x0 + (gint) Inkscape::round( (y - buf->rect.y0 ) / tan_angle[Z] );
-        gint const y1 = buf->rect.y0;
+    gdouble next_y = zstart_y_sc;
+    for (gdouble y = zstart_y_sc; y < buf->rect.bottom(); y += lyw, zlinenum++, next_y = y) {
+        gint const x0 = buf->rect.left();
+        gint const y0 = round(y);
+        gint x1 = x0 + round( (y - buf->rect.top() ) / tan_angle[Z] );
+        gint y1 = buf->rect.top();
+        if ( Geom::are_near(tan_angle[Z],0.) ) {
+            x1 = buf->rect.right();
+            y1 = y0;
+        }
 
         if (!scaled && (zlinenum % empspacing) != 0) {
             sp_caxonomgrid_drawline (buf, x0, y0, x1, y1, color);
@@ -652,19 +624,24 @@ CanvasAxonomGrid::Render (SPCanvasBuf *buf)
         }
     }
     // draw lines from bottom-up
-    gdouble const zstart_x_sc = buf->rect.x0 + (y - buf->rect.y1) / tan_angle[Z] ;
-    for (x = zstart_x_sc; x < buf->rect.x1; x += lxw_z, zlinenum++) {
-        gint const y0 = buf->rect.y1;
-        gint const y1 = buf->rect.y0;
-        gint const x0 = (gint) Inkscape::round(x);
-        gint const x1 = x0 + (gint) Inkscape::round( (buf->rect.y1 - buf->rect.y0) / tan_angle[Z] );
+    if (!Geom::are_near(tan_angle[Z],0.))
+    {
+        gdouble const zstart_x_sc = buf->rect.left() + (next_y - buf->rect.bottom()) / tan_angle[Z] ;
+        for (gdouble x = zstart_x_sc; x < buf->rect.right(); x += lxw_z, zlinenum++) {
+            gint const y0 = buf->rect.bottom();
+            gint const y1 = buf->rect.top();
+            gint const x0 = round(x);
+            gint const x1 = x0 + round(buf->rect.height() / tan_angle[Z] );
 
-        if (!scaled && (zlinenum % empspacing) != 0) {
-            sp_caxonomgrid_drawline (buf, x0, y0, x1, y1, color);
-        } else {
-            sp_caxonomgrid_drawline (buf, x0, y0, x1, y1, _empcolor);
+            if (!scaled && (zlinenum % empspacing) != 0) {
+                sp_caxonomgrid_drawline (buf, x0, y0, x1, y1, color);
+            } else {
+                sp_caxonomgrid_drawline (buf, x0, y0, x1, y1, _empcolor);
+            }
         }
     }
+
+    cairo_restore(buf->ct);
 }
 
 CanvasAxonomGridSnapper::CanvasAxonomGridSnapper(CanvasAxonomGrid *grid, SnapManager *sm, Geom::Coord const d) : LineSnapper(sm, d)
@@ -759,7 +736,7 @@ CanvasAxonomGridSnapper::_getSnapLines(Geom::Point const &p) const
     {
         inters = Geom::intersection(line_x, line_z);
     }
-    catch (Geom::InfiniteSolutions e)
+    catch (Geom::InfiniteSolutions &e)
     {
         // We're probably dealing with parallel lines; this is useless!
         return s;
@@ -780,33 +757,39 @@ CanvasAxonomGridSnapper::_getSnapLines(Geom::Point const &p) const
     if (use_left_half) {
         s.push_back(std::make_pair(norm_z, Geom::Point(grid->origin[Geom::X], y_proj_along_z_max)));
         s.push_back(std::make_pair(norm_x, Geom::Point(grid->origin[Geom::X], y_proj_along_x_min)));
-        s.push_back(std::make_pair(component_vectors[Geom::X], Geom::Point(x_max, 0)));
+        s.push_back(std::make_pair(Geom::Point(1, 0), Geom::Point(x_max, 0)));
     }
 
     if (use_right_half) {
         s.push_back(std::make_pair(norm_z, Geom::Point(grid->origin[Geom::X], y_proj_along_z_min)));
         s.push_back(std::make_pair(norm_x, Geom::Point(grid->origin[Geom::X], y_proj_along_x_max)));
-        s.push_back(std::make_pair(component_vectors[Geom::X], Geom::Point(x_min, 0)));
+        s.push_back(std::make_pair(Geom::Point(1, 0), Geom::Point(x_min, 0)));
     }
 
     return s;
 }
 
-void CanvasAxonomGridSnapper::_addSnappedLine(SnappedConstraints &sc, Geom::Point const snapped_point, Geom::Coord const snapped_distance, SnapSourceType const &source, long source_num, Geom::Point const normal_to_line, Geom::Point const point_on_line) const
+void CanvasAxonomGridSnapper::_addSnappedLine(IntermSnapResults &isr, Geom::Point const &snapped_point, Geom::Coord const &snapped_distance, SnapSourceType const &source, long source_num, Geom::Point const &normal_to_line, Geom::Point const &point_on_line) const
 {
     SnappedLine dummy = SnappedLine(snapped_point, snapped_distance, source, source_num, Inkscape::SNAPTARGET_GRID, getSnapperTolerance(), getSnapperAlwaysSnap(), normal_to_line, point_on_line);
-    sc.grid_lines.push_back(dummy);
+    isr.grid_lines.push_back(dummy);
 }
 
-void CanvasAxonomGridSnapper::_addSnappedPoint(SnappedConstraints &sc, Geom::Point const snapped_point, Geom::Coord const snapped_distance, SnapSourceType const &source, long source_num, bool constrained_snap) const
+void CanvasAxonomGridSnapper::_addSnappedPoint(IntermSnapResults &isr, Geom::Point const &snapped_point, Geom::Coord const &snapped_distance, SnapSourceType const &source, long source_num, bool constrained_snap) const
 {
     SnappedPoint dummy = SnappedPoint(snapped_point, source, source_num, Inkscape::SNAPTARGET_GRID, snapped_distance, getSnapperTolerance(), getSnapperAlwaysSnap(), constrained_snap, true);
-    sc.points.push_back(dummy);
+    isr.points.push_back(dummy);
+}
+
+void CanvasAxonomGridSnapper::_addSnappedLinePerpendicularly(IntermSnapResults &isr, Geom::Point const &snapped_point, Geom::Coord const &snapped_distance, SnapSourceType const &source, long source_num, bool constrained_snap) const
+{
+    SnappedPoint dummy = SnappedPoint(snapped_point, source, source_num, Inkscape::SNAPTARGET_GRID_PERPENDICULAR, snapped_distance, getSnapperTolerance(), getSnapperAlwaysSnap(), constrained_snap, true);
+    isr.points.push_back(dummy);
 }
 
 bool CanvasAxonomGridSnapper::ThisSnapperMightSnap() const
 {
-    return _snap_enabled && _snapmanager->snapprefs.getSnapToGrids() && _snapmanager->snapprefs.getSnapModeBBoxOrNodes();
+    return _snap_enabled && _snapmanager->snapprefs.isTargetSnappable(Inkscape::SNAPTARGET_GRID);
 }
 
 
@@ -822,4 +805,4 @@ bool CanvasAxonomGridSnapper::ThisSnapperMightSnap() const
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

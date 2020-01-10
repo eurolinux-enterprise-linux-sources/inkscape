@@ -9,18 +9,17 @@
  * Released under GNU GPL, read the file 'COPYING' for more information.
  */
 
-#include <forward.h>
 #include <uri-references.h>
 #include <stddef.h>
 #include <sigc++/sigc++.h>
 
 namespace Inkscape {
 namespace XML {
-struct Node;
+class Node;
 }
 }
 
-struct LivePathEffectObject;
+class LivePathEffectObject;
 
 namespace Inkscape {
 

@@ -35,21 +35,24 @@
 #ifndef _2GEOM_ELLIPSE_H_
 #define _2GEOM_ELLIPSE_H_
 
-
+#include <vector>
 #include <2geom/point.h>
 #include <2geom/exception.h>
-#include <2geom/matrix.h>
+#include <2geom/affine.h>
 
 namespace Geom
 {
 
-class SVGEllipticalArc;
+class EllipticalArc;
 class Circle;
 
 class Ellipse
 {
   public:
-    Ellipse()
+    Ellipse():
+       m_centre(),
+       m_ray(),
+       m_angle(0)
     {}
 
     Ellipse(double cx, double cy, double rx, double ry, double a)
@@ -88,9 +91,8 @@ class Ellipse
     // prerequisite: at least 5 points must be passed
     void set(std::vector<Point> const& points);
 
-    SVGEllipticalArc
-    arc(Point const& initial, Point const& inner, Point const& final,
-        bool _svg_compliant = true);
+    EllipticalArc *
+    arc(Point const& initial, Point const& inner, Point const& final, bool svg_compliant = true);
 
     Point center() const
     {
@@ -114,7 +116,7 @@ class Ellipse
 
     std::vector<double> implicit_form_coefficients() const;
 
-    Ellipse transformed(Matrix const& m) const;
+    Ellipse transformed(Affine const& m) const;
 
   private:
     Point m_centre, m_ray;
@@ -138,4 +140,4 @@ class Ellipse
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

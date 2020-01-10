@@ -55,6 +55,9 @@ unsigned combine_key_events(guint keyval, gint mask)
 
 unsigned combine_motion_events(SPCanvas *canvas, GdkEventMotion &event, gint mask)
 {
+    if (canvas == NULL) {
+        return false;
+    }
     GdkEvent *event_next;
     gint i = 0;
     event.x -= canvas->x0;
@@ -62,7 +65,7 @@ unsigned combine_motion_events(SPCanvas *canvas, GdkEventMotion &event, gint mas
 
     event_next = gdk_event_get();
     // while the next event is also a motion notify
-    while (event_next && event_next->type == GDK_MOTION_NOTIFY
+    while (event_next && (event_next->type == GDK_MOTION_NOTIFY)
             && (!mask || event_next->motion.state & mask))
     {
         if (event_next->motion.device == event.device) {
@@ -76,7 +79,7 @@ unsigned combine_motion_events(SPCanvas *canvas, GdkEventMotion &event, gint mas
             event.x_root = next.x_root;
             event.y_root = next.y_root;
             if (event.axes && next.axes) {
-                memcpy(event.axes, next.axes, event.device->num_axes);
+                memcpy(event.axes, next.axes, gdk_device_get_n_axes(event.device));
             }
         }
 
@@ -86,8 +89,9 @@ unsigned combine_motion_events(SPCanvas *canvas, GdkEventMotion &event, gint mas
         i++;
     }
     // otherwise, put it back onto the queue
-    if (event_next)
+    if (event_next) {
         gdk_event_put(event_next);
+    }
     event.x += canvas->x0;
     event.y += canvas->y0;
 
@@ -103,16 +107,16 @@ unsigned state_after_event(GdkEvent *event)
     case GDK_KEY_PRESS:
         state = event->key.state;
         switch(shortcut_key(event->key)) {
-        case GDK_Shift_L:
-        case GDK_Shift_R:
+        case GDK_KEY_Shift_L:
+        case GDK_KEY_Shift_R:
             state |= GDK_SHIFT_MASK;
             break;
-        case GDK_Control_L:
-        case GDK_Control_R:
+        case GDK_KEY_Control_L:
+        case GDK_KEY_Control_R:
             state |= GDK_CONTROL_MASK;
             break;
-        case GDK_Alt_L:
-        case GDK_Alt_R:
+        case GDK_KEY_Alt_L:
+        case GDK_KEY_Alt_R:
             state |= GDK_MOD1_MASK;
             break;
         default: break;
@@ -121,16 +125,16 @@ unsigned state_after_event(GdkEvent *event)
     case GDK_KEY_RELEASE:
         state = event->key.state;
         switch(shortcut_key(event->key)) {
-        case GDK_Shift_L:
-        case GDK_Shift_R:
+        case GDK_KEY_Shift_L:
+        case GDK_KEY_Shift_R:
             state &= ~GDK_SHIFT_MASK;
             break;
-        case GDK_Control_L:
-        case GDK_Control_R:
+        case GDK_KEY_Control_L:
+        case GDK_KEY_Control_R:
             state &= ~GDK_CONTROL_MASK;
             break;
-        case GDK_Alt_L:
-        case GDK_Alt_R:
+        case GDK_KEY_Alt_L:
+        case GDK_KEY_Alt_R:
             state &= ~GDK_MOD1_MASK;
             break;
         default: break;
@@ -153,4 +157,4 @@ unsigned state_after_event(GdkEvent *event)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

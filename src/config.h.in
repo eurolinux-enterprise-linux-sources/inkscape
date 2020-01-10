@@ -9,14 +9,11 @@
 /* Use AutoPackage? */
 #undef ENABLE_BINRELOC
 
-/* always defined to indicate that i18n is enabled */
+/* Description */
 #undef ENABLE_NLS
 
 /* Build with OSX .app data dir paths? */
 #undef ENABLE_OSX_APP_LOCATIONS
-
-/* SVG Fonts should be used */
-#undef ENABLE_SVG_FONTS
 
 /* Translation domain used */
 #undef GETTEXT_PACKAGE
@@ -39,14 +36,26 @@
 /* define to 1 if Carbon is available */
 #undef HAVE_CARBON
 
-/* Define to 1 if you have the `dcgettext' function. */
+/* Define to 1 if you have the MacOS X function CFLocaleCopyCurrent in the
+   CoreFoundation framework. */
+#undef HAVE_CFLOCALECOPYCURRENT
+
+/* Define to 1 if you have the MacOS X function CFPreferencesCopyAppValue in
+   the CoreFoundation framework. */
+#undef HAVE_CFPREFERENCESCOPYAPPVALUE
+
+/* Define if the GNU dcgettext() function is already present or preinstalled.
+   */
 #undef HAVE_DCGETTEXT
+
+/* Define to 1 if you have the <dlfcn.h> header file. */
+#undef HAVE_DLFCN_H
 
 /* Define to 1 if you have the `ecvt' function. */
 #undef HAVE_ECVT
 
-/* Legacy GNU ext/hash_set */
-#undef HAVE_EXT_HASH_SET
+/* Use libexif */
+#undef HAVE_EXIF
 
 /* Define to 1 if you have the <fcntl.h> header file. */
 #undef HAVE_FCNTL_H
@@ -57,17 +66,14 @@
 /* Define to 1 if you have the `fpsetmask' function. */
 #undef HAVE_FPSETMASK
 
-/* Define to 1 if you have the <gc/gc.h> header file. */
-#undef HAVE_GC_GC_H
-
-/* Define to 1 if you have the <gc.h> header file. */
-#undef HAVE_GC_H
-
 /* Define if the GNU gettext() function is already present or preinstalled. */
 #undef HAVE_GETTEXT
 
 /* Define to 1 if you have the `gettimeofday' function. */
 #undef HAVE_GETTIMEOFDAY
+
+/* Define to 1 if you have the <glibmm/threads.h> header file. */
+#undef HAVE_GLIBMM_THREADS_H
 
 /* Define to 1 if you have the `gtk_window_fullscreen' function. */
 #undef HAVE_GTK_WINDOW_FULLSCREEN
@@ -76,14 +82,17 @@
    function. */
 #undef HAVE_GTK_WINDOW_SET_DEFAULT_ICON_FROM_FILE
 
+/* Define if you have the iconv() function and it works. */
+#undef HAVE_ICONV
+
 /* Define to 1 if you have the <ieeefp.h> header file. */
 #undef HAVE_IEEEFP_H
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
-/* Define if your <locale.h> file defines LC_MESSAGES. */
-#undef HAVE_LC_MESSAGES
+/* Use libjpeg */
+#undef HAVE_JPEG
 
 /* Define to 1 if you have the <libintl.h> header file. */
 #undef HAVE_LIBINTL_H
@@ -96,9 +105,6 @@
 
 /* Define to 1 if you have the `m' library (-lm). */
 #undef HAVE_LIBM
-
-/* Define to 1 if you have the <locale.h> header file. */
-#undef HAVE_LOCALE_H
 
 /* Define to 1 if you have the `mallinfo' function. */
 #undef HAVE_MALLINFO
@@ -117,6 +123,9 @@
 
 /* Define to 1 if you have the `mkdir' function. */
 #undef HAVE_MKDIR
+
+/* Has working native unordered_set */
+#undef HAVE_NATIVE_UNORDERED_SET
 
 /* Use OpenMP */
 #undef HAVE_OPENMP
@@ -219,8 +228,9 @@
    slash. */
 #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
 
-/* Define to 1 if your C compiler doesn't accept -c and -o together. */
-#undef NO_MINUS_C_MINUS_O
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
+#undef LT_OBJDIR
 
 /* Name of package */
 #undef PACKAGE
@@ -246,6 +256,12 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
+/* Use even newer color space API from Poppler >= 0.26.0 */
+#undef POPPLER_EVEN_NEWER_COLOR_SPACE_API
+
+/* Use even newer new color space API from Poppler >= 0.29.0 */
+#undef POPPLER_EVEN_NEWER_NEW_COLOR_SPACE_API
+
 /* Use color space API from Poppler >= 0.12.2 */
 #undef POPPLER_NEW_COLOR_SPACE_API
 
@@ -257,9 +273,6 @@
 
 /* GfxPatch no longer uses GfxColor in >= 0.15.1 */
 #undef POPPLER_NEW_GFXPATCH
-
-/* Define as the return type of signal handlers (`int' or `void'). */
-#undef RETSIGTYPE
 
 /* Define to 1 if the `S_IS*' macros in <sys/stat.h> do not work properly. */
 #undef STAT_MACROS_BROKEN
@@ -276,14 +289,26 @@
 /* Version number of package */
 #undef VERSION
 
+/* Build in dbus */
+#undef WITH_DBUS
+
+/* Build with external GDL */
+#undef WITH_EXT_GDL
+
+/* Build with Gdl 3.6 or higher */
+#undef WITH_GDL_3_6
+
+/* Build with Glibmm 2.32 or higher */
+#undef WITH_GLIBMM_2_32
+
 /* Use gnome vfs file load functionality */
 #undef WITH_GNOME_VFS
 
-/* Build with Gtkmm 2.22.x */
-#undef WITH_GTKMM_2_22
+/* Build with Gtkmm 3.0.x or higher */
+#undef WITH_GTKMM_3_0
 
-/* Build with Gtkmm 2.24.x */
-#undef WITH_GTKMM_2_24
+/* Build with Gtkmm 3.10.x or higher */
+#undef WITH_GTKMM_3_10
 
 /* enable gtk spelling widget */
 #undef WITH_GTKSPELL
@@ -294,20 +319,32 @@
 /* enable openoffice files (SVG jars) */
 #undef WITH_INKJAR
 
+/* Build in libcdr */
+#undef WITH_LIBCDR
+
+/* Build using libcdr 0.0.x */
+#undef WITH_LIBCDR00
+
+/* Build using libcdr 0.1.x */
+#undef WITH_LIBCDR01
+
+/* Build in libvisio */
+#undef WITH_LIBVISIO
+
+/* Build using libvisio 0.0.x */
+#undef WITH_LIBVISIO00
+
+/* Build using libvisio 0.1.x */
+#undef WITH_LIBVISIO01
+
 /* Build in libwpg */
 #undef WITH_LIBWPG
 
-/* Build in libwpg 0.1.x */
-#undef WITH_LIBWPG01
-
-/* Build in libwpg 0.2.x */
+/* Build using libwpg 0.2.x */
 #undef WITH_LIBWPG02
 
-/* use Perl for embedded scripting */
-#undef WITH_PERL
-
-/* use Python for embedded scripting */
-#undef WITH_PYTHON
+/* Build using libwpg 0.3.x */
+#undef WITH_LIBWPG03
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

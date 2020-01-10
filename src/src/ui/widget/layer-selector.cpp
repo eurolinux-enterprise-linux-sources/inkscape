@@ -3,6 +3,7 @@
  *
  * Authors:
  *   MenTaLguY <mental@rydia.net>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2004 MenTaLguY
  *
@@ -15,14 +16,16 @@
 
 #include <cstring>
 #include <string>
+
+#include "ui/dialog/layer-properties.h"
 #include <glibmm/i18n.h>
 
 #include "desktop.h"
 #include "desktop-handles.h"
 #include "document.h"
+#include "document-undo.h"
 #include "layer-manager.h"
 #include "sp-item.h"
-#include "ui/dialog/layer-properties.h"
 #include "ui/icon-names.h"
 #include "ui/widget/layer-selector.h"
 #include "util/filter-list.h"
@@ -31,6 +34,7 @@
 #include "widgets/icon.h"
 #include "widgets/shrink-wrap-button.h"
 #include "xml/node-event-vector.h"
+#include "widgets/gradient-vector.h"
 
 namespace Inkscape {
 namespace Widgets {
@@ -94,7 +98,7 @@ LayerSelector::LayerSelector(SPDesktop *desktop)
     AlternateIcons *label;
 
     label = Gtk::manage(new AlternateIcons(Inkscape::ICON_SIZE_DECORATION,
-        INKSCAPE_ICON_OBJECT_VISIBLE, INKSCAPE_ICON_OBJECT_HIDDEN));
+        INKSCAPE_ICON("object-visible"), INKSCAPE_ICON("object-hidden")));
     _visibility_toggle.add(*label);
     _visibility_toggle.signal_toggled().connect(
         sigc::compose(
@@ -111,11 +115,11 @@ LayerSelector::LayerSelector(SPDesktop *desktop)
 
     _visibility_toggle.set_relief(Gtk::RELIEF_NONE);
     shrink_wrap_button(_visibility_toggle);
-    _tooltips.set_tip(_visibility_toggle, _("Toggle current layer visibility"));
+    _visibility_toggle.set_tooltip_text(_("Toggle current layer visibility"));
     pack_start(_visibility_toggle, Gtk::PACK_EXPAND_PADDING);
 
     label = Gtk::manage(new AlternateIcons(Inkscape::ICON_SIZE_DECORATION,
-        INKSCAPE_ICON_OBJECT_UNLOCKED, INKSCAPE_ICON_OBJECT_LOCKED));
+        INKSCAPE_ICON("object-unlocked"), INKSCAPE_ICON("object-locked")));
     _lock_toggle.add(*label);
     _lock_toggle.signal_toggled().connect(
         sigc::compose(
@@ -132,10 +136,10 @@ LayerSelector::LayerSelector(SPDesktop *desktop)
 
     _lock_toggle.set_relief(Gtk::RELIEF_NONE);
     shrink_wrap_button(_lock_toggle);
-    _tooltips.set_tip(_lock_toggle, _("Lock or unlock current layer"));
+    _lock_toggle.set_tooltip_text(_("Lock or unlock current layer"));
     pack_start(_lock_toggle, Gtk::PACK_EXPAND_PADDING);
 
-    _tooltips.set_tip(_selector, _("Current layer"));
+    _selector.set_tooltip_text(_("Current layer"));
     pack_start(_selector, Gtk::PACK_EXPAND_WIDGET);
 
     _layer_model = Gtk::ListStore::create(_model_columns);
@@ -159,17 +163,6 @@ LayerSelector::~LayerSelector() {
     _selection_changed_connection.disconnect();
 }
 
-namespace {
-
-/** Helper function - detaches desktop from selector
- */
-bool detach(LayerSelector *selector) {
-    selector->setDesktop(NULL);
-    return FALSE;
-}
-
-}
-
 /** Sets the desktop for the widget.  First disconnects signals
  *  for the current desktop, then stores the pointer to the
  *  given \a desktop, and attaches its signals to this one.
@@ -182,7 +175,10 @@ void LayerSelector::setDesktop(SPDesktop *desktop) {
 
     if (_desktop) {
 //        _desktop_shutdown_connection.disconnect();
-        _layer_changed_connection.disconnect();
+        if (_current_layer_changed_connection)
+            _current_layer_changed_connection.disconnect();
+        if (_layers_changed_connection)
+            _layers_changed_connection.disconnect();
 //        g_signal_handlers_disconnect_by_func(_desktop, (gpointer)&detach, this);
     }
     _desktop = desktop;
@@ -192,9 +188,13 @@ void LayerSelector::setDesktop(SPDesktop *desktop) {
 //          sigc::bind (sigc::ptr_fun (detach), this));
 //        g_signal_connect_after(_desktop, "shutdown", GCallback(detach), this);
 
-        _layer_changed_connection = _desktop->connectCurrentLayerChanged(
-            sigc::mem_fun(*this, &LayerSelector::_selectLayer)
-        );
+        LayerManager *mgr = _desktop->layer_manager;
+        if ( mgr ) {
+            _current_layer_changed_connection = mgr->connectCurrentLayerChanged( sigc::mem_fun(*this, &LayerSelector::_selectLayer) );
+            //_layerUpdatedConnection = mgr->connectLayerDetailsChanged( sigc::mem_fun(*this, &LayerSelector::_updateLayer) );
+            _layers_changed_connection = mgr->connectChanged( sigc::mem_fun(*this, &LayerSelector::_layersChanged) );
+        }
+
         _selectLayer(_desktop->currentLayer());
     }
 }
@@ -225,6 +225,17 @@ private:
     SPObject &_object;
 };
 
+}
+
+void LayerSelector::_layersChanged()
+{
+    if (_desktop) {
+        /*
+         * This code fixes #166691 but causes issues #1066543 and #1080378.
+         * Comment out until solution found.
+         */
+        //_selectLayer(_desktop->currentLayer());
+    }
 }
 
 /** Selects the given layer in the dropdown selector.
@@ -297,11 +308,13 @@ void LayerSelector::_setDesktopLayer() {
     Gtk::ListStore::iterator selected(_selector.get_active());
     SPObject *layer=_selector.get_active()->get_value(_model_columns.object);
     if ( _desktop && layer ) {
-        _layer_changed_connection.block();
+        _current_layer_changed_connection.block();
+        _layers_changed_connection.block();
 
         _desktop->layer_manager->setCurrentLayer(layer);
 
-        _layer_changed_connection.unblock();
+        _current_layer_changed_connection.unblock();
+        _layers_changed_connection.unblock();
 
         _selectLayer(_desktop->currentLayer());
     }
@@ -463,7 +476,7 @@ void LayerSelector::_buildEntry(unsigned depth, SPObject &object) {
     );
 
     SPObject *layer=_desktop->currentLayer();
-    if ( &object == layer || &object == SP_OBJECT_PARENT(layer) ) {
+    if ( (&object == layer) || (&object == layer->parent) ) {
         callbacks->update_list = sigc::bind(
             sigc::mem_fun(*this, &LayerSelector::_protectUpdate),
             sigc::bind(
@@ -501,12 +514,12 @@ void LayerSelector::_buildEntry(unsigned depth, SPObject &object) {
     sp_object_ref(&object, NULL);
     row->set_value(_model_columns.object, &object);
 
-    Inkscape::GC::anchor(SP_OBJECT_REPR(&object));
-    row->set_value(_model_columns.repr, SP_OBJECT_REPR(&object));
+    Inkscape::GC::anchor(object.getRepr());
+    row->set_value(_model_columns.repr, object.getRepr());
 
     row->set_value(_model_columns.callbacks, reinterpret_cast<void *>(callbacks));
 
-    sp_repr_add_listener(SP_OBJECT_REPR(&object), vector, callbacks);
+    sp_repr_add_listener(object.getRepr(), vector, callbacks);
 }
 
 /** Removes a row from the _model_columns object, disconnecting listeners
@@ -539,13 +552,13 @@ void LayerSelector::_prepareLabelRenderer(
     //       (or before one has been selected) something appears to
     //       "invent" an iterator with null data and try to render it;
     //       where does it come from, and how can we avoid it?
-    if ( object && SP_OBJECT_REPR(object) ) {
+    if ( object && object->getRepr() ) {
         SPObject *layer=( _desktop ? _desktop->currentLayer() : NULL );
         SPObject *root=( _desktop ? _desktop->currentRoot() : NULL );
 
-        bool isancestor = !( (layer && (SP_OBJECT_PARENT(object) == SP_OBJECT_PARENT(layer))) || ((layer == root) && (SP_OBJECT_PARENT(object) == root)));
+        bool isancestor = !( (layer && (object->parent == layer->parent)) || ((layer == root) && (object->parent == root)));
 
-        bool iscurrent = ( object == layer && object != root );
+        bool iscurrent = ( (object == layer) && (object != root) );
 
         gchar *format = g_strdup_printf (
             "<span size=\"smaller\" %s><tt>%*s%s</tt>%s%s%s%%s%s%s%s</span>",
@@ -562,7 +575,7 @@ void LayerSelector::_prepareLabelRenderer(
         gchar const *label;
         if ( object != root ) {
             label = object->label();
-            if (!label) {
+            if (!object->label()) {
                 label = object->defaultLabel();
                 label_defaulted = true;
             }
@@ -570,7 +583,7 @@ void LayerSelector::_prepareLabelRenderer(
             label = _("(root)");
         }
 
-        gchar *text = g_markup_printf_escaped(format, label);
+        gchar *text = g_markup_printf_escaped(format, gr_ellipsize_text (label, 50).c_str());
         _label_renderer.property_markup() = text;
         g_free(text);
         g_free(format);
@@ -582,21 +595,22 @@ void LayerSelector::_prepareLabelRenderer(
     _label_renderer.property_style() = ( label_defaulted ?
                                          Pango::STYLE_ITALIC :
                                          Pango::STYLE_NORMAL );
+
 }
 
 void LayerSelector::_lockLayer(bool lock) {
     if ( _layer && SP_IS_ITEM(_layer) ) {
         SP_ITEM(_layer)->setLocked(lock);
-        sp_document_done(sp_desktop_document(_desktop), SP_VERB_NONE,
-                         lock? _("Lock layer") : _("Unlock layer"));
+        DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_NONE,
+                           lock? _("Lock layer") : _("Unlock layer"));
     }
 }
 
 void LayerSelector::_hideLayer(bool hide) {
     if ( _layer && SP_IS_ITEM(_layer) ) {
         SP_ITEM(_layer)->setHidden(hide);
-        sp_document_done(sp_desktop_document(_desktop), SP_VERB_NONE,
-                         hide? _("Hide layer") : _("Unhide layer"));
+        DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_NONE,
+                           hide? _("Hide layer") : _("Unhide layer"));
     }
 }
 
@@ -612,4 +626,4 @@ void LayerSelector::_hideLayer(bool hide) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

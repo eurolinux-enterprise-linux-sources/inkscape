@@ -1,6 +1,8 @@
 #include <glib.h>
 #include <math.h>
 
+#include "mod360.h"
+
 /** Returns \a x wrapped around to between 0 and less than 360,
     or 0 if \a x isn't finite.
 **/
@@ -36,4 +38,4 @@ double mod360symm(double const x)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,11 +1,13 @@
-/** @file
- * @brief  Fill style widget
+/**
+ * @file
+ * Fill style widget.
  */
 /* Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Frank Felfe <innerspace@iname.com>
  *   bulia byak <buliabyak@users.sf.net>
  *   Jon A. Cruz <jon@joncruz.org>
+ *   Abhishek Sharma
  *
  * Copyright (C) 1999-2005 authors
  * Copyright (C) 2001-2002 Ximian, Inc.
@@ -20,8 +22,15 @@
 # include "config.h"
 #endif
 
-#include <glibmm/i18n.h>
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
 #include <gtkmm/box.h>
+#include <glibmm/i18n.h>
+
+#include "verbs.h"
+
 #include <gtk/gtk.h>
 
 #include "desktop.h"
@@ -30,6 +39,7 @@
 #include "desktop-style.h"
 #include "display/sp-canvas.h"
 #include "document-private.h"
+#include "document-undo.h"
 #include "gradient-chemistry.h"
 #include "inkscape.h"
 #include "selection.h"
@@ -78,6 +88,7 @@ private:
     static void fillruleChangedCB( SPPaintSelector *psel, SPPaintSelector::FillRule mode, FillNStroke *self );
 
     void selectionModifiedCB(guint flags);
+    void eventContextCB(SPDesktop *desktop, Inkscape::UI::Tools::ToolBase *eventcontext);
 
     void dragFromPaint();
     void updateFromPaint();
@@ -93,6 +104,7 @@ private:
     sigc::connection selectChangedConn;
     sigc::connection subselChangedConn;
     sigc::connection selectModifiedConn;
+    sigc::connection eventContextConn;
 };
 
 } // namespace Inkscape
@@ -127,7 +139,8 @@ FillNStroke::FillNStroke( FillOrStroke kind ) :
     update(false),
     selectChangedConn(),
     subselChangedConn(),
-    selectModifiedConn()
+    selectModifiedConn(),
+    eventContextConn()
 {
     // Add and connect up the paint selector widget:
     psel = sp_paint_selector_new(kind);
@@ -163,6 +176,7 @@ FillNStroke::~FillNStroke()
     selectModifiedConn.disconnect();
     subselChangedConn.disconnect();
     selectChangedConn.disconnect();
+    eventContextConn.disconnect();
 }
 
 /**
@@ -191,11 +205,13 @@ void FillNStroke::setDesktop(SPDesktop *desktop)
             selectModifiedConn.disconnect();
             subselChangedConn.disconnect();
             selectChangedConn.disconnect();
+            eventContextConn.disconnect();
         }
         this->desktop = desktop;
         if (desktop && desktop->selection) {
             selectChangedConn = desktop->selection->connectChanged(sigc::hide(sigc::mem_fun(*this, &FillNStroke::performUpdate)));
             subselChangedConn = desktop->connectToolSubselectionChanged(sigc::hide(sigc::mem_fun(*this, &FillNStroke::performUpdate)));
+            eventContextConn = desktop->connectEventContextChanged(sigc::hide(sigc::bind(sigc::mem_fun(*this, &FillNStroke::eventContextCB), (Inkscape::UI::Tools::ToolBase *)NULL)));
 
             // Must check flags, so can't call performUpdate() directly.
             selectModifiedConn = desktop->selection->connectModified(sigc::hide<0>(sigc::mem_fun(*this, &FillNStroke::selectionModifiedCB)));
@@ -203,6 +219,16 @@ void FillNStroke::setDesktop(SPDesktop *desktop)
         performUpdate();
     }
 }
+
+/**
+ * Listen to this "change in tool" event, in case a subselection tool (such as Gradient or Node) selection
+ * is changed back to a selection tool - especially needed for selected gradient stops.
+ */
+void FillNStroke::eventContextCB(SPDesktop * /*desktop*/, Inkscape::UI::Tools::ToolBase * /*eventcontext*/)
+{
+    performUpdate();
+}
+
 
 /**
  * Gets the active fill or stroke style property, then sets the appropriate
@@ -332,8 +358,8 @@ void FillNStroke::setFillrule( SPPaintSelector::FillRule mode )
         sp_repr_css_attr_unref(css);
         css = 0;
 
-        sp_document_done(desktop->doc(), SP_VERB_DIALOG_FILL_STROKE,
-                         _("Change fill rule"));
+        DocumentUndo::done(desktop->doc(), SP_VERB_DIALOG_FILL_STROKE,
+                           _("Change fill rule"));
     }
 }
 
@@ -417,8 +443,8 @@ void FillNStroke::dragFromPaint()
             // local change, do not update from selection
             dragId = g_timeout_add_full(G_PRIORITY_DEFAULT, 100, dragDelayCB, this, 0);
             psel->setFlatColor( desktop, (kind == FILL) ? "fill" : "stroke", (kind == FILL) ? "fill-opacity" : "stroke-opacity" );
-            sp_document_maybe_done(desktop->doc(), (kind == FILL) ? undo_F_label : undo_S_label, SP_VERB_DIALOG_FILL_STROKE,
-                                   (kind == FILL) ? _("Set fill color") : _("Set stroke color"));
+            DocumentUndo::maybeDone(desktop->doc(), (kind == FILL) ? undo_F_label : undo_S_label, SP_VERB_DIALOG_FILL_STROKE,
+                                    (kind == FILL) ? _("Set fill color") : _("Set stroke color"));
             break;
         }
 
@@ -480,8 +506,8 @@ void FillNStroke::updateFromPaint()
             sp_repr_css_attr_unref(css);
             css = 0;
 
-            sp_document_done(document, SP_VERB_DIALOG_FILL_STROKE,
-                             (kind == FILL) ? _("Remove fill") : _("Remove stroke"));
+            DocumentUndo::done(document, SP_VERB_DIALOG_FILL_STROKE,
+                               (kind == FILL) ? _("Remove fill") : _("Remove stroke"));
             break;
         }
 
@@ -490,18 +516,18 @@ void FillNStroke::updateFromPaint()
         {
             if (kind == FILL) {
                 // FIXME: fix for GTK breakage, see comment in SelectedStyle::on_opacity_changed; here it results in losing release events
-                sp_canvas_force_full_redraw_after_interruptions(sp_desktop_canvas(desktop), 0);
+                sp_desktop_canvas(desktop)->forceFullRedrawAfterInterruptions(0);
             }
 
             psel->setFlatColor( desktop,
                                 (kind == FILL) ? "fill" : "stroke",
                                 (kind == FILL) ? "fill-opacity" : "stroke-opacity" );
-            sp_document_maybe_done(sp_desktop_document(desktop), (kind == FILL) ? undo_F_label : undo_S_label, SP_VERB_DIALOG_FILL_STROKE,
-                                   (kind == FILL) ? _("Set fill color") : _("Set stroke color"));
+            DocumentUndo::maybeDone(sp_desktop_document(desktop), (kind == FILL) ? undo_F_label : undo_S_label, SP_VERB_DIALOG_FILL_STROKE,
+                                    (kind == FILL) ? _("Set fill color") : _("Set stroke color"));
 
             if (kind == FILL) {
                 // resume interruptibility
-                sp_canvas_end_forced_full_redraws(sp_desktop_canvas(desktop));
+                sp_desktop_canvas(desktop)->endForcedFullRedraws();
             }
 
             // on release, toggle undo_label so that the next drag will not be lumped with this one
@@ -556,19 +582,23 @@ void FillNStroke::updateFromPaint()
                     for (GSList const *i = items; i != NULL; i = i->next) {
                         //FIXME: see above
                         if (kind == FILL) {
-                            sp_repr_css_change_recursive(reinterpret_cast<SPObject*>(i->data)->repr, css, "style");
+                            sp_repr_css_change_recursive(reinterpret_cast<SPObject*>(i->data)->getRepr(), css, "style");
                         }
 
                         if (!vector) {
-                            SPGradient *gr = sp_gradient_vector_for_object( document, desktop, reinterpret_cast<SPObject*>(i->data), kind == FILL, createSwatch );
+                            SPGradient *gr = sp_gradient_vector_for_object( document,
+                                                                            desktop,
+                                                                            reinterpret_cast<SPObject*>(i->data),
+                                                                            (kind == FILL) ? Inkscape::FOR_FILL : Inkscape::FOR_STROKE,
+                                                                            createSwatch );
                             if ( gr && createSwatch ) {
                                 gr->setSwatch();
                             }
                             sp_item_set_gradient(SP_ITEM(i->data),
                                                  gr,
-                                                 gradient_type, kind == FILL);
+                                                 gradient_type, (kind == FILL) ? Inkscape::FOR_FILL : Inkscape::FOR_STROKE);
                         } else {
-                            sp_item_set_gradient(SP_ITEM(i->data), vector, gradient_type, kind == FILL);
+                            sp_item_set_gradient(SP_ITEM(i->data), vector, gradient_type, (kind == FILL) ? Inkscape::FOR_FILL : Inkscape::FOR_STROKE);
                         }
                     }
                 } else {
@@ -578,10 +608,10 @@ void FillNStroke::updateFromPaint()
                     for (GSList const *i = items; i != NULL; i = i->next) {
                         //FIXME: see above
                         if (kind == FILL) {
-                            sp_repr_css_change_recursive(reinterpret_cast<SPObject*>(i->data)->repr, css, "style");
+                            sp_repr_css_change_recursive(reinterpret_cast<SPObject*>(i->data)->getRepr(), css, "style");
                         }
 
-                        SPGradient *gr = sp_item_set_gradient(SP_ITEM(i->data), vector, gradient_type, kind == FILL);
+                        SPGradient *gr = sp_item_set_gradient(SP_ITEM(i->data), vector, gradient_type, (kind == FILL) ? Inkscape::FOR_FILL : Inkscape::FOR_STROKE);
                         psel->pushAttrsToGradient( gr );
                     }
                 }
@@ -591,8 +621,8 @@ void FillNStroke::updateFromPaint()
                     css = 0;
                 }
 
-                sp_document_done(document, SP_VERB_DIALOG_FILL_STROKE,
-                                 (kind == FILL) ? _("Set gradient on fill") : _("Set gradient on stroke"));
+                DocumentUndo::done(document, SP_VERB_DIALOG_FILL_STROKE,
+                                   (kind == FILL) ? _("Set gradient on fill") : _("Set gradient on stroke"));
             }
             break;
 
@@ -608,7 +638,7 @@ void FillNStroke::updateFromPaint()
                      */
 
                 } else {
-                    Inkscape::XML::Node *patrepr = pattern->repr;
+                    Inkscape::XML::Node *patrepr = pattern->getRepr();
                     SPCSSAttr *css = sp_repr_css_attr_new();
                     gchar *urltext = g_strdup_printf("url(#%s)", patrepr->attribute("id"));
                     sp_repr_css_set_property(css, (kind == FILL) ? "fill" : "stroke", urltext);
@@ -622,7 +652,7 @@ void FillNStroke::updateFromPaint()
                     // objects who already have the same root pattern but through a different href
                     // chain. FIXME: move this to a sp_item_set_pattern
                     for (GSList const *i = items; i != NULL; i = i->next) {
-                        Inkscape::XML::Node *selrepr = reinterpret_cast<SPObject*>(i->data)->repr;
+                        Inkscape::XML::Node *selrepr = reinterpret_cast<SPObject*>(i->data)->getRepr();
                         if ( (kind == STROKE) && !selrepr) {
                             continue;
                         }
@@ -651,9 +681,9 @@ void FillNStroke::updateFromPaint()
 
                 } // end if
 
-                sp_document_done(document, SP_VERB_DIALOG_FILL_STROKE,
-                                 (kind == FILL) ? _("Set pattern on fill") :
-                                 _("Set pattern on stroke"));
+                DocumentUndo::done(document, SP_VERB_DIALOG_FILL_STROKE,
+                                   (kind == FILL) ? _("Set pattern on fill") :
+                                   _("Set pattern on stroke"));
             } // end if
 
             break;
@@ -678,8 +708,8 @@ void FillNStroke::updateFromPaint()
                 sp_repr_css_attr_unref(css);
                 css = 0;
 
-                sp_document_done(document, SP_VERB_DIALOG_FILL_STROKE,
-                                 (kind == FILL) ? _("Unset fill") : _("Unset stroke"));
+                DocumentUndo::done(document, SP_VERB_DIALOG_FILL_STROKE,
+                                   (kind == FILL) ? _("Unset fill") : _("Unset stroke"));
             }
             break;
 
@@ -705,4 +735,4 @@ void FillNStroke::updateFromPaint()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

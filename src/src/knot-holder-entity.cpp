@@ -1,11 +1,10 @@
-#define __KNOT_HOLDER_ENTITY_C__
-
-/** \file
+/*
  * KnotHolderEntity definition.
  *
  * Authors:
  *   Mitsuru Oka <oka326@parkcity.ne.jp>
  *   Maximilian Albert <maximilian.albert@gmail.com>
+ *   Abhishek Sharma
  *
  * Copyright (C) 1999-2001 Lauris Kaplinski
  * Copyright (C) 2000-2001 Ximian, Inc.
@@ -16,26 +15,26 @@
  * Released under GNU GPL
  */
 
+#include "knot-holder-entity.h"
 #include "knotholder.h"
 #include "sp-item.h"
 #include "style.h"
 #include "preferences.h"
 #include "macros.h"
-#include <libnr/nr-matrix-ops.h>
 #include "sp-pattern.h"
 #include "snap.h"
 #include "desktop.h"
 #include "sp-namedview.h"
-#include <2geom/matrix.h>
+#include <2geom/affine.h>
 #include <2geom/transforms.h>
 
 int KnotHolderEntity::counter = 0;
 
-void
-KnotHolderEntity::create(SPDesktop *desktop, SPItem *item, KnotHolder *parent, const gchar *tip,
-                         SPKnotShapeType shape, SPKnotModeType mode, guint32 color)
+void KnotHolderEntity::create(SPDesktop *desktop, SPItem *item, KnotHolder *parent, Inkscape::ControlType type,
+                              const gchar *tip,
+                              SPKnotShapeType shape, SPKnotModeType mode, guint32 color)
 {
-    knot = sp_knot_new(desktop, tip);
+    knot = new SPKnot(desktop, tip);
 
     this->parent_holder = parent;
     this->item = item; // TODO: remove the item either from here or from knotholder.cpp
@@ -43,18 +42,21 @@ KnotHolderEntity::create(SPDesktop *desktop, SPItem *item, KnotHolder *parent, c
 
     my_counter = KnotHolderEntity::counter++;
 
-    g_object_set(G_OBJECT (knot->item), "shape", shape, NULL);
-    g_object_set(G_OBJECT (knot->item), "mode", mode, NULL);
+    g_object_set(G_OBJECT(knot->item), "shape", shape, NULL);
+    g_object_set(G_OBJECT(knot->item), "mode", mode, NULL);
+
+    // TODO base more appearance from this type instead of passing in arbitrary values.
+    knot->item->ctrlType = type;
 
     knot->fill [SP_KNOT_STATE_NORMAL] = color;
-    g_object_set (G_OBJECT (knot->item), "fill_color", color, NULL);
+    g_object_set (G_OBJECT(knot->item), "fill_color", color, NULL);
 
     update_knot();
-    sp_knot_show(knot);
+    knot->show();
 
-    _moved_connection = knot->_moved_signal.connect(sigc::mem_fun(*parent_holder, &KnotHolder::knot_moved_handler));
-    _click_connection = knot->_click_signal.connect(sigc::mem_fun(*parent_holder, &KnotHolder::knot_clicked_handler));
-    _ungrabbed_connection = knot->_ungrabbed_signal.connect(sigc::mem_fun(*parent_holder, &KnotHolder::knot_ungrabbed_handler));
+    _moved_connection = knot->moved_signal.connect(sigc::mem_fun(*parent_holder, &KnotHolder::knot_moved_handler));
+    _click_connection = knot->click_signal.connect(sigc::mem_fun(*parent_holder, &KnotHolder::knot_clicked_handler));
+    _ungrabbed_connection = knot->ungrabbed_signal.connect(sigc::mem_fun(*parent_holder, &KnotHolder::knot_ungrabbed_handler));
 }
 
 
@@ -66,7 +68,8 @@ KnotHolderEntity::~KnotHolderEntity()
 
     /* unref should call destroy */
     if (knot) {
-        g_object_unref(knot);
+        //g_object_unref(knot);
+        knot_unref(knot);
     } else {
         // FIXME: This shouldn't occur. Perhaps it is caused by LPE PointParams being knotholder entities, too
         //        If so, it will likely be fixed with upcoming refactoring efforts.
@@ -77,55 +80,55 @@ KnotHolderEntity::~KnotHolderEntity()
 void
 KnotHolderEntity::update_knot()
 {
-    Geom::Matrix const i2d(sp_item_i2d_affine(item));
+    Geom::Point knot_pos(knot_get());
+    if (knot_pos.isFinite()) {
+        Geom::Point dp(knot_pos * item->i2dt_affine());
 
-    Geom::Point dp(knot_get() * i2d);
-
-    _moved_connection.block();
-    sp_knot_set_position(knot, dp, SP_KNOT_STATE_NORMAL);
-    _moved_connection.unblock();
-}
-
-Geom::Point
-KnotHolderEntity::snap_knot_position(Geom::Point const &p)
-{
-    Geom::Matrix const i2d (sp_item_i2d_affine(item));
-    Geom::Point s = p * i2d;
-
-    SnapManager &m = desktop->namedview->snap_manager;
-    m.setup(desktop, true, item);
-
-    m.freeSnapReturnByRef(s, Inkscape::SNAPSOURCE_NODE_HANDLE);
-
-    return s * i2d.inverse();
-}
-
-Geom::Point
-KnotHolderEntity::snap_knot_position_constrained(Geom::Point const &p, Inkscape::Snapper::ConstraintLine const &constraint)
-{
-    Geom::Matrix const i2d (sp_item_i2d_affine(item));
-    Geom::Point s = p * i2d;
-
-    SnapManager &m = desktop->namedview->snap_manager;
-    m.setup(desktop, true, item);
-
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    if ((prefs->getBool("/options/snapmousepointer/value", false))) { // legacy behavior (pre v0.47)
-        // Snapping the mouse pointer instead of the constrained position of the knot allows to snap to
-        // things which don't intersect with the constraint line. This should be handled by the
-        // smart dynamic guides which are yet to be implemented, making this behavior more clean and
-        // transparent. With the current implementation it leads to unexpected results, and it doesn't
-        // allow accurately controlling what is being snapped to.
-
-        // freeSnap() will try snapping point p. This will not take into account the constraint, which
-        // is therefore to be enforced after snap_knot_position_constrained() has finished
-        m.freeSnapReturnByRef(s, Inkscape::SNAPSOURCE_NODE_HANDLE);
+        _moved_connection.block();
+        knot->setPosition(dp, SP_KNOT_STATE_NORMAL);
+        _moved_connection.unblock();
     } else {
-        // constrainedSnap() will first project the point p onto the constraint line and then try to snap along that line.
-        // This way the constraint is already enforced, no need to worry about that later on
-        Inkscape::Snapper::ConstraintLine transformed_constraint = Inkscape::Snapper::ConstraintLine(constraint.getPoint() * i2d, (constraint.getPoint() + constraint.getDirection()) * i2d - constraint.getPoint() * i2d);
-        m.constrainedSnapReturnByRef(s, Inkscape::SNAPSOURCE_NODE_HANDLE, transformed_constraint);
+        // knot coords are non-finite, hide knot
+        knot->hide();
     }
+}
+
+Geom::Point
+KnotHolderEntity::snap_knot_position(Geom::Point const &p, guint state)
+{
+    if (state & GDK_SHIFT_MASK) { // Don't snap when shift-key is held
+        return p;
+    }
+
+    Geom::Affine const i2dt (item->i2dt_affine());
+    Geom::Point s = p * i2dt;
+
+    SnapManager &m = desktop->namedview->snap_manager;
+    m.setup(desktop, true, item);
+    m.freeSnapReturnByRef(s, Inkscape::SNAPSOURCE_NODE_HANDLE);
+    m.unSetup();
+
+    return s * i2dt.inverse();
+}
+
+Geom::Point
+KnotHolderEntity::snap_knot_position_constrained(Geom::Point const &p, Inkscape::Snapper::SnapConstraint const &constraint, guint state)
+{
+    if (state & GDK_SHIFT_MASK) { // Don't snap when shift-key is held
+        return p;
+    }
+
+    Geom::Affine const i2d (item->i2dt_affine());
+    Geom::Point s = p * i2d;
+
+    SnapManager &m = desktop->namedview->snap_manager;
+    m.setup(desktop, true, item);
+
+    // constrainedSnap() will first project the point p onto the constraint line and then try to snap along that line.
+    // This way the constraint is already enforced, no need to worry about that later on
+    Inkscape::Snapper::SnapConstraint transformed_constraint = Inkscape::Snapper::SnapConstraint(constraint.getPoint() * i2d, (constraint.getPoint() + constraint.getDirection()) * i2d - constraint.getPoint() * i2d);
+    m.constrainedSnapReturnByRef(s, Inkscape::SNAPSOURCE_NODE_HANDLE, transformed_constraint);
+    m.unSetup();
 
     return s * i2d.inverse();
 }
@@ -135,15 +138,15 @@ KnotHolderEntity::snap_knot_position_constrained(Geom::Point const &p, Inkscape:
 
 /*  TODO: this pattern manipulation is not able to handle general transformation matrices. Only matrices that are the result of a pure scale times a pure rotation. */
 
-static gdouble sp_pattern_extract_theta(SPPattern *pat)
+static gdouble sp_pattern_extract_theta(SPPattern const *pat)
 {
-    Geom::Matrix transf = pat->patternTransform;
+    Geom::Affine transf = pat->patternTransform;
     return Geom::atan2(transf.xAxis());
 }
 
-static Geom::Point sp_pattern_extract_scale(SPPattern *pat)
+static Geom::Point sp_pattern_extract_scale(SPPattern const *pat)
 {
-    Geom::Matrix transf = pat->patternTransform;
+    Geom::Affine transf = pat->patternTransform;
     return Geom::Point( transf.expansionX(), transf.expansionY() );
 }
 
@@ -155,10 +158,10 @@ static Geom::Point sp_pattern_extract_trans(SPPattern const *pat)
 void
 PatternKnotHolderEntityXY::knot_set(Geom::Point const &p, Geom::Point const &origin, guint state)
 {
-    SPPattern *pat = SP_PATTERN(SP_STYLE_FILL_SERVER(SP_OBJECT(item)->style));
+    SPPattern *pat = _fill ? SP_PATTERN(item->style->getFillPaintServer()) : SP_PATTERN(item->style->getStrokePaintServer());
 
     // FIXME: this snapping should be done together with knowing whether control was pressed. If GDK_CONTROL_MASK, then constrained snapping should be used.
-    Geom::Point p_snapped = snap_knot_position(p);
+    Geom::Point p_snapped = snap_knot_position(p, state);
 
     if ( state & GDK_CONTROL_MASK ) {
         if (fabs((p - origin)[Geom::X]) > fabs((p - origin)[Geom::Y])) {
@@ -170,30 +173,30 @@ PatternKnotHolderEntityXY::knot_set(Geom::Point const &p, Geom::Point const &ori
 
     if (state)  {
         Geom::Point const q = p_snapped - sp_pattern_extract_trans(pat);
-        sp_item_adjust_pattern(item, Geom::Matrix(Geom::Translate(q)));
+        item->adjust_pattern(Geom::Translate(q), false, _fill ? TRANSFORM_FILL : TRANSFORM_STROKE);
     }
 
     item->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 }
 
 Geom::Point
-PatternKnotHolderEntityXY::knot_get()
+PatternKnotHolderEntityXY::knot_get() const
 {
-    SPPattern const *pat = SP_PATTERN(SP_STYLE_FILL_SERVER(SP_OBJECT(item)->style));
+    SPPattern *pat = _fill ? SP_PATTERN(item->style->getFillPaintServer()) : SP_PATTERN(item->style->getStrokePaintServer());
     return sp_pattern_extract_trans(pat);
 }
 
 Geom::Point
-PatternKnotHolderEntityAngle::knot_get()
+PatternKnotHolderEntityAngle::knot_get() const
 {
-    SPPattern *pat = SP_PATTERN(SP_STYLE_FILL_SERVER(SP_OBJECT(item)->style));
+    SPPattern *pat = _fill ? SP_PATTERN(item->style->getFillPaintServer()) : SP_PATTERN(item->style->getStrokePaintServer());
 
-    gdouble x = (pattern_width(pat));
+    gdouble x = pattern_width(pat);
     gdouble y = 0;
     Geom::Point delta = Geom::Point(x,y);
     Geom::Point scale = sp_pattern_extract_scale(pat);
     gdouble theta = sp_pattern_extract_theta(pat);
-    delta = delta * Geom::Matrix(Geom::Scale(scale))*Geom::Matrix(Geom::Rotate(theta));
+    delta = delta * Geom::Affine(Geom::Scale(scale))*Geom::Affine(Geom::Rotate(theta));
     delta = delta + sp_pattern_extract_trans(pat);
     return delta;
 }
@@ -204,7 +207,7 @@ PatternKnotHolderEntityAngle::knot_set(Geom::Point const &p, Geom::Point const &
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     int const snaps = prefs->getInt("/options/rotationsnapsperpi/value", 12);
 
-    SPPattern *pat = SP_PATTERN(SP_STYLE_FILL_SERVER(SP_OBJECT(item)->style));
+    SPPattern *pat = _fill ? SP_PATTERN(item->style->getFillPaintServer()) : SP_PATTERN(item->style->getStrokePaintServer());
 
     // get the angle from pattern 0,0 to the cursor pos
     Geom::Point delta = p - sp_pattern_extract_trans(pat);
@@ -216,21 +219,21 @@ PatternKnotHolderEntityAngle::knot_set(Geom::Point const &p, Geom::Point const &
 
     // get the scale from the current transform so we can keep it.
     Geom::Point scl = sp_pattern_extract_scale(pat);
-    Geom::Matrix rot = Geom::Matrix(Geom::Scale(scl)) * Geom::Matrix(Geom::Rotate(theta));
+    Geom::Affine rot = Geom::Affine(Geom::Scale(scl)) * Geom::Affine(Geom::Rotate(theta));
     Geom::Point const t = sp_pattern_extract_trans(pat);
     rot[4] = t[Geom::X];
     rot[5] = t[Geom::Y];
-    sp_item_adjust_pattern(item, rot, true);
+    item->adjust_pattern(rot, true, _fill ? TRANSFORM_FILL : TRANSFORM_STROKE);
     item->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 }
 
 void
 PatternKnotHolderEntityScale::knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint state)
 {
-    SPPattern *pat = SP_PATTERN(SP_STYLE_FILL_SERVER(SP_OBJECT(item)->style));
+    SPPattern *pat = _fill ? SP_PATTERN(item->style->getFillPaintServer()) : SP_PATTERN(item->style->getStrokePaintServer());
 
     // FIXME: this snapping should be done together with knowing whether control was pressed. If GDK_CONTROL_MASK, then constrained snapping should be used.
-    Geom::Point p_snapped = snap_knot_position(p);
+    Geom::Point p_snapped = snap_knot_position(p, state);
 
     // get angle from current transform
     gdouble theta = sp_pattern_extract_theta(pat);
@@ -249,25 +252,25 @@ PatternKnotHolderEntityScale::knot_set(Geom::Point const &p, Geom::Point const &
         scl = Geom::Scale(d[Geom::X] / pat_x, d[Geom::Y] / pat_y);
     }
 
-    Geom::Matrix rot = (Geom::Matrix)scl * Geom::Rotate(theta);
+    Geom::Affine rot = (Geom::Affine)scl * Geom::Rotate(theta);
 
     Geom::Point const t = sp_pattern_extract_trans(pat);
     rot[4] = t[Geom::X];
     rot[5] = t[Geom::Y];
-    sp_item_adjust_pattern(item, rot, true);
+    item->adjust_pattern(rot, true, _fill ? TRANSFORM_FILL : TRANSFORM_STROKE);
     item->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
 }
 
 
 Geom::Point
-PatternKnotHolderEntityScale::knot_get()
+PatternKnotHolderEntityScale::knot_get() const
 {
-    SPPattern *pat = SP_PATTERN(SP_STYLE_FILL_SERVER(SP_OBJECT(item)->style));
+    SPPattern *pat = _fill ? SP_PATTERN(item->style->getFillPaintServer()) : SP_PATTERN(item->style->getStrokePaintServer());
 
     gdouble x = pattern_width(pat);
     gdouble y = pattern_height(pat);
     Geom::Point delta = Geom::Point(x,y);
-    Geom::Matrix a = pat->patternTransform;
+    Geom::Affine a = pat->patternTransform;
     a[4] = 0;
     a[5] = 0;
     delta = delta * a;
@@ -284,4 +287,4 @@ PatternKnotHolderEntityScale::knot_get()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

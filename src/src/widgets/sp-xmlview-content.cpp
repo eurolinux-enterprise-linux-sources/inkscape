@@ -1,5 +1,3 @@
-#define __SP_XMLVIEW_CONTENT_C__
-
 /*
  * Specialization of GtkTextView for the XML tree view
  *
@@ -7,6 +5,7 @@
  *   MenTaLguY <mental@rydia.net>
  *
  * Copyright (C) 2002 MenTaLguY
+ *   Abhishek Sharma
  *
  * Released under the GNU GPL; see COPYING for details
  */
@@ -18,11 +17,20 @@
 #include "sp-xmlview-content.h"
 #include "desktop-handles.h"
 #include "document-private.h"
+#include "document-undo.h"
 #include "inkscape.h"
+#include "verbs.h"
+
+using Inkscape::DocumentUndo;
 
 static void sp_xmlview_content_class_init (SPXMLViewContentClass * klass);
 static void sp_xmlview_content_init (SPXMLViewContent * text);
-static void sp_xmlview_content_destroy (GtkObject * object);
+
+#if GTK_CHECK_VERSION(3,0,0)
+static void sp_xmlview_content_destroy(GtkWidget * object);
+#else
+static void sp_xmlview_content_destroy(GtkObject * object);
+#endif
 
 void sp_xmlview_content_changed (GtkTextBuffer *tb, SPXMLViewContent *text);
 
@@ -38,14 +46,10 @@ static Inkscape::XML::NodeEventVector repr_events = {
     NULL  /* order_changed */
 };
 
-GtkWidget *
-sp_xmlview_content_new (Inkscape::XML::Node * repr)
+GtkWidget *sp_xmlview_content_new(Inkscape::XML::Node * repr)
 {
-    GtkTextBuffer *tb;
-    SPXMLViewContent *text;
-
-    tb = gtk_text_buffer_new (NULL);
-    text = (SPXMLViewContent*)gtk_type_new (SP_TYPE_XMLVIEW_CONTENT);
+    GtkTextBuffer *tb = gtk_text_buffer_new(NULL);
+    SPXMLViewContent *text = SP_XMLVIEW_CONTENT(g_object_new(SP_TYPE_XMLVIEW_CONTENT, NULL));
     gtk_text_view_set_buffer (GTK_TEXT_VIEW (text), tb);
     gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (text), GTK_WRAP_CHAR);
 
@@ -55,7 +59,7 @@ sp_xmlview_content_new (Inkscape::XML::Node * repr)
 
     sp_xmlview_content_set_repr (text, repr);
 
-    return (GtkWidget *) text;
+    return GTK_WIDGET(text);
 }
 
 void
@@ -79,7 +83,7 @@ sp_xmlview_content_set_repr (SPXMLViewContent * text, Inkscape::XML::Node * repr
 
 GType sp_xmlview_content_get_type(void)
 {
-    static GtkType type = 0;
+    static GType type = 0;
 
     if (!type) {
         GTypeInfo info = {
@@ -100,16 +104,17 @@ GType sp_xmlview_content_get_type(void)
     return type;
 }
 
-void
-sp_xmlview_content_class_init (SPXMLViewContentClass * klass)
+void sp_xmlview_content_class_init(SPXMLViewContentClass * klass)
 {
-    GtkObjectClass * object_class;
-
-    object_class = (GtkObjectClass *) klass;
-
-    parent_class = (GtkTextViewClass*)gtk_type_class (GTK_TYPE_TEXT_VIEW);
-
+#if GTK_CHECK_VERSION(3,0,0)
+    GtkWidgetClass * widget_class = GTK_WIDGET_CLASS(klass);
+    widget_class->destroy = sp_xmlview_content_destroy;
+#else
+    GtkObjectClass * object_class = GTK_OBJECT_CLASS(klass);
     object_class->destroy = sp_xmlview_content_destroy;
+#endif
+
+    parent_class = GTK_TEXT_VIEW_CLASS(g_type_class_peek_parent (klass));
 }
 
 void
@@ -119,16 +124,21 @@ sp_xmlview_content_init (SPXMLViewContent *text)
     text->blocked = FALSE;
 }
 
-void
-sp_xmlview_content_destroy (GtkObject * object)
+#if GTK_CHECK_VERSION(3,0,0)
+void sp_xmlview_content_destroy(GtkWidget * object)
+#else
+void sp_xmlview_content_destroy(GtkObject * object)
+#endif
 {
-    SPXMLViewContent * text;
-
-    text = SP_XMLVIEW_CONTENT (object);
+    SPXMLViewContent * text = SP_XMLVIEW_CONTENT (object);
 
     sp_xmlview_content_set_repr (text, NULL);
 
+#if GTK_CHECK_VERSION(3,0,0)
+    GTK_WIDGET_CLASS (parent_class)->destroy (object);
+#else
     GTK_OBJECT_CLASS (parent_class)->destroy (object);
+#endif
 }
 
 void
@@ -165,7 +175,7 @@ sp_xmlview_content_changed (GtkTextBuffer *tb, SPXMLViewContent *text)
         text->repr->setContent(data);
         g_free (data);
         text->blocked = FALSE;
-        sp_document_done (sp_desktop_document (SP_ACTIVE_DESKTOP), SP_VERB_DIALOG_XML_EDITOR,
-                          _("Type text in a text node"));
+        DocumentUndo::done(sp_desktop_document(SP_ACTIVE_DESKTOP), SP_VERB_DIALOG_XML_EDITOR,
+			   _("Type text in a text node"));
     }
 }

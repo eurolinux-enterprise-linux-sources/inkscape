@@ -1,12 +1,18 @@
 ## Makefile.am fragment sourced by src/Makefile.am.
 
 ink_common_sources += \
+    util/ziptool.h \
+    util/ziptool.cpp \
 	util/accumulators.h	\
 	util/compose.hpp	\
 	util/copy.h \
 	util/enums.h \
+	util/ege-appear-time-tracker.cpp	\
+	util/ege-appear-time-tracker.h	\
 	util/ege-tags.h \
 	util/ege-tags.cpp \
+	util/expression-evaluator.h \
+	util/expression-evaluator.cpp \
 	util/filter-list.h \
 	util/find-if-before.h \
 	util/find-last-if.h \
@@ -25,6 +31,7 @@ ink_common_sources += \
 	util/reverse-list.h \
 	util/share.h \
 	util/share.cpp \
+	util/signal-blocker.h \
 	util/tuple.h \
 	util/ucompose.hpp \
 	util/units.cpp \

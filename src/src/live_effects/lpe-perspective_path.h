@@ -34,12 +34,15 @@ public:
     LPEPerspectivePath(LivePathEffectObject *lpeobject);
     virtual ~LPEPerspectivePath();
     
-    virtual void doBeforeEffect (SPLPEItem *lpeitem);
+    virtual void doBeforeEffect (SPLPEItem const* lpeitem);
 
     virtual Geom::Piecewise<Geom::D2<Geom::SBasis> > doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in);
 
+    virtual void refresh(Gtk::Entry* perspective);
+    virtual Gtk::Widget * newWidget();
     /* the knotholder entity classes must be declared friends */
     friend class PP::KnotHolderEntityOffset;
+    void addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item);
 
 private:
     // add the parameters for your effect here:
@@ -51,6 +54,7 @@ private:
     BoolParam uses_plane_xy;
     // there are all kinds of parameters. Check the /live_effects/parameter directory which types exist!
 
+    bool unapply;
     Geom::Point orig;
 
     LPEPerspectivePath(const LPEPerspectivePath&);
@@ -74,4 +78,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

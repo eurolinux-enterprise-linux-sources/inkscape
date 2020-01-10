@@ -1,6 +1,4 @@
-#define __SP_DESKTOP_C__
-
-/** \file
+/*
  * Editable view implementation
  *
  * Authors:
@@ -10,6 +8,8 @@
  *   Ralf Stephan <ralf@ark.in-berlin.de>
  *   John Bintz <jcoswell@coswellproductions.org>
  *   Johan Engelen <j.b.c.engelen@ewi.utwente.nl>
+ *   Jon A. Cruz <jon@joncruz.org>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2007 Jon A. Cruz
  * Copyright (C) 2006-2008 Johan Engelen
@@ -21,87 +21,71 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-/** \class SPDesktop
- * SPDesktop is a subclass of View, implementing an editable document
- * canvas.  It is extensively used by many UI controls that need certain
- * visual representations of their own.
- *
- * SPDesktop provides a certain set of SPCanvasItems, serving as GUI
- * layers of different control objects. The one containing the whole
- * document is the drawing layer. In addition to it, there are grid,
- * guide, sketch and control layers. The sketch layer is used for
- * temporary drawing objects, before the real objects in document are
- * created. The control layer contains editing knots, rubberband and
- * similar non-document UI objects.
- *
- * Each SPDesktop is associated with a SPNamedView node of the document
- * tree.  Currently, all desktops are created from a single main named
- * view, but in the future there may be support for different ones.
- * SPNamedView serves as an in-document container for desktop-related
- * data, like grid and guideline placement, snapping options and so on.
- *
- * Associated with each SPDesktop are the two most important editing
- * related objects - SPSelection and SPEventContext.
- *
- * Sodipodi keeps track of the active desktop and invokes notification
- * signals whenever it changes. UI elements can use these to update their
- * display to the selection of the currently active editing window.
- * (Lauris Kaplinski)
- */
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
 
+#include "ui/dialog/dialog-manager.h"
 #include <glibmm/i18n.h>
 #include <sigc++/functors/mem_fun.h>
-#include <gtkmm.h>
 
+#include <2geom/transforms.h>
 #include <2geom/rect.h>
-#include "macros.h"
-#include "inkscape-private.h"
-#include "desktop.h"
-#include "desktop-events.h"
-#include "desktop-handles.h"
-#include "document.h"
-#include "message-stack.h"
-#include "selection.h"
-#include "select-context.h"
-#include "sp-namedview.h"
+
+#include "ui/tools/box3d-tool.h"
 #include "color.h"
-#include "sp-item-group.h"
-#include "preferences.h"
-#include "object-hierarchy.h"
-#include "helper/units.h"
-#include "display/canvas-arena.h"
-#include "display/nr-arena.h"
-#include "display/gnome-canvas-acetate.h"
-#include "display/sodipodi-ctrlrect.h"
-#include "display/sp-canvas-util.h"
-#include "display/canvas-temporary-item-list.h"
-#include "display/snap-indicator.h"
-#include "ui/dialog/dialog-manager.h"
-#include "xml/repr.h"
-#include "message-context.h"
+#include "desktop-events.h"
+#include "desktop.h"
+#include "desktop-handles.h"
+#include "desktop-style.h"
 #include "device-manager.h"
+#include "display/canvas-arena.h"
+#include "display/canvas-grid.h"
+#include "display/canvas-temporary-item-list.h"
+#include "display/drawing-group.h"
+#include "display/gnome-canvas-acetate.h"
+#include "display/drawing.h"
+#include "display/snap-indicator.h"
+#include "display/sodipodi-ctrlrect.h"
+#include "display/sp-canvas-group.h"
+#include "display/sp-canvas.h"
+#include "display/sp-canvas-util.h"
+#include "document.h"
+#include "document-undo.h"
+#include "event-log.h"
+#include "helper/action-context.h"
+#include "interface.h"
+#include "inkscape-private.h"
 #include "layer-fns.h"
 #include "layer-manager.h"
-#include "event-log.h"
-#include "display/canvas-grid.h"
+#include "layer-model.h"
+#include "macros.h"
+#include "message-context.h"
+#include "message-stack.h"
+#include "preferences.h"
+#include "resource-manager.h"
+#include "ui/tools/select-tool.h"
+#include "selection.h"
+#include "sp-item-group.h"
+#include "sp-item-group.h"
+#include "sp-namedview.h"
+#include "sp-root.h"
+#include "sp-defs.h"
+#include "tool-factory.h"
 #include "widgets/desktop-widget.h"
-#include "box3d-context.h"
+#include "xml/repr.h"
+#include "helper/action.h" //sp_action_perform
 
 // TODO those includes are only for node tool quick zoom. Remove them after fixing it.
-#include "ui/tool/node-tool.h"
+#include "ui/tools/node-tool.h"
 #include "ui/tool/control-point-selection.h"
-
-#include "display/sp-canvas.h"
 
 namespace Inkscape { namespace XML { class Node; }}
 
 // Callback declarations
 static void _onSelectionChanged (Inkscape::Selection *selection, SPDesktop *desktop);
-static gint _arena_handler (SPCanvasArena *arena, NRArenaItem *ai, GdkEvent *event, SPDesktop *desktop);
+static gint _arena_handler (SPCanvasArena *arena, Inkscape::DrawingItem *ai, GdkEvent *event, SPDesktop *desktop);
 static void _layer_activated(SPObject *layer, SPDesktop *desktop);
 static void _layer_deactivated(SPObject *layer, SPDesktop *desktop);
 static void _layer_hierarchy_changed(SPObject *top, SPObject *bottom, SPDesktop *desktop);
@@ -109,15 +93,11 @@ static void _reconstruction_start(SPDesktop * desktop);
 static void _reconstruction_finish(SPDesktop * desktop);
 static void _namedview_modified (SPObject *obj, guint flags, SPDesktop *desktop);
 
-/**
- * Return new desktop object.
- * \pre namedview != NULL.
- * \pre canvas != NULL.
- */
 SPDesktop::SPDesktop() :
     _dlg_mgr( 0 ),
     namedview( 0 ),
     canvas( 0 ),
+    layers( 0 ),
     selection( 0 ),
     event_context( 0 ),
     layer_manager( 0 ),
@@ -137,21 +117,20 @@ SPDesktop::SPDesktop() :
     page_border( 0 ),
     current( 0 ),
     _focusMode(false),
-    zooms_past( 0 ),
-    zooms_future( 0 ),
     dkey( 0 ),
     number( 0 ),
     window_state(0),
     interaction_disabled_counter( 0 ),
     waiting_cursor( false ),
+    showing_dialogs ( false ),
     guides_active( false ),
     gr_item( 0 ),
-    gr_point_type( 0 ),
+    gr_point_type( POINT_LG_BEGIN ),
     gr_point_i( 0 ),
-    gr_fill_or_stroke( true ),
-    _layer_hierarchy( 0 ),
-    _reconstruction_old_layer_id( 0 ),
+    gr_fill_or_stroke( Inkscape::FOR_FILL ),
+    _reconstruction_old_layer_id(), // an id attribute is not allowed to be the empty string
     _display_mode(Inkscape::RENDERMODE_NORMAL),
+    _display_color_mode(Inkscape::COLORMODE_NORMAL),
     _widget( 0 ),
     _inkscape( 0 ),
     _guides_message_context( 0 ),
@@ -159,12 +138,17 @@ SPDesktop::SPDesktop() :
     _w2d(),
     _d2w(),
     _doc2dt( Geom::Scale(1, -1) ),
+    _image_render_observer(this, "/options/rendering/imageinoutlinemode"),
     grids_visible( false )
 {
     _d2w.setIdentity();
     _w2d.setIdentity();
-
-    selection = Inkscape::GC::release( new Inkscape::Selection(this) );
+    
+    layers = new Inkscape::LayerModel();
+    layers->_layer_activated_signal.connect(sigc::bind(sigc::ptr_fun(_layer_activated), this));
+    layers->_layer_deactivated_signal.connect(sigc::bind(sigc::ptr_fun(_layer_deactivated), this));
+    layers->_layer_changed_signal.connect(sigc::bind(sigc::ptr_fun(_layer_hierarchy_changed), this));
+    selection = Inkscape::GC::release( new Inkscape::Selection(layers, this) );
 }
 
 void
@@ -174,6 +158,7 @@ SPDesktop::init (SPNamedView *nv, SPCanvas *aCanvas, Inkscape::UI::View::EditWid
 
     // Temporary workaround for link order issues:
     Inkscape::DeviceManager::getManager().getDevices();
+    Inkscape::ResourceManager::getManager();
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
 
     _guides_message_context = new Inkscape::MessageContext(const_cast<Inkscape::MessageStack*>(messageStack()));
@@ -183,14 +168,32 @@ SPDesktop::init (SPNamedView *nv, SPCanvas *aCanvas, Inkscape::UI::View::EditWid
     namedview = nv;
     canvas = aCanvas;
 
-    SPDocument *document = SP_OBJECT_DOCUMENT (namedview);
-    /* Kill flicker */
-    sp_document_ensure_up_to_date (document);
+    SPDocument *document = namedview->document;
+    /* XXX:
+     * ensureUpToDate() sends a 'modified' signal to the root element.
+     * This is reportedly required to prevent flickering after the document
+     * loads. However, many SPObjects write to their repr in response
+     * to this signal. This is apparently done to support live path effects,
+     * which rewrite their result paths after each modification of the base object.
+     * This causes the generation of an incomplete undo transaction,
+     * which causes problems down the line, including crashes in the
+     * Undo History dialog.
+     *
+     * For now, this is handled by disabling undo tracking during this call.
+     * A proper fix would involve modifying the way ensureUpToDate() works,
+     * so that the LPE results are not rewritten.
+     */
+    Inkscape::DocumentUndo::setUndoSensitive(document, false);
+    document->ensureUpToDate();
+    Inkscape::DocumentUndo::setUndoSensitive(document, true);
 
     /* Setup Dialog Manager */
     _dlg_mgr = &Inkscape::UI::Dialog::DialogManager::getInstance();
 
-    dkey = sp_item_display_key_new (1);
+    dkey = SPItem::display_key_new(1);
+
+    /* Connect display key to layer model */
+    layers->setDisplayKey(dkey);
 
     /* Connect document */
     setDocument (document);
@@ -201,7 +204,7 @@ SPDesktop::init (SPNamedView *nv, SPCanvas *aCanvas, Inkscape::UI::View::EditWid
     /* Setup Canvas */
     g_object_set_data (G_OBJECT (canvas), "SPDesktop", this);
 
-    SPCanvasGroup *root = sp_canvas_root (canvas);
+    SPCanvasGroup *root = canvas->getRoot();
 
     /* Setup adminstrative layers */
     acetate = sp_canvas_item_new (root, GNOME_TYPE_CANVAS_ACETATE, NULL);
@@ -221,7 +224,7 @@ SPDesktop::init (SPNamedView *nv, SPCanvas *aCanvas, Inkscape::UI::View::EditWid
     drawing = sp_canvas_item_new (main, SP_TYPE_CANVAS_ARENA, NULL);
     g_signal_connect (G_OBJECT (drawing), "arena_event", G_CALLBACK (_arena_handler), this);
 
-    SP_CANVAS_ARENA (drawing)->arena->delta = prefs->getDouble("/options/cursortolerance/value", 1.0); // default is 1 px
+    SP_CANVAS_ARENA (drawing)->drawing.delta = prefs->getDouble("/options/cursortolerance/value", 1.0); // default is 1 px
 
     if (prefs->getBool("/options/startmode/outline")) {
         // Start in outline mode
@@ -244,18 +247,13 @@ SPDesktop::init (SPNamedView *nv, SPCanvas *aCanvas, Inkscape::UI::View::EditWid
     tempgroup = (SPCanvasGroup *) sp_canvas_item_new (main, SP_TYPE_CANVAS_GROUP, NULL);
     controls = (SPCanvasGroup *) sp_canvas_item_new (main, SP_TYPE_CANVAS_GROUP, NULL);
 
-    /* Push select tool to the bottom of stack */
-    /** \todo
-     * FIXME: this is the only call to this.  Everything else seems to just
-     * call "set" instead of "push".  Can we assume that there is only one
-     * context ever?
-     */
-    push_event_context (SP_TYPE_SELECT_CONTEXT, "/tools/select", SP_EVENT_CONTEXT_STATIC);
+    // Set the select tool as the active tool.
+    set_event_context2("/tools/select");
 
     // display rect and zoom are now handled in sp_desktop_widget_realize()
 
     Geom::Rect const d(Geom::Point(0.0, 0.0),
-                       Geom::Point(sp_document_width(document), sp_document_height(document)));
+                       Geom::Point(document->getWidth().value("px"), document->getHeight().value("px")));
 
     SP_CTRLRECT(page)->setRectangle(d);
     SP_CTRLRECT(page_border)->setRectangle(d);
@@ -272,17 +270,17 @@ SPDesktop::init (SPNamedView *nv, SPCanvas *aCanvas, Inkscape::UI::View::EditWid
 
 
     /* Connect event for page resize */
-    _doc2dt[5] = sp_document_height (document);
+    _doc2dt[5] = document->getHeight().value("px");
     sp_canvas_item_affine_absolute (SP_CANVAS_ITEM (drawing), _doc2dt);
 
     _modified_connection = namedview->connectModified(sigc::bind<2>(sigc::ptr_fun(&_namedview_modified), this));
 
-    NRArenaItem *ai = sp_item_invoke_show (SP_ITEM (sp_document_root (document)),
-            SP_CANVAS_ARENA (drawing)->arena,
+    Inkscape::DrawingItem *ai = document->getRoot()->invoke_show(
+            SP_CANVAS_ARENA (drawing)->drawing,
             dkey,
             SP_ITEM_SHOW_DISPLAY);
     if (ai) {
-        nr_arena_item_add_child (SP_CANVAS_ARENA (drawing)->root, ai, NULL);
+        SP_CANVAS_ARENA (drawing)->drawing.root()->prependChild(ai);
     }
 
     namedview->show(this);
@@ -297,7 +295,7 @@ SPDesktop::init (SPNamedView *nv, SPCanvas *aCanvas, Inkscape::UI::View::EditWid
         document->connectReconstructionStart(sigc::bind(sigc::ptr_fun(_reconstruction_start), this));
     _reconstruction_finish_connection =
         document->connectReconstructionFinish(sigc::bind(sigc::ptr_fun(_reconstruction_finish), this));
-    _reconstruction_old_layer_id = NULL;
+    _reconstruction_old_layer_id.clear();
 
     // ?
     // sp_active_desktop_set (desktop);
@@ -343,6 +341,8 @@ SPDesktop::init (SPNamedView *nv, SPCanvas *aCanvas, Inkscape::UI::View::EditWid
 
 void SPDesktop::destroy()
 {
+    _destroy_signal.emit(this);
+
     if (snapindicator) {
         delete snapindicator;
         snapindicator = NULL;
@@ -372,17 +372,13 @@ void SPDesktop::destroy()
     g_signal_handlers_disconnect_by_func(G_OBJECT (main), (gpointer) G_CALLBACK(sp_desktop_root_handler), this);
     g_signal_handlers_disconnect_by_func(G_OBJECT (drawing), (gpointer) G_CALLBACK(_arena_handler), this);
 
-    while (event_context) {
-        SPEventContext *ec = event_context;
-        event_context = ec->next;
-        sp_event_context_finish (ec);
-        g_object_unref (G_OBJECT (ec));
+    if (event_context) {
+        event_context->finish();
+    	delete event_context;
+    	event_context = NULL;
     }
 
-    if (_layer_hierarchy) {
-        delete _layer_hierarchy;
-//        _layer_hierarchy = NULL; //this should be here, but commented to find other bug somewhere else.
-    }
+    delete layers;
 
     if (layer_manager) {
         delete layer_manager;
@@ -394,18 +390,77 @@ void SPDesktop::destroy()
     }
 
     if (drawing) {
-        sp_item_invoke_hide (SP_ITEM (sp_document_root (doc())), dkey);
+        doc()->getRoot()->invoke_hide(dkey);
+        g_object_unref(drawing);
         drawing = NULL;
     }
 
     delete _guides_message_context;
     _guides_message_context = NULL;
-
-    g_list_free (zooms_past);
-    g_list_free (zooms_future);
 }
 
-SPDesktop::~SPDesktop() {}
+SPDesktop::~SPDesktop()
+{
+}
+
+
+Inkscape::UI::Tools::ToolBase* SPDesktop::getEventContext() const {
+	return event_context;
+}
+
+Inkscape::Selection* SPDesktop::getSelection() const {
+	return selection;
+}
+
+SPDocument* SPDesktop::getDocument() const {
+	return doc();
+}
+
+SPCanvas* SPDesktop::getCanvas() const {
+	return SP_CANVAS_ITEM(main)->canvas;
+}
+
+SPCanvasItem* SPDesktop::getAcetate() const {
+	return acetate;
+}
+
+SPCanvasGroup* SPDesktop::getMain() const {
+	return main;
+}
+
+SPCanvasGroup* SPDesktop::getGridGroup() const {
+	return gridgroup;
+}
+
+SPCanvasGroup* SPDesktop::getGuides() const {
+	return guides;
+}
+
+SPCanvasItem* SPDesktop::getDrawing() const {
+	return drawing;
+}
+
+SPCanvasGroup* SPDesktop::getSketch() const {
+	return sketch;
+}
+
+SPCanvasGroup* SPDesktop::getControls() const {
+	return controls;
+}
+
+SPCanvasGroup* SPDesktop::getTempGroup() const {
+	return tempgroup;
+}
+
+Inkscape::MessageStack* SPDesktop::getMessageStack() const {
+	return messageStack();
+}
+
+SPNamedView* SPDesktop::getNamedView() const {
+	return namedview;
+}
+
+
 
 //--------------------------------------------------------------------
 /* Public methods */
@@ -445,12 +500,38 @@ SPDesktop::remove_temporary_canvasitem (Inkscape::Display::TemporaryItem * tempi
     }
 }
 
+void SPDesktop::redrawDesktop() {
+    sp_canvas_item_affine_absolute (SP_CANVAS_ITEM (main), _d2w); // redraw
+}
+
 void SPDesktop::_setDisplayMode(Inkscape::RenderMode mode) {
-    SP_CANVAS_ARENA (drawing)->arena->rendermode = mode;
+    SP_CANVAS_ARENA (drawing)->drawing.setRenderMode(mode);
     canvas->rendermode = mode;
     _display_mode = mode;
-    sp_canvas_item_affine_absolute (SP_CANVAS_ITEM (main), _d2w); // redraw
-    _widget->setTitle(SP_DOCUMENT_NAME(sp_desktop_document(this)));
+    redrawDesktop();
+    _widget->setTitle( sp_desktop_document(this)->getName() );
+}
+
+void SPDesktop::_setDisplayColorMode(Inkscape::ColorMode mode) {
+    // reload grayscale matrix from prefs
+    if (mode == Inkscape::COLORMODE_GRAYSCALE) {
+        Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+        gdouble r = prefs->getDoubleLimited("/options/rendering/grayscale/red-factor",0.21,0.,1.);
+        gdouble g = prefs->getDoubleLimited("/options/rendering/grayscale/green-factor",0.72,0.,1.);
+        gdouble b = prefs->getDoubleLimited("/options/rendering/grayscale/blue-factor",0.072,0.,1.);
+        gdouble grayscale_value_matrix[20] = { r, g, b, 0, 0,
+                                               r, g, b, 0, 0,
+                                               r, g, b, 0, 0,
+                                               0, 0, 0, 1, 0 };
+        //g_message("%g",grayscale_value_matrix[0]);
+        SP_CANVAS_ARENA (drawing)->drawing.setGrayscaleMatrix(grayscale_value_matrix);
+    }
+
+    SP_CANVAS_ARENA (drawing)->drawing.setColorMode(mode);
+    canvas->colorrendermode = mode;
+    _display_color_mode = mode;
+    redrawDesktop();
+    _widget->setTitle( sp_desktop_document(this)->getName() );
 }
 
 void SPDesktop::displayModeToggle() {
@@ -464,99 +545,76 @@ void SPDesktop::displayModeToggle() {
     case Inkscape::RENDERMODE_OUTLINE:
         _setDisplayMode(Inkscape::RENDERMODE_NORMAL);
         break;
-//    case Inkscape::RENDERMODE_PRINT_COLORS_PREVIEW:
     default:
         _setDisplayMode(Inkscape::RENDERMODE_NORMAL);
     }
 }
+void SPDesktop::displayColorModeToggle() {
+    switch (_display_color_mode) {
+    case Inkscape::COLORMODE_NORMAL:
+        _setDisplayColorMode(Inkscape::COLORMODE_GRAYSCALE);
+        break;
+    case Inkscape::COLORMODE_GRAYSCALE:
+        _setDisplayColorMode(Inkscape::COLORMODE_NORMAL);
+        break;
+//    case Inkscape::COLORMODE_PRINT_COLORS_PREVIEW:
+    default:
+        _setDisplayColorMode(Inkscape::COLORMODE_NORMAL);
+    }
+}
 
-/**
- * Returns current root (=bottom) layer.
- */
+// Pass-through LayerModel functions
 SPObject *SPDesktop::currentRoot() const
 {
-    return _layer_hierarchy ? _layer_hierarchy->top() : NULL;
+    return layers->currentRoot();
 }
 
-/**
- * Returns current top layer.
- */
 SPObject *SPDesktop::currentLayer() const
 {
-    return _layer_hierarchy ? _layer_hierarchy->bottom() : NULL;
+    return layers->currentLayer();
+}
+
+void SPDesktop::setCurrentLayer(SPObject *object)
+{
+    layers->setCurrentLayer(object);
+}
+
+void SPDesktop::toggleLayerSolo(SPObject *object)
+{
+    layers->toggleLayerSolo(object);
+}
+
+void SPDesktop::toggleHideAllLayers(bool hide)
+{
+    layers->toggleHideAllLayers(hide);
+}
+
+void SPDesktop::toggleLockAllLayers(bool lock)
+{
+    layers->toggleLockAllLayers(lock);
+}
+
+void SPDesktop::toggleLockOtherLayers(SPObject *object)
+{
+    layers->toggleLockOtherLayers(object);
+}
+
+bool SPDesktop::isLayer(SPObject *object) const
+{
+    return layers->isLayer(object);
 }
 
 /**
- * Sets the current layer of the desktop.
- *
- * Make \a object the top layer.
- */
-void SPDesktop::setCurrentLayer(SPObject *object) {
-    g_return_if_fail(SP_IS_GROUP(object));
-    g_return_if_fail( currentRoot() == object || (currentRoot() && currentRoot()->isAncestorOf(object)) );
-    // printf("Set Layer to ID: %s\n", SP_OBJECT_ID(object));
-    _layer_hierarchy->setBottom(object);
-}
-
-void SPDesktop::toggleLayerSolo(SPObject *object) {
-    g_return_if_fail(SP_IS_GROUP(object));
-    g_return_if_fail( currentRoot() == object || (currentRoot() && currentRoot()->isAncestorOf(object)) );
-
-    bool othersShowing = false;
-    std::vector<SPObject*> layers;
-    for ( SPObject* obj = Inkscape::next_layer(currentRoot(), object); obj; obj = Inkscape::next_layer(currentRoot(), obj) ) {
-        layers.push_back(obj);
-        othersShowing |= !SP_ITEM(obj)->isHidden();
-    }
-    for ( SPObject* obj = Inkscape::previous_layer(currentRoot(), object); obj; obj = Inkscape::previous_layer(currentRoot(), obj) ) {
-        layers.push_back(obj);
-        othersShowing |= !SP_ITEM(obj)->isHidden();
-    }
-
-
-    if ( SP_ITEM(object)->isHidden() ) {
-        SP_ITEM(object)->setHidden(false);
-    }
-
-    for ( std::vector<SPObject*>::iterator it = layers.begin(); it != layers.end(); ++it ) {
-        SP_ITEM(*it)->setHidden(othersShowing);
-    }
-}
-
-/**
- * Return layer that contains \a object.
- */
-SPObject *SPDesktop::layerForObject(SPObject *object) {
-    g_return_val_if_fail(object != NULL, NULL);
-
-    SPObject *root=currentRoot();
-    object = SP_OBJECT_PARENT(object);
-    while ( object && object != root && !isLayer(object) ) {
-        object = SP_OBJECT_PARENT(object);
-    }
-    return object;
-}
-
-/**
- * True if object is a layer.
- */
-bool SPDesktop::isLayer(SPObject *object) const {
-    return ( SP_IS_GROUP(object)
-             && ( SP_GROUP(object)->effectiveLayerMode(this->dkey)
-                  == SPGroup::LAYER ) );
-}
-
-/**
- * True if desktop viewport fully contains \a item's bbox.
+ * True if desktop viewport intersects \a item's bbox.
  */
 bool SPDesktop::isWithinViewport (SPItem *item) const
 {
     Geom::Rect const viewport = get_display_area();
-    Geom::OptRect const bbox = sp_item_bbox_desktop(item);
+    Geom::OptRect const bbox = item->desktopVisualBounds();
     if (bbox) {
-        return viewport.contains(*bbox);
+        return viewport.intersects(*bbox);
     } else {
-        return true;
+        return false;
     }
 }
 
@@ -611,68 +669,44 @@ SPDesktop::change_document (SPDocument *theDocument)
     SPDesktopWidget *dtw = (SPDesktopWidget *) parent->get_data("desktopwidget");
     if (dtw) {
         dtw->desktop = this;
+        dtw->updateNamedview();
     }
-    dtw->updateNamedview();
 
     _namedview_modified (namedview, SP_OBJECT_MODIFIED_FLAG, this);
     _document_replaced_signal.emit (this, theDocument);
 }
 
 /**
- * Make desktop switch event contexts.
+ * Replaces the currently active tool with a new one.
  */
-void
-SPDesktop::set_event_context (GtkType type, const gchar *config)
+void SPDesktop::set_event_context2(const std::string& toolName)
 {
-    SPEventContext *ec;
-    while (event_context) {
-        ec = event_context;
-        sp_event_context_deactivate (ec);
-        // we have to keep event_context valid during destruction - otherwise writing
-        // destructors is next to impossible
-        SPEventContext *next = ec->next;
-        sp_event_context_finish (ec);
-        g_object_unref (G_OBJECT (ec));
-        event_context = next;
+    Inkscape::UI::Tools::ToolBase* old_tool = event_context;
+
+    if (old_tool) {
+        if (toolName.compare(old_tool->pref_observer->observed_path) != 0) {
+            //g_message("Old tool: %s", old_tool->pref_observer->observed_path.c_str());
+            //g_message("New tool: %s", toolName.c_str());
+            old_tool->finish();
+            delete old_tool;
+        } else {
+            _event_context_changed_signal.emit(this, event_context);
+            return;
+        }
     }
+    
+    Inkscape::UI::Tools::ToolBase* new_tool = ToolFactory::instance().createObject(toolName);
+    new_tool->desktop = this;
+    new_tool->message_context = new Inkscape::MessageContext(this->messageStack());
+    event_context = new_tool;
+    new_tool->setup();
 
-    // The event_context will be null. This means that it will be impossible
-    // to process any event invoked by the lines below. See for example bug
-    // LP #622350. Cutting and undoing again in the node tool resets the event
-    // context to the node tool. In this bug the line bellow invokes GDK_LEAVE_NOTIFY
-    // events which cannot be handled and must be discarded.
-    ec = sp_event_context_new (type, this, config, SP_EVENT_CONTEXT_STATIC);
-    ec->next = event_context;
-    event_context = ec;
-    // Now the event_context has been set again and we can process all events again
-    sp_event_context_activate (ec);
-    _event_context_changed_signal.emit (this, ec);
-}
+    // Make sure no delayed snapping events are carried over after switching tools
+    // (this is only an additional safety measure against sloppy coding, because each
+    // tool should take care of this by itself)
+    sp_event_context_discard_delayed_snap_event(event_context);
 
-/**
- * Push event context onto desktop's context stack.
- */
-void
-SPDesktop::push_event_context (GtkType type, const gchar *config, unsigned int key)
-{
-    SPEventContext *ref, *ec;
-
-    if (event_context && event_context->key == key) return;
-    ref = event_context;
-    while (ref && ref->next && ref->next->key != key) ref = ref->next;
-    if (ref && ref->next) {
-        ec = ref->next;
-        ref->next = ec->next;
-        sp_event_context_finish (ec);
-        g_object_unref (G_OBJECT (ec));
-    }
-
-    if (event_context) sp_event_context_deactivate (event_context);
-    ec = sp_event_context_new (type, this, config, key);
-    ec->next = event_context;
-    event_context = ec;
-    sp_event_context_activate (ec);
-    _event_context_changed_signal.emit (this, ec);
+    _event_context_changed_signal.emit(this, event_context);
 }
 
 /**
@@ -683,42 +717,42 @@ SPDesktop::set_coordinate_status (Geom::Point p) {
     _widget->setCoordinateStatus(p);
 }
 
-/**
- * \see sp_document_item_from_list_at_point_bottom()
- */
-SPItem *
-SPDesktop::item_from_list_at_point_bottom (const GSList *list, Geom::Point const p) const
-{
-    g_return_val_if_fail (doc() != NULL, NULL);
-    return sp_document_item_from_list_at_point_bottom (dkey, SP_GROUP (doc()->root), list, p);
+Inkscape::UI::Widget::Dock* SPDesktop::getDock() {
+	return _widget->getDock();
 }
 
 /**
- * \see sp_document_item_at_point()
+ * \see SPDocument::getItemFromListAtPointBottom()
  */
-SPItem *
-SPDesktop::item_at_point (Geom::Point const p, bool into_groups, SPItem *upto) const
+SPItem *SPDesktop::getItemFromListAtPointBottom(const GSList *list, Geom::Point const &p) const
 {
     g_return_val_if_fail (doc() != NULL, NULL);
-    return sp_document_item_at_point (doc(), dkey, p, into_groups, upto);
+    return SPDocument::getItemFromListAtPointBottom(dkey, doc()->getRoot(), list, p);
 }
 
 /**
- * \see sp_document_group_at_point()
+ * \see SPDocument::getItemAtPoint()
  */
-SPItem *
-SPDesktop::group_at_point (Geom::Point const p) const
+SPItem *SPDesktop::getItemAtPoint(Geom::Point const &p, bool into_groups, SPItem *upto) const
 {
     g_return_val_if_fail (doc() != NULL, NULL);
-    return sp_document_group_at_point (doc(), dkey, p);
+    return doc()->getItemAtPoint( dkey, p, into_groups, upto);
 }
 
 /**
- * \brief  Returns the mouse point in document coordinates; if mouse is
- * outside the canvas, returns the center of canvas viewpoint
+ * \see SPDocument::getGroupAtPoint()
  */
-Geom::Point
-SPDesktop::point() const
+SPItem *SPDesktop::getGroupAtPoint(Geom::Point const &p) const
+{
+    g_return_val_if_fail (doc() != NULL, NULL);
+    return doc()->getGroupAtPoint(dkey, p);
+}
+
+/**
+ * Returns the mouse point in document coordinates; if mouse is
+ * outside the canvas, returns the center of canvas viewpoint.
+ */
+Geom::Point SPDesktop::point() const
 {
     Geom::Point p = _widget->getPointer();
     Geom::Point pw = sp_canvas_window_to_world (canvas, p);
@@ -744,22 +778,12 @@ SPDesktop::point() const
  * Put current zoom data in history list.
  */
 void
-SPDesktop::push_current_zoom (GList **history)
+SPDesktop::push_current_zoom (std::list<Geom::Rect> &history)
 {
-    Geom::Rect const area = get_display_area();
+    Geom::Rect area = get_display_area();
 
-    NRRect *old_zoom = g_new(NRRect, 1);
-    old_zoom->x0 = area.min()[Geom::X];
-    old_zoom->x1 = area.max()[Geom::X];
-    old_zoom->y0 = area.min()[Geom::Y];
-    old_zoom->y1 = area.max()[Geom::Y];
-    if ( *history == NULL
-         || !( ( ((NRRect *) ((*history)->data))->x0 == old_zoom->x0 ) &&
-               ( ((NRRect *) ((*history)->data))->x1 == old_zoom->x1 ) &&
-               ( ((NRRect *) ((*history)->data))->y0 == old_zoom->y0 ) &&
-               ( ((NRRect *) ((*history)->data))->y1 == old_zoom->y1 ) ) )
-    {
-        *history = g_list_prepend (*history, old_zoom);
+    if (history.empty() || history.front() != area) {
+        history.push_front(area);
     }
 }
 
@@ -770,13 +794,13 @@ void
 SPDesktop::set_display_area (double x0, double y0, double x1, double y1, double border, bool log)
 {
     g_assert(_widget);
+    bool zoomChanged = false;
 
     // save the zoom
     if (log) {
-        push_current_zoom(&zooms_past);
+        push_current_zoom(zooms_past);
         // if we do a logged zoom, our zoom-forward list is invalidated, so delete it
-        g_list_free (zooms_future);
-        zooms_future = NULL;
+        zooms_future.clear();
     }
 
     double const cx = 0.5 * (x0 + x1);
@@ -797,28 +821,35 @@ SPDesktop::set_display_area (double x0, double y0, double x1, double y1, double 
     newscale = CLAMP(newscale, SP_DESKTOP_ZOOM_MIN, SP_DESKTOP_ZOOM_MAX); // unit: 'screen pixels' per 'document pixels'
 
     int clear = FALSE;
-    if (!NR_DF_TEST_CLOSE (newscale, scale, 1e-4 * scale)) {
+    if (!Geom::are_near(newscale, scale, Geom::EPSILON * scale)) {
         // zoom changed - set new zoom factors
         _d2w = Geom::Scale(newscale, -newscale);
         _w2d = Geom::Scale(1/newscale, 1/-newscale);
-        sp_canvas_item_affine_absolute(SP_CANVAS_ITEM(main), _d2w);
+        redrawDesktop();
         clear = TRUE;
-        signal_zoom_changed.emit(_d2w.descrim());
+        zoomChanged = true;
     }
 
     /* Calculate top left corner (in document pixels) */
     x0 = cx - 0.5 * viewbox.dimensions()[Geom::X] / newscale;
     y1 = cy + 0.5 * viewbox.dimensions()[Geom::Y] / newscale;
 
-    /* Scroll */
-    sp_canvas_scroll_to (canvas, x0 * newscale - border, y1 * -newscale - border, clear);
+    // Scroll
+    canvas->scrollTo(x0 * newscale - border, y1 * -newscale - border, clear);
 
     /*  update perspective lines if we are in the 3D box tool (so that infinite ones are shown correctly) */
-    sp_box3d_context_update_lines(event_context);
+    //sp_box3d_context_update_lines(event_context);
+    if (SP_IS_BOX3D_CONTEXT(event_context)) {
+    	SP_BOX3D_CONTEXT(event_context)->_vpdrag->updateLines();
+    }
 
     _widget->updateRulers();
     _widget->updateScrollbars(_d2w.descrim());
     _widget->updateZoom();
+
+    if ( zoomChanged ) {
+        signal_zoom_changed.emit(_d2w.descrim());
+    }
 }
 
 void SPDesktop::set_display_area(Geom::Rect const &a, Geom::Coord b, bool log)
@@ -835,6 +866,7 @@ Geom::Rect SPDesktop::get_display_area() const
 
     double const scale = _d2w[0];
 
+    /// @fixme hardcoded desktop transform
     return Geom::Rect(Geom::Point(viewbox.min()[Geom::X] / scale, viewbox.max()[Geom::Y] / -scale),
                       Geom::Point(viewbox.max()[Geom::X] / scale, viewbox.min()[Geom::Y] / -scale));
 }
@@ -845,56 +877,49 @@ Geom::Rect SPDesktop::get_display_area() const
 void
 SPDesktop::prev_zoom()
 {
-    if (zooms_past == NULL) {
+    if (zooms_past.empty()) {
         messageStack()->flash(Inkscape::WARNING_MESSAGE, _("No previous zoom."));
         return;
     }
 
     // push current zoom into forward zooms list
-    push_current_zoom (&zooms_future);
+    push_current_zoom (zooms_future);
 
     // restore previous zoom
-    set_display_area (((NRRect *) zooms_past->data)->x0,
-            ((NRRect *) zooms_past->data)->y0,
-            ((NRRect *) zooms_past->data)->x1,
-            ((NRRect *) zooms_past->data)->y1,
-            0, false);
+    Geom::Rect past = zooms_past.front();
+    set_display_area (past.left(), past.top(), past.right(), past.bottom(), 0, false);
 
     // remove the just-added zoom from the past zooms list
-    zooms_past = g_list_remove (zooms_past, ((NRRect *) zooms_past->data));
+    zooms_past.pop_front();
 }
 
 /**
  * Set zoom to next in list.
  */
-void
-SPDesktop::next_zoom()
+void SPDesktop::next_zoom()
 {
-    if (zooms_future == NULL) {
+    if (zooms_future.empty()) {
         this->messageStack()->flash(Inkscape::WARNING_MESSAGE, _("No next zoom."));
         return;
     }
 
     // push current zoom into past zooms list
-    push_current_zoom (&zooms_past);
+    push_current_zoom (zooms_past);
 
     // restore next zoom
-    set_display_area (((NRRect *) zooms_future->data)->x0,
-            ((NRRect *) zooms_future->data)->y0,
-            ((NRRect *) zooms_future->data)->x1,
-            ((NRRect *) zooms_future->data)->y1,
-            0, false);
+    Geom::Rect future = zooms_future.front();
+    set_display_area (future.left(), future.top(), future.right(), future.bottom(), 0, false);
 
     // remove the just-used zoom from the zooms_future list
-    zooms_future = g_list_remove (zooms_future, ((NRRect *) zooms_future->data));
+    zooms_future.pop_front();
 }
 
-/** \brief  Performs a quick zoom into what the user is working on
-    \param  enable  Whether we're going in or out of quick zoom
-
-*/
-void
-SPDesktop::zoom_quick (bool enable)
+/**
+ * Performs a quick zoom into what the user is working on.
+ *
+ * @param  enable  Whether we're going in or out of quick zoom.
+ */
+void SPDesktop::zoom_quick(bool enable)
 {
     if (enable == _quick_zoom_enabled) {
         return;
@@ -907,7 +932,7 @@ SPDesktop::zoom_quick (bool enable)
         // TODO This needs to migrate into the node tool, but currently the design
         // of this method is sufficiently wrong to prevent this.
         if (!zoomed && INK_IS_NODE_TOOL(event_context)) {
-            InkNodeTool *nt = static_cast<InkNodeTool*>(event_context);
+            Inkscape::UI::Tools::NodeTool *nt = static_cast<Inkscape::UI::Tools::NodeTool*>(event_context);
             if (!nt->_selected_nodes->empty()) {
                 Geom::Rect nodes = *nt->_selected_nodes->bounds();
                 double area = nodes.area();
@@ -921,7 +946,7 @@ SPDesktop::zoom_quick (bool enable)
         }
 
         if (!zoomed) {
-            Geom::OptRect const d = selection->bounds();
+            Geom::OptRect const d = selection->visualBounds();
             if (d && d->area() * 2.0 < _quick_zoom_stored_area.area()) {
                 set_display_area(*d, true);
                 zoomed = true;
@@ -964,6 +989,26 @@ SPDesktop::zoom_absolute_keep_point (double cx, double cy, double px, double py,
                      cx + (1 - px) * width2,
                      cy + (1 - py) * height2,
                      0.0);
+}
+
+/**
+  * Apply the desktop's current style or the tool style to the object.
+  */
+void SPDesktop::applyCurrentOrToolStyle(SPObject *obj, Glib::ustring const &tool_path, bool with_text)
+{
+    SPCSSAttr *css_current = sp_desktop_get_style(this, with_text);
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+
+    if (prefs->getBool(tool_path + "/usecurrent") && css_current) {
+        obj->setCSS(css_current,"style");
+    } else {
+        SPCSSAttr *css = prefs->getInheritedStyle(tool_path + "/style");
+        obj->setCSS(css,"style");
+        sp_repr_css_attr_unref(css);
+    }
+    if (css_current) {
+        sp_repr_css_attr_unref(css_current);
+    }
 }
 
 /**
@@ -1020,7 +1065,7 @@ void
 SPDesktop::zoom_page()
 {
     Geom::Rect d(Geom::Point(0, 0),
-                 Geom::Point(sp_document_width(doc()), sp_document_height(doc())));
+                 Geom::Point(doc()->getWidth().value("px"), doc()->getHeight().value("px")));
 
     if (d.minExtent() < 1.0) {
         return;
@@ -1037,12 +1082,12 @@ SPDesktop::zoom_page_width()
 {
     Geom::Rect const a = get_display_area();
 
-    if (sp_document_width(doc()) < 1.0) {
+    if (doc()->getWidth().value("px") < 1.0) {
         return;
     }
 
     Geom::Rect d(Geom::Point(0, a.midpoint()[Geom::Y]),
-                 Geom::Point(sp_document_width(doc()), a.midpoint()[Geom::Y]));
+                 Geom::Point(doc()->getWidth().value("px"), a.midpoint()[Geom::Y]));
 
     set_display_area(d, 10);
 }
@@ -1053,7 +1098,7 @@ SPDesktop::zoom_page_width()
 void
 SPDesktop::zoom_selection()
 {
-    Geom::OptRect const d = selection->bounds();
+    Geom::OptRect const d = selection->visualBounds();
 
     if ( !d || d->minExtent() < 0.1 ) {
         return;
@@ -1078,10 +1123,11 @@ void
 SPDesktop::zoom_drawing()
 {
     g_return_if_fail (doc() != NULL);
-    SPItem *docitem = SP_ITEM (sp_document_root (doc()));
+    SPItem *docitem = doc()->getRoot();
     g_return_if_fail (docitem != NULL);
 
-    Geom::OptRect d = sp_item_bbox_desktop(docitem);
+    docitem->bbox_valid = FALSE;
+    Geom::OptRect d = docitem->desktopVisualBounds();
 
     /* Note that the second condition here indicates that
     ** there are no items in the drawing.
@@ -1113,10 +1159,13 @@ SPDesktop::scroll_world (double dx, double dy, bool is_scrolling)
 
     Geom::Rect const viewbox = canvas->getViewbox();
 
-    sp_canvas_scroll_to(canvas, viewbox.min()[Geom::X] - dx, viewbox.min()[Geom::Y] - dy, FALSE, is_scrolling);
+    canvas->scrollTo(viewbox.min()[Geom::X] - dx, viewbox.min()[Geom::Y] - dy, FALSE, is_scrolling);
 
     /*  update perspective lines if we are in the 3D box tool (so that infinite ones are shown correctly) */
-    sp_box3d_context_update_lines(event_context);
+    //sp_box3d_context_update_lines(event_context);
+    if (SP_IS_BOX3D_CONTEXT(event_context)) {
+		SP_BOX3D_CONTEXT(event_context)->_vpdrag->updateLines();
+	}
 
     _widget->updateRulers();
     _widget->updateScrollbars(_d2w.descrim());
@@ -1140,7 +1189,7 @@ SPDesktop::scroll_to_point (Geom::Point const &p, gdouble autoscrollspeed)
     if (!(p[X] > dbox.min()[X] && p[X] < dbox.max()[X]) ||
         !(p[Y] > dbox.min()[Y] && p[Y] < dbox.max()[Y])   ) {
 
-        Geom::Point const s_w( p * (Geom::Matrix)_d2w );
+        Geom::Point const s_w( p * (Geom::Affine)_d2w );
 
         gdouble x_to;
         if (p[X] < dbox.min()[X])
@@ -1209,22 +1258,22 @@ SPDesktop::fullscreen()
     _widget->setFullscreen();
 }
 
-/** \brief  Checks to see if the user is working in focused mode
-
-    Returns the value of \c _focusMode
-*/
-bool
-SPDesktop::is_focusMode()
+/**
+ * Checks to see if the user is working in focused mode.
+ *
+ * @return  the value of \c _focusMode.
+ */
+bool SPDesktop::is_focusMode()
 {
     return _focusMode;
 }
 
-/** \brief  Changes whether the user is in focus mode or not
-    \param  mode  Which mode the view should be in
-
-*/
-void
-SPDesktop::focusMode (bool mode)
+/**
+ * Changes whether the user is in focus mode or not.
+ *
+ * @param  mode  Which mode the view should be in.
+ */
+void SPDesktop::focusMode(bool mode)
 {
     if (mode == _focusMode) { return; }
 
@@ -1272,8 +1321,13 @@ SPDesktop::presentWindow()
     _widget->present();
 }
 
+bool SPDesktop::showInfoDialog( Glib::ustring const & message )
+{
+    return _widget->showInfoDialog( message );
+}
+
 bool
-SPDesktop::warnDialog (gchar *text)
+SPDesktop::warnDialog (Glib::ustring const &text)
 {
     return _widget->warnDialog (text);
 }
@@ -1288,6 +1342,17 @@ void
 SPDesktop::toggleScrollbars()
 {
     _widget->toggleScrollbars();
+}
+
+
+void SPDesktop::toggleToolbar(gchar const *toolbar_name)
+{
+    Glib::ustring pref_path = getLayoutPrefPath(this) + toolbar_name + "/state";
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    gboolean visible = prefs->getBool(pref_path, true);
+    prefs->setBool(pref_path, !visible);
+
+    layoutWidget();
 }
 
 void
@@ -1370,10 +1435,9 @@ SPDesktop::emitToolSubselectionChanged(gpointer data)
     inkscape_subselection_changed (this);
 }
 
-void
-SPDesktop::updateNow()
+void SPDesktop::updateNow()
 {
-    sp_canvas_update_now(canvas);
+    canvas->updateNow();
 }
 
 void
@@ -1390,22 +1454,31 @@ void SPDesktop::disableInteraction()
 void SPDesktop::setWaitingCursor()
 {
     GdkCursor *waiting = gdk_cursor_new(GDK_WATCH);
-    gdk_window_set_cursor(GTK_WIDGET(sp_desktop_canvas(this))->window, waiting);
+    gdk_window_set_cursor(gtk_widget_get_window(GTK_WIDGET(sp_desktop_canvas(this))), waiting);
+#if GTK_CHECK_VERSION(3,0,0)
+    g_object_unref(waiting);
+#else
     gdk_cursor_unref(waiting);
+#endif
     // GDK needs the flush for the cursor change to take effect
     gdk_flush();
     waiting_cursor = true;
 }
 
-void SPDesktop::clearWaitingCursor()
-{
-  if (waiting_cursor)
-      sp_event_context_update_cursor(sp_desktop_event_context(this));
+void SPDesktop::clearWaitingCursor() {
+  if (waiting_cursor) {
+      this->event_context->sp_event_context_update_cursor();
+  }
 }
 
 void SPDesktop::toggleColorProfAdjust()
 {
     _widget->toggleColorProfAdjust();
+}
+
+bool SPDesktop::colorProfAdjustEnabled()
+{
+    return _widget->colorProfAdjustEnabled();
 }
 
 void SPDesktop::toggleGrids()
@@ -1416,8 +1489,7 @@ void SPDesktop::toggleGrids()
         }
     } else {
         //there is no grid present at the moment. add a rectangular grid and make it visible
-        Inkscape::XML::Node *repr = SP_OBJECT_REPR(namedview);
-        Inkscape::CanvasGrid::writeNewGridToRepr(repr, sp_desktop_document(this), Inkscape::GRID_RECTANGULAR);
+        namedview->writeNewGrid(sp_desktop_document(this), Inkscape::GRID_RECTANGULAR);
         showGrids(true);
     }
 }
@@ -1435,19 +1507,12 @@ void SPDesktop::showGrids(bool show, bool dirty_document)
 
 void SPDesktop::toggleSnapGlobal()
 {
-    bool v = namedview->snap_manager.snapprefs.getSnapEnabledGlobally();
-    Inkscape::XML::Node *repr = SP_OBJECT_REPR(namedview);
-    sp_repr_set_boolean(repr, "inkscape:snap-global", !v);
+    bool v = namedview->getSnapGlobal();
+    namedview->setSnapGlobal(!v);
 }
 
 //----------------------------------------------------------------------
 // Callback implementations. The virtual ones are connected by the view.
-
-void
-SPDesktop::onPositionSet (double x, double y)
-{
-    _widget->viewSetPosition (Geom::Point(x,y));
-}
 
 void
 SPDesktop::onResized (double /*x*/, double /*y*/)
@@ -1478,20 +1543,21 @@ SPDesktop::updateCanvasNow()
 void
 SPDesktop::setDocument (SPDocument *doc)
 {
-    if (this->doc() && doc) {
+    if (!doc) return;
+
+    if (this->doc()) {
         namedview->hide(this);
-        sp_item_invoke_hide (SP_ITEM (sp_document_root (this->doc())), dkey);
+        this->doc()->getRoot()->invoke_hide(dkey);
     }
 
-    if (_layer_hierarchy) {
-        _layer_hierarchy->clear();
-        delete _layer_hierarchy;
-    }
-    _layer_hierarchy = new Inkscape::ObjectHierarchy(NULL);
-    _layer_hierarchy->connectAdded(sigc::bind(sigc::ptr_fun(_layer_activated), this));
-    _layer_hierarchy->connectRemoved(sigc::bind(sigc::ptr_fun(_layer_deactivated), this));
-    _layer_hierarchy->connectChanged(sigc::bind(sigc::ptr_fun(_layer_hierarchy_changed), this));
-    _layer_hierarchy->setTop(SP_DOCUMENT_ROOT(doc));
+    layers->setDocument(doc);
+
+	// remove old EventLog if it exists (see also: bug #1071082)
+	if (event_log) {
+		doc->removeUndoObserver(*event_log);
+		delete event_log;
+		event_log = 0;
+	}
 
     /* setup EventLog */
     event_log = new Inkscape::EventLog(doc);
@@ -1505,18 +1571,18 @@ SPDesktop::setDocument (SPDocument *doc)
     /// are surely more safe methods to accomplish this.
     // TODO since the comment had reversed logic, check the intent of this block of code:
     if (drawing) {
-        NRArenaItem *ai = 0;
+        Inkscape::DrawingItem *ai = 0;
 
         namedview = sp_document_namedview (doc, NULL);
         _modified_connection = namedview->connectModified(sigc::bind<2>(sigc::ptr_fun(&_namedview_modified), this));
         number = namedview->getViewCount();
 
-        ai = sp_item_invoke_show (SP_ITEM (sp_document_root (doc)),
-                SP_CANVAS_ARENA (drawing)->arena,
+        ai = doc->getRoot()->invoke_show(
+                SP_CANVAS_ARENA (drawing)->drawing,
                 dkey,
                 SP_ITEM_SHOW_DISPLAY);
         if (ai) {
-            nr_arena_item_add_child (SP_CANVAS_ARENA (drawing)->root, ai, NULL);
+            SP_CANVAS_ARENA (drawing)->drawing.root()->prependChild(ai);
         }
         namedview->show(this);
         /* Ugly hack */
@@ -1592,9 +1658,9 @@ _onSelectionChanged
      */
     SPItem *item=selection->singleItem();
     if (item) {
-        SPObject *layer=desktop->layerForObject(item);
+        SPObject *layer=desktop->layers->layerForObject(item);
         if ( layer && layer != desktop->currentLayer() ) {
-            desktop->setCurrentLayer(layer);
+            desktop->layers->setCurrentLayer(layer);
         }
     }
 }
@@ -1605,10 +1671,10 @@ _onSelectionChanged
  * \todo fixme
  */
 static gint
-_arena_handler (SPCanvasArena */*arena*/, NRArenaItem *ai, GdkEvent *event, SPDesktop *desktop)
+_arena_handler (SPCanvasArena */*arena*/, Inkscape::DrawingItem *ai, GdkEvent *event, SPDesktop *desktop)
 {
     if (ai) {
-        SPItem *spi = (SPItem*)NR_ARENA_ITEM_GET_DATA (ai);
+        SPItem *spi = (SPItem*) ai->data();
         return sp_event_context_item_handler (desktop->event_context, spi, event);
     } else {
         return sp_event_context_root_handler (desktop->event_context, event);
@@ -1637,12 +1703,10 @@ _layer_hierarchy_changed(SPObject */*top*/, SPObject *bottom,
 }
 
 /// Called when document is starting to be rebuilt.
-static void
-_reconstruction_start (SPDesktop * desktop)
+static void _reconstruction_start(SPDesktop * desktop)
 {
-    // printf("Desktop, starting reconstruction\n");
-    desktop->_reconstruction_old_layer_id = g_strdup(desktop->currentLayer()->getId());
-    desktop->_layer_hierarchy->setBottom(desktop->currentRoot());
+    desktop->_reconstruction_old_layer_id = desktop->currentLayer()->getId() ? desktop->currentLayer()->getId() : "";
+    desktop->layers->reset();
 
     /*
     GSList const * selection_objs = desktop->selection->list();
@@ -1651,42 +1715,36 @@ _reconstruction_start (SPDesktop * desktop)
     }
     */
     desktop->selection->clear();
-
-    // printf("Desktop, starting reconstruction end\n");
 }
 
 /// Called when document rebuild is finished.
-static void
-_reconstruction_finish (SPDesktop * desktop)
+static void _reconstruction_finish(SPDesktop * desktop)
 {
-    // printf("Desktop, finishing reconstruction\n");
-    if (desktop->_reconstruction_old_layer_id == NULL)
-        return;
+    g_debug("Desktop, finishing reconstruction\n");
+    if ( !desktop->_reconstruction_old_layer_id.empty() ) {
+        SPObject * newLayer = desktop->namedview->document->getObjectById(desktop->_reconstruction_old_layer_id);
+        if (newLayer != NULL) {
+            desktop->layers->setCurrentLayer(newLayer);
+        }
 
-    SPObject * newLayer = SP_OBJECT_DOCUMENT(desktop->namedview)->getObjectById(desktop->_reconstruction_old_layer_id);
-    if (newLayer != NULL)
-        desktop->setCurrentLayer(newLayer);
-
-    g_free(desktop->_reconstruction_old_layer_id);
-    desktop->_reconstruction_old_layer_id = NULL;
-    // printf("Desktop, finishing reconstruction end\n");
-    return;
+        desktop->_reconstruction_old_layer_id.clear();
+    }
+    g_debug("Desktop, finishing reconstruction end\n");
 }
 
 /**
  * Namedview_modified callback.
  */
-static void
-_namedview_modified (SPObject *obj, guint flags, SPDesktop *desktop)
+static void _namedview_modified (SPObject *obj, guint flags, SPDesktop *desktop)
 {
     SPNamedView *nv=SP_NAMEDVIEW(obj);
 
     if (flags & SP_OBJECT_MODIFIED_FLAG) {
 
         /* Show/hide page background */
-        if (nv->pagecolor & 0xff) {
+        if (nv->pagecolor | (0xff != 0xffffffff)) {
             sp_canvas_item_show (desktop->table);
-            ((CtrlRect *) desktop->table)->setColor(0x00000000, true, nv->pagecolor);
+            ((CtrlRect *) desktop->table)->setColor(0x00000000, true, nv->pagecolor | 0xff);
             sp_canvas_item_move_to_z (desktop->table, 0);
         } else {
             sp_canvas_item_hide (desktop->table);
@@ -1725,19 +1783,18 @@ _namedview_modified (SPObject *obj, guint flags, SPDesktop *desktop)
         }
 
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-        if (SP_RGBA32_A_U(nv->pagecolor) < 128 ||
-            (SP_RGBA32_R_U(nv->pagecolor) +
-             SP_RGBA32_G_U(nv->pagecolor) +
-             SP_RGBA32_B_U(nv->pagecolor)) >= 384) {
-            // the background color is light or transparent, use black outline
-            SP_CANVAS_ARENA (desktop->drawing)->arena->outlinecolor = prefs->getInt("/options/wireframecolors/onlight", 0xff);
+        if (SP_RGBA32_R_U(nv->pagecolor) +
+            SP_RGBA32_G_U(nv->pagecolor) +
+            SP_RGBA32_B_U(nv->pagecolor) >= 384) {
+            // the background color is light, use black outline
+            SP_CANVAS_ARENA (desktop->drawing)->drawing.outlinecolor = prefs->getInt("/options/wireframecolors/onlight", 0xff);
         } else { // use white outline
-            SP_CANVAS_ARENA (desktop->drawing)->arena->outlinecolor = prefs->getInt("/options/wireframecolors/ondark", 0xffffffff);
+            SP_CANVAS_ARENA (desktop->drawing)->drawing.outlinecolor = prefs->getInt("/options/wireframecolors/ondark", 0xffffffff);
         }
     }
 }
 
-Geom::Matrix SPDesktop::w2d() const
+Geom::Affine SPDesktop::w2d() const
 {
     return _w2d;
 }
@@ -1752,15 +1809,14 @@ Geom::Point SPDesktop::d2w(Geom::Point const &p) const
     return p * _d2w;
 }
 
-Geom::Matrix SPDesktop::doc2dt() const
+Geom::Affine SPDesktop::doc2dt() const
 {
     return _doc2dt;
 }
 
-Geom::Matrix SPDesktop::dt2doc() const
+Geom::Affine SPDesktop::dt2doc() const
 {
-    // doc2dt is its own inverse
-    return _doc2dt;
+    return _doc2dt.inverse();
 }
 
 Geom::Point SPDesktop::doc2dt(Geom::Point const &p) const
@@ -1773,14 +1829,78 @@ Geom::Point SPDesktop::dt2doc(Geom::Point const &p) const
     return p * dt2doc();
 }
 
+void
+SPDesktop::show_dialogs()
+{
 
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    if (prefs == NULL) {
+        return;
+    }
+
+    int active = prefs->getInt("/options/savedialogposition/value", 1);
+    if (active == 0) {
+        // User has turned off this feature in preferences
+        return;
+    }
+
+    if (showing_dialogs) {
+        return;
+    }
+
+    showing_dialogs = TRUE;
+
+
+    /*
+     * Get each dialogs previous state from preferences and reopen on startup if needed, without grabbing focus (canvas retains focus).
+     * Map dialog manager's dialog IDs to dialog last visible state preference. FIXME: store this correspondence in dialogs themselves!
+     */
+    std::map<Glib::ustring, Glib::ustring> mapVerbPreference;
+    mapVerbPreference.insert(std::make_pair ("LayersPanel", "/dialogs/layers") );
+    mapVerbPreference.insert(std::make_pair ("FillAndStroke", "/dialogs/fillstroke") );
+    mapVerbPreference.insert(std::make_pair ("ExtensionEditor", "/dialogs/extensioneditor") );
+    mapVerbPreference.insert(std::make_pair ("AlignAndDistribute", "/dialogs/align") );
+    mapVerbPreference.insert(std::make_pair ("DocumentMetadata", "/dialogs/documentmetadata") );
+    mapVerbPreference.insert(std::make_pair ("DocumentProperties", "/dialogs/documentoptions") );
+    mapVerbPreference.insert(std::make_pair ("FilterEffectsDialog", "/dialogs/filtereffects") );
+    mapVerbPreference.insert(std::make_pair ("Find", "/dialogs/find") );
+    mapVerbPreference.insert(std::make_pair ("Glyphs", "/dialogs/glyphs") );
+    mapVerbPreference.insert(std::make_pair ("Messages", "/dialogs/messages") );
+    mapVerbPreference.insert(std::make_pair ("Memory", "/dialogs/memory") );
+    mapVerbPreference.insert(std::make_pair ("LivePathEffect", "/dialogs/livepatheffect") );
+    mapVerbPreference.insert(std::make_pair ("UndoHistory", "/dialogs/undo-history") );
+    mapVerbPreference.insert(std::make_pair ("Transformation", "/dialogs/transformation") );
+    mapVerbPreference.insert(std::make_pair ("Swatches", "/dialogs/swatches") );
+    mapVerbPreference.insert(std::make_pair ("IconPreviewPanel", "/dialogs/iconpreview") );
+    mapVerbPreference.insert(std::make_pair ("SvgFontsDialog", "/dialogs/svgfonts") );
+    mapVerbPreference.insert(std::make_pair ("InputDevices", "/dialogs/inputdevices") );
+    mapVerbPreference.insert(std::make_pair ("InkscapePreferences", "/dialogs/preferences") );
+    mapVerbPreference.insert(std::make_pair ("TileDialog", "/dialogs/gridtiler") );
+    mapVerbPreference.insert(std::make_pair ("Trace", "/dialogs/trace") );
+    mapVerbPreference.insert(std::make_pair ("PixelArt", "/dialogs/pixelart") );
+    mapVerbPreference.insert(std::make_pair ("TextFont", "/dialogs/textandfont") );
+    mapVerbPreference.insert(std::make_pair ("Export", "/dialogs/export") );
+    mapVerbPreference.insert(std::make_pair ("XmlTree", "/dialogs/xml") );
+    mapVerbPreference.insert(std::make_pair ("CloneTiler", "/dialogs/clonetiler") );
+    mapVerbPreference.insert(std::make_pair ("ObjectProperties", "/dialogs/object") );
+    mapVerbPreference.insert(std::make_pair ("SpellCheck", "/dialogs/spellcheck") );
+    mapVerbPreference.insert(std::make_pair ("Symbols", "/dialogs/symbols") );
+
+    for (std::map<Glib::ustring, Glib::ustring>::const_iterator iter = mapVerbPreference.begin(); iter != mapVerbPreference.end(); ++iter) {
+        Glib::ustring pref = iter->second;
+        int visible = prefs->getInt(pref + "/visible", 0);
+        if (visible) {
+            _dlg_mgr->showDialog(iter->first.c_str(), false); // without grabbing focus, we need focus to remain on the canvas
+        }
+    }
+}
 /*
  * Pop event context from desktop's context stack. Never used.
  */
 // void
 // SPDesktop::pop_event_context (unsigned int key)
 // {
-//    SPEventContext *ec = NULL;
+//    ToolBase *ec = NULL;
 //
 //    if (event_context && event_context->key == key) {
 //        g_return_if_fail (event_context);
@@ -1792,7 +1912,7 @@ Geom::Point SPDesktop::dt2doc(Geom::Point const &p) const
 //        _event_context_changed_signal.emit (this, ec);
 //    }
 //
-//    SPEventContext *ref = event_context;
+//    ToolBase *ref = event_context;
 //    while (ref && ref->next && ref->next->key != key)
 //        ref = ref->next;
 //
@@ -1816,4 +1936,5 @@ Geom::Point SPDesktop::dt2doc(Geom::Point const &p) const
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+

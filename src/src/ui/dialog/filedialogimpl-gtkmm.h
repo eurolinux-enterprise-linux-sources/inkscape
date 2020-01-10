@@ -17,38 +17,37 @@
 #ifndef __FILE_DIALOGIMPL_H__
 #define __FILE_DIALOGIMPL_H__
 
-#include "filedialog.h"
-#include "extension/system.h"
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
+//Gtk includes
+#include <gtkmm/filechooserdialog.h>
+#include <glib/gstdio.h>
+#include <gtkmm/comboboxtext.h>
+#include <gtkmm/checkbutton.h>
 
 //General includes
 #include <unistd.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include <libxml/parser.h>
-#include <libxml/tree.h>
+
+#include "filedialog.h"
 
 
-//Gtk includes
-#include <glibmm/i18n.h>
-#include <glib/gstdio.h>
-
-//Temporary ugly hack
-//Remove this after the get_filter() calls in
-//show() on both classes are fixed
-#include <gtk/gtk.h>
-
-//Inkscape includes
-#include "extension/input.h"
-#include "extension/output.h"
-#include "extension/db.h"
-#include "inkscape.h"
-#include "svg-view-widget.h"
-
-//For export dialog
-#include "ui/widget/scalar-unit.h"
+namespace Gtk {
+class Expander;
+}
 
 namespace Inkscape
 {
+
+class URI;
+
 namespace UI
 {
 namespace Dialog
@@ -76,7 +75,7 @@ findExpanderWidgets(Gtk::Container *parent,
 class FileType
 {
     public:
-    FileType() {}
+    FileType(): name(), pattern(),extension(0) {}
     ~FileType() {}
     Glib::ustring name;
     Glib::ustring pattern;
@@ -130,7 +129,7 @@ private:
     /**
      * The sp_svg_view widget
      */
-    GtkWidget *viewerGtk;
+    Gtk::Widget *viewerGtk;
 
     /**
      * are we currently showing the "no preview" image?
@@ -245,12 +244,19 @@ public:
 
 	Glib::ustring getCurrentDirectory();
 
+    /// Add a custom file filter menu item
+    /// @param name - Name of the filter (such as "Javscript")
+    /// @param pattern - File filtering patter (such as "*.js")
+    /// Use the FileDialogType::CUSTOM_TYPE in constructor to not include other file types
+    void addFilterMenu(Glib::ustring name, Glib::ustring pattern);
+
 private:
 
     /**
      *  Create a filter menu for this type of dialog
      */
     void createFilterMenu();
+
 
     /**
      * Filter name->extension lookup
@@ -293,6 +299,7 @@ public:
     virtual void setSelectionType( Inkscape::Extension::Extension * key );
 
 	Glib::ustring getCurrentDirectory();
+	void addFileType(Glib::ustring name, Glib::ustring pattern);
 
 private:
     //void change_title(const Glib::ustring& title);
@@ -588,4 +595,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

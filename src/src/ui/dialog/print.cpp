@@ -1,8 +1,10 @@
-/** @file
- * @brief Print dialog
+/**
+ * @file
+ * Print dialog.
  */
 /* Authors:
  *   Kees Cook <kees@outflux.net>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2007 Kees Cook
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
@@ -11,12 +13,15 @@
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
+
+#include <gtkmm.h>
+
 #ifdef WIN32
 #include <io.h>
 #include <windows.h>
 #endif
 
-#include <gtkmm/stock.h>
+#include "preferences.h"
 #include "print.h"
 
 #include "extension/internal/cairo-render-context.h"
@@ -24,11 +29,12 @@
 #include "ui/widget/rendering-options.h"
 #include "document.h"
 
-#include "unit-constants.h"
+#include "util/units.h"
 #include "helper/png-write.h"
 #include "svg/svg-color.h"
 #include "io/sys.h"
 
+#include <glibmm/i18n.h>
 
 
 static void draw_page(
@@ -41,14 +47,18 @@ static void draw_page(
                       gint               /*page_nr*/,
                       gpointer           user_data)
 {
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     struct workaround_gtkmm *junk = (struct workaround_gtkmm*)user_data;
     //printf("%s %d\n",__FUNCTION__, page_nr);
 
     if (junk->_tab->as_bitmap()) {
         // Render as exported PNG
-        gdouble width = sp_document_width(junk->_doc);
-        gdouble height = sp_document_height(junk->_doc);
+        prefs->setBool("/dialogs/printing/asbitmap", true);
+        gdouble width = (junk->_doc)->getWidth().value("px");
+        gdouble height = (junk->_doc)->getHeight().value("px");
         gdouble dpi = junk->_tab->bitmap_dpi();
+        prefs->setDouble("/dialogs/printing/dpi", dpi);
+        
         std::string tmp_png;
         std::string tmp_base = "inkscape-print-png-XXXXXX";
 
@@ -58,15 +68,19 @@ static void draw_page(
 
             guint32 bgcolor = 0x00000000;
             Inkscape::XML::Node *nv = sp_repr_lookup_name (junk->_doc->rroot, "sodipodi:namedview");
-            if (nv && nv->attribute("pagecolor"))
+            if (nv && nv->attribute("pagecolor")){
                 bgcolor = sp_svg_read_color(nv->attribute("pagecolor"), 0xffffff00);
-            if (nv && nv->attribute("inkscape:pageopacity"))
-                bgcolor |= SP_COLOR_F_TO_U(sp_repr_get_double_attribute (nv, "inkscape:pageopacity", 1.0));
+            }
+            if (nv && nv->attribute("inkscape:pageopacity")){
+                double opacity = 1.0;
+                sp_repr_get_double (nv, "inkscape:pageopacity", &opacity);
+                bgcolor |= SP_COLOR_F_TO_U(opacity);
+            }
 
             sp_export_png_file(junk->_doc, tmp_png.c_str(), 0.0, 0.0,
                 width, height,
-                (unsigned long)(width * dpi / PX_PER_IN),
-                (unsigned long)(height * dpi / PX_PER_IN),
+                (unsigned long)(Inkscape::Util::Quantity::convert(width, "px", "in") * dpi),
+                (unsigned long)(Inkscape::Util::Quantity::convert(height, "px", "in") * dpi),
                 dpi, dpi, bgcolor, NULL, NULL, true, NULL);
 
             // This doesn't seem to work:
@@ -81,24 +95,25 @@ static void draw_page(
             {
                 Cairo::RefPtr<Cairo::ImageSurface> png = Cairo::ImageSurface::create_from_png (tmp_png);
                 cairo_t *cr = gtk_print_context_get_cairo_context (context);
-		cairo_matrix_t m;
-		cairo_get_matrix(cr, &m);
-		cairo_scale(cr, PT_PER_IN / dpi, PT_PER_IN / dpi);
+                cairo_matrix_t m;
+                cairo_get_matrix(cr, &m);
+                cairo_scale(cr, Inkscape::Util::Quantity::convert(1, "in", "pt") / dpi, Inkscape::Util::Quantity::convert(1, "in", "pt") / dpi);
                 // FIXME: why is the origin offset??
-                cairo_set_source_surface(cr, png->cobj(), -16.0, -16.0);
-		cairo_paint(cr);
-		cairo_set_matrix(cr, &m);
+                cairo_set_source_surface(cr, png->cobj(), 0, 0);
+                cairo_paint(cr);
+                cairo_set_matrix(cr, &m);
             }
 
             // Clean up
             unlink (tmp_png.c_str());
         }
         else {
-            g_warning(_("Could not open temporary PNG for bitmap printing"));
+            g_warning("%s", _("Could not open temporary PNG for bitmap printing"));
         }
     }
     else {
         // Render as vectors
+        prefs->setBool("/dialogs/printing/asbitmap", false);
         Inkscape::Extension::Internal::CairoRenderer renderer;
         Inkscape::Extension::Internal::CairoRenderContext *ctx = renderer.createContext();
 
@@ -131,17 +146,17 @@ static void draw_page(
 #endif             
         bool ret = ctx->setSurfaceTarget (surface, true, &ctm);
         if (ret) {
-            ret = renderer.setupDocument (ctx, junk->_doc, TRUE, NULL);
+            ret = renderer.setupDocument (ctx, junk->_doc, TRUE, 0., NULL);
             if (ret) {
                 renderer.renderItem(ctx, junk->_base);
                 ret = ctx->finish();
             }
             else {
-                g_warning(_("Could not set up Document"));
+                g_warning("%s", _("Could not set up Document"));
             }
         }
         else {
-            g_warning(_("Failed to set CairoRenderContext"));
+            g_warning("%s", _("Failed to set CairoRenderContext"));
         }
 
         // Clean up
@@ -150,16 +165,14 @@ static void draw_page(
 
 }
 
-static GObject*
-create_custom_widget (GtkPrintOperation */*operation*/,
+static GObject* create_custom_widget (GtkPrintOperation */*operation*/,
                       gpointer           user_data)
 {
     //printf("%s\n",__FUNCTION__);
     return G_OBJECT(user_data);
 }
 
-static void
-begin_print (GtkPrintOperation *operation,
+static void begin_print (GtkPrintOperation *operation,
              GtkPrintContext   */*context*/,
              gpointer           /*user_data*/)
 {
@@ -181,7 +194,7 @@ Print::Print(SPDocument *doc, SPItem *base) :
     _printop = gtk_print_operation_new ();
 
     // set up dialog title, based on document name
-    gchar *jobname = _doc->name ? _doc->name : _("SVG Document");
+    gchar const *jobname = _doc->getName() ? _doc->getName() : _("SVG Document");
     Glib::ustring title = _("Print");
     title += " ";
     title += jobname;
@@ -190,8 +203,8 @@ Print::Print(SPDocument *doc, SPItem *base) :
     // set up paper size to match the document size
     gtk_print_operation_set_unit (_printop, GTK_UNIT_POINTS);
     GtkPageSetup *page_setup = gtk_page_setup_new();
-    gdouble doc_width = sp_document_width(_doc) * PT_PER_PX;
-    gdouble doc_height = sp_document_height(_doc) * PT_PER_PX;
+    gdouble doc_width = _doc->getWidth().value("pt");
+    gdouble doc_height = _doc->getHeight().value("pt");
     GtkPaperSize *paper_size;
     if (doc_width > doc_height) {
         gtk_page_setup_set_orientation (page_setup, GTK_PAGE_ORIENTATION_LANDSCAPE);
@@ -240,4 +253,4 @@ Gtk::PrintOperationResult Print::run(Gtk::PrintOperationAction, Gtk::Window &par
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

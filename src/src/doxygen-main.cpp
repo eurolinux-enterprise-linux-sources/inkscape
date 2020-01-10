@@ -1,5 +1,6 @@
-/** @file
- * @brief Doxygen documentation - main page and namespace documentation.
+/**
+ * @file
+ * Doxygen documentation - main page and namespace documentation.
  */
 /* Authors:
  *   Ralf Stephan <ralf@ark.in-berlin.de>
@@ -13,14 +14,14 @@
 // Note: % before a word prevents that word from being linkified
 
 /**
- * @brief Main %Inkscape namespace
+ * Main %Inkscape namespace.
  *
  * This namespace contains all code internal to %Inkscape.
  */
 namespace Inkscape {
 
 /**
- * @brief Some STL-style algorithms
+ * Some STL-style algorithms.
  *
  * This namespace contains a few generic algorithms used with the %XML tree.
  */
@@ -28,7 +29,7 @@ namespace Algorithms {}
 
 
 /**
- * @brief Debugging utilities
+ * Debugging utilities.
  *
  * This namespace contains various debugging code which can help developers
  * to pinpoint problems with their (or others') code.
@@ -36,14 +37,14 @@ namespace Algorithms {}
 namespace Debug {}
 
 /**
- * @brief Rendering-related code
+ * Rendering-related code.
  *
  * This namespace contains code related to the renderer.
  */
 namespace Display {}
 
 /**
- * @brief Extension support
+ * Extension support.
  *
  * This namespace contains the extension subsystem and implementations
  * of the internal extensions. This includes input and output filters, bitmap
@@ -52,7 +53,7 @@ namespace Display {}
 namespace Extension {}
 
 /**
- * @brief Boehm-GC based garbage collector
+ * Boehm-GC based garbage collector.
  *
  * This namespace contains code related to the garbage collector and base
  * classes for %GC-managed objects.
@@ -60,7 +61,7 @@ namespace Extension {}
 namespace GC {}
 
 /**
- * @brief Low-level IO code
+ * Low-level IO code.
  *
  * This namespace contains low level IO-related code, including a homegrown
  * streams implementation, routines for formatting SVG output, and some
@@ -69,7 +70,7 @@ namespace GC {}
 namespace IO {}
 
 /**
- * @brief Live Path Effects code
+ * Live Path Effects code.
  *
  * This namespace contains classes and functions related to the implementation
  * of Live Path Effects, which apply arbitrary transformation to a path and
@@ -78,7 +79,7 @@ namespace IO {}
 namespace LivePathEffect {}
 
 /**
- * @brief Tracing backend
+ * Tracing backend.
  *
  * This namespace contains the integrated potrace-based tracing backend, used
  * in the Trace Bitmap and Paint Bucket features.
@@ -86,23 +87,23 @@ namespace LivePathEffect {}
 namespace Trace {}
 
 /**
- * @brief User interface code
+ * User interface code.
  *
  * This namespace contains everything related to the user interface of Inkscape.
  */
 namespace UI {
 
 /**
- * @brief Dialog code
+ * Dialog code.
  *
  * This namespace contains all code related to dialogs.
  */
 namespace Dialog {}
 
 /**
- * @brief Custom widgets
+ * Custom widgets.
  *
- * This namespace contains custom user interface widgets used thorought
+ * This namespace contains custom user interface widgets used thorough
  * Inkscape.
  */
 namespace Widget {}
@@ -110,7 +111,7 @@ namespace Widget {}
 } // namespace UI
 
 /**
- * @brief Miscellaneous supporting code
+ * Miscellaneous supporting code.
  *
  * This namespace contains miscellaneous low-level code: an implementation of
  * garbage-collected lists, tuples, generic pointer iterators and length unit
@@ -119,7 +120,7 @@ namespace Widget {}
 namespace Util {}
 
 /**
- * @brief %Inkscape %XML tree
+ * @Inkscape %XML tree.
  *
  * This namespace contains classes and functions that comprise the XML tree
  * of Inkscape documents.
@@ -244,7 +245,6 @@ namespace XML {}
  *       - SPLinearGradient
  *       - SPRadialGradient
  *     - SPPattern [\ref sp-pattern.cpp, \ref sp-pattern.h]
- *   - SPSkeleton [\ref sp-skeleton.cpp, \ref sp-skeleton.h]
  *   - SPStop [\ref sp-stop.h]
  *   - SPString [\ref sp-string.cpp, \ref sp-string.h]
  *   - SPStyleElem [\ref sp-style-elem.cpp, \ref sp-style-elem.h]
@@ -258,32 +258,31 @@ namespace XML {}
  *
  * \section Event Context Class Hierarchy
  *
- *- SPEventContext[\ref event-context.cpp, \ref event-context.h]
- * - SPArcContext [\ref arc-context.cpp, \ref arc-context.h]
+ *- ToolBase[\ref event-context.cpp, \ref event-context.h]
+ * - ArcTool [\ref arc-context.cpp, \ref arc-context.h]
  * - SPDrawContext [\ref draw-context.cpp, \ref draw-context.h]
- *   - SPPenContext [\ref pen-context.cpp, \ref pen-context.h]
- *   - SPPencilContext [\ref pencil-context.cpp, \ref pencil-context.h]
- *   - SPConnectorContext [\ref connector-context.cpp, \ref connector-context.h, \ref sp-conn-end.cpp, \ref sp-conn-end-pair.cpp]
- * - SPGradientContext [\ref gradient-context.cpp, \ref gradient-context.h, \ref gradient-drag.cpp, \ref gradient-toolbar.cpp]
- * - SPRectContext [\ref rect-context.cpp, \ref rect-context.h]
- * - SPSelectContext [\ref select-context.cpp, \ref select-context.h]
- * - SPSpiralContext [\ref spiral-context.cpp, \ref spiral-context.h]
- * - SPStarContext [\ref star-context.cpp, \ref star-context.h]
+ *   - PenTool [\ref pen-context.cpp, \ref pen-context.h]
+ *   - PencilTool [\ref pencil-context.cpp, \ref pencil-context.h]
+ *   - ConnectorTool [\ref connector-context.cpp, \ref connector-context.h, \ref sp-conn-end.cpp, \ref sp-conn-end-pair.cpp]
+ * - GradientTool [\ref gradient-context.cpp, \ref gradient-context.h, \ref gradient-drag.cpp, \ref gradient-toolbar.cpp]
+ * - RectTool [\ref rect-context.cpp, \ref rect-context.h]
+ * - SelectTool [\ref select-context.cpp, \ref select-context.h]
+ * - SpiralTool [\ref spiral-context.cpp, \ref spiral-context.h]
+ * - StarTool [\ref star-context.cpp, \ref star-context.h]
  * - FloodContext [\ref flood-context.cpp, \ref flood-context.h]
- * - Box3DContext [\ref box3d-context.cpp, \ref box3d-context.h]
+ * - Box3dTool [\ref box3d-context.cpp, \ref box3d-context.h]
  *
  * SPNodeContext [\ref node-context.cpp, \ref node-context.h]
  *
- * SPZoomContext [\ref zoom-context.cpp, \ref zoom-context.h]
+ * ZoomTool [\ref zoom-context.cpp, \ref zoom-context.h]
  *
- * SPDynaDrawContext [\ref dyna-draw-context.cpp, \ref dyna-draw-context.h]
+ * CalligraphicTool [\ref dyna-draw-context.cpp, \ref dyna-draw-context.h]
  *
- * SPDropperContext [\ref dropper-context.cpp, \ref dropper-context.h]
+ * DropperTool [\ref dropper-context.cpp, \ref dropper-context.h]
  */
 /** \page UI User Interface Classes and Files
  *
  * - Inkscape::UI::View::View [\ref ui/view/view.cpp, \ref ui/view/view.h]
- *   - Inkscape::UI::View::Edit [\ref ui/view/edit.cpp, \ref ui/view/edit.h]
  *   - SPDesktop [\ref desktop.cpp, \ref desktop-events.cpp, \ref desktop-handles.cpp, \ref desktop-style.cpp, \ref desktop.h, \ref desktop-events.h, \ref desktop-handles.h, \ref desktop-style.h]
  *   - SPSVGView [\ref svg-view.cpp, \ref svg-view.h]
  *
@@ -303,10 +302,10 @@ namespace XML {}
  * SPGuide [\ref sp-guide.cpp, \ref sp-guide.h, \ref satisfied-guide-cns.cpp, \ref sp-guide-attachment.h, \ref sp-guide-constraint.h]
  *
  * [\ref help.cpp] [\ref inkscape.cpp] [\ref inkscape-stock.cpp]
- * [\ref interface.cpp, \ref memeq.h] [\ref main.cpp, \ref winmain.cpp]
+ * [\ref interface.cpp] [\ref main.cpp, \ref winmain.cpp]
  * [\ref menus-skeleton.h, \ref preferences-skeleton.h]
- * [\ref context-menu.cpp] [\ref select-toolbar.cpp] [\ref shortcuts.cpp]
- * [\ref sp-cursor.cpp] [\ref text-edit.cpp] [\ref toolbox.cpp, \ref ui/widget/toolbox.cpp]
+ * [\ref select-toolbar.cpp] [\ref shortcuts.cpp]
+ * [\ref sp-cursor.cpp] [\ref text-edit.cpp] [\ref toolbox.cpp]
  * Inkscape::Verb [\ref verbs.h]
  *
  */
@@ -330,11 +329,9 @@ namespace XML {}
  * [\ref geom.cpp] [\ref mod360.cpp]
  */
 /** \page OtherServices Classes and Files From Other Services
- * [\ref inkview.cpp, \ref slideshow.cpp] [\ref sp-animation.cpp]
+ * [\ref inkview.cpp, \ref slideshow.cpp]
  *
  * Inkscape::GC
- *
- * [\ref sp-metrics.cpp, \ref sp-metrics.h]
  *
  * [\ref prefs-utils.cpp] [\ref print.cpp]
  *
@@ -350,7 +347,7 @@ namespace XML {}
  * Inkscape::Whiteboard::UndoStackObserver [\ref undo-stack-observer.cpp, \ref composite-undo-stack-observer.cpp]
  * [\ref document-undo.cpp]
  *
- * {\ref dialogs/} [\ref approx-equal.h] [\ref decimal-round.h] [\ref enums.h] [\ref unit-constants.h]
+ * {\ref dialogs/} [\ref decimal-round.h] [\ref enums.h]
  */
 
 

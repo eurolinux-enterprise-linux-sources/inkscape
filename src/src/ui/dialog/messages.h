@@ -16,9 +16,18 @@
 #ifndef INKSCAPE_UI_DIALOG_MESSAGES_H
 #define INKSCAPE_UI_DIALOG_MESSAGES_H
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
 #include <gtkmm/box.h>
 #include <gtkmm/textview.h>
 #include <gtkmm/button.h>
+#include <gtkmm/checkbutton.h>
 #include <gtkmm/menubar.h>
 #include <gtkmm/menu.h>
 #include <gtkmm/scrolledwindow.h>
@@ -98,4 +107,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

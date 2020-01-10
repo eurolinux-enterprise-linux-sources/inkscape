@@ -29,7 +29,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gdl-tools.h"
 #include "gdl-dock-object.h"
 #include "gdl-dock-master.h"
 #include "libgdltypebuiltins.h"
@@ -46,7 +45,6 @@
 /* ----- Private prototypes ----- */
 
 static void     gdl_dock_object_class_init         (GdlDockObjectClass *klass);
-static void     gdl_dock_object_instance_init      (GdlDockObject      *object);
 
 static void     gdl_dock_object_set_property       (GObject            *g_object,
                                                     guint               prop_id,
@@ -94,9 +92,16 @@ enum {
 
 static guint gdl_dock_object_signals [LAST_SIGNAL] = { 0 };
 
+struct DockRegisterItem {
+	gchar* nick;
+	gpointer type;
+};
+
+static GArray *dock_register = NULL;
+
 /* ----- Private interface ----- */
 
-GDL_CLASS_BOILERPLATE (GdlDockObject, gdl_dock_object, GtkContainer, GTK_TYPE_CONTAINER);
+G_DEFINE_TYPE (GdlDockObject, gdl_dock_object, GTK_TYPE_CONTAINER);
 
 static void
 gdl_dock_object_class_init (GdlDockObjectClass *klass)
@@ -128,14 +133,14 @@ gdl_dock_object_class_init (GdlDockObjectClass *klass)
         g_param_spec_string ("long-name", _("Long name"),
                              _("Human readable name for the dock object"),
                              NULL,
-                             G_PARAM_READWRITE));
+                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT));
 
     g_object_class_install_property (
         g_object_class, PROP_STOCK_ID,
         g_param_spec_string ("stock-id", _("Stock Icon"),
                              _("Stock icon for the dock object"),
                              NULL,
-                             G_PARAM_READWRITE));
+                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT));
 
     g_object_class_install_property (
         g_object_class, PROP_PIXBUF_ICON,
@@ -193,7 +198,7 @@ gdl_dock_object_class_init (GdlDockObjectClass *klass)
 }
 
 static void
-gdl_dock_object_instance_init (GdlDockObject *object)
+gdl_dock_object_init (GdlDockObject *object)
 {
     object->flags = GDL_DOCK_AUTOMATIC;
     object->freeze_count = 0;
@@ -282,7 +287,7 @@ gdl_dock_object_finalize (GObject *g_object)
     object->stock_id = NULL;
     object->pixbuf_icon = NULL;
 
-    GDL_CALL_PARENT (G_OBJECT_CLASS, finalize, (g_object));
+    G_OBJECT_CLASS (gdl_dock_object_parent_class)->finalize (g_object);
 }
 
 static void
@@ -319,7 +324,7 @@ gdl_dock_object_destroy (GtkObject *gtk_object)
     if (object->master)
         gdl_dock_object_unbind (object);
         
-    GDL_CALL_PARENT (GTK_OBJECT_CLASS, destroy, (gtk_object));
+    GTK_OBJECT_CLASS(gdl_dock_object_parent_class)->destroy (gtk_object);
 }
 
 static void
@@ -340,7 +345,7 @@ gdl_dock_object_show (GtkWidget *widget)
                                (GtkCallback) gdl_dock_object_foreach_automatic,
                                gtk_widget_show);
     }
-    GDL_CALL_PARENT (GTK_WIDGET_CLASS, show, (widget));
+    GTK_WIDGET_CLASS (gdl_dock_object_parent_class)->show (widget);
 }
 
 static void
@@ -351,7 +356,7 @@ gdl_dock_object_hide (GtkWidget *widget)
                                (GtkCallback) gdl_dock_object_foreach_automatic,
                                gtk_widget_hide);
     }
-    GDL_CALL_PARENT (GTK_WIDGET_CLASS, hide, (widget));
+    GTK_WIDGET_CLASS (gdl_dock_object_parent_class)->hide (widget);
 }
 
 static void
@@ -374,8 +379,8 @@ gdl_dock_object_real_detach (GdlDockObject *object,
     GDL_DOCK_OBJECT_UNSET_FLAGS (object, GDL_DOCK_ATTACHED);
     parent = gdl_dock_object_get_parent_object (object);
     widget = GTK_WIDGET (object);
-    if (widget->parent)
-        gtk_container_remove (GTK_CONTAINER (widget->parent), widget);
+    if (gtk_widget_get_parent (widget))
+        gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (GTK_WIDGET (widget))), widget);
     if (parent)
         gdl_dock_object_reduce (parent);
 }
@@ -395,6 +400,7 @@ gdl_dock_object_real_reduce (GdlDockObject *object)
     children = gtk_container_get_children (GTK_CONTAINER (object));
     if (g_list_length (children) <= 1) {
         GList *l;
+        GList *dchildren = NULL;
         
         /* detach ourselves and then re-attach our children to our
            current parent.  if we are not currently attached, the
@@ -402,20 +408,43 @@ gdl_dock_object_real_reduce (GdlDockObject *object)
         if (parent)
             gdl_dock_object_freeze (parent);
         gdl_dock_object_freeze (object);
-        gdl_dock_object_detach (object, FALSE);
+        /* Detach the children before detaching this object, since in this
+         * way the children can have access to the whole object hierarchy.
+         * Set the InDetach flag now, so the children know that this object
+         * is going to be detached. */
+        
+        
+        GDL_DOCK_OBJECT_SET_FLAGS (object, GDL_DOCK_IN_DETACH);
+        
         for (l = children; l; l = l->next) {
-            GdlDockObject *child = GDL_DOCK_OBJECT (l->data);
+            GdlDockObject *child;
+            
+            if (!GDL_IS_DOCK_OBJECT (l->data))
+                continue;
+            
+            child = GDL_DOCK_OBJECT (l->data);
 
             g_object_ref (child);
-            GDL_DOCK_OBJECT_SET_FLAGS (child, GDL_DOCK_IN_REFLOW);
             gdl_dock_object_detach (child, FALSE);
+            GDL_DOCK_OBJECT_SET_FLAGS (child, GDL_DOCK_IN_REFLOW);
             if (parent)
-                gtk_container_add (GTK_CONTAINER (parent), GTK_WIDGET (child));
+                dchildren = g_list_append (dchildren, child);
             GDL_DOCK_OBJECT_UNSET_FLAGS (child, GDL_DOCK_IN_REFLOW);
-            g_object_unref (child);
         }
+        /* Now it can be detached */
+        gdl_dock_object_detach (object, FALSE);
+        
+        /* After detaching the reduced object, we can add the
+        children (the only child in fact) to the new parent */
+        for (l = dchildren; l; l = l->next) {
+            gtk_container_add (GTK_CONTAINER (parent), l->data);
+            g_object_unref (l->data);
+        }
+        g_list_free (dchildren);
+        
+        
         /* sink the widget, so any automatic floating widget is destroyed */
-        gtk_object_sink (GTK_OBJECT (object));
+        g_object_ref_sink (object);
         /* don't reenter */
         object->reduce_pending = FALSE;
         gdl_dock_object_thaw (object);
@@ -464,6 +493,9 @@ gdl_dock_object_detach (GdlDockObject *object,
 {
     g_return_if_fail (object != NULL);
 
+    if (!GDL_IS_DOCK_OBJECT (object))
+        return;
+    
     if (!GDL_DOCK_OBJECT_ATTACHED (object))
         return;
     
@@ -482,9 +514,9 @@ gdl_dock_object_get_parent_object (GdlDockObject *object)
     
     g_return_val_if_fail (object != NULL, NULL);
 
-    parent = GTK_WIDGET (object)->parent;
+    parent = gtk_widget_get_parent (GTK_WIDGET (object));
     while (parent && !GDL_IS_DOCK_OBJECT (parent)) {
-        parent = parent->parent;
+        parent = gtk_widget_get_parent (parent);
     }
     
     return parent ? GDL_DOCK_OBJECT (parent) : NULL;
@@ -528,7 +560,8 @@ gdl_dock_object_reduce (GdlDockObject *object)
         return;
     }
 
-    GDL_CALL_VIRTUAL (object, GDL_DOCK_OBJECT_GET_CLASS, reduce, (object));
+    if (GDL_DOCK_OBJECT_GET_CLASS (object)->reduce)
+        GDL_DOCK_OBJECT_GET_CLASS (object)->reduce (object);
 }
 
 gboolean
@@ -539,13 +572,19 @@ gdl_dock_object_dock_request (GdlDockObject  *object,
 {
     g_return_val_if_fail (object != NULL && request != NULL, FALSE);
 
-    return GDL_CALL_VIRTUAL_WITH_DEFAULT (object,
-                                          GDL_DOCK_OBJECT_GET_CLASS,
-                                          dock_request,
-                                          (object, x, y, request),
-                                          FALSE);
+    if (GDL_DOCK_OBJECT_GET_CLASS (object)->dock_request)
+        return GDL_DOCK_OBJECT_GET_CLASS (object)->dock_request (object, x, y, request);
+    else
+        return FALSE;
 }
 
+/**
+ * gdl_dock_object_dock:
+ * @object:
+ * @requestor:
+ * @position:
+ * @other_data: (allow-none):
+ **/
 void
 gdl_dock_object_dock (GdlDockObject    *object,
                       GdlDockObject    *requestor,
@@ -657,11 +696,10 @@ gdl_dock_object_reorder (GdlDockObject    *object,
 {
     g_return_val_if_fail (object != NULL && child != NULL, FALSE);
 
-    return GDL_CALL_VIRTUAL_WITH_DEFAULT (object,
-                                          GDL_DOCK_OBJECT_GET_CLASS,
-                                          reorder,
-                                          (object, child, new_position, other_data),
-                                          FALSE);
+    if (GDL_DOCK_OBJECT_GET_CLASS (object)->reorder)
+            return GDL_DOCK_OBJECT_GET_CLASS (object)->reorder (object, child, new_position, other_data);
+    else
+        return FALSE;
 }
 
 void 
@@ -677,7 +715,8 @@ gdl_dock_object_present (GdlDockObject *object,
         /* chain the call to our parent */
         gdl_dock_object_present (parent, object);
 
-    GDL_CALL_VIRTUAL (object, GDL_DOCK_OBJECT_GET_CLASS, present, (object, child));
+   if (GDL_DOCK_OBJECT_GET_CLASS (object)->present)
+        GDL_DOCK_OBJECT_GET_CLASS (object)->present (object, child);
 }
 
 /**
@@ -710,10 +749,10 @@ gdl_dock_object_child_placement (GdlDockObject    *object,
     if (!gdl_dock_object_is_compound (object))
         return FALSE;
     
-    return GDL_CALL_VIRTUAL_WITH_DEFAULT (object, GDL_DOCK_OBJECT_GET_CLASS,
-                                          child_placement,
-                                          (object, child, placement),
-                                          FALSE);
+    if (GDL_DOCK_OBJECT_GET_CLASS (object)->child_placement)
+        return GDL_DOCK_OBJECT_GET_CLASS (object)->child_placement (object, child, placement);
+    else
+        return FALSE;
 }
 
 
@@ -830,7 +869,7 @@ gdl_dock_param_get_type (void)
     static GType our_type = 0;
 
     if (our_type == 0) {
-        GTypeInfo tinfo = { 0, };
+        GTypeInfo tinfo = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         our_type = g_type_register_static (G_TYPE_STRING, "GdlDockParam", &tinfo, 0);
 
         /* register known transform functions */
@@ -853,65 +892,93 @@ gdl_dock_param_get_type (void)
 
 /* -------------- nick <-> type conversion functions --------------- */
 
-static GRelation *dock_register = NULL;
-
-enum {
-    INDEX_NICK = 0,
-    INDEX_TYPE
-};
-
 static void
 gdl_dock_object_register_init (void)
 {
+    const size_t n_default = 5;
+    guint i = 0;
+    struct DockRegisterItem default_items[n_default];
+
     if (dock_register)
         return;
-    
-    /* FIXME: i don't know if GRelation is efficient */
-    dock_register = g_relation_new (2);
-    g_relation_index (dock_register, INDEX_NICK, g_str_hash, g_str_equal);
-    g_relation_index (dock_register, INDEX_TYPE, g_direct_hash, g_direct_equal);
 
+    dock_register 
+        = g_array_new (FALSE, FALSE, sizeof (struct DockRegisterItem));
+    
     /* add known types */
-    g_relation_insert (dock_register, "dock", (gpointer) GDL_TYPE_DOCK);
-    g_relation_insert (dock_register, "item", (gpointer) GDL_TYPE_DOCK_ITEM);
-    g_relation_insert (dock_register, "paned", (gpointer) GDL_TYPE_DOCK_PANED);
-    g_relation_insert (dock_register, "notebook", (gpointer) GDL_TYPE_DOCK_NOTEBOOK);
-    g_relation_insert (dock_register, "placeholder", (gpointer) GDL_TYPE_DOCK_PLACEHOLDER);
+    default_items[0].nick = "dock";
+    default_items[0].type = (gpointer) GDL_TYPE_DOCK;
+    default_items[1].nick = "item";
+    default_items[1].type = (gpointer) GDL_TYPE_DOCK_ITEM;
+    default_items[2].nick = "paned";
+    default_items[2].type = (gpointer) GDL_TYPE_DOCK_PANED;
+    default_items[3].nick = "notebook";
+    default_items[3].type = (gpointer) GDL_TYPE_DOCK_NOTEBOOK;
+    default_items[4].nick = "placeholder";
+    default_items[4].type = (gpointer) GDL_TYPE_DOCK_PLACEHOLDER;
+
+    for (i = 0; i < n_default; i++)
+        g_array_append_val (dock_register, default_items[i]);
 }
 
-G_CONST_RETURN gchar *
+/**
+ * gdl_dock_object_nick_from_type:
+ * @type: The type for which to find the nickname
+ *
+ * Finds the nickname for a given type
+ *
+ * Returns: If the object has a nickname, then it is returned.
+ *   Otherwise, the type name.
+ */
+const gchar *
 gdl_dock_object_nick_from_type (GType type)
 {
-    GTuples *tuples;
     gchar *nick = NULL;
+    guint i = 0;
     
     if (!dock_register)
         gdl_dock_object_register_init ();
 
-    if (g_relation_count (dock_register, (gpointer) type, INDEX_TYPE) > 0) {
-        tuples = g_relation_select (dock_register, (gpointer) type, INDEX_TYPE);
-        nick = (gchar *) g_tuples_index (tuples, 0, INDEX_NICK);
-        g_tuples_destroy (tuples);
+    for (i=0; i < dock_register->len; i++) {
+        struct DockRegisterItem item 
+            = g_array_index (dock_register, struct DockRegisterItem, i);
+
+	if (g_direct_equal (item.type, (gpointer) type))
+		nick = g_strdup (item.nick);
     }
     
     return nick ? nick : g_type_name (type);
 }
 
+/**
+ * gdl_dock_object_type_from_nick:
+ * @nick: The nickname for the object type
+ *
+ * Finds the object type assigned to a given nickname.
+ *
+ * Returns: If the nickname has previously been assigned, then the corresponding
+ * object type is returned.  Otherwise, %G_TYPE_NONE.
+ */
 GType
 gdl_dock_object_type_from_nick (const gchar *nick)
 {
-    GTuples *tuples;
     GType type = G_TYPE_NONE;
+    gboolean nick_is_in_register = FALSE;
+    guint i = 0;
     
     if (!dock_register)
         gdl_dock_object_register_init ();
 
-    if (g_relation_count (dock_register, (gpointer) nick, INDEX_NICK) > 0) {
-        tuples = g_relation_select (dock_register, (gpointer) nick, INDEX_NICK);
-        type = (GType) g_tuples_index (tuples, 0, INDEX_TYPE);
-        g_tuples_destroy (tuples);
+    for (i = 0; i < dock_register->len; i++) {
+        struct DockRegisterItem item 
+		= g_array_index (dock_register, struct DockRegisterItem, i);
+
+	if (!g_strcmp0 (nick, item.nick)) {
+	    nick_is_in_register = TRUE;
+	    type = (GType) item.type;
+	}
     }
-    else {
+    if (!nick_is_in_register) {
         /* try searching in the glib type system */
         type = g_type_from_name (nick);
     }
@@ -919,23 +986,41 @@ gdl_dock_object_type_from_nick (const gchar *nick)
     return type;
 }
 
+/**
+ * gdl_dock_object_set_type_for_nick:
+ * @nick: The nickname for the object type
+ * @type: The object type
+ *
+ * Assigns an object type to a given nickname.  If the nickname already exists,
+ * then it reassigns it to a new object type.
+ *
+ * Returns: If the nick was previously assigned, the old type is returned.
+ * Otherwise, %G_TYPE_NONE.
+ */
 GType
 gdl_dock_object_set_type_for_nick (const gchar *nick,
                                    GType        type)
 {
     GType old_type = G_TYPE_NONE;
+    guint i = 0;
+    struct DockRegisterItem new_item;
+    new_item.nick = g_strdup(nick);
+    new_item.type = (gpointer) type;
     
     if (!dock_register)
         gdl_dock_object_register_init ();
 
     g_return_val_if_fail (g_type_is_a (type, GDL_TYPE_DOCK_OBJECT), G_TYPE_NONE);
     
-    if (g_relation_count (dock_register, (gpointer) nick, INDEX_NICK) > 0) {
-        old_type = gdl_dock_object_type_from_nick (nick);
-        g_relation_delete (dock_register, (gpointer) nick, INDEX_NICK);
+    for (i = 0; i < dock_register->len; i++) {
+        struct DockRegisterItem item 
+            = g_array_index (dock_register, struct DockRegisterItem, i);
+
+	if (!g_strcmp0 (nick, item.nick)) {
+            old_type = (GType) item.type;
+	    g_array_insert_val (dock_register, i, new_item);
+	}
     }
-    
-    g_relation_insert (dock_register, nick, type);
 
     return old_type;
 }

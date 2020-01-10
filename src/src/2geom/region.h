@@ -1,7 +1,7 @@
 /**
  * \file
- * \brief  \todo brief description
- *
+ * \brief Uncrossed path for boolean algorithms
+ *//*
  * Authors:
  *      ? <?@?.?>
  * 
@@ -81,7 +81,7 @@ class Region {
     
     Region inverse() const { return Region(boundary.reverse(), box, !fill); }
     
-    Region operator*(Matrix const &m) const;
+    Region operator*(Affine const &m) const;
     
     bool invariants() const;
 };
@@ -127,4 +127,4 @@ inline Regions region_boolean(bool rev, Region const & a, Region const & b) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,9 +1,6 @@
-#ifndef GEOM_CONVEX_COVER_H
-#define GEOM_CONVEX_COVER_H
-
 /**
  * \file
- * \brief \todo brief description
+ * \brief Dynamic convex hull structure
  *
  * Copyright 2006 Nathan Hurst <njh@mail.csse.monash.edu.au>
  * Copyright 2006 Michael G. Sloan <mgsloan@gmail.com>
@@ -33,14 +30,17 @@
  *
  */
 
-/** A convex cover is a sequence of convex polygons that completely cover the path.  For now a
- * convex hull class is included here (the convex-hull header is wrong)
- */
+#ifndef GEOM_CONVEX_COVER_H
+#define GEOM_CONVEX_COVER_H
 
 #include <2geom/point.h>
 #include <vector>
 
 namespace Geom{
+
+/* A convex cover is a sequence of convex polygons that completely cover the path.  For now a
+ * convex hull class is included here (the convex-hull header is wrong)
+ */
 
 /** ConvexHull
  * A convexhull is a convex region - every point between two points in the convex hull is also in
@@ -58,6 +58,7 @@ public: // XXX: should be private :)
     void find_pivot();
     void angle_sort();
     void graham_scan();
+    void andrew_scan();
     void graham();
 public:
     std::vector<Point> boundary;
@@ -67,6 +68,7 @@ public:
     bool contains_point(Point p);
     bool strict_contains_point(Point p);
 
+    inline size_t size() const { return boundary.size();}
     inline Point operator[](int i) const {
 
         int l = boundary.size();
@@ -82,8 +84,9 @@ public:
 
 public:
     ConvexHull() {}
-    ConvexHull(std::vector<Point> const & points) {
-        boundary = points;
+    ConvexHull(std::vector<Point> const & points) :
+        boundary (points)
+    {
         graham();
     }
 
@@ -98,7 +101,6 @@ public:
     /** Is the convex hull clockwise?  We use the definition of clockwise from point.h
     **/
     bool is_clockwise() const;
-    bool no_colinear_points() const;
     bool top_point_first() const;
     bool meets_invariants() const;
 
@@ -129,11 +131,21 @@ public:
     double narrowest_diameter(Point &a, Point &b, Point &c);
 
 };
+/** @brief Output operator for points.
+ * Prints out all the coordinates. */
+inline std::ostream &operator<< (std::ostream &out_file, const Geom::ConvexHull &in_cvx) {
+    out_file << "ConvexHull(";
+    for(unsigned i = 0; i < in_cvx.size(); i++) {
+        out_file << in_cvx.boundary[i] << ", ";
+    }
+    out_file << ")";
+    return out_file;
+}
 
 // do two convex hulls intersect?
 bool intersectp(ConvexHull a, ConvexHull b);
 
-std::vector<Point> bridge_points(ConvexHull a, ConvexHull b);
+std::vector<std::pair<int, int> > bridges(ConvexHull a, ConvexHull b);
 
 // find the convex hull intersection
 ConvexHull intersection(ConvexHull a, ConvexHull b);
@@ -144,6 +156,9 @@ ConvexHull merge(ConvexHull a, ConvexHull b);
 
 // naive approach
 ConvexHull graham_merge(ConvexHull a, ConvexHull b);
+
+// naive approach
+ConvexHull andrew_merge(ConvexHull a, ConvexHull b);
 
 unsigned find_bottom_right(ConvexHull const &a);
 
@@ -186,4 +201,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

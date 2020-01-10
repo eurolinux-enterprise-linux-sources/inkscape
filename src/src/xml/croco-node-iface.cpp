@@ -1,4 +1,3 @@
-
 #include <cstring>
 #include <string>
 #include <glib.h>
@@ -46,7 +45,7 @@ static gboolean is_element_node(CRXMLNodePtr n) { return static_cast<Node const 
 }
 
 /**
- * @brief Interface for XML nodes used by libcroco
+ * Interface for XML nodes used by libcroco.
  *
  * This structure defines operations on Inkscape::XML::Node used by the libcroco
  * CSS parsing library.
@@ -75,4 +74,4 @@ CRNodeIface const croco_node_iface = {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

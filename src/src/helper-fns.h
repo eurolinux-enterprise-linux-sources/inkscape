@@ -1,9 +1,6 @@
 #ifndef SEEN_HELPER_FNS_H
 #define SEEN_HELPER_FNS_H
-/** \file
- *
- * Some helper functions
- *
+/*
  * Authors:
  *   Felipe Corrêa da Silva Sanches <juca@members.fsf.org>
  *
@@ -22,7 +19,7 @@
 // can be more clear.
 #define HELPERFNS_NO_WARNING false
 
-/* convert localized ascii representation to double
+/* convert ascii representation to double
  * the function can only be used to convert numbers as given by gui elements that use localized representation
  * @param value ascii representation of the number
  * @return the converted number
@@ -37,7 +34,7 @@ inline double helperfns_read_number(gchar const *value, bool warning = true) {
         return 0;
     }
     char *end;
-    double ret = g_strtod(value, &end);
+    double ret = g_ascii_strtod(value, &end);
     if (*end) {
         if (warning) {
             g_warning("helper-fns::helperfns_read_number() Unable to convert \"%s\" to number", value);
@@ -62,13 +59,14 @@ inline bool helperfns_read_bool(gchar const *value, bool default_value){
     return default_value;
 }
 
-/* convert localized ascii representation to double
+/* convert ascii representation to double
  * the function can only be used to convert numbers as given by gui elements that use localized representation
  * numbers are delimeted by space
  * @param value ascii representation of the number
  * @param size number of elements in string
  * @return the vector of the converted numbers
  */
+/*
 inline std::vector<gdouble> helperfns_read_vector(const gchar* value, int size){
         std::vector<gdouble> v(size, (gdouble) 0);
         std::istringstream is(value);
@@ -77,7 +75,7 @@ inline std::vector<gdouble> helperfns_read_vector(const gchar* value, int size){
             is >> str;
             char *end;
 
-            double ret = g_strtod(str.c_str(), &end);
+            double ret = g_ascii_strtod(str.c_str(), &end);
             if (*end) {
                 g_warning("helper-fns::helperfns_read_vector() Unable to convert \"%s\" to number", str.c_str());
                 // We could leave this out, too. If strtod can't convert
@@ -88,8 +86,8 @@ inline std::vector<gdouble> helperfns_read_vector(const gchar* value, int size){
         };
         return v;
 }
-
-/* convert localized ascii representation to double
+*/
+/* convert ascii representation to double
  * the function can only be used to convert numbers as given by gui elements that use localized representation
  * numbers are delimeted by space
  * @param value ascii representation of the number
@@ -99,21 +97,22 @@ inline std::vector<gdouble> helperfns_read_vector(const gchar* value){
         std::vector<gdouble> v;
 
         gchar const* beg = value;
-        while(isspace(*beg)) beg++;
+        while(isspace(*beg) || (*beg == ',')) beg++;
         while(*beg)
         {
             char *end;
-            double ret = g_strtod(beg, &end);
+            double ret = g_ascii_strtod(beg, &end);
             if (end==beg){
                 g_warning("helper-fns::helperfns_read_vector() Unable to convert \"%s\" to number", beg);
                 // We could leave this out, too. If strtod can't convert
                 // anything, it will return zero.
                 ret = 0;
+                break;
             }
             v.push_back(ret);
 
             beg = end;
-            while(isspace(*beg)) beg++;
+            while(isspace(*beg) || (*beg == ',')) beg++;
         }
         return v;
 }
@@ -129,4 +128,4 @@ inline std::vector<gdouble> helperfns_read_vector(const gchar* value){
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

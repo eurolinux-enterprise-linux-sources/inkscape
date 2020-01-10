@@ -14,60 +14,63 @@
  */
 
 #include <gtk/gtk.h>
-#include "sp-metric.h"
 #include <iostream>
 #include <glib.h>
 
+namespace Inkscape {
+    namespace Util {
+        class Unit;
+    }
+}
 
-void sp_ruler_set_metric (GtkRuler * ruler, SPMetric  metric);
+G_BEGIN_DECLS
 
+#define SP_TYPE_RULER            (sp_ruler_get_type ())
+#define SP_RULER(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_RULER, SPRuler))
+#define SP_RULER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_RULER, SPRulerClass))
+#define SP_IS_RULER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_RULER))
+#define SP_IS_RULER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_RULER))
+#define SP_RULER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), SP_TYPE_RULER, SPRulerClass))
 
-#define SP_HRULER(obj)          GTK_CHECK_CAST (obj, sp_hruler_get_type (), SPHRuler)
-#define SP_HRULER_CLASS(klass)  GTK_CHECK_CLASS_CAST (klass, sp_hruler_get_type (), SPHRulerClass)
-#define SP_IS_HRULER(obj)       GTK_CHECK_TYPE (obj, sp_hruler_get_type ())
+typedef struct _SPRuler         SPRuler;
+typedef struct _SPRulerClass    SPRulerClass;
 
-
-struct SPHRuler
+struct _SPRuler
 {
-  GtkRuler ruler;
+  GtkWidget parent_instance;
 };
 
-struct SPHRulerClass
+struct _SPRulerClass
 {
-  GtkRulerClass parent_class;
-};
-
-
-GtkType    sp_hruler_get_type (void);
-GtkWidget* sp_hruler_new      (void);
-
-
-
-// vruler
-
-
-
-#define SP_VRULER(obj)          GTK_CHECK_CAST (obj, sp_vruler_get_type (), SPVRuler)
-#define SP_VRULER_CLASS(klass)  GTK_CHECK_CLASS_CAST (klass, sp_vruler_get_type (), SPVRulerClass)
-#define SP_IS_VRULER(obj)       GTK_CHECK_TYPE (obj, sp_vruler_get_type ())
-
-
-struct SPVRuler
-{
-  GtkRuler ruler;
-};
-
-struct SPVRulerClass
-{
-  GtkRulerClass parent_class;
+  GtkWidgetClass parent_class;
 };
 
 
-GtkType    sp_vruler_get_type (void);
-GtkWidget* sp_vruler_new      (void);
+GType           sp_ruler_get_type            (void) G_GNUC_CONST;
 
+GtkWidget*      sp_ruler_new                 (GtkOrientation  orientation);
 
+void            sp_ruler_add_track_widget    (SPRuler        *ruler,
+		                              GtkWidget      *widget);
+void            sp_ruler_remove_track_widget (SPRuler        *ruler,
+		                              GtkWidget      *widget);
 
+void            sp_ruler_set_unit            (SPRuler        *ruler,
+                                              const Inkscape::Util::Unit *unit);
+Inkscape::Util::Unit const * sp_ruler_get_unit            (SPRuler        *ruler);
+void            sp_ruler_set_position        (SPRuler        *ruler,
+                                              gdouble         set_position);
+gdouble         sp_ruler_get_position        (SPRuler        *ruler);
+void            sp_ruler_set_range           (SPRuler        *ruler,
+                                              gdouble         lower,
+                                              gdouble         upper,
+                                              gdouble         max_size);
+void            sp_ruler_get_range           (SPRuler        *ruler,
+                                              gdouble        *lower,
+                                              gdouble        *upper,
+                                              gdouble        *max_size);
+
+G_END_DECLS
 
 #endif /* __SP_RULER_H__ */
 
@@ -80,4 +83,4 @@ GtkWidget* sp_vruler_new      (void);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

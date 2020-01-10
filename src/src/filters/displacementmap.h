@@ -1,10 +1,6 @@
-#ifndef SP_FEDISPLACEMENTMAP_H_SEEN
-#define SP_FEDISPLACEMENTMAP_H_SEEN
-
 /** \file
- * SVG <feDisplacementMap> implementation, see DisplacementMap.cpp.
- */
-/*
+ * SVG displacement map filter effect
+ *//*
  * Authors:
  *   Hugo Rodrigues <haa.rodrigues@gmail.com>
  *
@@ -13,8 +9,13 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "sp-filter.h"
-#include "displacementmap-fns.h"
+#ifndef SP_FEDISPLACEMENTMAP_H_SEEN
+#define SP_FEDISPLACEMENTMAP_H_SEEN
+
+#include "sp-filter-primitive.h"
+
+#define SP_FEDISPLACEMENTMAP(obj) (dynamic_cast<SPFeDisplacementMap*>((SPObject*)obj))
+#define SP_IS_FEDISPLACEMENTMAP(obj) (dynamic_cast<const SPFeDisplacementMap*>((SPObject*)obj) != NULL)
 
 enum FilterDisplacementMapChannelSelector {
     DISPLACEMENTMAP_CHANNEL_RED,
@@ -24,23 +25,28 @@ enum FilterDisplacementMapChannelSelector {
     DISPLACEMENTMAP_CHANNEL_ENDTYPE
 };
 
-/* FeDisplacementMap base class */
-class SPFeDisplacementMapClass;
+class SPFeDisplacementMap : public SPFilterPrimitive {
+public:
+	SPFeDisplacementMap();
+	virtual ~SPFeDisplacementMap();
 
-struct SPFeDisplacementMap : public SPFilterPrimitive {
-    /** DISPLACEMENTMAP ATTRIBUTES HERE */
     int in2; 
     double scale;
     FilterDisplacementMapChannelSelector xChannelSelector;
     FilterDisplacementMapChannelSelector yChannelSelector;
+
+protected:
+	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
+	virtual void release();
+
+	virtual void set(unsigned int key, const gchar* value);
+
+	virtual void update(SPCtx* ctx, unsigned int flags);
+
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
+
+	virtual void build_renderer(Inkscape::Filters::Filter* filter);
 };
-
-struct SPFeDisplacementMapClass {
-    SPFilterPrimitiveClass parent_class;
-};
-
-GType sp_feDisplacementMap_get_type();
-
 
 #endif /* !SP_FEDISPLACEMENTMAP_H_SEEN */
 
@@ -53,4 +59,4 @@ GType sp_feDisplacementMap_get_type();
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

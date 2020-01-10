@@ -16,18 +16,28 @@
 #include <gdk/gdk.h>
 #include "display/nr-light-types.h"
 #include "display/nr-filter-primitive.h"
-#include "display/nr-filter-slot.h"
-#include "display/nr-filter-units.h"
-#include "filters/distantlight.h"
-#include "filters/pointlight.h"
-#include "filters/spotlight.h"
-#include "color.h"
+
+class SPFeDistantLight;
+class SPFePointLight;
+class SPFeSpotLight;
+struct SVGICCColor;
 
 namespace Inkscape {
 namespace Filters {
-    
+
+class FilterSlot;
+
 class FilterSpecularLighting : public FilterPrimitive {
 public:
+    FilterSpecularLighting();
+    static FilterPrimitive *create();
+    virtual ~FilterSpecularLighting();
+
+    virtual void render_cairo(FilterSlot &slot);
+    virtual void set_icc(SVGICCColor *icc_color);
+    virtual void area_enlarge(Geom::IntRect &area, Geom::Affine const &trans);
+    virtual double complexity(Geom::Affine const &ctm);
+
     union {
         SPFeDistantLight *distant;
         SPFePointLight *point;
@@ -38,15 +48,9 @@ public:
     gdouble specularConstant;
     gdouble specularExponent;
     guint32 lighting_color;
-    
-    FilterSpecularLighting();
-    static FilterPrimitive *create();
-    virtual ~FilterSpecularLighting();
-    virtual int render(FilterSlot &slot, FilterUnits const &units);
-    virtual void area_enlarge(NRRectL &area, Geom::Matrix const &trans);
-    virtual FilterTraits get_input_traits();
 
 private:
+    SVGICCColor *icc;
 };
 
 } /* namespace Filters */
@@ -62,4 +66,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

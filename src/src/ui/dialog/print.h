@@ -11,14 +11,12 @@
 #ifndef INKSCAPE_UI_DIALOG_PRINT_H
 #define INKSCAPE_UI_DIALOG_PRINT_H
 
-#include <glibmm/i18n.h>
-#include <gtkmm/printoperation.h> // GtkMM
-#include <gtk/gtk.h> // Gtk
-
-#include "desktop.h"
-#include "sp-item.h"
-
 #include "ui/widget/rendering-options.h"
+#include <gtkmm/printoperation.h> // GtkMM
+
+class SPItem;
+class SPDocument;
+
 
 /*
  * gtk 2.12.0 has a bug (http://bugzilla.gnome.org/show_bug.cgi?id=482089)
@@ -70,4 +68,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,9 +1,9 @@
 /**
  * \file
- * \brief PathVector - std::vector containing Geom::Path
+ * \brief PathVector - std::vector containing Geom::Path.
  * This file provides a set of operations that can be performed on PathVector,
  * e.g. an affine transform.
- *
+ *//*
  * Authors:
  *  Johan Engelen <goejendaagh@zonnet.nl>
  * 
@@ -33,8 +33,8 @@
  * the specific language governing rights and limitations.
  */
 
-#ifndef SEEN_GEOM_PATHVECTOR_H
-#define SEEN_GEOM_PATHVECTOR_H
+#ifndef LIB2GEOM_SEEN_PATHVECTOR_H
+#define LIB2GEOM_SEEN_PATHVECTOR_H
 
 #include <2geom/forward.h>
 #include <2geom/path.h>
@@ -46,13 +46,13 @@ typedef std::vector<Geom::Path> PathVector;
 
 /* general path transformation: */
 inline
-void operator*= (PathVector & path_in, Matrix const &m) {
+void operator*= (PathVector & path_in, Affine const &m) {
     for(PathVector::iterator it = path_in.begin(); it != path_in.end(); ++it) {
         (*it) *= m;
     }
 }
 inline
-PathVector operator*(PathVector const & path_in, Matrix const &m) {
+PathVector operator*(PathVector const & path_in, Affine const &m) {
     PathVector ret(path_in);
     ret *= m;
     return ret;
@@ -108,7 +108,10 @@ struct PathVectorPosition {
     // pathvector[path_nr].pointAt(t) is the position
     unsigned int path_nr;
     double       t;
-    PathVectorPosition() {}
+    PathVectorPosition() :
+        path_nr(0),
+        t(0)
+        {}
     PathVectorPosition(unsigned int path_nr,
                        double       t) : path_nr(path_nr), t(t) {}
 };
@@ -117,15 +120,13 @@ boost::optional<PathVectorPosition> nearestPoint(PathVector const & path_in, Poi
 std::vector<PathVectorPosition> allNearestPoints(PathVector const & path_in, Point const& _point, double *distance_squared = NULL);
 
 inline
-Point pointAt(PathVector const & path_in, PathVectorPosition const pvp) {
+Point pointAt(PathVector const & path_in, PathVectorPosition const &pvp) {
     return path_in[pvp.path_nr].pointAt(pvp.t);
 }
 
-
-
 } // end namespace Geom
 
-#endif // SEEN_GEOM_PATHVECTOR_H
+#endif // LIB2GEOM_SEEN_PATHVECTOR_H
 
 /*
   Local Variables:
@@ -136,4 +137,4 @@ Point pointAt(PathVector const & path_in, PathVectorPosition const pvp) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

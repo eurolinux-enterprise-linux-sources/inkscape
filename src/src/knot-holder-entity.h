@@ -1,9 +1,6 @@
 #ifndef SEEN_KNOT_HOLDER_ENTITY_H
 #define SEEN_KNOT_HOLDER_ENTITY_H
-
-/** \file
- * KnotHolderEntity definition.
- *
+/*
  * Authors:
  *   Mitsuru Oka <oka326@parkcity.ne.jp>
  *   Maximilian Albert <maximilian.albert@gmail.com>
@@ -21,44 +18,54 @@
 #include "knot.h"
 #include <2geom/forward.h>
 #include "snapper.h"
+#include "display/sp-canvas-item.h"
 
-struct SPItem;
-struct SPKnot;
-
+class SPItem;
+class SPKnot;
 class SPDesktop;
 class KnotHolder;
 
+namespace Inkscape {
+namespace LivePathEffect {
+    class Effect;
+} // namespace LivePathEffect
+} // namespace Inkscape
+
 typedef void (* SPKnotHolderSetFunc) (SPItem *item, Geom::Point const &p, Geom::Point const &origin, guint state);
 typedef Geom::Point (* SPKnotHolderGetFunc) (SPItem *item);
-/* fixme: Think how to make callbacks most sensitive (Lauris) */
-typedef void (* SPKnotHolderReleasedFunc) (SPItem *item);
 
+/**
+ * KnotHolderEntity definition.
+ */
 class KnotHolderEntity {
 public:
-    KnotHolderEntity() {}
+    KnotHolderEntity():
+        knot(NULL),
+        item(NULL),
+        desktop(NULL),
+        parent_holder(NULL),
+        my_counter(0)
+        {}
     virtual ~KnotHolderEntity();
-    virtual void create(SPDesktop *desktop, SPItem *item, KnotHolder *parent, const gchar *tip = "",
+
+    virtual void create(SPDesktop *desktop, SPItem *item, KnotHolder *parent,
+                        Inkscape::ControlType type = Inkscape::CTRL_TYPE_UNKNOWN,
+                        const gchar *tip = "",
                         SPKnotShapeType shape = SP_KNOT_SHAPE_DIAMOND,
                         SPKnotModeType mode = SP_KNOT_MODE_XOR,
                         guint32 color = 0xffffff00);
-
-    /* derived classes used for LPE knotholder handles use this to indicate that they
-       must not be deleted when a knotholder is destroyed */
-    // TODO: it would be nice to ditch this but then we need to dynamically create instances of different
-    //       KnotHolderEntity classes in Effect::addKnotHolderEntities. How to do this???
-    virtual bool isDeletable() { return true; }
-
+ 
     /* the get/set/click handlers are virtual functions; each handler class for a knot
        should be derived from KnotHolderEntity and override these functions */
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state) = 0;
-    virtual Geom::Point knot_get() = 0;
+    virtual Geom::Point knot_get() const = 0;
     virtual void knot_click(guint /*state*/) {}
 
     void update_knot();
 
 //private:
-    Geom::Point snap_knot_position(Geom::Point const &p);
-    Geom::Point snap_knot_position_constrained(Geom::Point const &p, Inkscape::Snapper::ConstraintLine const &constraint);
+    Geom::Point snap_knot_position(Geom::Point const &p, guint state);
+    Geom::Point snap_knot_position_constrained(Geom::Point const &p, Inkscape::Snapper::SnapConstraint const &constraint, guint state);
 
     SPKnot *knot;
     SPItem *item;
@@ -76,6 +83,7 @@ public:
     /** Connection to \a knot's "ungrabbed" signal. */
     guint   _ungrab_handler_id;
 
+private:
     sigc::connection _moved_connection;
     sigc::connection _click_connection;
     sigc::connection _ungrabbed_connection;
@@ -83,27 +91,40 @@ public:
 
 // derived KnotHolderEntity class for LPEs
 class LPEKnotHolderEntity : public KnotHolderEntity {
-    virtual bool isDeletable() { return false; }
+public:
+    LPEKnotHolderEntity(Inkscape::LivePathEffect::Effect *effect) : _effect(effect) {};
+protected:
+    Inkscape::LivePathEffect::Effect *_effect;
 };
 
 /* pattern manipulation */
 
 class PatternKnotHolderEntityXY : public KnotHolderEntity {
 public:
-    virtual Geom::Point knot_get();
+    PatternKnotHolderEntityXY(bool fill) : KnotHolderEntity(), _fill(fill) {}
+    virtual Geom::Point knot_get() const;
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
+private:
+    // true if the entity tracks fill, false for stroke 
+    bool _fill;
 };
 
 class PatternKnotHolderEntityAngle : public KnotHolderEntity {
 public:
-    virtual Geom::Point knot_get();
+    PatternKnotHolderEntityAngle(bool fill) : KnotHolderEntity(), _fill(fill) {}
+    virtual Geom::Point knot_get() const;
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
+private:
+    bool _fill;
 };
 
 class PatternKnotHolderEntityScale : public KnotHolderEntity {
 public:
-    virtual Geom::Point knot_get();
+    PatternKnotHolderEntityScale(bool fill) : KnotHolderEntity(), _fill(fill) {}
+    virtual Geom::Point knot_get() const;
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
+private:
+    bool _fill;
 };
 
 #endif /* !SEEN_KNOT_HOLDER_ENTITY_H */
@@ -117,4 +138,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

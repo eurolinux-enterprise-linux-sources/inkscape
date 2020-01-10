@@ -1,5 +1,6 @@
-/** @file
- * @brief A dockable dialog implementation.
+/**
+ * @file
+ * A dockable dialog implementation.
  */
 /* Author:
  *   Gustav Broberg <broberg@kth.se>
@@ -45,16 +46,22 @@ DockBehavior::DockBehavior(Dialog &dialog) :
                 Inkscape::Verb::get(dialog._verb_num)->get_image() : ""),
                static_cast<Widget::DockItem::State>(
                    Inkscape::Preferences::get()->getInt(_dialog._prefs_path + "/state",
-                                            UI::Widget::DockItem::DOCKED_STATE)))
+                                            UI::Widget::DockItem::DOCKED_STATE)),
+                static_cast<Widget::DockItem::Placement>(
+                    Inkscape::Preferences::get()->getInt(_dialog._prefs_path + "/placement",
+                                             UI::Widget::DockItem::TOP)))
+
 {
     // Connect signals
     _signal_hide_connection = signal_hide().connect(sigc::mem_fun(*this, &Inkscape::UI::Dialog::Behavior::DockBehavior::_onHide));
+    signal_show().connect(sigc::mem_fun(*this, &Inkscape::UI::Dialog::Behavior::DockBehavior::_onShow));
     _dock_item.signal_state_changed().connect(sigc::mem_fun(*this, &Inkscape::UI::Dialog::Behavior::DockBehavior::_onStateChanged));
 
     if (_dock_item.getState() == Widget::DockItem::FLOATING_STATE) {
         if (Gtk::Window *floating_win = _dock_item.getWindow())
             sp_transientize(GTK_WIDGET(floating_win->gobj()));
     }
+
 }
 
 DockBehavior::~DockBehavior()
@@ -165,8 +172,7 @@ DockBehavior::set_title(Glib::ustring title)
     _dock_item.set_title(title);
 }
 
-void
-DockBehavior::set_sensitive(bool sensitive)
+void DockBehavior::set_sensitive(bool sensitive)
 {
     // TODO check this. Seems to be bad that we ignore the parameter
     get_vbox()->set_sensitive();
@@ -178,8 +184,12 @@ DockBehavior::_onHide()
 {
     _dialog.save_geometry();
     _dialog._user_hidden = true;
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    prefs->setInt(_dialog._prefs_path + "/state", _dock_item.getPrevState());
+}
+
+void
+DockBehavior::_onShow()
+{
+    _dialog._user_hidden = false;
 }
 
 void
@@ -187,8 +197,6 @@ DockBehavior::_onStateChanged(Widget::DockItem::State /*prev_state*/,
                               Widget::DockItem::State new_state)
 {
 // TODO probably need to avoid window calls unless the state is different. Check.
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    prefs->setInt(_dialog._prefs_path + "/state", new_state);
 
     if (new_state == Widget::DockItem::FLOATING_STATE) {
         if (Gtk::Window *floating_win = _dock_item.getWindow())
@@ -212,8 +220,9 @@ DockBehavior::onShowF12()
 void
 DockBehavior::onShutdown()
 {
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    prefs->setInt(_dialog._prefs_path + "/state", _dock_item.getPrevState());
+    int visible = _dock_item.isIconified() || !_dialog._user_hidden;
+    int status = (_dock_item.getState() == Inkscape::UI::Widget::DockItem::UNATTACHED) ? _dock_item.getPrevState() : _dock_item.getState();
+    _dialog.save_status( visible, status, _dock_item.getPlacement() );
 }
 
 void
@@ -263,7 +272,7 @@ DockBehavior::onDesktopActivated(SPDesktop *desktop)
         }
 
         // we're done, allow next retransientizing not sooner than after 120 msec
-        gtk_timeout_add (120, (GtkFunction) sp_retransientize_again, (gpointer) floating_win);
+        g_timeout_add (120, (GSourceFunc) sp_retransientize_again, (gpointer) floating_win);
     }
 }
 
@@ -300,4 +309,4 @@ DockBehavior::signal_drag_end() { return _dock_item.signal_drag_end(); }
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

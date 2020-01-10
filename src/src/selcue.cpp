@@ -1,11 +1,10 @@
-#define __SELCUE_C__
-
 /*
  * Helper object for showing selected items
  *
  * Authors:
  *   bulia byak <bulia@users.sf.net>
  *   Carl Hetherington <inkscape@carlh.net>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2004 Authors
  *
@@ -26,8 +25,20 @@
 #include "preferences.h"
 #include "selcue.h"
 
+Inkscape::SelCue::BoundingBoxPrefsObserver::BoundingBoxPrefsObserver(SelCue &sel_cue) :
+    Observer("/tools/bounding_box"),
+    _sel_cue(sel_cue)
+{
+}
+
+void Inkscape::SelCue::BoundingBoxPrefsObserver::notify(Preferences::Entry const &val)
+{
+    _sel_cue._boundingBoxPrefsChanged(static_cast<int>(val.getBool()));
+}
+
 Inkscape::SelCue::SelCue(SPDesktop *desktop)
-    : _desktop(desktop)
+    : _desktop(desktop),
+      _bounding_box_prefs_observer(*this)
 {
     _selection = sp_desktop_selection(_desktop);
 
@@ -35,11 +46,16 @@ Inkscape::SelCue::SelCue(SPDesktop *desktop)
         sigc::hide(sigc::mem_fun(*this, &Inkscape::SelCue::_newItemBboxes))
         );
 
-    _sel_modified_connection = _selection->connectModified(
-        sigc::hide(sigc::hide(sigc::mem_fun(*this, &Inkscape::SelCue::_updateItemBboxes)))
+    {
+        void(SelCue::*modifiedSignal)() = &SelCue::_updateItemBboxes;
+        _sel_modified_connection = _selection->connectModified(
+            sigc::hide(sigc::hide(sigc::mem_fun(*this, modifiedSignal)))
         );
+    }
 
-    _updateItemBboxes();
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    _updateItemBboxes(prefs);
+    prefs->addObserver(_bounding_box_prefs_observer);
 }
 
 Inkscape::SelCue::~SelCue()
@@ -47,20 +63,24 @@ Inkscape::SelCue::~SelCue()
     _sel_changed_connection.disconnect();
     _sel_modified_connection.disconnect();
 
-    for (std::vector<SPCanvasItem*>::iterator i = _item_bboxes.begin(); i != _item_bboxes.end(); i++) {
-        gtk_object_destroy(*i);
+    for (std::vector<SPCanvasItem*>::iterator i = _item_bboxes.begin(); i != _item_bboxes.end(); ++i) {
+        sp_canvas_item_destroy(*i);
     }
     _item_bboxes.clear();
 
-    for (std::vector<SPCanvasItem*>::iterator i = _text_baselines.begin(); i != _text_baselines.end(); i++) {
-        gtk_object_destroy(*i);
+    for (std::vector<SPCanvasItem*>::iterator i = _text_baselines.begin(); i != _text_baselines.end(); ++i) {
+        sp_canvas_item_destroy(*i);
     }
     _text_baselines.clear();
 }
 
 void Inkscape::SelCue::_updateItemBboxes()
 {
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    _updateItemBboxes(Inkscape::Preferences::get());
+}
+
+void Inkscape::SelCue::_updateItemBboxes(Inkscape::Preferences *prefs)
+{
     gint mode = prefs->getInt("/options/selcue/value", MARK);
     if (mode == NONE) {
         return;
@@ -69,9 +89,12 @@ void Inkscape::SelCue::_updateItemBboxes()
     g_return_if_fail(_selection != NULL);
 
     int prefs_bbox = prefs->getBool("/tools/bounding_box");
-    SPItem::BBoxType bbox_type = !prefs_bbox ? 
-        SPItem::APPROXIMATE_BBOX : SPItem::GEOMETRIC_BBOX;
 
+    _updateItemBboxes(mode, prefs_bbox);
+}
+
+void Inkscape::SelCue::_updateItemBboxes(gint mode, int prefs_bbox)
+{
     GSList const *items = _selection->itemList();
     if (_item_bboxes.size() != g_slist_length((GSList *) items)) {
         _newItemBboxes();
@@ -80,11 +103,12 @@ void Inkscape::SelCue::_updateItemBboxes()
 
     int bcount = 0;
     for (GSList const *l = _selection->itemList(); l != NULL; l = l->next) {
-        SPItem *item = (SPItem *) l->data;
+        SPItem *item = static_cast<SPItem *>(l->data);
         SPCanvasItem* box = _item_bboxes[bcount ++];
 
         if (box) {
-            Geom::OptRect const b = sp_item_bbox_desktop(item, bbox_type);
+            Geom::OptRect const b = (prefs_bbox == 0) ?
+                item->desktopVisualBounds() : item->desktopGeometricBounds();
 
             if (b) {
                 sp_canvas_item_show(box);
@@ -105,8 +129,8 @@ void Inkscape::SelCue::_updateItemBboxes()
 
 void Inkscape::SelCue::_newItemBboxes()
 {
-    for (std::vector<SPCanvasItem*>::iterator i = _item_bboxes.begin(); i != _item_bboxes.end(); i++) {
-        gtk_object_destroy(*i);
+    for (std::vector<SPCanvasItem*>::iterator i = _item_bboxes.begin(); i != _item_bboxes.end(); ++i) {
+        sp_canvas_item_destroy(*i);
     }
     _item_bboxes.clear();
 
@@ -119,13 +143,12 @@ void Inkscape::SelCue::_newItemBboxes()
     g_return_if_fail(_selection != NULL);
 
     int prefs_bbox = prefs->getBool("/tools/bounding_box");
-    SPItem::BBoxType bbox_type = !prefs_bbox ? 
-        SPItem::APPROXIMATE_BBOX : SPItem::GEOMETRIC_BBOX;
     
     for (GSList const *l = _selection->itemList(); l != NULL; l = l->next) {
-        SPItem *item = (SPItem *) l->data;
+        SPItem *item = static_cast<SPItem *>(l->data);
 
-        Geom::OptRect const b = sp_item_bbox_desktop(item, bbox_type);
+        Geom::OptRect const b = (prefs_bbox == 0) ?
+            item->desktopVisualBounds() : item->desktopGeometricBounds();
 
         SPCanvasItem* box = NULL;
 
@@ -154,6 +177,7 @@ void Inkscape::SelCue::_newItemBboxes()
                 SP_CTRLRECT(box)->setRectangle(*b);
                 SP_CTRLRECT(box)->setColor(0x000000a0, 0, 0);
                 SP_CTRLRECT(box)->setDashed(true);
+                SP_CTRLRECT(box)->setShadow(1, 0xffffffff);
 
                 sp_canvas_item_move_to_z(box, 0);
             }
@@ -169,13 +193,13 @@ void Inkscape::SelCue::_newItemBboxes()
 
 void Inkscape::SelCue::_newTextBaselines()
 {
-    for (std::vector<SPCanvasItem*>::iterator i = _text_baselines.begin(); i != _text_baselines.end(); i++) {
-        gtk_object_destroy(*i);
+    for (std::vector<SPCanvasItem*>::iterator i = _text_baselines.begin(); i != _text_baselines.end(); ++i) {
+        sp_canvas_item_destroy(*i);
     }
     _text_baselines.clear();
 
     for (GSList const *l = _selection->itemList(); l != NULL; l = l->next) {
-        SPItem *item = (SPItem *) l->data;
+        SPItem *item = static_cast<SPItem *>(l->data);
 
         SPCanvasItem* baseline_point = NULL;
         if (SP_IS_TEXT(item) || SP_IS_FLOWTEXT(item)) { // visualize baseline
@@ -192,7 +216,7 @@ void Inkscape::SelCue::_newTextBaselines()
                         NULL);
 
                     sp_canvas_item_show(baseline_point);
-                    SP_CTRL(baseline_point)->moveto((*pt) * sp_item_i2d_affine(item));
+                    SP_CTRL(baseline_point)->moveto((*pt) * item->i2dt_affine());
                     sp_canvas_item_move_to_z(baseline_point, 0);
                 }
             }
@@ -204,6 +228,18 @@ void Inkscape::SelCue::_newTextBaselines()
     }
 }
 
+void Inkscape::SelCue::_boundingBoxPrefsChanged(int prefs_bbox)
+{
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    gint mode = prefs->getInt("/options/selcue/value", MARK);
+    if (mode == NONE) {
+        return;
+    }
+
+    g_return_if_fail(_selection != NULL);
+
+    _updateItemBboxes(mode, prefs_bbox);
+}
 
 /*
   Local Variables:

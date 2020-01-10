@@ -16,10 +16,13 @@
 #include "draw-anchor.h"
 #include "desktop.h"
 #include "desktop-handles.h"
-#include "event-context.h"
-#include "lpe-tool-context.h"
+#include "ui/tools/tool-base.h"
+#include "ui/tools/lpe-tool.h"
 #include "display/sodipodi-ctrl.h"
 #include "display/curve.h"
+#include "ui/control-manager.h"
+
+using Inkscape::ControlManager;
 
 #define FILL_COLOR_NORMAL 0xffffff7f
 #define FILL_COLOR_MOUSEOVER 0xff0000ff
@@ -27,14 +30,12 @@
 /**
  * Creates an anchor object and initializes it.
  */
-SPDrawAnchor *sp_draw_anchor_new(SPDrawContext *dc, SPCurve *curve, gboolean start, Geom::Point delta)
+SPDrawAnchor *sp_draw_anchor_new(Inkscape::UI::Tools::FreehandBase *dc, SPCurve *curve, gboolean start, Geom::Point delta)
 {
     if (SP_IS_LPETOOL_CONTEXT(dc)) {
         // suppress all kinds of anchors in LPEToolContext
         return NULL;
     }
-
-    SPDesktop *dt = SP_EVENT_CONTEXT_DESKTOP(dc);
 
     SPDrawAnchor *a = g_new(SPDrawAnchor, 1);
 
@@ -44,15 +45,11 @@ SPDrawAnchor *sp_draw_anchor_new(SPDrawContext *dc, SPCurve *curve, gboolean sta
     a->start = start;
     a->active = FALSE;
     a->dp = delta;
-    a->ctrl = sp_canvas_item_new(sp_desktop_controls(dt), SP_TYPE_CTRL,
-                                 "size", 6.0,
-                                 "filled", 1,
-                                 "fill_color", FILL_COLOR_NORMAL,
-                                 "stroked", 1,
-                                 "stroke_color", 0x000000ff,
-                                 NULL);
+    a->ctrl = ControlManager::getManager().createControl(sp_desktop_controls(&dc->getDesktop()), Inkscape::CTRL_TYPE_ANCHOR);
 
     SP_CTRL(a->ctrl)->moveto(delta);
+
+    ControlManager::getManager().track(a->ctrl);
 
     return a;
 }
@@ -66,13 +63,11 @@ SPDrawAnchor *sp_draw_anchor_destroy(SPDrawAnchor *anchor)
         anchor->curve->unref();
     }
     if (anchor->ctrl) {
-        gtk_object_destroy(GTK_OBJECT(anchor->ctrl));
+        sp_canvas_item_destroy(anchor->ctrl);
     }
     g_free(anchor);
     return NULL;
 }
-
-#define A_SNAP 4.0
 
 /**
  * Test if point is near anchor, if so fill anchor on canvas and return
@@ -80,18 +75,18 @@ SPDrawAnchor *sp_draw_anchor_destroy(SPDrawAnchor *anchor)
  */
 SPDrawAnchor *sp_draw_anchor_test(SPDrawAnchor *anchor, Geom::Point w, gboolean activate)
 {
-    SPDesktop *dt = SP_EVENT_CONTEXT_DESKTOP(anchor->dc);
+    SPCtrl *ctrl = SP_CTRL(anchor->ctrl);
 
-    if ( activate && ( Geom::LInfty( w - dt->d2w(anchor->dp) ) <= A_SNAP ) ) {
+    if ( activate && ( Geom::LInfty( w - anchor->dc->getDesktop().d2w(anchor->dp) ) <= (ctrl->box.width() / 2.0) ) ) {
         if (!anchor->active) {
-            sp_canvas_item_set((GtkObject *) anchor->ctrl, "fill_color", FILL_COLOR_MOUSEOVER, NULL);
+            g_object_set(anchor->ctrl, "fill_color", FILL_COLOR_MOUSEOVER, NULL);
             anchor->active = TRUE;
         }
         return anchor;
     }
 
     if (anchor->active) {
-        sp_canvas_item_set((GtkObject *) anchor->ctrl, "fill_color", FILL_COLOR_NORMAL, NULL);
+        g_object_set(anchor->ctrl, "fill_color", FILL_COLOR_NORMAL, NULL);
         anchor->active = FALSE;
     }
     return NULL;
@@ -107,4 +102,4 @@ SPDrawAnchor *sp_draw_anchor_test(SPDrawAnchor *anchor, Geom::Point w, gboolean 
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

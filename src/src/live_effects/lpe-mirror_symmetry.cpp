@@ -1,4 +1,3 @@
-#define INKSCAPE_LPE_MIRROR_SYMMETRY_CPP
 /** \file
  * LPE <mirror_symmetry> implementation: mirrors a path with respect to a given line.
  */
@@ -6,12 +5,15 @@
  * Authors:
  *   Maximilian Albert
  *   Johan Engelen
+ *   Abhishek Sharma
  *
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  * Copyright (C) Maximilin Albert 2008 <maximilian.albert@gmail.com>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
+
+#include <glibmm/i18n.h>
 
 #include "live_effects/lpe-mirror_symmetry.h"
 #include <sp-path.h>
@@ -20,7 +22,7 @@
 
 #include <2geom/path.h>
 #include <2geom/transforms.h>
-#include <2geom/matrix.h>
+#include <2geom/affine.h>
 
 namespace Inkscape {
 namespace LivePathEffect {
@@ -28,7 +30,7 @@ namespace LivePathEffect {
 LPEMirrorSymmetry::LPEMirrorSymmetry(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
     discard_orig_path(_("Discard original path?"), _("Check this to only keep the mirrored part of the path"), "discard_orig_path", &wr, this, false),
-    reflection_line(_("Reflection line"), _("Line which serves as 'mirror' for the reflection"), "reflection_line", &wr, this, "M0,0 L100,100")
+    reflection_line(_("Reflection line:"), _("Line which serves as 'mirror' for the reflection"), "reflection_line", &wr, this, "M0,0 L100,100")
 {
     show_orig_path = true;
 
@@ -41,13 +43,14 @@ LPEMirrorSymmetry::~LPEMirrorSymmetry()
 }
 
 void
-LPEMirrorSymmetry::doOnApply (SPLPEItem *lpeitem)
+LPEMirrorSymmetry::doOnApply (SPLPEItem const* lpeitem)
 {
     using namespace Geom;
 
-    SPItem *item = SP_ITEM(lpeitem);
-    Geom::Matrix t = sp_item_i2d_affine(item);
-    Geom::Rect bbox = *item->getBounds(t); // fixme: what happens if getBounds does not return a valid rect?
+    // fixme: what happens if the bbox is empty?
+    // fixme: this is probably wrong
+    Geom::Affine t = lpeitem->i2dt_affine();
+    Geom::Rect bbox = *lpeitem->desktopVisualBounds();
 
     Point A(bbox.left(), bbox.bottom());
     Point B(bbox.left(), bbox.top());
@@ -74,15 +77,15 @@ LPEMirrorSymmetry::doEffect_path (std::vector<Geom::Path> const & path_in)
     Geom::Point A(mline.front().initialPoint());
     Geom::Point B(mline.back().finalPoint());
 
-    Geom::Matrix m1(1.0, 0.0, 0.0, 1.0, A[0], A[1]);
+    Geom::Affine m1(1.0, 0.0, 0.0, 1.0, A[0], A[1]);
     double hyp = Geom::distance(A, B);
     double c = (B[0] - A[0]) / hyp; // cos(alpha)
     double s = (B[1] - A[1]) / hyp; // sin(alpha)
 
-    Geom::Matrix m2(c, -s, s, c, 0.0, 0.0);
-    Geom::Matrix sca(1.0, 0.0, 0.0, -1.0, 0.0, 0.0);
+    Geom::Affine m2(c, -s, s, c, 0.0, 0.0);
+    Geom::Affine sca(1.0, 0.0, 0.0, -1.0, 0.0, 0.0);
 
-    Geom::Matrix m = m1.inverse() * m2;
+    Geom::Affine m = m1.inverse() * m2;
     m = m * sca;
     m = m * m2.inverse();
     m = m * m1;

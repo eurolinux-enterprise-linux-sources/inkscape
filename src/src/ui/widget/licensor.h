@@ -1,7 +1,4 @@
-/** \file
- * \brief Widget for specifying a document's license; part of document
- * preferences dialog.
- *
+/*
  * Authors:
  *   Ralf Stephan <ralf@ark.in-berlin.de>
  *
@@ -10,16 +7,20 @@
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
 
-#ifndef INKSCAPE_UI_WIDGET_LICENSOR__H
-#define INKSCAPE_UI_WIDGET_LICENSOR__H
+#ifndef INKSCAPE_UI_WIDGET_LICENSOR_H
+#define INKSCAPE_UI_WIDGET_LICENSOR_H
+
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
 
 #include <gtkmm/box.h>
 
 class SPDocument;
-
-namespace Gtk {
-    class Tooltips;
-}
 
 namespace Inkscape {
     namespace UI {
@@ -29,11 +30,15 @@ class EntityEntry;
 class Registry;
 
 
+/**
+ * Widget for specifying a document's license; part of document
+ * preferences dialog.
+ */
 class Licensor : public Gtk::VBox {
 public:
     Licensor();
     virtual ~Licensor();
-    void init (Gtk::Tooltips&, Registry&);
+    void init (Registry&);
     void update (SPDocument *doc);
 
 protected: 
@@ -45,7 +50,7 @@ protected:
 } // namespace UI
 } // namespace Inkscape
 
-#endif // INKSCAPE_UI_WIDGET_LICENSOR__H
+#endif // INKSCAPE_UI_WIDGET_LICENSOR_H
 
 /*
   Local Variables:

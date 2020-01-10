@@ -1,10 +1,6 @@
-#ifndef SP_FETURBULENCE_H_SEEN
-#define SP_FETURBULENCE_H_SEEN
-
-/** \file
- * SVG <feTurbulence> implementation, see Turbulence.cpp.
- */
-/*
+/** @file
+ * @brief SVG turbulence filter effect
+ *//*
  * Authors:
  *   Felipe Corrêa da Silva Sanches <juca@members.fsf.org>
  *   Hugo Rodrigues <haa.rodrigues@gmail.com>
@@ -14,15 +10,23 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "sp-filter.h"
-#include "turbulence-fns.h"
+#ifndef SP_FETURBULENCE_H_SEEN
+#define SP_FETURBULENCE_H_SEEN
+
+#include "sp-filter-primitive.h"
 #include "number-opt-number.h"
 #include "display/nr-filter-turbulence.h"
 
-/* FeTurbulence base class */
-class SPFeTurbulenceClass;
+#define SP_FETURBULENCE(obj) (dynamic_cast<SPFeTurbulence*>((SPObject*)obj))
+#define SP_IS_FETURBULENCE(obj) (dynamic_cast<const SPFeTurbulence*>((SPObject*)obj) != NULL)
 
-struct SPFeTurbulence : public SPFilterPrimitive {
+/* FeTurbulence base class */
+
+class SPFeTurbulence : public SPFilterPrimitive {
+public:
+	SPFeTurbulence();
+	virtual ~SPFeTurbulence();
+
     /** TURBULENCE ATTRIBUTES HERE */
     NumberOptNumber baseFrequency;
     int numOctaves;
@@ -31,14 +35,19 @@ struct SPFeTurbulence : public SPFilterPrimitive {
     Inkscape::Filters::FilterTurbulenceType type;
     SVGLength x, y, height, width;
     bool updated;
+
+protected:
+	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
+	virtual void release();
+
+	virtual void set(unsigned int key, const gchar* value);
+
+	virtual void update(SPCtx* ctx, unsigned int flags);
+
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
+
+	virtual void build_renderer(Inkscape::Filters::Filter* filter);
 };
-
-struct SPFeTurbulenceClass {
-    SPFilterPrimitiveClass parent_class;
-};
-
-GType sp_feTurbulence_get_type();
-
 
 #endif /* !SP_FETURBULENCE_H_SEEN */
 
@@ -51,4 +60,4 @@ GType sp_feTurbulence_get_type();
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

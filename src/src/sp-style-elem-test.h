@@ -1,4 +1,3 @@
-
 #ifndef SEEN_SP_STYLE_ELEM_TEST_H
 #define SEEN_SP_STYLE_ELEM_TEST_H
 
@@ -23,18 +22,19 @@ public:
     {
         if ( _doc )
         {
-            sp_document_unref( _doc );
+            _doc->doUnref();
         }
     }
 
     static void createSuiteSubclass( SPStyleElemTest *& dst )
     {
-        SPStyleElem *style_elem = static_cast<SPStyleElem *>(g_object_new(SP_TYPE_STYLE_ELEM, NULL));
+        SPStyleElem *style_elem = new SPStyleElem();
+
         if ( style_elem ) {
             TS_ASSERT(!style_elem->is_css);
             TS_ASSERT(style_elem->media.print);
             TS_ASSERT(style_elem->media.screen);
-            g_object_unref(style_elem);
+            delete style_elem;
 
             dst = new SPStyleElemTest();
         }
@@ -53,38 +53,38 @@ public:
 
     void testSetType()
     {
-        SPStyleElem *style_elem = static_cast<SPStyleElem *>(g_object_new(SP_TYPE_STYLE_ELEM, NULL));
+        SPStyleElem *style_elem = new SPStyleElem();
         SP_OBJECT(style_elem)->document = _doc;
 
-        sp_object_set(SP_OBJECT(style_elem), SP_ATTR_TYPE, "something unrecognized");
+        SP_OBJECT(style_elem)->setKeyValue( SP_ATTR_TYPE, "something unrecognized");
         TS_ASSERT( !style_elem->is_css );
 
-        sp_object_set(SP_OBJECT(style_elem), SP_ATTR_TYPE, "text/css");
+        SP_OBJECT(style_elem)->setKeyValue( SP_ATTR_TYPE, "text/css");
         TS_ASSERT( style_elem->is_css );
 
-        sp_object_set(SP_OBJECT(style_elem), SP_ATTR_TYPE, "atext/css");
+        SP_OBJECT(style_elem)->setKeyValue( SP_ATTR_TYPE, "atext/css");
         TS_ASSERT( !style_elem->is_css );
 
-        sp_object_set(SP_OBJECT(style_elem), SP_ATTR_TYPE, "text/cssx");
+        SP_OBJECT(style_elem)->setKeyValue( SP_ATTR_TYPE, "text/cssx");
         TS_ASSERT( !style_elem->is_css );
 
-        g_object_unref(style_elem);
+        delete style_elem;
     }
 
     void testWrite()
     {
         TS_ASSERT( _doc );
-        TS_ASSERT( sp_document_repr_doc(_doc) );
-        if ( !sp_document_repr_doc(_doc) ) {
+        TS_ASSERT( _doc->getReprDoc() );
+        if ( !_doc->getReprDoc() ) {
             return; // evil early return
         }
 
-        SPStyleElem *style_elem = SP_STYLE_ELEM(g_object_new(SP_TYPE_STYLE_ELEM, NULL));
+        SPStyleElem *style_elem = new SPStyleElem();
         SP_OBJECT(style_elem)->document = _doc;
 
-        sp_object_set(SP_OBJECT(style_elem), SP_ATTR_TYPE, "text/css");
-        Inkscape::XML::Node *repr = sp_document_repr_doc(_doc)->createElement("svg:style");
-        SP_OBJECT(style_elem)->updateRepr(sp_document_repr_doc(_doc), repr, SP_OBJECT_WRITE_ALL);
+        SP_OBJECT(style_elem)->setKeyValue( SP_ATTR_TYPE, "text/css");
+        Inkscape::XML::Node *repr = _doc->getReprDoc()->createElement("svg:style");
+        SP_OBJECT(style_elem)->updateRepr(_doc->getReprDoc(), repr, SP_OBJECT_WRITE_ALL);
         {
             gchar const *typ = repr->attribute("type");
             TS_ASSERT( typ != NULL );
@@ -94,24 +94,24 @@ public:
             }
         }
 
-        g_object_unref(style_elem);
+        delete style_elem;
     }
 
     void testBuild()
     {
         TS_ASSERT( _doc );
-        TS_ASSERT( sp_document_repr_doc(_doc) );
-        if ( !sp_document_repr_doc(_doc) ) {
+        TS_ASSERT( _doc->getReprDoc() );
+        if ( !_doc->getReprDoc() ) {
             return; // evil early return
         }
 
-        SPStyleElem &style_elem = *SP_STYLE_ELEM(g_object_new(SP_TYPE_STYLE_ELEM, NULL));
-        Inkscape::XML::Node *const repr = sp_document_repr_doc(_doc)->createElement("svg:style");
+        SPStyleElem *style_elem = new SPStyleElem();
+        Inkscape::XML::Node *const repr = _doc->getReprDoc()->createElement("svg:style");
         repr->setAttribute("type", "text/css");
-        sp_object_invoke_build(&style_elem, _doc, repr, false);
-        TS_ASSERT( style_elem.is_css );
-        TS_ASSERT( style_elem.media.print );
-        TS_ASSERT( style_elem.media.screen );
+        style_elem->invoke_build( _doc, repr, false);
+        TS_ASSERT( style_elem->is_css );
+        TS_ASSERT( style_elem->media.print );
+        TS_ASSERT( style_elem->media.screen );
 
         /* Some checks relevant to the read_content test below. */
         {
@@ -121,31 +121,31 @@ public:
             g_assert(stylesheet->statements == NULL);
         }
 
-        g_object_unref(&style_elem);
+        delete style_elem;
         Inkscape::GC::release(repr);
     }
 
     void testReadContent()
     {
         TS_ASSERT( _doc );
-        TS_ASSERT( sp_document_repr_doc(_doc) );
-        if ( !sp_document_repr_doc(_doc) ) {
+        TS_ASSERT( _doc->getReprDoc() );
+        if ( !_doc->getReprDoc() ) {
             return; // evil early return
         }
 
-        SPStyleElem &style_elem = *SP_STYLE_ELEM(g_object_new(SP_TYPE_STYLE_ELEM, NULL));
-        Inkscape::XML::Node *const repr = sp_document_repr_doc(_doc)->createElement("svg:style");
+        SPStyleElem *style_elem = new SPStyleElem();
+        Inkscape::XML::Node *const repr = _doc->getReprDoc()->createElement("svg:style");
         repr->setAttribute("type", "text/css");
-        Inkscape::XML::Node *const content_repr = sp_document_repr_doc(_doc)->createTextNode(".myclass { }");
+        Inkscape::XML::Node *const content_repr = _doc->getReprDoc()->createTextNode(".myclass { }");
         repr->addChild(content_repr, NULL);
-        sp_object_invoke_build(&style_elem, _doc, repr, false);
-        TS_ASSERT( style_elem.is_css );
+        style_elem->invoke_build(_doc, repr, false);
+        TS_ASSERT( style_elem->is_css );
         TS_ASSERT( _doc->style_cascade );
         CRStyleSheet const *const stylesheet = cr_cascade_get_sheet(_doc->style_cascade, ORIGIN_AUTHOR);
         TS_ASSERT(stylesheet != NULL);
         TS_ASSERT(stylesheet->statements != NULL);
 
-        g_object_unref(&style_elem);
+        delete style_elem;
         Inkscape::GC::release(repr);
     }
 
@@ -163,4 +163,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,10 +1,10 @@
 /**
- * \file
- * \brief  \todo brief description
- *
+ * @file
+ * @brief Structure representing the intersection of two curves
+ *//*
  * Authors:
- *      Michael Sloane <?@?.?>
- *      Marco <?@?.?>
+ *   Michael Sloan <mgsloan@gmail.com>
+ *   Marco Cecchetti <mrcekets at gmail.com>
  * 
  * Copyright 2006-2008  authors
  *
@@ -183,6 +183,7 @@ CrossingSet reverse_ta(CrossingSet const &cr, unsigned split, std::vector<double
 CrossingSet reverse_tb(CrossingSet const &cr, unsigned split, std::vector<double> max);
 
 void clean(Crossings &cr_a, Crossings &cr_b);
+void delete_duplicates(Crossings &crs);
 
 }
 
@@ -196,4 +197,4 @@ void clean(Crossings &cr_a, Crossings &cr_b);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

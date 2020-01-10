@@ -6,6 +6,8 @@
  *   Ted Gould <ted@gould.cx>
  *   Ulf Erikson <ulferikson@users.sf.net>
  *   Johan Engelen <goejendaagh@zonnet.nl>
+ *   Jon A. Cruz <jon@joncruz.org>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2004-2010 Authors
  *
@@ -27,35 +29,39 @@
 #include "extension/print.h"
 #include "extension/db.h"
 #include "extension/output.h"
-#include "display/nr-arena.h"
-#include "display/nr-arena-item.h"
+#include "display/drawing.h"
 
 #include "display/curve.h"
 #include "display/canvas-bpath.h"
 #include "sp-item.h"
 #include "sp-root.h"
 
-#include <2geom/matrix.h>
+#include <2geom/affine.h>
+#include "document.h"
+
+#include "util/units.h"
 
 namespace Inkscape {
 namespace Extension {
 namespace Internal {
 
-bool
-CairoRendererPdfOutput::check (Inkscape::Extension::Extension * module)
+bool CairoRendererPdfOutput::check(Inkscape::Extension::Extension * /*module*/)
 {
-    if (NULL == Inkscape::Extension::db.get("org.inkscape.output.pdf.cairorenderer"))
-        return FALSE;
+    bool result = true;
 
-    return TRUE;
+    if (NULL == Inkscape::Extension::db.get("org.inkscape.output.pdf.cairorenderer")) {
+        result = false;
+    }
+
+    return result;
 }
 
 static bool
 pdf_render_document_to_file(SPDocument *doc, gchar const *filename, unsigned int level,
                             bool texttopath, bool omittext, bool filtertobitmap, int resolution,
-                            const gchar * const exportId, bool exportDrawing, bool exportCanvas)
+                            const gchar * const exportId, bool exportDrawing, bool exportCanvas, float bleedmargin_px)
 {
-    sp_document_ensure_up_to_date(doc);
+    doc->ensureUpToDate();
 
 /* Start */
 
@@ -69,41 +75,40 @@ pdf_render_document_to_file(SPDocument *doc, gchar const *filename, unsigned int
     }
     else {
         // we want to export the entire document from root
-        base = SP_ITEM(sp_document_root(doc));
+        base = doc->getRoot();
         pageBoundingBox = !exportDrawing;
     }
 
-    if (!base)
+    if (!base) {
         return false;
+    }
     
     /* Create new arena */
-    NRArena *arena = NRArena::create();
-    nr_arena_set_renderoffscreen (arena);
-    unsigned dkey = sp_item_display_key_new(1);
-    sp_item_invoke_show(base, arena, dkey, SP_ITEM_SHOW_DISPLAY);
+    Inkscape::Drawing drawing;
+    drawing.setExact(true);
+    unsigned dkey = SPItem::display_key_new(1);
+    base->invoke_show(drawing, dkey, SP_ITEM_SHOW_DISPLAY);
 
     /* Create renderer and context */
     CairoRenderer *renderer = new CairoRenderer();
     CairoRenderContext *ctx = renderer->createContext();
     ctx->setPDFLevel(level);
     ctx->setTextToPath(texttopath);
-    renderer->_omitText = omittext;
+    ctx->setOmitText(omittext);
     ctx->setFilterToBitmap(filtertobitmap);
     ctx->setBitmapResolution(resolution);
 
     bool ret = ctx->setPdfTarget (filename);
     if(ret) {
         /* Render document */
-        ret = renderer->setupDocument(ctx, doc, pageBoundingBox, base);
+        ret = renderer->setupDocument(ctx, doc, pageBoundingBox, bleedmargin_px, base);
         if (ret) {
             renderer->renderItem(ctx, base);
             ret = ctx->finish();
         }
     }
 
-    /* Release arena */
-    sp_item_invoke_hide(base, dkey);
-    nr_object_unref((NRObject *) arena);
+    base->invoke_hide(dkey);
 
     renderer->destroyContext(ctx);
     delete renderer;
@@ -131,12 +136,12 @@ CairoRendererPdfOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, 
     if (ext == NULL)
         return;
 
-    const gchar *new_level = NULL;
     int level = 0;
     try {
-        new_level = mod->get_param_enum("PDFversion");
-        if((new_level != NULL) && (g_ascii_strcasecmp("PDF-1.5", new_level) == 0))
+        const gchar *new_level = mod->get_param_enum("PDFversion");
+        if((new_level != NULL) && (g_ascii_strcasecmp("PDF-1.5", new_level) == 0)) {
             level = 1;
+        }
     }
     catch(...) {
         g_warning("Parameter <PDFversion> might not exist");
@@ -182,20 +187,20 @@ CairoRendererPdfOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, 
         g_warning("Parameter <exportId> might not exist");
     }
 
-    bool new_exportDrawing  = FALSE;
+    bool new_exportCanvas  = true;
     try {
-        new_exportDrawing  = mod->get_param_bool("areaDrawing");
+        new_exportCanvas = (strcmp(ext->get_param_optiongroup("area"), "page") == 0);
+    } catch(...) {
+        g_warning("Parameter <area> might not exist");
     }
-    catch(...) {
-        g_warning("Parameter <areaDrawing> might not exist");
-    }
+    bool new_exportDrawing  = !new_exportCanvas;
 
-    bool new_exportCanvas  = FALSE;
+    float new_bleedmargin_px = 0.;
     try {
-        new_exportCanvas  = mod->get_param_bool("areaPage");
+        new_bleedmargin_px = Inkscape::Util::Quantity::convert(mod->get_param_float("bleed"), "mm", "px");
     }
     catch(...) {
-        g_warning("Parameter <exportCanvas> might not exist");
+        g_warning("Parameter <bleed> might not exist");
     }
 
     // Create PDF file
@@ -204,7 +209,7 @@ CairoRendererPdfOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, 
         final_name = g_strdup_printf("> %s", filename);
         ret = pdf_render_document_to_file(doc, final_name, level,
                                           new_textToPath, new_textToLaTeX, new_blurToBitmap, new_bitmapResolution,
-                                          new_exportId, new_exportDrawing, new_exportCanvas);
+                                          new_exportId, new_exportDrawing, new_exportCanvas, new_bleedmargin_px);
         g_free(final_name);
 
         if (!ret)
@@ -213,7 +218,7 @@ CairoRendererPdfOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, 
 
     // Create LaTeX file (if requested)
     if (new_textToLaTeX) {
-        ret = latex_render_document_text_to_file(doc, filename, new_exportId, new_exportDrawing, new_exportCanvas, true);
+        ret = latex_render_document_text_to_file(doc, filename, new_exportId, new_exportDrawing, new_exportCanvas, new_bleedmargin_px, true);
 
         if (!ret)
             throw Inkscape::Extension::Output::save_failed();
@@ -232,32 +237,35 @@ CairoRendererPdfOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, 
 void
 CairoRendererPdfOutput::init (void)
 {
-	Inkscape::Extension::build_from_mem(
-		"<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
-			"<name>Portable Document Format</name>\n"
-			"<id>org.inkscape.output.pdf.cairorenderer</id>\n"
-			"<param name=\"PDFversion\" gui-text=\"" N_("Restrict to PDF version") "\" type=\"enum\" >\n"
+    Inkscape::Extension::build_from_mem(
+        "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
+            "<name>Portable Document Format</name>\n"
+            "<id>org.inkscape.output.pdf.cairorenderer</id>\n"
+            "<param name=\"PDFversion\" gui-text=\"" N_("Restrict to PDF version:") "\" type=\"enum\" >\n"
 #if (CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1, 10, 0))
-				"<_item value='PDF-1.5'>" N_("PDF 1.5") "</_item>\n"
+                "<_item value='PDF-1.5'>" N_("PDF 1.5") "</_item>\n"
 #endif
                 "<_item value='PDF-1.4'>" N_("PDF 1.4") "</_item>\n"
-			"</param>\n"
-			"<param name=\"textToPath\" gui-text=\"" N_("Convert texts to paths") "\" type=\"boolean\">false</param>\n"
-			"<param name=\"textToLaTeX\" gui-text=\"" N_("PDF+LaTeX: Omit text in PDF, and create LaTeX file") "\" type=\"boolean\">false</param>\n"
-			"<param name=\"blurToBitmap\" gui-text=\"" N_("Rasterize filter effects") "\" type=\"boolean\">true</param>\n"
-			"<param name=\"resolution\" gui-text=\"" N_("Resolution for rasterization (dpi)") "\" type=\"int\" min=\"1\" max=\"10000\">90</param>\n"
-			"<param name=\"areaDrawing\" gui-text=\"" N_("Export area is drawing") "\" type=\"boolean\">false</param>\n"
-			"<param name=\"areaPage\" gui-text=\"" N_("Export area is page") "\" type=\"boolean\">false</param>\n"
-			"<param name=\"exportId\" gui-text=\"" N_("Limit export to the object with ID") "\" type=\"string\"></param>\n"
-			"<output>\n"
-				"<extension>.pdf</extension>\n"
-				"<mimetype>application/pdf</mimetype>\n"
-				"<filetypename>Portable Document Format (*.pdf)</filetypename>\n"
-				"<filetypetooltip>PDF File</filetypetooltip>\n"
-			"</output>\n"
-		"</inkscape-extension>", new CairoRendererPdfOutput());
+            "</param>\n"
+            "<param name=\"textToPath\" gui-text=\"" N_("Convert texts to paths") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"textToLaTeX\" gui-text=\"" N_("PDF+LaTeX: Omit text in PDF, and create LaTeX file") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"blurToBitmap\" gui-text=\"" N_("Rasterize filter effects") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"resolution\" gui-text=\"" N_("Resolution for rasterization (dpi):") "\" type=\"int\" min=\"1\" max=\"10000\">90</param>\n"
+            "<param name=\"area\" gui-text=\"" N_("Output page size:") "\" type=\"optiongroup\" >\n"
+                "<_option value=\"page\">" N_("Use document's page size") "</_option>"
+                "<_option value=\"drawing\">" N_("Use exported object's size") "</_option>"
+            "</param>"
+            "<param name=\"bleed\" gui-text=\"" N_("Bleed/margin (mm):") "\" type=\"float\" min=\"-10000\" max=\"10000\">0</param>\n"
+            "<param name=\"exportId\" gui-text=\"" N_("Limit export to the object with ID:") "\" type=\"string\"></param>\n"
+            "<output>\n"
+                "<extension>.pdf</extension>\n"
+                "<mimetype>application/pdf</mimetype>\n"
+                "<filetypename>Portable Document Format (*.pdf)</filetypename>\n"
+                "<filetypetooltip>PDF File</filetypetooltip>\n"
+            "</output>\n"
+        "</inkscape-extension>", new CairoRendererPdfOutput());
 
-	return;
+    return;
 }
 
 } } }  /* namespace Inkscape, Extension, Internal */

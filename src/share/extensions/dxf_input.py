@@ -26,6 +26,8 @@ import inkex, simplestyle, math
 from StringIO import StringIO
 from urllib import quote
 
+inkex.localize()
+
 def export_MTEXT():
     # mandatory group codes : (1 or 3, 10, 20) (text, x, y)
     if (vals[groups['1']] or vals[groups['3']]) and vals[groups['10']] and vals[groups['20']]:
@@ -277,14 +279,14 @@ def export_INSERT():
     if vals[groups['2']] and vals[groups['10']] and vals[groups['20']]:
         x = vals[groups['10']][0] + scale*xmin
         y = vals[groups['20']][0] - scale*ymin - height
-        attribs = {'x': '%f' % x, 'y': '%f' % y, inkex.addNS('href','xlink'): '#' + quote(vals[groups['2']][0].encode("utf-8"))}
+        attribs = {'x': '%f' % x, 'y': '%f' % y, inkex.addNS('href','xlink'): '#' + quote(vals[groups['2']][0].replace(" ", "_").encode("utf-8"))}
         inkex.etree.SubElement(layer, 'use', attribs)
 
 def export_BLOCK():
     # mandatory group codes : (2) (block name)
     if vals[groups['2']]:
         global block
-        block = inkex.etree.SubElement(defs, 'symbol', {'id': vals[groups['2']][0]})
+        block = inkex.etree.SubElement(defs, 'symbol', {'id': vals[groups['2']][0].replace(" ", "_")})
 
 def export_ENDBLK():
     global block
@@ -320,7 +322,7 @@ def generate_ellipse(xc, yc, xm, ym, w, a1, a2):
 
 def generate_gcodetools_point(xc, yc):
     path= 'm %s,%s 2.9375,-6.34375 0.8125,1.90625 6.84375,-6.84375 0,0 0.6875,0.6875 -6.84375,6.84375 1.90625,0.8125 z' % (xc,yc)
-    attribs = {'d': path, inkex.addNS('dxfpoint','inkscape'):'1', 'style': 'stroke:#ff0000;fill:#ff0000'}
+    attribs = {'d': path, inkex.addNS('dxfpoint','inkscape'):'1', 'style': 'stroke:none;fill:#ff0000'}
     inkex.etree.SubElement(layer, 'path', attribs)
 
 def get_line():
@@ -365,6 +367,7 @@ stream = open(args[0], 'r')
 xmax = xmin = ymin = 0.0
 height = 297.0*90.0/25.4                            # default A4 height in pixels
 line = get_line()
+polylines = 0
 flag = 0                                            # (0, 1, 2, 3) = (none, LAYER, LTYPE, DIMTXT)
 layer_colors = {}                                   # store colors by layer
 layer_nodes = {}                                    # store nodes by layer
@@ -411,10 +414,10 @@ else:
     scale = float(options.scale)                    # manual scale factor
     xmin = float(options.xmin)
     ymin = float(options.ymin)
-desc.text = '%s - scale = %f' % (unicode(args[0], options.input_encode), scale)
+desc.text = '%s - scale = %f, origin = (%f, %f), auto = %s' % (unicode(args[0], options.input_encode), scale, xmin, ymin, options.auto)
 scale *= 90.0/25.4                                  # convert from mm to pixels
 
-if not layer_nodes:
+if not layer_nodes.has_key('0'):
     attribs = {inkex.addNS('groupmode','inkscape'): 'layer', inkex.addNS('label','inkscape'): '0'}
     layer_nodes['0'] = inkex.etree.SubElement(doc.getroot(), 'g', attribs)
     layer_colors['0'] = 7
@@ -438,6 +441,8 @@ while line[0] and (line[1] != 'ENDSEC' or not inENTITIES):
     line = get_line()
     if line[1] == 'ENTITIES':
         inENTITIES = True
+    elif line[1] == 'POLYLINE':
+        polylines += 1
     if entity and groups.has_key(line[0]):
         seqs.append(line[0])                        # list of group codes
         if line[0] == '1' or line[0] == '2' or line[0] == '3' or line[0] == '6' or line[0] == '8':  # text value
@@ -467,6 +472,8 @@ while line[0] and (line[1] != 'ENDSEC' or not inENTITIES):
             if block != defs:                       # in a BLOCK
                 layer = block
             elif vals[groups['8']]:                 # use Common Layer Name
+                if not vals[groups['8']][0]:
+                    vals[groups['8']][0] = '0'      # use default name
                 layer = layer_nodes[vals[groups['8']][0]]
             color = '#000000'                       # default color
             if vals[groups['8']]:
@@ -493,6 +500,8 @@ while line[0] and (line[1] != 'ENDSEC' or not inENTITIES):
         vals = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
         seqs = []
 
+if polylines:
+    inkex.errormsg(_('%d ENTITIES of type POLYLINE encountered and ignored. Please try to convert to Release 13 format using QCad.') % polylines)
 doc.write(inkex.sys.stdout)
 
 # vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99

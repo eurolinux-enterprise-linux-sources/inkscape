@@ -16,7 +16,6 @@
 #define SEEN_INKSCAPE_XML_SUBTREE_H
 
 #include "gc-managed.h"
-#include "xml/xml-forward.h"
 #include "xml/composite-node-observer.h"
 
 namespace Inkscape {
@@ -74,4 +73,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

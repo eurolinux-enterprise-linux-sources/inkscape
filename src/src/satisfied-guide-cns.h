@@ -1,11 +1,11 @@
-#ifndef __SATISFIED_GUIDE_CNS_H__
-#define __SATISFIED_GUIDE_CNS_H__
+#ifndef SEEN_SATISFIED_GUIDE_CNS_H
+#define SEEN_SATISFIED_GUIDE_CNS_H
 
-#include <forward.h>
 #include <2geom/forward.h>
 #include <vector>
 #include <sp-item.h>
 
+class SPDesktop;
 class SPGuideConstraint;
 
 void satisfied_guide_cns(SPDesktop const &desktop,
@@ -13,7 +13,7 @@ void satisfied_guide_cns(SPDesktop const &desktop,
                          std::vector<SPGuideConstraint> &cns);
 
 
-#endif /* !__SATISFIED_GUIDE_CNS_H__ */
+#endif // SEEN_SATISFIED_GUIDE_CNS_H
 
 /*
   Local Variables:
@@ -24,4 +24,4 @@ void satisfied_guide_cns(SPDesktop const &desktop,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

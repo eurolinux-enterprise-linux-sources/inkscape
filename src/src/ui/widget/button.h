@@ -1,6 +1,4 @@
-/**
- * \brief Button and CheckButton widgets
- *
+/*
  * Author:
  *   buliabyak@gmail.com
  *
@@ -12,30 +10,55 @@
 #ifndef INKSCAPE_UI_WIDGET_BUTTON_H
 #define INKSCAPE_UI_WIDGET_BUTTON_H
 
-#include <gtkmm/button.h>
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
 #include <gtkmm/checkbutton.h>
-#include <gtkmm/tooltips.h>
+#include <gtkmm/radiobutton.h>
 
 namespace Inkscape {
 namespace UI {
 namespace Widget {
 
+/**
+ * Button widget.
+ * @deprecated - no need for an explicit subclass... just perhaps a helper function.
+ */
 class Button : public Gtk::Button
 {
 public:
     Button();
     Button(Glib::ustring const &label, Glib::ustring const &tooltip);
-protected:
-    Gtk::Tooltips _tooltips;
 };
 
+/**
+ * CheckButton widget.
+ * @deprecated - no need for an explicit subclass... just perhaps a helper function.
+ */
 class CheckButton : public Gtk::CheckButton
 {
 public:
     CheckButton();
     CheckButton(Glib::ustring const &label, Glib::ustring const &tooltip);
-protected:
-    Gtk::Tooltips _tooltips;
+    CheckButton(Glib::ustring const &label, Glib::ustring const &tooltip, bool active);
+
+};
+
+/**
+ * RadioButton widget.
+ * @deprecated - no need for an explicit subclass... just perhaps a helper function.
+ */
+class RadioButton : public Gtk::RadioButton
+{
+public:
+    RadioButton();
+    RadioButton(Glib::ustring const &label, Glib::ustring const &tooltip);
+
 };
 
 } // namespace Widget

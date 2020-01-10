@@ -10,6 +10,7 @@
 #include "extension/system.h"
 
 #include "normalize.h"
+#include <Magick++.h>
 
 namespace Inkscape {
 namespace Extension {
@@ -22,7 +23,7 @@ Normalize::applyEffect(Magick::Image* image) {
 }
 
 void
-Normalize::refreshParameters(Inkscape::Extension::Effect* module) {	
+Normalize::refreshParameters(Inkscape::Extension::Effect* /*module*/) {	
 }
 
 #include "../clear-n_.h"
@@ -39,7 +40,7 @@ Normalize::init(void)
 				"<effects-menu>\n"
 					"<submenu name=\"" N_("Raster") "\" />\n"
 				"</effects-menu>\n"
-				"<menu-tip>" N_("Normalize selected bitmap(s), expanding color range to the full possible range of color.") "</menu-tip>\n"
+				"<menu-tip>" N_("Normalize selected bitmap(s), expanding color range to the full possible range of color") "</menu-tip>\n"
 			"</effect>\n"
 		"</inkscape-extension>\n", new Normalize());
 }

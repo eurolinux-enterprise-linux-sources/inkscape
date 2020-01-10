@@ -9,7 +9,13 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#ifdef HAVE_CONFIG_H
+# include "config.h"
+#endif
+
+#ifndef PANGO_ENABLE_ENGINE
 #define PANGO_ENABLE_ENGINE
+#endif
 
 #include <gtk/gtk.h>
 #include "Layout-TNG.h"
@@ -19,20 +25,16 @@
 #include "sp-string.h"
 #include "FontFactory.h"
 
-#if !PANGO_VERSION_CHECK(1,24,0)
-#define PANGO_WEIGHT_THIN       static_cast<PangoWeight>(100)
-#define PANGO_WEIGHT_BOOK       static_cast<PangoWeight>(380)
-#define PANGO_WEIGHT_MEDIUM     static_cast<PangoWeight>(500)
-#define PANGO_WEIGHT_ULTRAHEAVY static_cast<PangoWeight>(1000)
-#endif
 
 namespace Inkscape {
 namespace Text {
 
 void Layout::_clearInputObjects()
 {
-    for(std::vector<InputStreamItem*>::iterator it = _input_stream.begin() ; it != _input_stream.end() ; it++)
+    for(std::vector<InputStreamItem*>::iterator it = _input_stream.begin() ; it != _input_stream.end() ; ++it) {
         delete *it;
+    }
+
     _input_stream.clear();
     _input_wrap_shapes.clear();
 }
@@ -52,7 +54,7 @@ void Layout::appendText(Glib::ustring const &text, SPStyle *style, void *source_
     sp_style_ref(style);
 
     new_source->text_length = 0;
-    for ( ; text_begin != text_end && text_begin != text.end() ; text_begin++)
+    for ( ; text_begin != text_end && text_begin != text.end() ; ++text_begin)
         new_source->text_length++;        // save this because calculating the length of a UTF-8 string is expensive
 
     if (optional_attributes) {
@@ -135,7 +137,7 @@ float Layout::InputStreamTextSource::styleComputeFontSize() const
         if (this_style->font_size.set && !this_style->font_size.inherit) {
             switch (this_style->font_size.type) {
                 case SP_FONT_SIZE_LITERAL: {
-                    switch(this_style->font_size.value) {   // these multipliers are straight out of the CSS spec
+                    switch(this_style->font_size.literal) {   // these multipliers are straight out of the CSS spec
 	                    case SP_CSS_FONT_SIZE_XX_SMALL: return medium_font_size * inherit_multiplier * (3.0/5.0);
 	                    case SP_CSS_FONT_SIZE_X_SMALL:  return medium_font_size * inherit_multiplier * (3.0/4.0);
 	                    case SP_CSS_FONT_SIZE_SMALL:    return medium_font_size * inherit_multiplier * (8.0/9.0);
@@ -284,16 +286,15 @@ font_instance *Layout::InputStreamTextSource::styleGetFontInstance() const
 
 PangoFontDescription *Layout::InputStreamTextSource::styleGetFontDescription() const
 {
-    if (style->text == NULL) return NULL;
     PangoFontDescription *descr = pango_font_description_new();
     // Pango can't cope with spaces before or after the commas - let's remove them.
     // this code is not exactly unicode-safe, but it's similar to what's done in
     // pango, so it's not the limiting factor
     Glib::ustring family;
-    if (style->text->font_family.value == NULL) {
-        family = "Sans";
+    if (style->font_family.value == NULL) {
+        family = "sans-serif";
     } else {
-        gchar **families = g_strsplit(style->text->font_family.value, ",", -1);
+        gchar **families = g_strsplit(style->font_family.value, ",", -1);
         if (families) {
             for (gchar **f = families ; *f ; ++f) {
                 g_strstrip(*f);

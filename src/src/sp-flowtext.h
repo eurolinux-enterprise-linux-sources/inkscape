@@ -1,22 +1,29 @@
-#ifndef __SP_ITEM_FLOWTEXT_H__
-#define __SP_ITEM_FLOWTEXT_H__
+#ifndef SEEN_SP_ITEM_FLOWTEXT_H
+#define SEEN_SP_ITEM_FLOWTEXT_H
 
 /*
  */
 
 #include "sp-item.h"
 
-#include "display/nr-arena-forward.h"
 #include <2geom/forward.h>
 #include "libnrtype/Layout-TNG.h"
 
-#define SP_TYPE_FLOWTEXT            (sp_flowtext_get_type ())
-#define SP_FLOWTEXT(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_FLOWTEXT, SPFlowtext))
-#define SP_FLOWTEXT_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_FLOWTEXT, SPFlowtextClass))
-#define SP_IS_FLOWTEXT(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_FLOWTEXT))
-#define SP_IS_FLOWTEXT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_FLOWTEXT))
+#define SP_FLOWTEXT(obj) (dynamic_cast<SPFlowtext*>((SPObject*)obj))
+#define SP_IS_FLOWTEXT(obj) (dynamic_cast<const SPFlowtext*>((SPObject*)obj) != NULL)
 
-struct SPFlowtext : public SPItem {
+
+namespace Inkscape {
+
+class DrawingGroup;
+
+} // namespace Inkscape
+
+class SPFlowtext : public SPItem {
+public:
+	SPFlowtext();
+	virtual ~SPFlowtext();
+
     /** Completely recalculates the layout. */
     void rebuildLayout();
 
@@ -31,10 +38,16 @@ struct SPFlowtext : public SPItem {
 //semiprivate:  (need to be accessed by the C-style functions still)
     Inkscape::Text::Layout layout;
 
-    /** discards the NRArena objects representing this text. */
-    void _clearFlow(NRArenaGroup* in_arena);
+    /** discards the drawing objects representing this text. */
+    void _clearFlow(Inkscape::DrawingGroup* in_arena);
 
     double par_indent;
+
+    bool _optimizeScaledText;
+
+    /** Optimize scaled flow text on next set_transform. */
+    void optimizeScaledText()
+        {_optimizeScaledText = true;}
 
 private:
     /** Recursively walks the xml tree adding tags and their contents. */
@@ -44,17 +57,32 @@ private:
     of this flowroot. */
     Shape* _buildExclusionShape() const;
 
-};
+public:
+	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
 
-struct SPFlowtextClass {
-    SPItemClass parent_class;
-};
+	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
+	virtual void remove_child(Inkscape::XML::Node* child);
 
-GType sp_flowtext_get_type (void);
+	virtual void set(unsigned int key, const gchar* value);
+	virtual Geom::Affine set_transform(Geom::Affine const& xform);
+
+	virtual void update(SPCtx* ctx, unsigned int flags);
+	virtual void modified(unsigned int flags);
+
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
+
+	virtual Geom::OptRect bbox(Geom::Affine const &transform, SPItem::BBoxType type) const;
+	virtual void print(SPPrintContext *ctx);
+        virtual const char* displayName() const;
+	virtual gchar* description() const;
+	virtual Inkscape::DrawingItem* show(Inkscape::Drawing &drawing, unsigned int key, unsigned int flags);
+	virtual void hide(unsigned int key);
+    virtual void snappoints(std::vector<Inkscape::SnapCandidatePoint> &p, Inkscape::SnapPreferences const *snapprefs) const;
+};
 
 SPItem *create_flowtext_with_internal_frame (SPDesktop *desktop, Geom::Point p1, Geom::Point p2);
 
-#endif
+#endif // SEEN_SP_ITEM_FLOWTEXT_H
 
 /*
   Local Variables:
@@ -65,4 +93,4 @@ SPItem *create_flowtext_with_internal_frame (SPDesktop *desktop, Geom::Point p1,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

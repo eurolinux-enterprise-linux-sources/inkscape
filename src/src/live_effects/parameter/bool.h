@@ -28,7 +28,7 @@ public:
                bool default_value = false);
     virtual ~BoolParam();
 
-    virtual Gtk::Widget * param_newWidget(Gtk::Tooltips * tooltips);
+    virtual Gtk::Widget * param_newWidget();
 
     virtual bool param_readSVGValue(const gchar * strvalue);
     virtual gchar * param_getSVGValue() const;
@@ -36,10 +36,9 @@ public:
     void param_setValue(bool newvalue);
     virtual void param_set_default();
 
-    bool get_value() { return value; };
+    bool get_value() const { return value; };
 
-    inline operator bool()
-        { return value; };
+    inline operator bool() const { return value; };
 
 private:
     BoolParam(const BoolParam&);

@@ -1,10 +1,13 @@
 /**
- * \file bezier.h
- * \brief \todo brief description
+ * @file
+ * @brief Bezier polynomial
+ *//*
+ * Authors:
+ *   MenTaLguY <mental@rydia.net>
+ *   Michael Sloan <mgsloan@gmail.com>
+ *   Nathan Hurst <njh@njhurst.com>
  *
- * Copyright 2007  MenTaLguY <mental@rydia.net>
- * Copyright 2007  Michael Sloan <mgsloan@gmail.com>
- * Copyright 2007  Nathan Hurst <njh@njhurst.com>
+ * Copyright 2007 Authors
  *
  * This library is free software; you can redistribute it and/or
  * modify it either under the terms of the GNU Lesser General Public
@@ -31,22 +34,24 @@
  *
  */
 
-#ifndef SEEN_BEZIER_H
-#define SEEN_BEZIER_H
+#ifndef LIB2GEOM_SEEN_BEZIER_H
+#define LIB2GEOM_SEEN_BEZIER_H
 
-#include <2geom/coord.h>
 #include <valarray>
-#include <2geom/isnan.h>
+#include <boost/optional.hpp>
+#include <2geom/coord.h>
+#include <2geom/choose.h>
+#include <valarray>
+#include <2geom/math-utils.h>
 #include <2geom/d2.h>
 #include <2geom/solver.h>
-#include <boost/optional/optional.hpp>
 
 namespace Geom {
 
 inline Coord subdivideArr(Coord t, Coord const *v, Coord *left, Coord *right, unsigned order) {
 /*
  *  Bernstein : 
- *      Evaluate a Bernstein function at a particular parameter value
+ *	Evaluate a Bernstein function at a particular parameter value
  *      Fill in control points for resulting sub-curves.
  * 
  */
@@ -108,7 +113,6 @@ inline T bernsteinValueAt(double t, T const *c_, unsigned n) {
     return (tmp + tn*t*c_[n]);
 }
 
-
 class Bezier {
 private:
     std::valarray<Coord> c_;
@@ -118,6 +122,12 @@ private:
     friend OptInterval bounds_fast(Bezier const & b);
 
     friend Bezier derivative(const Bezier & a);
+
+    friend class Bernstein;
+
+    void
+    find_bezier_roots(std::vector<double> & solutions,
+                      double l, double r) const;
 
 protected:
     Bezier(Coord const c[], unsigned ord) : c_(c, ord+1){
@@ -183,15 +193,15 @@ public:
 
     //IMPL: FragmentConcept
     typedef Coord output_type;
-    inline bool isZero() const {
+    inline bool isZero(double eps=EPSILON) const {
         for(unsigned i = 0; i <= order(); i++) {
-            if(c_[i] != 0) return false;
+            if( ! are_near(c_[i], 0., eps) ) return false;
         }
         return true;
     }
-    inline bool isConstant() const {
+    inline bool isConstant(double eps=EPSILON) const {
         for(unsigned i = 1; i <= order(); i++) {
-            if(c_[i] != c_[0]) return false;
+            if( ! are_near(c_[i], c_[0], eps) ) return false;
         }
         return true;
     }
@@ -218,17 +228,10 @@ public:
             tmp = (tmp + tn*bc*c_[i])*u;
         }
         return (tmp + tn*t*c_[n]);
-        //return subdivideArr(t, &c_[0], NULL, NULL, order());
     }
     inline Coord operator()(double t) const { return valueAt(t); }
 
     SBasis toSBasis() const;
-//    inline SBasis toSBasis() const {
-//        SBasis sb;
-//        bezier_to_sbasis(sb, (*this));
-//        return sb;
-//        //return bezier_to_sbasis(&c_[0], order());
-//    }
 
     //Only mutator
     inline Coord &operator[](unsigned ix) { return c_[ix]; }
@@ -248,7 +251,7 @@ public:
 
         // initialize temp storage variables
         std::valarray<Coord> d_(order()+1);
-        for (unsigned i = 0; i < size(); i++) {
+        for(unsigned i = 0; i < size(); i++) {
             d_[i] = c_[i];
         }
 
@@ -256,10 +259,10 @@ public:
         if(n_derivs > order()) {
             nn = order()+1; // only calculate the non zero derivs
         }
-        for (unsigned di = 0; di < nn; di++) {
+        for(unsigned di = 0; di < nn; di++) {
             //val_n_der[di] = (subdivideArr(t, &d_[0], NULL, NULL, order() - di));
             val_n_der[di] = bernsteinValueAt(t, &d_[0], order() - di);
-            for (unsigned i = 0; i < order() - di; i++) {
+            for(unsigned i = 0; i < order() - di; i++) {
                 d_[i] = (order()-di)*(d_[i+1] - d_[i]);
             }
         }
@@ -275,19 +278,95 @@ public:
 
     std::vector<double> roots() const {
         std::vector<double> solutions;
-        find_bernstein_roots(&const_cast<std::valarray<Coord>&>(c_)[0], order(), solutions, 0, 0.0, 1.0);
+        find_bezier_roots(solutions, 0, 1);
         return solutions;
     }
     std::vector<double> roots(Interval const ivl) const {
         std::vector<double> solutions;
-        find_bernstein_roots(&const_cast<std::valarray<Coord>&>(c_)[0], order(), solutions, 0, ivl[0], ivl[1]);
+        find_bernstein_roots(&const_cast<std::valarray<Coord>&>(c_)[0], order(), solutions, 0, ivl.min(), ivl.max());
         return solutions;
+    }
+
+    Bezier forward_difference(unsigned k) {
+        Bezier fd(Order(order()-k));
+        unsigned n = fd.size();
+        
+        for(unsigned i = 0; i < n; i++) {
+            fd[i] = 0;
+            for(unsigned j = i; j < n; j++) {
+                fd[i] += (((j)&1)?-c_[j]:c_[j])*choose<double>(n, j-i);
+            }
+        }
+        return fd;
+    }
+  
+    Bezier elevate_degree() const {
+        Bezier ed(Order(order()+1));
+        unsigned n = size();
+        ed[0] = c_[0];
+        ed[n] = c_[n-1];
+        for(unsigned i = 1; i < n; i++) {
+            ed[i] = (i*c_[i-1] + (n - i)*c_[i])/(n);
+        }
+        return ed;
+    }
+
+    Bezier reduce_degree() const {
+        if(order() == 0) return *this;
+        Bezier ed(Order(order()-1));
+        unsigned n = size();
+        ed[0] = c_[0];
+        ed[n-1] = c_[n]; // ensure exact endpoints
+        unsigned middle = n/2;
+        for(unsigned i = 1; i < middle; i++) {
+            ed[i] = (n*c_[i] - i*ed[i-1])/(n-i);
+        }
+        for(unsigned i = n-1; i >= middle; i--) {
+            ed[i] = (n*c_[i] - i*ed[n-i])/(i);
+        }
+        return ed;
+    }
+
+    Bezier elevate_to_degree(unsigned newDegree) const {
+        Bezier ed = *this;
+        for(unsigned i = degree(); i < newDegree; i++) {
+            ed = ed.elevate_degree();
+        }
+        return ed;
+    }
+
+    Bezier deflate() {
+        if(order() == 0) return *this;
+        unsigned n = order();
+        Bezier b(Order(n-1));
+        for(unsigned i = 0; i < n; i++) {
+            b[i] = (n*c_[i+1])/(i+1);
+        }
+        return b;
     }
 };
 
 
 void bezier_to_sbasis (SBasis & sb, Bezier const& bz);
 
+inline
+Bezier multiply(Bezier const& f, Bezier const& g) {
+    unsigned m = f.order();
+    unsigned n = g.order();
+    Bezier h(Bezier::Order(m+n));
+    // h_k = sum_(i+j=k) (m i)f_i (n j)g_j / (m+n k)
+    
+    for(unsigned i = 0; i <= m; i++) {
+        const double fi = choose<double>(m,i)*f[i];
+        for(unsigned j = 0; j <= n; j++) {
+            h[i+j] += fi * choose<double>(n,j)*g[j];
+        }
+    }
+    for(unsigned k = 0; k <= m+n; k++) {
+        h[k] /= choose<double>(m+n, k);
+    }
+    return h;
+}
 
 inline
 SBasis Bezier::toSBasis() const {
@@ -310,6 +389,18 @@ inline Bezier operator-(const Bezier & a, double v) {
     for(unsigned i = 0; i <= a.order(); i++)
         result[i] = a[i] - v;
     return result;
+}
+
+inline Bezier& operator+=(Bezier & a, double v) {
+    for(unsigned i = 0; i <= a.order(); ++i)
+        a[i] = a[i] + v;
+    return a;
+}
+
+inline Bezier& operator-=(Bezier & a, double v) {
+    for(unsigned i = 0; i <= a.order(); ++i)
+        a[i] = a[i] - v;
+    return a;
 }
 
 inline Bezier operator*(const Bezier & a, double v) {
@@ -381,7 +472,8 @@ inline Bezier integral(const Bezier & a) {
 }
 
 inline OptInterval bounds_fast(Bezier const & b) {
-    return Interval::fromArray(&const_cast<Bezier&>(b).c_[0], b.size());
+    OptInterval ret = Interval::from_array(&const_cast<Bezier&>(b).c_[0], b.size());
+    return ret;
 }
 
 //TODO: better bounds exact
@@ -399,14 +491,15 @@ inline OptInterval bounds_local(Bezier const & b, OptInterval i) {
 }
 
 inline std::ostream &operator<< (std::ostream &out_file, const Bezier & b) {
+    out_file << "Bezier(";
     for(unsigned i = 0; i < b.size(); i++) {
         out_file << b[i] << ", ";
     }
-    return out_file;
+    return out_file << ")";
 }
 
 }
-#endif //SEEN_BEZIER_H
+#endif // LIB2GEOM_SEEN_BEZIER_H
 
 /*
   Local Variables:
@@ -417,4 +510,4 @@ inline std::ostream &operator<< (std::ostream &out_file, const Bezier & b) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

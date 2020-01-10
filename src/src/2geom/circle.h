@@ -1,7 +1,7 @@
 /**
  * \file
- * \brief Circle Curve
- *
+ * \brief Circles
+ *//*
  * Authors:
  *      Marco Cecchetti <mrcekets at gmail.com>
  *
@@ -31,19 +31,17 @@
  * the specific language governing rights and limitations.
  */
 
+#ifndef LIB2GEOM_SEEN_CIRCLE_H
+#define LIB2GEOM_SEEN_CIRCLE_H
 
-#ifndef _2GEOM_CIRCLE_H_
-#define _2GEOM_CIRCLE_H_
-
-
+#include <vector>
 #include <2geom/point.h>
 #include <2geom/exception.h>
+#include <2geom/path.h>
 
+namespace Geom {
 
-namespace Geom
-{
-
-class SVGEllipticalArc;
+class EllipticalArc;
 
 class Circle
 {
@@ -53,6 +51,11 @@ class Circle
 
     Circle(double cx, double cy, double r)
         : m_centre(cx, cy), m_ray(r)
+    {
+    }
+
+    Circle(Point center, double r)
+        : m_centre(center), m_ray(r)
     {
     }
 
@@ -82,9 +85,12 @@ class Circle
     // prerequisite: at least 3 points must be passed
     void set(std::vector<Point> const& points);
 
-    SVGEllipticalArc
+    EllipticalArc *
     arc(Point const& initial, Point const& inner, Point const& final,
         bool _svg_compliant = true);
+
+    D2<SBasis> toSBasis();
+    void getPath(std::vector<Path> &path_out);
 
     Point center() const
     {
@@ -107,13 +113,9 @@ class Circle
     Coord m_ray;
 };
 
-
 } // end namespace Geom
 
-
-
-#endif // _2GEOM_CIRCLE_H_
-
+#endif // LIB2GEOM_SEEN_CIRCLE_H
 
 /*
   Local Variables:
@@ -124,4 +126,4 @@ class Circle
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,6 +1,6 @@
-/*
+/** @file
  * SVG feBlend renderer
- *
+ *//*
  * "This filter composites two objects together using commonly used
  * imaging software blending modes. It performs a pixel-wise combination
  * of two input images." 
@@ -9,109 +9,27 @@
  * Authors:
  *   Niko Kiirala <niko@kiirala.com>
  *   Jasper van de Gronde <th.v.d.gronde@hccnet.nl>
+ *   Krzysztof Kosiński <tweenk.pl@gmail.com>
  *
  * Copyright (C) 2007-2008 authors
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include "display/cairo-templates.h"
+#include "display/cairo-utils.h"
 #include "display/nr-filter-blend.h"
-#include "display/nr-filter-pixops.h"
 #include "display/nr-filter-primitive.h"
 #include "display/nr-filter-slot.h"
 #include "display/nr-filter-types.h"
-#include "display/nr-filter-units.h"
-#include "libnr/nr-pixblock.h"
-#include "libnr/nr-blit.h"
-#include "libnr/nr-pixops.h"
+#include "preferences.h"
 
 namespace Inkscape {
 namespace Filters {
-
-/*
- * From http://www.w3.org/TR/SVG11/filters.html#feBlend
- *
- * For all feBlend modes, the result opacity is computed as follows:
- * qr = 1 - (1-qa)*(1-qb)
- *
- * For the compositing formulas below, the following definitions apply:
- * cr = Result color (RGB) - premultiplied
- * qa = Opacity value at a given pixel for image A
- * qb = Opacity value at a given pixel for image B
- * ca = Color (RGB) at a given pixel for image A - premultiplied
- * cb = Color (RGB) at a given pixel for image B - premultiplied
- */
-
-/*
- * These blending equations given in SVG standard are for color values
- * in the range 0..1. As these values are stored as unsigned char values,
- * they need some reworking. An unsigned char value can be thought as
- * 0.8 fixed point representation of color value. This is how I've
- * ended up with these equations here.
- */
-
-// Set alpha / opacity. This line is same for all the blending modes,
-// so let's save some copy-pasting.
-#define SET_ALPHA r[3] = NR_NORMALIZE_21((255 * 255) - (255 - a[3]) * (255 - b[3]))
-
-// cr = (1 - qa) * cb + ca
-inline void
-blend_normal(unsigned char *r, unsigned char const *a, unsigned char const *b)
-{
-    r[0] = NR_COMPOSEPPP_1111(a[0],a[3],b[0]);
-    r[1] = NR_COMPOSEPPP_1111(a[1],a[3],b[1]);
-    r[2] = NR_COMPOSEPPP_1111(a[2],a[3],b[2]);
-    SET_ALPHA;
-}
-
-// cr = (1-qa)*cb + (1-qb)*ca + ca*cb
-inline void
-blend_multiply(unsigned char *r, unsigned char const *a, unsigned char const *b)
-{
-    r[0] = NR_NORMALIZE_21((255 - a[3]) * b[0] + (255 - b[3]) * a[0]
-                           + a[0] * b[0]);
-    r[1] = NR_NORMALIZE_21((255 - a[3]) * b[1] + (255 - b[3]) * a[1]
-                           + a[1] * b[1]);
-    r[2] = NR_NORMALIZE_21((255 - a[3]) * b[2] + (255 - b[3]) * a[2]
-                           + a[2] * b[2]);
-    SET_ALPHA;
-}
-
-// cr = cb + ca - ca * cb
-inline void
-blend_screen(unsigned char *r, unsigned char const *a, unsigned char const *b)
-{
-    r[0] = NR_NORMALIZE_21((b[0] + a[0]) * 255 - a[0] * b[0]);
-    r[1] = NR_NORMALIZE_21((b[1] + a[1]) * 255 - a[1] * b[1]);
-    r[2] = NR_NORMALIZE_21((b[2] + a[2]) * 255 - a[2] * b[2]);
-    SET_ALPHA;
-}
-
-// cr = Min ((1 - qa) * cb + ca, (1 - qb) * ca + cb)
-inline void
-blend_darken(unsigned char *r, unsigned char const *a, unsigned char const *b)
-{
-    r[0] = NR_NORMALIZE_21(std::min(NR_COMPOSEPPP_1112(a[0],a[3],b[0]),
-                                    NR_COMPOSEPPP_1112(b[0],b[3],a[0])));
-    r[1] = NR_NORMALIZE_21(std::min(NR_COMPOSEPPP_1112(a[1],a[3],b[1]),
-                                    NR_COMPOSEPPP_1112(b[1],b[3],a[1])));
-    r[2] = NR_NORMALIZE_21(std::min(NR_COMPOSEPPP_1112(a[2],a[3],b[2]),
-                                    NR_COMPOSEPPP_1112(b[2],b[3],a[2])));
-    SET_ALPHA;
-}
-
-// cr = Max ((1 - qa) * cb + ca, (1 - qb) * ca + cb)
-inline void
-blend_lighten(unsigned char *r, unsigned char const *a, unsigned char const *b)
-{
-    r[0] = NR_NORMALIZE_21(std::max(NR_COMPOSEPPP_1112(a[0],a[3],b[0]),
-                                    NR_COMPOSEPPP_1112(b[0],b[3],a[0])));
-    r[1] = NR_NORMALIZE_21(std::max(NR_COMPOSEPPP_1112(a[1],a[3],b[1]),
-                                    NR_COMPOSEPPP_1112(b[1],b[3],a[1])));
-    r[2] = NR_NORMALIZE_21(std::max(NR_COMPOSEPPP_1112(a[2],a[3],b[2]),
-                                    NR_COMPOSEPPP_1112(b[2],b[3],a[2])));
-    SET_ALPHA;
-}
 
 FilterBlend::FilterBlend() 
     : _blend_mode(BLEND_NORMAL),
@@ -125,81 +43,114 @@ FilterPrimitive * FilterBlend::create() {
 FilterBlend::~FilterBlend()
 {}
 
-int FilterBlend::render(FilterSlot &slot, FilterUnits const & /*units*/) {
-    NRPixBlock *in1 = slot.get(_input);
-    NRPixBlock *in2 = slot.get(_input2);
-    NRPixBlock *original_in1 = in1;
-    NRPixBlock *original_in2 = in2;
-    NRPixBlock *out;
+void FilterBlend::render_cairo(FilterSlot &slot)
+{
+    cairo_surface_t *input1 = slot.getcairo(_input);
+    cairo_surface_t *input2 = slot.getcairo(_input2);
 
-    // Bail out if either one of source images is missing
-    if (!in1 || !in2) {
-        g_warning("Missing source image for feBlend (in=%d in2=%d)", _input, _input2);
-        return 1;
+    // We may need to transform input surface to correct color interpolation space. The input surface
+    // might be used as input to another primitive but it is likely that all the primitives in a given
+    // filter use the same color interpolation space so we don't copy the input before converting.
+    SPColorInterpolation ci_fp  = SP_CSS_COLOR_INTERPOLATION_AUTO;
+    if( _style ) {
+        ci_fp = (SPColorInterpolation)_style->color_interpolation_filters.computed;
     }
+    set_cairo_surface_ci( input1, ci_fp );
+    set_cairo_surface_ci( input2, ci_fp );
 
-    out = new NRPixBlock;
-    NRRectL out_area;
-    nr_rect_l_union(&out_area, &in1->area, &in2->area);
-    nr_pixblock_setup_fast(out, NR_PIXBLOCK_MODE_R8G8B8A8P,
-                           out_area.x0, out_area.y0, out_area.x1, out_area.y1,
-                           true);
+    // input2 is the "background" image
+    // out should be ARGB32 if any of the inputs is ARGB32
+    cairo_surface_t *out = ink_cairo_surface_create_output(input1, input2);
+    set_cairo_surface_ci( out, ci_fp );
 
-    // Blending modes are defined for premultiplied RGBA values,
-    // thus convert them to that format before blending
-    if (in1->mode != NR_PIXBLOCK_MODE_R8G8B8A8P) {
-        in1 = new NRPixBlock;
-        nr_pixblock_setup_fast(in1, NR_PIXBLOCK_MODE_R8G8B8A8P,
-                               original_in1->area.x0, original_in1->area.y0,
-                               original_in1->area.x1, original_in1->area.y1,
-                               false);
-        nr_blit_pixblock_pixblock(in1, original_in1);
-    }
-    if (in2->mode != NR_PIXBLOCK_MODE_R8G8B8A8P) {
-        in2 = new NRPixBlock;
-        nr_pixblock_setup_fast(in2, NR_PIXBLOCK_MODE_R8G8B8A8P,
-                               original_in2->area.x0, original_in2->area.y0,
-                               original_in2->area.x1, original_in2->area.y1,
-                               false);
-        nr_blit_pixblock_pixblock(in2, original_in2);
-    }
+    ink_cairo_surface_blit(input2, out);
+    cairo_t *out_ct = cairo_create(out);
+    cairo_set_source_surface(out_ct, input1, 0, 0);
 
-    /* pixops_mix is defined in display/nr-filter-pixops.h
-     * It mixes the two input images with the function given as template
-     * and places the result in output image.
-     */
+    // All of the blend modes are implemented in Cairo as of 1.10.
+    // For a detailed description, see:
+    // http://cairographics.org/operators/
     switch (_blend_mode) {
-        case BLEND_MULTIPLY:
-            pixops_mix<blend_multiply>(*out, *in1, *in2);
-            break;
-        case BLEND_SCREEN:
-            pixops_mix<blend_screen>(*out, *in1, *in2);
-            break;
-        case BLEND_DARKEN:
-            pixops_mix<blend_darken>(*out, *in1, *in2);
-            break;
-        case BLEND_LIGHTEN:
-            pixops_mix<blend_lighten>(*out, *in1, *in2);
-            break;
-        case BLEND_NORMAL:
-        default:
-            pixops_mix<blend_normal>(*out, *in1, *in2);
-            break;
+    case BLEND_MULTIPLY:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_MULTIPLY);
+        break;
+    case BLEND_SCREEN:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_SCREEN);
+        break;
+    case BLEND_DARKEN:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_DARKEN);
+        break;
+    case BLEND_LIGHTEN:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_LIGHTEN);
+        break;
+    // New in CSS Compositing and Blending Level 1
+    case BLEND_OVERLAY:   
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_OVERLAY);
+        break;
+    case BLEND_COLORDODGE:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_COLOR_DODGE);
+        break;
+    case BLEND_COLORBURN:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_COLOR_BURN);
+        break;
+    case BLEND_HARDLIGHT:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_HARD_LIGHT);
+        break;
+    case BLEND_SOFTLIGHT:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_SOFT_LIGHT);
+        break;
+    case BLEND_DIFFERENCE:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_DIFFERENCE);
+        break;
+    case BLEND_EXCLUSION:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_EXCLUSION);
+        break;
+    case BLEND_HUE:       
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_HSL_HUE);
+        break;
+    case BLEND_SATURATION:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_HSL_SATURATION);
+        break;
+    case BLEND_COLOR:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_HSL_COLOR);
+        break;
+    case BLEND_LUMINOSITY:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_HSL_LUMINOSITY);
+        break;
+
+    case BLEND_NORMAL:
+    default:
+        cairo_set_operator(out_ct, CAIRO_OPERATOR_OVER);
+        break;
     }
 
-    if (in1 != original_in1) {
-        nr_pixblock_release(in1);
-        delete in1;
-    }
-    if (in2 != original_in2) {
-        nr_pixblock_release(in2);
-        delete in2;
-    }
+    cairo_paint(out_ct);
+    cairo_destroy(out_ct);
 
-    out->empty = FALSE;
     slot.set(_output, out);
+    cairo_surface_destroy(out);
+}
 
-    return 0;
+bool FilterBlend::can_handle_affine(Geom::Affine const &)
+{
+    // blend is a per-pixel primitive and is immutable under transformations
+    return true;
+}
+
+double FilterBlend::complexity(Geom::Affine const &)
+{
+    return 1.1;
+}
+
+bool FilterBlend::uses_background()
+{
+    if (_input == NR_FILTER_BACKGROUNDIMAGE || _input == NR_FILTER_BACKGROUNDALPHA ||
+        _input2 == NR_FILTER_BACKGROUNDIMAGE || _input2 == NR_FILTER_BACKGROUNDALPHA)
+    {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 void FilterBlend::set_input(int slot) {
@@ -212,9 +163,15 @@ void FilterBlend::set_input(int input, int slot) {
 }
 
 void FilterBlend::set_mode(FilterBlendMode mode) {
-    if (mode == BLEND_NORMAL || mode == BLEND_MULTIPLY ||
-        mode == BLEND_SCREEN || mode == BLEND_DARKEN ||
-        mode == BLEND_LIGHTEN)
+    if (mode == BLEND_NORMAL     || mode == BLEND_MULTIPLY   ||
+        mode == BLEND_SCREEN     || mode == BLEND_DARKEN     ||
+        mode == BLEND_LIGHTEN    || mode == BLEND_OVERLAY    ||
+        mode == BLEND_COLORDODGE || mode == BLEND_COLORBURN  ||
+        mode == BLEND_HARDLIGHT  || mode == BLEND_SOFTLIGHT  ||
+        mode == BLEND_DIFFERENCE || mode == BLEND_EXCLUSION  ||
+        mode == BLEND_HUE        || mode == BLEND_SATURATION ||
+        mode == BLEND_COLOR      || mode == BLEND_LUMINOSITY
+        )
     {
         _blend_mode = mode;
     }
@@ -232,4 +189,4 @@ void FilterBlend::set_mode(FilterBlendMode mode) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

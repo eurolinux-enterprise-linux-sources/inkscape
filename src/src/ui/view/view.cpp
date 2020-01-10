@@ -1,11 +1,8 @@
-#define __SP_VIEW_C__
-
-/** \file
- * View implementation
- *
+/*
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Ralf Stephan <ralf@ark.in-berlin.de>
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2001-2002 Lauris Kaplinski
  * Copyright (C) 2001 Ximian, Inc.
@@ -17,7 +14,7 @@
 # include "config.h"
 #endif
 
-#include "libnr/nr-point.h"
+#include <2geom/point.h>
 #include "document.h"
 #include "view.h"
 #include "message-stack.h"
@@ -28,12 +25,6 @@
 namespace Inkscape {
 namespace UI {
 namespace View {
-
-static void 
-_onPositionSet (double x, double y, View* v)
-{
-    v->onPositionSet (x,y);
-}
 
 static void 
 _onResized (double x, double y, View* v)
@@ -72,16 +63,12 @@ View::View()
     _message_stack = GC::release(new Inkscape::MessageStack());
     _tips_message_context = new Inkscape::MessageContext(_message_stack);
 
-    _position_set_connection = _position_set_signal.connect (sigc::bind (sigc::ptr_fun (&_onPositionSet), this));
     _resized_connection = _resized_signal.connect (sigc::bind (sigc::ptr_fun (&_onResized), this));
     _redraw_requested_connection = _redraw_requested_signal.connect (sigc::bind (sigc::ptr_fun (&_onRedrawRequested), this));
     
     _message_changed_connection = _message_stack->connectChanged (sigc::bind (sigc::ptr_fun (&_onStatusMessage), this));
 }
 
-/**
- * Deletes and nulls all View message stacks and disconnects it from signals.
- */
 View::~View()
 {
     _close();
@@ -108,16 +95,6 @@ void View::_close() {
    Inkscape::Verb::delete_all_view (this);
 }
 
-void View::setPosition (double x, double y)
-{
-    _position_set_signal.emit (x,y);
-}
-
-void View::setPosition(Geom::Point const &p) 
-{ 
-    setPosition (double(p[Geom::X]), double(p[Geom::Y])); 
-}
-
 void View::emitResized (double width, double height)
 {
     _resized_signal.emit (width, height);
@@ -128,15 +105,6 @@ void View::requestRedraw()
     _redraw_requested_signal.emit();
 }
 
-/**
- * Disconnects the view from the document signals, connects the view 
- * to a new one, and emits the _document_set_signal on the view.
- *
- * This is code comon to all subclasses and called from their
- * setDocument() methods after they are done.
- * 
- * \param doc The new document to connect the view to.
- */
 void View::setDocument(SPDocument *doc) {
     g_return_if_fail(doc != NULL);
 
@@ -156,7 +124,7 @@ void View::setDocument(SPDocument *doc) {
         _doc->connectURISet(sigc::bind(sigc::ptr_fun(&_onDocumentURISet), this));
     _document_resized_connection = 
         _doc->connectResized(sigc::bind(sigc::ptr_fun(&_onDocumentResized), this));
-    _document_uri_set_signal.emit (SP_DOCUMENT_URI(_doc));
+    _document_uri_set_signal.emit( _doc->getURI() );
 }
 
 }}}

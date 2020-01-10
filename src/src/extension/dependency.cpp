@@ -13,10 +13,13 @@
 #endif
 
 #include <glibmm/i18n.h>
+#include <glibmm/fileutils.h>
+#include <glibmm/miscutils.h>
 #include "config.h"
 #include "path-prefix.h"
 #include "dependency.h"
 #include "db.h"
+#include "extension.h"
 
 namespace Inkscape {
 namespace Extension {
@@ -54,14 +57,22 @@ Dependency::Dependency (Inkscape::XML::Node * in_repr)
 
     Inkscape::GC::anchor(_repr);
 
-    const gchar * location = _repr->attribute("location");
-    for (int i = 0; i < LOCATION_CNT && location != NULL; i++) {
-        if (!strcmp(location, _location_str[i])) {
-            _location = (location_t)i;
-            break;
+    if (const gchar * location = _repr->attribute("location")) {
+        for (int i = 0; i < LOCATION_CNT && location != NULL; i++) {
+            if (!strcmp(location, _location_str[i])) {
+                _location = (location_t)i;
+                break;
+            }
+        }
+    } else if (const gchar * location = _repr->attribute("reldir")) {
+        for (int i = 0; i < LOCATION_CNT && location != NULL; i++) {
+            if (!strcmp(location, _location_str[i])) {
+                _location = (location_t)i;
+                break;
+            }
         }
     }
-
+    
     const gchar * type = _repr->attribute("type");
     for (int i = 0; i < TYPE_CNT && type != NULL; i++) {
         if (!strcmp(type, _type_str[i])) {
@@ -70,7 +81,7 @@ Dependency::Dependency (Inkscape::XML::Node * in_repr)
         }
     }
 
-    _string = sp_repr_children(_repr)->content();
+    _string = _repr->firstChild()->content();
 
     _description = _repr->attribute("description");
     if (_description == NULL)
@@ -119,8 +130,7 @@ Dependency::~Dependency (void)
     found then a TRUE is returned.  If we get all the way through the
     path then a FALSE is returned, the command could not be found.
 */
-bool
-Dependency::check (void) const
+bool Dependency::check (void) const
 {
     // std::cout << "Checking: " << *this << std::endl;
 
@@ -213,7 +223,6 @@ Dependency::check (void) const
 
                     g_free(orig_path);
                     return FALSE; /* Reverse logic in this one */
-                    break;
                 }
             } /* switch _location */
             break;

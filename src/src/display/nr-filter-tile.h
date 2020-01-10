@@ -13,12 +13,11 @@
  */
 
 #include "display/nr-filter-primitive.h"
-#include "display/nr-filter-slot.h"
-#include "display/nr-filter-units.h"
-#include "libnr/nr-rect-l.h"
 
 namespace Inkscape {
 namespace Filters {
+
+class FilterSlot;
 
 class FilterTile : public FilterPrimitive {
 public:
@@ -26,9 +25,8 @@ public:
     static FilterPrimitive *create();
     virtual ~FilterTile();
 
-    virtual int render(FilterSlot &slot, FilterUnits const &units);
-    virtual void area_enlarge(NRRectL &area, Geom::Matrix const &trans);
-    virtual FilterTraits get_input_traits();
+    virtual void render_cairo(FilterSlot &slot);
+    virtual double complexity(Geom::Affine const &ctm);
 };
 
 } /* namespace Filters */
@@ -44,4 +42,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

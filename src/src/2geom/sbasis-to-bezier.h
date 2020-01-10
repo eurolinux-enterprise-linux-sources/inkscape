@@ -1,7 +1,7 @@
 /**
  * \file
- * \brief  \todo brief description
- *
+ * \brief Conversion between SBasis and Bezier basis polynomials
+ *//*
  * Authors:
  *      ? <?@?.?>
  * 
@@ -42,11 +42,14 @@
 
 namespace Geom {
 
+class PathBuilder;
+
 void sbasis_to_bezier (Bezier & bz, SBasis const& sb, size_t sz = 0);
 void sbasis_to_bezier (std::vector<Point> & bz, D2<SBasis> const& sb, size_t sz = 0);
+void sbasis_to_cubic_bezier (std::vector<Point> & bz, D2<SBasis> const& sb);
 void bezier_to_sbasis (SBasis & sb, Bezier const& bz);
 void bezier_to_sbasis (D2<SBasis> & sb, std::vector<Point> const& bz);
-
+void build_from_sbasis(PathBuilder &pb, D2<SBasis> const &B, double tol, bool only_cubicbeziers);
 
 #if 0
 // this produces a degree k bezier from a degree k sbasis
@@ -83,4 +86,4 @@ inline Path cubicbezierpath_from_sbasis(D2<SBasis> const &B, double tol)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

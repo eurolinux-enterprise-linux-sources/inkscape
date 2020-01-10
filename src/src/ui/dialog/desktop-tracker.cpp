@@ -1,7 +1,3 @@
-/**
- * Glyph selector dialog.
- */
-
 /* Authors:
  *   Jon A. Cruz
  *
@@ -9,13 +5,13 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "widgets/desktop-widget.h"
 #include <glib-object.h>
 
 #include "desktop-tracker.h"
 
 #include "inkscape.h"
 #include "desktop.h"
-#include "widgets/desktop-widget.h"
 
 namespace Inkscape {
 namespace UI {
@@ -156,4 +152,4 @@ void DesktopTracker::setDesktop(SPDesktop *desktop)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

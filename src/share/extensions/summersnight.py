@@ -17,10 +17,17 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 """
-import inkex, os, simplepath, cubicsuperpath, simpletransform, voronoi2svg
+# standard library
+import os
+# local library
+import cubicsuperpath
+import inkex
+import simplepath
+import simpletransform
+import voronoi2svg
 from ffgeom import *
-import gettext
-_ = gettext.gettext
+
+inkex.localize()
 
 try:
     from subprocess import Popen, PIPE
@@ -30,13 +37,15 @@ except:
 
 class Project(inkex.Effect):
     def __init__(self):
-            inkex.Effect.__init__(self)
+        inkex.Effect.__init__(self)
+
     def effect(self):
         if len(self.options.ids) < 2:
             inkex.errormsg(_("This extension requires two selected paths. \nThe second path must be exactly four nodes long."))
             exit()
 
         #obj is selected second
+        scale = self.unittouu('1px')    # convert to document units
         obj = self.selected[self.options.ids[0]]
         trafo = self.selected[self.options.ids[1]]
         if obj.get(inkex.addNS('type','sodipodi')):
@@ -67,11 +76,11 @@ class Project(inkex.Effect):
                     if bsubprocess:
                         p = Popen('inkscape --query-%s --query-id=%s "%s"' % (query,id,file), shell=True, stdout=PIPE, stderr=PIPE)
                         rc = p.wait()
-                        self.q[query] = float(p.stdout.read())
+                        self.q[query] = scale*float(p.stdout.read())
                         err = p.stderr.read()
                     else:
                         f,err = os.popen3('inkscape --query-%s --query-id=%s "%s"' % (query,id,file))[1:]
-                        self.q[query] = float(f.read())
+                        self.q[query] = scale*float(f.read())
                         f.close()
                         err.close()
 
@@ -121,6 +130,7 @@ class Project(inkex.Effect):
 
         p = intersectSegments(vert,horz)
         return [p['x'],p['y']]    
+
 
 if __name__ == '__main__':
     e = Project()

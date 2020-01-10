@@ -35,12 +35,13 @@ typedef enum {
     VIEW_TYPE_GRID
 } ViewType;
 
+
 class Previewable
 {
 public:
 // TODO need to add some nice parameters
     virtual ~Previewable() {}
-    virtual Gtk::Widget* getPreview( PreviewStyle style, ViewType view, ::PreviewSize size, guint ratio ) = 0;
+    virtual Gtk::Widget* getPreview( PreviewStyle style, ViewType view, ::PreviewSize size, guint ratio, guint border) = 0;
 };
 
 
@@ -59,4 +60,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

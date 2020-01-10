@@ -57,7 +57,7 @@ struct Ops {
                                            CleanupFunc *old_func,
                                            void **old_data);
     int (*general_register_disappearing_link)(void **p_ptr,
-                                              void *base);
+                                              void const *base);
     int (*unregister_disappearing_link)(void **p_ptr);
     std::size_t (*get_heap_size)();
     std::size_t (*get_free_bytes)();
@@ -211,4 +211,4 @@ inline void operator delete[](void *mem, Inkscape::GC::Delete) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

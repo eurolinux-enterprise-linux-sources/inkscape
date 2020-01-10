@@ -20,14 +20,20 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 """
-import random, inkex, simplestyle, gettext, voronoi
-_ = gettext.gettext
+# standard library
+import random
+# local library
+import inkex
+import simplestyle
+import voronoi
+
+inkex.localize()
 
 try:
     from subprocess import Popen, PIPE
 except:
-    inkex.errormsg(_("Failed to import the subprocess module. Please report this as a bug at : https://bugs.launchpad.net/inkscape."))
-    inkex.errormsg("Python version is : " + str(inkex.sys.version_info))
+    inkex.errormsg(_("Failed to import the subprocess module. Please report this as a bug at: https://bugs.launchpad.net/inkscape."))
+    inkex.errormsg(_("Python version is: ") + str(inkex.sys.version_info))
     exit()
 
 def clip_line(x1, y1, x2, y2, w, h):
@@ -78,6 +84,10 @@ class Pattern(inkex.Effect):
                         action="store", type="int", 
                         dest="border", default=0,
                         help="Size of Border (px)")
+        self.OptionParser.add_option("--tab",
+                        action="store", type="string",
+                        dest="tab",
+                        help="The selected UI-tab when OK was pressed")
 
     def effect(self):
         if not self.options.ids:
@@ -135,6 +145,7 @@ class Pattern(inkex.Effect):
         # plot Voronoi diagram
         sl = voronoi.SiteList(pts)
         voronoi.voronoi(sl, c)
+        path = ""
         for edge in c.edges:
             if edge[1] >= 0 and edge[2] >= 0:       # two vertices
                 [x1, y1, x2, y2] = clip_line(c.vertices[edge[1]][0], c.vertices[edge[1]][1], c.vertices[edge[2]][0], c.vertices[edge[2]][1], q['width'], q['height'])
@@ -161,9 +172,10 @@ class Pattern(inkex.Effect):
                     ytemp = c.lines[edge[0]][2]/c.lines[edge[0]][1]
                 [x1, y1, x2, y2] = clip_line(xtemp, ytemp, c.vertices[edge[2]][0], c.vertices[edge[2]][1], q['width'], q['height'])
             if x1 or x2 or y1 or y2:
-                path = 'M %f,%f %f,%f' % (x1, y1, x2, y2)
-                attribs = {'d': path, 'style': 'stroke:#000000'}
-                inkex.etree.SubElement(pattern, inkex.addNS('path', 'svg'), attribs)
+                path += 'M %.3f,%.3f %.3f,%.3f ' % (x1, y1, x2, y2)
+
+        attribs = {'d': path, 'style': 'stroke:#000000'}
+        inkex.etree.SubElement(pattern, inkex.addNS('path', 'svg'), attribs)
 
         # link selected object to pattern
         obj = self.selected[self.options.ids[0]]
@@ -184,4 +196,4 @@ if __name__ == '__main__':
     e = Pattern()
     e.affect()
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99

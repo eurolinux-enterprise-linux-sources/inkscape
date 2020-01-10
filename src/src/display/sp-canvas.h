@@ -3,7 +3,7 @@
 
 /**
  * @file
- * SPCanvas, SPCanvasBuf, and SPCanvasItem.
+ * SPCanvas, SPCanvasBuf.
  */
 /*
  * Authors:
@@ -33,19 +33,19 @@
 #include <glib.h>
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
-
 #include <glibmm/ustring.h>
-
-#include <2geom/matrix.h>
-#include <libnr/nr-rect-l.h>
-
+#include <2geom/affine.h>
 #include <2geom/rect.h>
 
 G_BEGIN_DECLS
 
+#define SP_TYPE_CANVAS (sp_canvas_get_type())
+#define SP_CANVAS(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), SP_TYPE_CANVAS, SPCanvas))
+#define SP_IS_CANVAS(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), SP_TYPE_CANVAS))
+
 struct SPCanvas;
+struct SPCanvasItem;
 struct SPCanvasGroup;
-typedef struct _SPCanvasItemClass SPCanvasItemClass;
 
 enum {
     SP_CANVAS_UPDATE_REQUESTED  = 1 << 0,
@@ -53,116 +53,110 @@ enum {
 };
 
 /**
- * The canvas buf contains the actual pixels.
+ * Structure used when rendering canvas items.
  */
-struct SPCanvasBuf{
-    guchar *buf;
-    int buf_rowstride;
-    NRRectL rect;
-    NRRectL visible_rect;
-    /// Background color, given as 0xrrggbb
-    guint32 bg_color;
-    // If empty, ignore contents of buffer and use a solid area of bg_color
-    bool is_empty;
+struct SPCanvasBuf {
     cairo_t *ct;
+    Geom::IntRect rect;
+    Geom::IntRect visible_rect;
+
+    unsigned char *buf;
+    int buf_rowstride;
+    bool is_empty;
 };
-
-/**
- * An SPCanvasItem refers to a SPCanvas and to its parent item; it has
- * four coordinates, a bounding rectangle, and a transformation matrix.
- */
-struct SPCanvasItem : public GtkObject {
-    SPCanvas *canvas;
-    SPCanvasItem *parent;
-
-    double x1, y1, x2, y2;
-    Geom::Rect bounds;
-    Geom::Matrix xform;
-};
-
-/**
- * The vtable of an SPCanvasItem.
- */
-struct _SPCanvasItemClass : public GtkObjectClass {
-    void (* update) (SPCanvasItem *item, Geom::Matrix const &affine, unsigned int flags);
-
-    void (* render) (SPCanvasItem *item, SPCanvasBuf *buf);
-    double (* point) (SPCanvasItem *item, Geom::Point p, SPCanvasItem **actual_item);
-
-    int (* event) (SPCanvasItem *item, GdkEvent *event);
-};
-
-SPCanvasItem *sp_canvas_item_new(SPCanvasGroup *parent, GtkType type, const gchar *first_arg_name, ...);
 
 G_END_DECLS
 
-#define sp_canvas_item_set gtk_object_set
-
-void sp_canvas_item_affine_absolute(SPCanvasItem *item, Geom::Matrix const &aff);
-
-void sp_canvas_item_raise(SPCanvasItem *item, int positions);
-void sp_canvas_item_lower(SPCanvasItem *item, int positions);
-bool sp_canvas_item_is_visible(SPCanvasItem *item);
-void sp_canvas_item_show(SPCanvasItem *item);
-void sp_canvas_item_hide(SPCanvasItem *item);
-int sp_canvas_item_grab(SPCanvasItem *item, unsigned int event_mask, GdkCursor *cursor, guint32 etime);
-void sp_canvas_item_ungrab(SPCanvasItem *item, guint32 etime);
-
-Geom::Matrix sp_canvas_item_i2w_affine(SPCanvasItem const *item);
-
-void sp_canvas_item_grab_focus(SPCanvasItem *item);
-
-void sp_canvas_item_request_update(SPCanvasItem *item);
-
-/* get item z-order in parent group */
-
-gint sp_canvas_item_order(SPCanvasItem * item);
-
-
 // SPCanvas -------------------------------------------------
+
+class SPCanvasImpl;
+
+GType sp_canvas_get_type() G_GNUC_CONST;
+
 /**
  * Port of GnomeCanvas for inkscape needs.
  */
 struct SPCanvas {
+    friend class SPCanvasImpl;
+
+    /**
+     * Returns new canvas as widget.
+     */
+    static GtkWidget *createAA();
+
+    /**
+     * Returns the root group of the specified canvas.
+     */
+    SPCanvasGroup *getRoot();
+
+    /**
+     * Scrolls canvas to specific position (cx and cy are measured in screen pixels).
+     */
+    void scrollTo(double cx, double cy, unsigned int clear, bool is_scrolling = false);
+
+
+    /**
+     * Updates canvas if necessary.
+     */
+    void updateNow();
+
+    /**
+     * Forces redraw of rectangular canvas area.
+     */
+    void requestRedraw(int x1, int y1, int x2, int y2);
+
+    /**
+     * Force a full redraw after a specified number of interrupted redraws.
+     */
+    void forceFullRedrawAfterInterruptions(unsigned int count);
+
+    /**
+     * End forced full redraw requests.
+     */
+    void endForcedFullRedraws();
+
+
+    // Data members: ----------------------------------------------------------
+
     GtkWidget widget;
 
     guint idle_id;
 
     SPCanvasItem *root;
 
-    double dx0, dy0;
-    int x0, y0;
+    bool is_dragging;
+    double dx0;
+    double dy0;
+    int x0;
+    int y0;
 
     /* Area that needs redrawing, stored as a microtile array */
-    int    tLeft,tTop,tRight,tBottom;
-    int    tileH,tileV;
+    int    tLeft, tTop, tRight, tBottom;
+    int    tileH, tileV;
     uint8_t *tiles;
 
-    /* Last known modifier state, for deferred repick when a button is down */
+    /** Last known modifier state, for deferred repick when a button is down. */
     int state;
 
-    /* The item containing the mouse pointer, or NULL if none */
+    /** The item containing the mouse pointer, or NULL if none. */
     SPCanvasItem *current_item;
 
-    /* Item that is about to become current (used to track deletions and such) */
+    /** Item that is about to become current (used to track deletions and such). */
     SPCanvasItem *new_current_item;
 
-    /* Item that holds a pointer grab, or NULL if none */
+    /** Item that holds a pointer grab, or NULL if none. */
     SPCanvasItem *grabbed_item;
 
-    /* Event mask specified when grabbing an item */
+    /** Event mask specified when grabbing an item. */
     guint grabbed_event_mask;
 
-    /* If non-NULL, the currently focused item */
+    /** If non-NULL, the currently focused item. */
     SPCanvasItem *focused_item;
 
-    /* Event on which selection of current item is based */
+    /** Event on which selection of current item is based. */
     GdkEvent pick_event;
 
     int close_enough;
-
-    /* GC for temporary draw pixmap */
-    GdkGC *pixmap_gc;
 
     unsigned int need_update : 1;
     unsigned int need_redraw : 1;
@@ -171,9 +165,10 @@ struct SPCanvas {
     int forced_redraw_count;
     int forced_redraw_limit;
 
-    /* For use by internal pick_current_item() function */
+    /** For use by internal pick_current_item() function. */
     unsigned int left_grabbed_item : 1;
-    /* For use by internal pick_current_item() function */
+
+    /** For use by internal pick_current_item() function. */
     unsigned int in_repick : 1;
 
     // In most tools Inkscape only generates enter and leave events
@@ -183,30 +178,23 @@ struct SPCanvas {
     // connector tool).  If so, they may temporarily set this flag to
     // 'true'.
     bool gen_all_enter_events;
+    
+    /** For scripting, sometimes we want to delay drawing. */
+    bool drawing_disabled;
 
     int rendermode;
+    int colorrendermode;
 
 #if defined(HAVE_LIBLCMS1) || defined(HAVE_LIBLCMS2)
     bool enable_cms_display_adj;
-    Glib::ustring* cms_key;
+    Glib::ustring cms_key;
 #endif // defined(HAVE_LIBLCMS1) || defined(HAVE_LIBLCMS2)
 
     bool is_scrolling;
 
     Geom::Rect getViewbox() const;
-    NR::IRect getViewboxIntegers() const;
+    Geom::IntRect getViewboxIntegers() const;
 };
-
-GtkWidget *sp_canvas_new_aa();
-
-SPCanvasGroup *sp_canvas_root(SPCanvas *canvas);
-
-void sp_canvas_scroll_to(SPCanvas *canvas, double cx, double cy, unsigned int clear, bool is_scrolling = false);
-void sp_canvas_update_now(SPCanvas *canvas);
-
-void sp_canvas_request_redraw(SPCanvas *canvas, int x1, int y1, int x2, int y2);
-void sp_canvas_force_full_redraw_after_interruptions(SPCanvas *canvas, unsigned int count);
-void sp_canvas_end_forced_full_redraws(SPCanvas *canvas);
 
 bool sp_canvas_world_pt_inside_window(SPCanvas const *canvas, Geom::Point const &world);
 

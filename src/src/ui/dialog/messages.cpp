@@ -1,5 +1,6 @@
-/** @file
- * @brief Messages dialog - implementation
+/**
+ * @file
+ * Messages dialog - implementation.
  */
 /* Authors:
  *   Bob Jamison
@@ -123,9 +124,8 @@ static void dialogLoggingCallback(const gchar */*log_domain*/,
                            const gchar *messageText,
                            gpointer user_data)
 {
-    Messages *dlg = (Messages *)user_data;
-
-    dlg->message((char *)messageText);
+    Messages *dlg = static_cast<Messages *>(user_data);
+    dlg->message(const_cast<char*>(messageText));
 
 }
 
@@ -216,4 +216,4 @@ void Messages::releaseLogMessages()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

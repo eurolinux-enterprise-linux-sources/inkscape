@@ -49,9 +49,7 @@ enum {
     CHANGED = 0,
     LAST_SIGNAL};
 
-
-static void ege_select_one_action_class_init( EgeSelectOneActionClass* klass );
-static void ege_select_one_action_init( EgeSelectOneAction* action );
+static void ege_select_one_action_finalize( GObject* action );
 static void ege_select_one_action_get_property( GObject* obj, guint propId, GValue* value, GParamSpec * pspec );
 static void ege_select_one_action_set_property( GObject* obj, guint propId, const GValue *value, GParamSpec* pspec );
 
@@ -72,7 +70,6 @@ static void disconnect_proxy( GtkAction *action, GtkWidget *proxy );
 
 static int scan_max_width( GtkTreeModel *model, gint labelColumn );
 
-static GtkActionClass* gParentClass = 0;
 static guint signals[LAST_SIGNAL] = {0};
 static GQuark gDataName = 0;
 
@@ -125,28 +122,7 @@ enum {
     PROP_SELECTION
 };
 
-GType ege_select_one_action_get_type( void )
-{
-    static GType myType = 0;
-    if ( !myType ) {
-        static const GTypeInfo myInfo = {
-            sizeof( EgeSelectOneActionClass ),
-            NULL, /* base_init */
-            NULL, /* base_finalize */
-            (GClassInitFunc)ege_select_one_action_class_init,
-            NULL, /* class_finalize */
-            NULL, /* class_data */
-            sizeof( EgeSelectOneAction ),
-            0, /* n_preallocs */
-            (GInstanceInitFunc)ege_select_one_action_init,
-            NULL
-        };
-
-        myType = g_type_register_static( GTK_TYPE_ACTION, "EgeSelectOneAction", &myInfo, (GTypeFlags)0 );
-    }
-
-    return myType;
-}
+G_DEFINE_TYPE(EgeSelectOneAction, ege_select_one_action, GTK_TYPE_ACTION);
 
 GtkTreeModel *ege_select_one_action_get_model(EgeSelectOneAction* action ){
     return GTK_TREE_MODEL(action->private_data->model);
@@ -154,11 +130,11 @@ GtkTreeModel *ege_select_one_action_get_model(EgeSelectOneAction* action ){
 void ege_select_one_action_class_init( EgeSelectOneActionClass* klass )
 {
     if ( klass ) {
-        gParentClass = GTK_ACTION_CLASS( g_type_class_peek_parent( klass ) );
         GObjectClass* objClass = G_OBJECT_CLASS( klass );
 
         gDataName = g_quark_from_string("ege-select1-action");
 
+        objClass->finalize = ege_select_one_action_finalize;
         objClass->get_property = ege_select_one_action_get_property;
         objClass->set_property = ege_select_one_action_set_property;
 
@@ -280,6 +256,19 @@ void ege_select_one_action_init( EgeSelectOneAction* action )
     action->private_data->pendingText = 0;
 
 /*     g_signal_connect( action, "notify", G_CALLBACK( fixup_labels ), NULL ); */
+}
+
+void ege_select_one_action_finalize( GObject* object )
+{
+    EgeSelectOneAction *action = EGE_SELECT_ONE_ACTION( object );
+
+    g_free( action->private_data->iconProperty );
+    g_free( action->private_data->appearance );
+    g_free( action->private_data->selection );
+
+    if ( G_OBJECT_CLASS(ege_select_one_action_parent_class)->finalize ) {
+        (*G_OBJECT_CLASS(ege_select_one_action_parent_class)->finalize)(object);
+    }
 }
 
 EgeSelectOneAction* ege_select_one_action_new( const gchar *name,
@@ -578,7 +567,6 @@ GtkWidget* create_menu_item( GtkAction* action )
     if ( IS_EGE_SELECT_ONE_ACTION(action) ) {
         EgeSelectOneAction* act = EGE_SELECT_ONE_ACTION( action );
         gchar*  sss = 0;
-        gboolean valid = FALSE;
         gint index = 0;
         GtkTreeIter iter;
         GSList* group = 0;
@@ -588,7 +576,7 @@ GtkWidget* create_menu_item( GtkAction* action )
 
         item = gtk_menu_item_new_with_label( sss );
 
-        valid = gtk_tree_model_get_iter_first( act->private_data->model, &iter );
+        gboolean valid = gtk_tree_model_get_iter_first( act->private_data->model, &iter );
         while ( valid ) {
             gchar* str = 0;
             gtk_tree_model_get( act->private_data->model, &iter,
@@ -616,7 +604,7 @@ GtkWidget* create_menu_item( GtkAction* action )
 
         g_free(sss);
     } else {
-        item = gParentClass->create_menu_item( action );
+        item = GTK_ACTION_CLASS(ege_select_one_action_parent_class)->create_menu_item( action );
     }
 
     return item;
@@ -644,25 +632,31 @@ GtkWidget* create_tool_item( GtkAction* action )
         item = GTK_WIDGET( gtk_tool_item_new() );
 
         if ( act->private_data->appearanceMode == APPEARANCE_FULL ) {
+#if GTK_CHECK_VERSION(3,0,0)
+            GtkWidget* holder = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+            gtk_box_set_homogeneous(GTK_BOX(holder), FALSE);
+#else
             GtkWidget* holder = gtk_hbox_new( FALSE, 0 );
+#endif
 
             GtkRadioAction* ract = 0;
-            GtkWidget* sub = 0;
             GSList* group = 0;
             GtkTreeIter iter;
             gboolean valid = FALSE;
             gint index = 0;
-            GtkTooltips* tooltips = gtk_tooltips_new();
 
-            gchar*  sss = 0;
-            g_object_get( G_OBJECT(action), "short_label", &sss, NULL );
-            // If short_label not defined, g_object_get will return label.
-            // This hack allows a label to be used with a drop-down menu when
-            // no label is used with a set of icons that are self-explanatory.
-            if (sss && strcmp( sss, "NotUsed" ) != 0 ) {
-                GtkWidget* lbl;
-                lbl = gtk_label_new(sss);
-                gtk_box_pack_start( GTK_BOX(holder), lbl, FALSE, FALSE, 4 );
+            {
+                gchar*  sss = 0;
+                g_object_get( G_OBJECT(action), "short_label", &sss, NULL );
+                // If short_label not defined, g_object_get will return label.
+                // This hack allows a label to be used with a drop-down menu when
+                // no label is used with a set of icons that are self-explanatory.
+                if (sss && strcmp( sss, "NotUsed" ) != 0 ) {
+                    GtkWidget* lbl = gtk_label_new(sss);
+                    gtk_box_pack_start( GTK_BOX(holder), lbl, FALSE, FALSE, 4 );
+                }
+                g_free( sss );
+                sss = 0;
             }
 
             valid = gtk_tree_model_get_iter_first( act->private_data->model, &iter );
@@ -732,9 +726,9 @@ GtkWidget* create_tool_item( GtkAction* action )
                 }
                 g_signal_connect( G_OBJECT(ract), "changed", G_CALLBACK( proxy_action_chagned_cb ), act );
 
-                sub = gtk_action_create_tool_item( GTK_ACTION(ract) );
-                gtk_action_connect_proxy( GTK_ACTION(ract), sub );
-                gtk_tool_item_set_tooltip( GTK_TOOL_ITEM(sub), tooltips, tip, NULL );
+                GtkWidget* sub = gtk_action_create_tool_item( GTK_ACTION(ract) );
+                gtk_activatable_set_related_action( GTK_ACTIVATABLE (sub), GTK_ACTION(ract) );
+                gtk_tool_item_set_tooltip_text( GTK_TOOL_ITEM(sub), tip );
 
                 gtk_box_pack_start( GTK_BOX(holder), sub, FALSE, FALSE, 0 );
 
@@ -747,17 +741,23 @@ GtkWidget* create_tool_item( GtkAction* action )
             }
 
             g_object_set_data( G_OBJECT(holder), "ege-proxy_action-group", group );
-            g_object_set_data( G_OBJECT(holder), "ege-tooltips", tooltips );
 
             gtk_container_add( GTK_CONTAINER(item), holder );
         } else {
-            GtkCellRenderer * renderer = 0;
+#if GTK_CHECK_VERSION(3,0,0)
+            GtkWidget* holder = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+            gtk_box_set_homogeneous(GTK_BOX(holder), FALSE);
+#else
             GtkWidget *holder = gtk_hbox_new( FALSE, 4 );
+#endif
+
             GtkEntry *entry = 0;
-            GtkWidget *normal = (act->private_data->selectionMode == SELECTION_OPEN) ?
-                gtk_combo_box_entry_new_with_model( act->private_data->model, act->private_data->labelColumn ) :
-                gtk_combo_box_new_with_model( act->private_data->model );
-            if ((act->private_data->selectionMode == SELECTION_OPEN)) {
+            GtkWidget *normal;
+
+            if (act->private_data->selectionMode == SELECTION_OPEN) {
+	            normal = gtk_combo_box_new_with_model_and_entry (act->private_data->model);
+	            gtk_combo_box_set_entry_text_column (GTK_COMBO_BOX (normal), act->private_data->labelColumn);
+
                 GtkWidget *child = gtk_bin_get_child( GTK_BIN(normal) );
                 if (GTK_IS_ENTRY(child)) {
                     int maxUsed = scan_max_width( act->private_data->model, act->private_data->labelColumn );
@@ -777,7 +777,10 @@ GtkWidget* create_tool_item( GtkAction* action )
                     g_signal_connect( G_OBJECT(child), "activate", G_CALLBACK(combo_entry_changed_cb), act );
                     g_signal_connect( G_OBJECT(child), "focus-out-event", G_CALLBACK(combo_entry_focus_lost_cb), act );
                 }
-            } else {
+            } 
+	    else {
+                GtkCellRenderer * renderer = NULL;
+                normal = gtk_combo_box_new_with_model( act->private_data->model );
                 if ( act->private_data->iconColumn >= 0 ) {
                     renderer = gtk_cell_renderer_pixbuf_new();
                     gtk_cell_layout_pack_start( GTK_CELL_LAYOUT(normal), renderer, TRUE );
@@ -799,14 +802,16 @@ GtkWidget* create_tool_item( GtkAction* action )
             g_signal_connect( G_OBJECT(normal), "changed", G_CALLBACK(combo_changed_cb), action );
 
             g_object_set_data( G_OBJECT(holder), "ege-combo-box", normal );
+            g_object_set_data( G_OBJECT(act), "ege-combo-box", normal );
 
             if (act->private_data->appearanceMode == APPEARANCE_COMPACT) {
                 gchar*  sss = 0;
                 g_object_get( G_OBJECT(action), "short_label", &sss, NULL );
                 if (sss) {
-                    GtkWidget* lbl;
-                    lbl = gtk_label_new(sss);
+                    GtkWidget* lbl = gtk_label_new(sss);
                     gtk_box_pack_start( GTK_BOX(holder), lbl, FALSE, FALSE, 4 );
+                    g_free( sss );
+                    sss = 0;
                 }
             }
 
@@ -821,7 +826,7 @@ GtkWidget* create_tool_item( GtkAction* action )
 
         gtk_widget_show_all( item );
     } else {
-        item = gParentClass->create_tool_item( action );
+        item = GTK_ACTION_CLASS(ege_select_one_action_parent_class)->create_tool_item( action );
     }
 
     return item;
@@ -830,12 +835,12 @@ GtkWidget* create_tool_item( GtkAction* action )
 
 void connect_proxy( GtkAction *action, GtkWidget *proxy )
 {
-    gParentClass->connect_proxy( action, proxy );
+    GTK_ACTION_CLASS(ege_select_one_action_parent_class)->connect_proxy( action, proxy );
 }
 
 void disconnect_proxy( GtkAction *action, GtkWidget *proxy )
 {
-    gParentClass->disconnect_proxy( action, proxy );
+    GTK_ACTION_CLASS(ege_select_one_action_parent_class)->disconnect_proxy( action, proxy );
 }
 
 
@@ -856,12 +861,12 @@ void resync_active( EgeSelectOneAction* act, gint active, gboolean override )
                     }
                     if ( GTK_IS_COMBO_BOX(combodata) ) {
                         GtkComboBox* combo = GTK_COMBO_BOX(combodata);
-                        if ((active == -1) && (GTK_IS_COMBO_BOX_ENTRY(combo))) {
+                        if ((active == -1) && (gtk_combo_box_get_has_entry(combo))) {
                             gtk_entry_set_text(GTK_ENTRY(gtk_bin_get_child(GTK_BIN(combo))), act->private_data->activeText);
                         } else if ( gtk_combo_box_get_active(combo) != active ) {
                             gtk_combo_box_set_active( combo, active );
                         }
-                    } else if ( GTK_IS_HBOX(children->data) ) {
+                    } else if ( GTK_IS_BOX(children->data) ) {
                         gpointer data = g_object_get_data( G_OBJECT(children->data), "ege-proxy_action-group" );
                         if ( data ) {
                             GSList* group = (GSList*)data;
@@ -916,13 +921,12 @@ void resync_sensitive( EgeSelectOneAction* act )
                 }
                 if ( GTK_IS_COMBO_BOX(combodata) ) {
                     /* Not implemented */
-                } else if ( GTK_IS_HBOX(children->data) ) {
+                } else if ( GTK_IS_BOX(children->data) ) {
                     gpointer data = g_object_get_data( G_OBJECT(children->data), "ege-proxy_action-group" );
                     if ( data ) {
                         GSList* group = (GSList*)data;
                         // List is backwards in group as compared to GtkTreeModel, we better do matching.
                         while ( group ) {
-#if GTK_CHECK_VERSION(2,16,0)
                             GtkRadioAction* ract = GTK_RADIO_ACTION(group->data);
                             const gchar* label = gtk_action_get_label( GTK_ACTION( ract ) );
 
@@ -931,7 +935,7 @@ void resync_sensitive( EgeSelectOneAction* act )
                             gboolean valid;
                             valid = gtk_tree_model_get_iter_first( act->private_data->model, &iter );
                             gboolean sens = true;
-
+ 
                             while( valid ) {
 
                                 gchar* str = 0;
@@ -951,8 +955,6 @@ void resync_sensitive( EgeSelectOneAction* act )
                             }
 
                             gtk_action_set_sensitive( GTK_ACTION(ract), sens );
-#endif
-
                             group = g_slist_next(group);
                         }
                     }
@@ -970,9 +972,31 @@ void resync_sensitive( EgeSelectOneAction* act )
 
 void combo_changed_cb( GtkComboBox* widget, gpointer user_data )
 {
-    EgeSelectOneAction* act = EGE_SELECT_ONE_ACTION(user_data);
-    gint newActive = gtk_combo_box_get_active(widget);
-    gchar *text = gtk_combo_box_get_active_text(widget);
+    EgeSelectOneAction *act = EGE_SELECT_ONE_ACTION(user_data);
+    gchar              *text = 0;
+    GtkComboBox        *cb = GTK_COMBO_BOX (widget);
+    gint                newActive = gtk_combo_box_get_active(widget);
+
+    if (gtk_combo_box_get_has_entry (cb)) {
+	    GtkBin   *bin = GTK_BIN (cb);
+	    GtkEntry *entry = GTK_ENTRY (gtk_bin_get_child (bin));
+
+	    text = g_strdup (gtk_entry_get_text (entry));
+    }
+    else {
+	    GtkTreeIter  iter;
+
+	    if (gtk_combo_box_get_active_iter (cb, &iter)) {
+		    GtkTreeModel *model = gtk_combo_box_get_model (cb);
+
+		    gtk_tree_model_get (model, &iter, 0, &text, -1);
+	    }
+    }
+
+    if (!text) {
+        /* User probably deleted the data in the model */
+        return;
+    }
 
     if (newActive == -1) {
         /* indicates the user is entering text for a custom aka "open" value */
@@ -1103,18 +1127,27 @@ int scan_max_width( GtkTreeModel *model, gint labelColumn )
     GtkTreeIter iter;
     gboolean valid = gtk_tree_model_get_iter_first( model, &iter );
     while ( valid ) {
-        gchar* str = 0;
-        int count = 0;
-        gtk_tree_model_get( model, &iter,
-                            labelColumn, &str,
-                            -1 );
-        count = strlen(str);
-        if (count > maxUsed) {
-            maxUsed = count;
+        gchar* str = NULL;
+        gtk_tree_model_get( model, &iter, labelColumn, &str, -1 );
+        if (str != NULL){
+            int count = strlen(str);
+            if (count > maxUsed) {
+                maxUsed = count;
+            }
+            g_free(str);
         }
-        g_free( str );
-
         valid = gtk_tree_model_iter_next( model, &iter );
     }
     return maxUsed;
 }
+
+/*
+  Local Variables:
+  mode:c++
+  c-file-style:"stroustrup"
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  indent-tabs-mode:nil
+  fill-column:99
+  End:
+*/
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -2,18 +2,8 @@
    Copyright 2005, 2006 by Gerald Friedland, Kristian Jantz and Lars Knipping
 
    Conversion to C++ for Inkscape by Bob Jamison
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+   
+   Released under GNU GPL, read the file 'COPYING' for more information
  */
 #include "siox.h"
 
@@ -21,6 +11,7 @@
 #include <stdarg.h>
 #include <map>
 #include <algorithm>
+#include <cstdlib>
 
 
 namespace org
@@ -584,14 +575,14 @@ void SioxImage::assign(const SioxImage &other)
 /**
  * Write the image to a PPM file
  */
-bool SioxImage::writePPM(const std::string fileName)
+bool SioxImage::writePPM(const std::string &fileName)
 {
 
     FILE *f = fopen(fileName.c_str(), "wb");
     if (!f)
         return false;
 
-    fprintf(f, "P6 %d %d 255\n", width, height);
+    fprintf(f, "P6 %u %u 255\n", width, height);
 
     for (unsigned int y=0 ; y<height; y++)
         {
@@ -736,19 +727,33 @@ const float Siox::CERTAIN_BACKGROUND_CONFIDENCE=0.0f;
 /**
  *  Construct a Siox engine
  */
-Siox::Siox()
+Siox::Siox() :
+    sioxObserver(0),
+    keepGoing(true),
+    width(0),
+    height(0),
+    pixelCount(0),
+    image(0),
+    cm(0),
+    labelField(0)
 {
-    sioxObserver = NULL;
     init();
 }
 
 /**
  *  Construct a Siox engine
  */
-Siox::Siox(SioxObserver *observer)
+Siox::Siox(SioxObserver *observer) :
+    sioxObserver(observer),
+    keepGoing(true),
+    width(0),
+    height(0),
+    pixelCount(0),
+    image(0),
+    cm(0),
+    labelField(0)
 {
     init();
-    sioxObserver = observer;
 }
 
 
@@ -884,7 +889,7 @@ SioxImage Siox::extractForeground(const SioxImage &originalImage,
         return workImage;
         }
 
-    trace("knownBg:%zu knownFg:%zu", knownBg.size(), knownFg.size());
+    trace("knownBg:%u knownFg:%u", static_cast<unsigned int>(knownBg.size()), static_cast<unsigned int>(knownFg.size()));
 
 
     std::vector<CieLab> bgSignature ;
@@ -919,7 +924,7 @@ SioxImage Siox::extractForeground(const SioxImage &originalImage,
 
     //trace("### bgSignature:%d", bgSignature.size());
 
-    if (bgSignature.size() < 1)
+    if (bgSignature.empty())
         {
         // segmentation impossible
         error("Signature size is < 1.  Segmentation is impossible");
@@ -1011,7 +1016,7 @@ SioxImage Siox::extractForeground(const SioxImage &originalImage,
                     }
                 tupel.minFgDist  = minFg;
                 tupel.indexMinFg = minIndex;
-                if (fgSignature.size() == 0)
+                if (fgSignature.empty())
                     {
                     isBackground = (minBg <= clusterSize);
                     // remove next line to force behaviour of old algorithm
@@ -1316,29 +1321,31 @@ bool Siox::colorSignature(const std::vector<CieLab> &inputVec,
     if (length < 1) // no error. just don't do anything
         return true;
 
-    CieLab *input = (CieLab *) malloc(length * sizeof(CieLab));
+    CieLab *input = new CieLab [length];
 
     if (!input)
-        {
+    {
         error("Could not allocate buffer for signature");
         return false;
-        }
+    }
     for (unsigned int i=0 ; i < length ; i++)
+    {
         input[i] = inputVec[i];
+    }
 
     unsigned int stage1length = 0;
-    colorSignatureStage1(input, 0, length, 0,
-                   &stage1length, dims);
+    colorSignatureStage1(input, 0, length, 0, &stage1length, dims);
 
     unsigned int stage2length = 0;
-    colorSignatureStage2(input, 0, stage1length, 0,
-                  &stage2length, length * 0.001, dims);
+    colorSignatureStage2(input, 0, stage1length, 0, &stage2length, length * 0.001, dims);
 
     result.clear();
     for (unsigned int i=0 ; i < stage2length ; i++)
+    {
         result.push_back(input[i]);
+    }
 
-    free(input);
+    delete[] input;
 
     return true;
 }
@@ -1414,7 +1421,7 @@ int Siox::depthFirstSearch(int startPos,
         }
 
 
-    while (pixelsToVisit.size() > 0)
+    while (!pixelsToVisit.empty())
         {
         int pos = pixelsToVisit[pixelsToVisit.size() - 1];
         pixelsToVisit.erase(pixelsToVisit.end() - 1);
@@ -1486,7 +1493,7 @@ void Siox::fillColorRegions()
         // int componentSize = 1;
         pixelsToVisit.push_back(i);
         // depth first search to fill region
-        while (pixelsToVisit.size() > 0)
+        while (!pixelsToVisit.empty())
             {
             int pos = pixelsToVisit[pixelsToVisit.size() - 1];
             pixelsToVisit.erase(pixelsToVisit.end() - 1);

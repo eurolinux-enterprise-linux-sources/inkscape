@@ -1,5 +1,3 @@
-#define INKSCAPE_LPE_ENVELOPE_CPP
-
 /*
  * Copyright (C) Steren Giannini 2008 <steren.giannini@gmail.com>
  *
@@ -30,12 +28,12 @@ namespace LivePathEffect {
 
 LPEEnvelope::LPEEnvelope(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    bend_path1(_("Top bend path"), _("Top path along which to bend the original path"), "bendpath1", &wr, this, "M0,0 L1,0"),
-    bend_path2(_("Right bend path"), _("Right path along which to bend the original path"), "bendpath2", &wr, this, "M0,0 L1,0"),
-    bend_path3(_("Bottom bend path"), _("Bottom path along which to bend the original path"), "bendpath3", &wr, this, "M0,0 L1,0"),
-    bend_path4(_("Left bend path"), _("Left path along which to bend the original path"), "bendpath4", &wr, this, "M0,0 L1,0"),
-    xx(_("Enable left & right paths"), _("Enable the left and right deformation paths"), "xx", &wr, this, true),
-    yy(_("Enable top & bottom paths"), _("Enable the top and bottom deformation paths"), "yy", &wr, this, true)
+    bend_path1(_("Top bend path:"), _("Top path along which to bend the original path"), "bendpath1", &wr, this, "M0,0 L1,0"),
+    bend_path2(_("Right bend path:"), _("Right path along which to bend the original path"), "bendpath2", &wr, this, "M0,0 L1,0"),
+    bend_path3(_("Bottom bend path:"), _("Bottom path along which to bend the original path"), "bendpath3", &wr, this, "M0,0 L1,0"),
+    bend_path4(_("Left bend path:"), _("Left path along which to bend the original path"), "bendpath4", &wr, this, "M0,0 L1,0"),
+    xx(_("E_nable left & right paths"), _("Enable the left and right deformation paths"), "xx", &wr, this, true),
+    yy(_("_Enable top & bottom paths"), _("Enable the top and bottom deformation paths"), "yy", &wr, this, true)
 {
     registerParameter( dynamic_cast<Parameter *>(&yy) );
     registerParameter( dynamic_cast<Parameter *>(&xx) );
@@ -52,7 +50,7 @@ LPEEnvelope::~LPEEnvelope()
 }
 
 void
-LPEEnvelope::doBeforeEffect (SPLPEItem *lpeitem)
+LPEEnvelope::doBeforeEffect (SPLPEItem const* lpeitem)
 {
     // get the item bounding box
     original_bbox(lpeitem);
@@ -227,7 +225,7 @@ LPEEnvelope::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd
 }
 
 void
-LPEEnvelope::resetDefaults(SPItem * item)
+LPEEnvelope::resetDefaults(SPItem const* item)
 {
     Effect::resetDefaults(item);
 

@@ -1,51 +1,49 @@
-/** \file
- * Code for handling extensions (i.e.\ scripts).
- */
-/*
+/**
+ * Code for handling extensions (i.e. scripts).
+ *
  * Authors:
  *   Bryce Harrington <bryce@osdl.org>
  *   Ted Gould <ted@gould.cx>
  *   Jon A. Cruz <jon@joncruz.org>
+ *   Abhishek Sharma
  *
- * Copyright (C) 2002-2005,2007 Authors
+ * Copyright (C) 2002-2007 Authors
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#define __INKSCAPE_EXTENSION_IMPLEMENTATION_SCRIPT_C__
-
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
+#include <glibmm.h>
+#include <gtkmm/messagedialog.h>
+#include <gtkmm/main.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/textview.h>
+#include <glibmm/miscutils.h>
+#include <glibmm/convert.h>
 #include <unistd.h>
 
 #include <errno.h>
-#include <glib.h>
 #include <glib/gstdio.h>
-#include <gtkmm.h>
 
-#include "ui/view/view.h"
 #include "desktop-handles.h"
 #include "desktop.h"
-#include "selection.h"
-#include "sp-namedview.h"
-#include "io/sys.h"
-#include "preferences.h"
-#include "../system.h"
+#include "dialogs/dialog-events.h"
 #include "extension/effect.h"
 #include "extension/output.h"
 #include "extension/input.h"
 #include "extension/db.h"
+#include "inkscape.h"
+#include "io/sys.h"
+#include "preferences.h"
 #include "script.h"
-#include "dialogs/dialog-events.h"
-#include "application/application.h"
+#include "selection.h"
+#include "sp-namedview.h"
+#include "extension/system.h"
+#include "ui/view/view.h"
 #include "xml/node.h"
 #include "xml/attribute-record.h"
 
 #include "util/glib-list-iterators.h"
 #include "path-prefix.h"
-
 
 #ifdef WIN32
 #include <windows.h>
@@ -53,12 +51,8 @@
 #include "registrytool.h"
 #endif
 
-
-
 /** This is the command buffer that gets allocated from the stack */
 #define BUFSIZE (255)
-
-
 
 /* Namespaces */
 namespace Inkscape {
@@ -148,7 +142,8 @@ std::string Script::resolveInterpreterExecutable(const Glib::ustring &interpName
    of memory in the unloaded state.
 */
 Script::Script() :
-    Implementation()
+    Implementation(),
+    _canceled(false)
 {
 }
 
@@ -176,14 +171,13 @@ Script::~Script()
     string.  This means that the caller of this function can always
     free what they are given (and should do it too!).
 */
-std::string
-Script::solve_reldir(Inkscape::XML::Node *reprin) {
+std::string Script::solve_reldir(Inkscape::XML::Node *reprin) {
 
     gchar const *s = reprin->attribute("reldir");
 
     // right now the only recognized relative directory is "extensions"
     if (!s || Glib::ustring(s) != "extensions") {
-        Glib::ustring str = sp_repr_children(reprin)->content();
+        Glib::ustring str = reprin->firstChild()->content();
         return str;
     }
 
@@ -194,7 +188,7 @@ Script::solve_reldir(Inkscape::XML::Node *reprin) {
 
         gchar * fname = g_build_filename(
            Inkscape::Extension::Extension::search_path[i],
-           sp_repr_children(reprin)->content(),
+           reprin->firstChild()->content(),
            NULL);
         Glib::ustring filename = fname;
         g_free(fname);
@@ -307,10 +301,10 @@ bool Script::load(Inkscape::Extension::Extension *module)
     helper_extension = "";
 
     /* This should probably check to find the executable... */
-    Inkscape::XML::Node *child_repr = sp_repr_children(module->get_repr());
+    Inkscape::XML::Node *child_repr = module->get_repr()->firstChild();
     while (child_repr != NULL) {
         if (!strcmp(child_repr->name(), INKSCAPE_EXTENSION_NS "script")) {
-            child_repr = sp_repr_children(child_repr);
+            child_repr = child_repr->firstChild();
             while (child_repr != NULL) {
                 if (!strcmp(child_repr->name(), INKSCAPE_EXTENSION_NS "command")) {
                     const gchar *interpretstr = child_repr->attribute("interpreter");
@@ -321,14 +315,14 @@ bool Script::load(Inkscape::Extension::Extension *module)
                     command.insert(command.end(), solve_reldir(child_repr));
                 }
                 if (!strcmp(child_repr->name(), INKSCAPE_EXTENSION_NS "helper_extension")) {
-                    helper_extension = sp_repr_children(child_repr)->content();
+                    helper_extension = child_repr->firstChild()->content();
                 }
-                child_repr = sp_repr_next(child_repr);
+                child_repr = child_repr->next();
             }
 
             break;
         }
-        child_repr = sp_repr_next(child_repr);
+        child_repr = child_repr->next();
     }
 
     //g_return_val_if_fail(command.length() > 0, false);
@@ -360,15 +354,14 @@ void Script::unload(Inkscape::Extension::Extension */*module*/)
     \param    module  The Extension in question
 
 */
-bool
-Script::check(Inkscape::Extension::Extension *module)
+bool Script::check(Inkscape::Extension::Extension *module)
 {
     int script_count = 0;
-    Inkscape::XML::Node *child_repr = sp_repr_children(module->get_repr());
+    Inkscape::XML::Node *child_repr = module->get_repr()->firstChild();
     while (child_repr != NULL) {
         if (!strcmp(child_repr->name(), INKSCAPE_EXTENSION_NS "script")) {
             script_count++;
-            child_repr = sp_repr_children(child_repr);
+            child_repr = child_repr->firstChild();
             while (child_repr != NULL) {
                 if (!strcmp(child_repr->name(), INKSCAPE_EXTENSION_NS "check")) {
                     std::string command_text = solve_reldir(child_repr);
@@ -384,18 +377,18 @@ Script::check(Inkscape::Extension::Extension *module)
                 }
 
                 if (!strcmp(child_repr->name(), INKSCAPE_EXTENSION_NS "helper_extension")) {
-                    gchar const *helper = sp_repr_children(child_repr)->content();
+                    gchar const *helper = child_repr->firstChild()->content();
                     if (Inkscape::Extension::db.get(helper) == NULL) {
                         return false;
                     }
                 }
 
-                child_repr = sp_repr_next(child_repr);
+                child_repr = child_repr->next();
             }
 
             break;
         }
-        child_repr = sp_repr_next(child_repr);
+        child_repr = child_repr->next();
     }
 
     if (script_count == 0) {
@@ -532,9 +525,8 @@ SPDocument *Script::open(Inkscape::Extension::Input *module,
     } // data_read
 
     if (mydoc != NULL) {
-        g_free(mydoc->base);
-        mydoc->base = NULL;
-        sp_document_change_uri_and_hrefs(mydoc, filenameArg);
+        mydoc->setBase(0);
+        mydoc->changeUriAndHrefs(filenameArg);
     }
 
     // make sure we don't leak file descriptors from g_file_open_tmp
@@ -602,10 +594,14 @@ void Script::save(Inkscape::Extension::Output *module,
 
 
     file_listener fileout;
-    execute(command, params, tempfilename_in, fileout);
+    int data_read = execute(command, params, tempfilename_in, fileout);
 
-    std::string lfilename = Glib::filename_from_utf8(filenameArg);
-    bool success = fileout.toFile(lfilename);
+    bool success = false;
+
+    if (data_read > 0) {
+        std::string lfilename = Glib::filename_from_utf8(filenameArg);
+        success = fileout.toFile(lfilename);
+    }
 
     // make sure we don't leak file descriptors from g_file_open_tmp
     close(tempfd_in);
@@ -661,8 +657,13 @@ void Script::effect(Inkscape::Extension::Effect *module,
         printf("TOO BAD TO LIVE!!!");
         exit(1);
     }
+    if (doc == NULL)
+    {
+        g_warning("Script::effect: View not defined");
+        return;
+    }
 
-    SPDesktop *desktop = (SPDesktop *)doc;
+    SPDesktop *desktop = reinterpret_cast<SPDesktop *>(doc);
     sp_namedview_document_from_window(desktop);
 
     std::list<std::string> params;
@@ -688,16 +689,14 @@ void Script::effect(Inkscape::Extension::Effect *module,
         return;
     }
 
-    if (desktop != NULL) {
-        Inkscape::Util::GSListConstIterator<SPItem *> selected =
-             sp_desktop_selection(desktop)->itemList();
-        while ( selected != NULL ) {
-            Glib::ustring selected_id;
-            selected_id += "--id=";
-            selected_id += (*selected)->getId();
-            params.insert(params.begin(), selected_id);
-            ++selected;
-        }
+    Inkscape::Util::GSListConstIterator<SPItem *> selected =
+        sp_desktop_selection(desktop)->itemList(); //desktop should not be NULL since doc was checked and desktop is a casted pointer
+    while ( selected != NULL ) {
+        Glib::ustring selected_id;
+        selected_id += "--id=";
+        selected_id += (*selected)->getId();
+        params.insert(params.begin(), selected_id);
+        ++selected;
     }
 
     file_listener fileout;
@@ -720,30 +719,37 @@ void Script::effect(Inkscape::Extension::Effect *module,
 
     g_unlink(tempfilename_out.c_str());
 
-    /* Do something with mydoc.... */
     if (mydoc) {
-        doc->doc()->emitReconstructionStart();
-        copy_doc(doc->doc()->rroot, mydoc->rroot);
-        doc->doc()->emitReconstructionFinish();
-        SPObject *layer = NULL;
+        SPDocument* vd=doc->doc();
+        if (vd != NULL)
+        {
+            vd->emitReconstructionStart();
+            copy_doc(vd->rroot, mydoc->rroot);
+            vd->emitReconstructionFinish();
 
-        // Getting the named view from the document generated by the extension
-        SPNamedView *nv = sp_document_namedview(mydoc, NULL);
-
-        //Check if it has a default layer set up
-        if ( nv != NULL){
-            if( nv->default_layer_id != 0 ) {
-                SPDocument *document = desktop->doc();
-                //If so, get that layer
-                layer = document->getObjectById(g_quark_to_string(nv->default_layer_id));
+            // Getting the named view from the document generated by the extension
+            SPNamedView *nv = sp_document_namedview(mydoc, NULL);
+            
+            //Check if it has a default layer set up
+            SPObject *layer = NULL;
+            if ( nv != NULL)
+            {
+                if( nv->default_layer_id != 0 ) {
+                    SPDocument *document = desktop->doc();
+                    //If so, get that layer
+                    if (document != NULL)
+                    {
+                        layer = document->getObjectById(g_quark_to_string(nv->default_layer_id));
+                    }
+                }
             }
-        }
-
-        sp_namedview_update_layers_from_document(desktop);
-        //If that layer exists,
-        if (layer) {
-            //set the current layer
-            desktop->setCurrentLayer(layer);
+            
+            sp_namedview_update_layers_from_document(desktop);
+            //If that layer exists,
+            if (layer) {
+                //set the current layer
+                desktop->setCurrentLayer(layer);
+            }
         }
         mydoc->release();
     }
@@ -754,25 +760,44 @@ void Script::effect(Inkscape::Extension::Effect *module,
 
 
 /**
-    \brief  A function to take all the svg elements from one document
-            and put them in another.
-    \param  oldroot  The root node of the document to be replaced
-    \param  newroot  The root node of the document to replace it with
+    \brief  A function to replace all the elements in an old document
+            by those from a new document.
+            document and repinserts them into an emptied old document.
+    \param  oldroot  The root node of the old (destination) document.
+    \param  newroot  The root node of the new (source) document.
 
-    This function first deletes all of the data in the old document.  It
-    does this by creating a list of what needs to be deleted, and then
-    goes through the list.  This two pass approach removes issues with
-    the list being change while parsing through it.  Lots of nasty bugs.
+    This function first deletes all the elements in the old document by
+    making two pass, the first to create a list of the old elements and
+    the second to actually delete them. This two pass approach removes issues
+    with the list being change while parsing through it... lots of nasty bugs.
 
-    Then, it goes through the new document, duplicating all of the
-    elements and putting them into the old document.  The copy
-    is then complete.
+    Then, it copies all the element in the new document into the old document.
+
+    Finally, it replaces the attributes in the root element of the old document
+    by the attributes in root of the new document.
 */
 void Script::copy_doc (Inkscape::XML::Node * oldroot, Inkscape::XML::Node * newroot)
 {
+    if ((oldroot == NULL) ||(newroot == NULL))
+    {
+        g_warning("Error on copy_doc: NULL pointer input.");
+        return;
+    }
+
+    // For copying attributes in root and in namedview
+    using Inkscape::Util::List;
+    using Inkscape::XML::AttributeRecord;
+
+    // Question: Why is the "sodipodi:namedview" special? Treating it as a normal
+    // elmement results in crashes.
+    // Seems to be a bug:
+    // http://inkscape.13.x6.nabble.com/Effect-that-modifies-the-document-properties-tt2822126.html
+
     std::vector<Inkscape::XML::Node *> delete_list;
     Inkscape::XML::Node * oldroot_namedview = NULL;
+    Inkscape::XML::Node * newroot_namedview = NULL;
 
+    // Make list
     for (Inkscape::XML::Node * child = oldroot->firstChild();
             child != NULL;
             child = child->next()) {
@@ -787,14 +812,18 @@ void Script::copy_doc (Inkscape::XML::Node * oldroot, Inkscape::XML::Node * newr
             delete_list.push_back(child);
         }
     }
+
+    // Unparent (delete)
     for (unsigned int i = 0; i < delete_list.size(); i++) {
         sp_repr_unparent(delete_list[i]);
     }
 
+    // Copy
     for (Inkscape::XML::Node * child = newroot->firstChild();
             child != NULL;
             child = child->next()) {
         if (!strcmp("sodipodi:namedview", child->name())) {
+            newroot_namedview = child;
             if (oldroot_namedview != NULL) {
                 for (Inkscape::XML::Node * newroot_namedview_child = child->firstChild();
                         newroot_namedview_child != NULL;
@@ -807,26 +836,44 @@ void Script::copy_doc (Inkscape::XML::Node * oldroot, Inkscape::XML::Node * newr
         }
     }
 
-    {
-        using Inkscape::Util::List;
-        using Inkscape::XML::AttributeRecord;
-        std::vector<gchar const *> attribs;
+    std::vector<gchar const *> attribs;
 
-        // Make a list of all attributes of the old root node.
-        for (List<AttributeRecord const> iter = oldroot->attributeList(); iter; ++iter) {
-            attribs.push_back(g_quark_to_string(iter->key));
-        }
+    // Must explicitly copy root attributes.
 
-        // Delete the attributes of the old root nodes.
-        for (std::vector<gchar const *>::const_iterator it = attribs.begin(); it != attribs.end(); it++) {
-            oldroot->setAttribute(*it, NULL);
-        }
+    // Make a list of all attributes of the old root node.
+    for (List<AttributeRecord const> iter = oldroot->attributeList(); iter; ++iter) {
+        attribs.push_back(g_quark_to_string(iter->key));
+    }
 
-        // Set the new attributes.
-        for (List<AttributeRecord const> iter = newroot->attributeList(); iter; ++iter) {
-            gchar const *name = g_quark_to_string(iter->key);
-            oldroot->setAttribute(name, newroot->attribute(name));
-        }
+    // Delete the attributes of the old root node.
+    for (std::vector<gchar const *>::const_iterator it = attribs.begin(); it != attribs.end(); ++it) {
+        oldroot->setAttribute(*it, NULL);
+    }
+
+    // Set the new attributes.
+    for (List<AttributeRecord const> iter = newroot->attributeList(); iter; ++iter) {
+        gchar const *name = g_quark_to_string(iter->key);
+        oldroot->setAttribute(name, newroot->attribute(name));
+    }
+
+    attribs.clear();
+
+    // Must explicitly copy namedview attributes.
+
+    // Make a list of all attributes of the old namedview node.
+    for (List<AttributeRecord const> iter = oldroot_namedview->attributeList(); iter; ++iter) {
+        attribs.push_back(g_quark_to_string(iter->key));
+    }
+
+    // Delete the attributes of the old namedview node.
+    for (std::vector<gchar const *>::const_iterator it = attribs.begin(); it != attribs.end(); ++it) {
+        oldroot_namedview->setAttribute(*it, NULL);
+    }
+
+    // Set the new attributes.
+    for (List<AttributeRecord const> iter = newroot_namedview->attributeList(); iter; ++iter) {
+        gchar const *name = g_quark_to_string(iter->key);
+        oldroot_namedview->setAttribute(name, newroot_namedview->attribute(name));
     }
 
     /** \todo  Restore correct layer */
@@ -846,7 +893,11 @@ void Script::checkStderr (const Glib::ustring &data,
     GtkWidget *dlg = GTK_WIDGET(warning.gobj());
     sp_transientize(dlg);
 
-    Gtk::VBox * vbox = warning.get_vbox();
+#if WITH_GTKMM_3_0
+    Gtk::Box * vbox = warning.get_content_area();
+#else
+    Gtk::Box * vbox = warning.get_vbox();
+#endif
 
     /* Gtk::TextView * textview = new Gtk::TextView(Gtk::TextBuffer::create()); */
     Gtk::TextView * textview = new Gtk::TextView();
@@ -854,13 +905,7 @@ void Script::checkStderr (const Glib::ustring &data,
     textview->set_wrap_mode(Gtk::WRAP_WORD);
     textview->show();
 
-    // Remove the last character
-    char *errormsg = (char*) data.c_str();
-    while (*errormsg != '\0') errormsg++;
-    errormsg -= 1;
-    *errormsg = '\0';
-
-    textview->get_buffer()->set_text(_(data.c_str()));
+    textview->get_buffer()->set_text(data.c_str());
 
     Gtk::ScrolledWindow * scrollwindow = new Gtk::ScrolledWindow();
     scrollwindow->add(*textview);
@@ -956,7 +1001,14 @@ int Script::execute (const std::list<std::string> &in_command,
     // assemble the rest of argv
     std::copy(in_params.begin(), in_params.end(), std::back_inserter(argv));
     if (!filein.empty()) {
-        argv.push_back(filein);
+        if(Glib::path_is_absolute(filein))
+            argv.push_back(filein);
+        else {
+            std::vector<std::string> buildargs;
+            buildargs.push_back(Glib::get_current_dir());
+            buildargs.push_back(filein);
+            argv.push_back(Glib::build_filename(buildargs));
+        }
     }
 
     int stdout_pipe, stderr_pipe;
@@ -970,7 +1022,7 @@ int Script::execute (const std::list<std::string> &in_command,
                                      NULL,           // STDIN
                                      &stdout_pipe,   // STDOUT
                                      &stderr_pipe);  // STDERR
-    } catch (Glib::Error e) {
+    } catch (Glib::Error &e) {
         printf("Can't Spawn!!! spawn returns: %s\n", e.what().data());
         return 0;
     }
@@ -999,7 +1051,7 @@ int Script::execute (const std::list<std::string> &in_command,
 
     Glib::ustring stderr_data = fileerr.string();
     if (stderr_data.length() != 0 &&
-        Inkscape::NSApplication::Application::getUseGui()
+        inkscape_use_gui()
        ) {
         checkStderr(stderr_data, Gtk::MESSAGE_INFO,
                                  _("Inkscape has received additional data from the script executed.  "
@@ -1031,4 +1083,4 @@ int Script::execute (const std::list<std::string> &in_command,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :

@@ -7,18 +7,16 @@
  *
  */
 
-#include <gtk/gtk.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
-#include <libnr/nr-rect-l.h>
-#include "sp-canvas.h"
-
+#include "sp-canvas-item.h"
+#include "enums.h"
 
 
 #define SP_TYPE_CTRL            (sp_ctrl_get_type ())
-#define SP_CTRL(obj)            (GTK_CHECK_CAST ((obj), SP_TYPE_CTRL, SPCtrl))
-#define SP_CTRL_CLASS(klass)    (GTK_CHECK_CLASS_CAST ((klass), SP_TYPE_CTRL, SPCtrlClass))
-#define SP_IS_CTRL(obj)         (GTK_CHECK_TYPE ((obj), SP_TYPE_CTRL))
-#define SP_IS_CTRL_CLASS(klass) (GTK_CHECK_CLASS_TYPE ((klass), SP_TYPE_CTRL))
+#define SP_CTRL(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_CTRL, SPCtrl))
+#define SP_CTRL_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_CTRL, SPCtrlClass))
+#define SP_IS_CTRL(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_CTRL))
+#define SP_IS_CTRL_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_CTRL))
 
 typedef enum {
     SP_CTRL_SHAPE_SQUARE,
@@ -35,11 +33,12 @@ typedef enum {
     SP_CTRL_MODE_XOR
 } SPCtrlModeType;
 
-struct SPCtrl : public SPCanvasItem{
+struct SPCtrl : public SPCanvasItem {
     SPCtrlShapeType shape;
     SPCtrlModeType mode;
-    GtkAnchorType anchor;
-    gint span;
+    SPAnchorType anchor;
+    gint width;
+    gint height;
     guint defined : 1;
     guint shown   : 1;
     guint build   : 1;
@@ -47,10 +46,9 @@ struct SPCtrl : public SPCanvasItem{
     guint stroked : 1;
     guint32 fill_color;
     guint32 stroke_color;
-    bool _moved;
 
-    NRRectL box;   /* NB! x1 & y1 are included */
-    guchar *cache;
+    Geom::IntRect box;   /* NB! x1 & y1 are included */
+    guint32 *cache;
     GdkPixbuf * pixbuf;
 
     void moveto(Geom::Point const p);
@@ -63,7 +61,7 @@ struct SPCtrlClass : public SPCanvasItemClass{
 
 
 /* Standard Gtk function */
-GtkType sp_ctrl_get_type (void);
+GType sp_ctrl_get_type (void);
 
 
 #endif /* !INKSCAPE_CTRL_H */
@@ -77,4 +75,4 @@ GtkType sp_ctrl_get_type (void);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

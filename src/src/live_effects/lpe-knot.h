@@ -3,9 +3,9 @@
  */
 /* Authors:
  *   Jean-Francois Barraud <jf.barraud@gmail.com>
- *   Johan Engelen <j.b.c.engelen@utwente.nl>
+ *   Johan Engelen <j.b.c.engelen@alumnus.utwente.nl>
  *
- * Copyright (C) Johan Engelen 2007
+ * Copyright (C) Authors 2007-2012
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -56,14 +56,15 @@ public:
   LPEKnot(LivePathEffectObject *lpeobject);
   virtual ~LPEKnot();
   
-  virtual void doBeforeEffect (SPLPEItem *lpeitem);
+  virtual void doBeforeEffect (SPLPEItem const* lpeitem);
   virtual std::vector<Geom::Path> doEffect_path (std::vector<Geom::Path> const & input_path);
   
   /* the knotholder entity classes must be declared friends */
   friend class KnotHolderEntityCrossingSwitcher;
+  void addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item);
 
 protected:
-    virtual void addCanvasIndicators(SPLPEItem *lpeitem, std::vector<Geom::PathVector> &hp_vec);
+    virtual void addCanvasIndicators(SPLPEItem const *lpeitem, std::vector<Geom::PathVector> &hp_vec);
   
 private:
   void updateSwitcher();
@@ -73,7 +74,6 @@ private:
   BoolParam  add_stroke_width;
   BoolParam  add_other_stroke_width;
   ScalarParam switcher_size;
-  double stroke_width;
   ArrayParam<double> crossing_points_vector;//svg storage of crossing_points
   
   LPEKnotNS::CrossingPoints crossing_points;//topology representation of the knot.

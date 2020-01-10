@@ -1,6 +1,4 @@
-/** \file
- * \brief
- *
+/*
  * Authors:
  *   Ralf Stephan <ralf@ark.in-berlin.de>
  *
@@ -8,13 +6,8 @@
  *
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
-
 #ifndef INKSCAPE_UI_WIDGET_REGISTRY__H
 #define INKSCAPE_UI_WIDGET_REGISTRY__H
-
-#include <map>
-#include <glibmm/i18n.h>
-#include <glibmm/ustring.h>
 
 namespace Gtk {
     class Object;

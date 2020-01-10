@@ -1,6 +1,8 @@
 #include <string.h>
 #include <glib.h>
 
+#include "extract-uri.h"
+
 // FIXME: kill this ugliness when we have a proper CSS parser
 
 // Functions as per 4.3.4 of CSS 2.1
@@ -93,4 +95,4 @@ gchar *extract_uri( gchar const *s, gchar const** endptr )
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

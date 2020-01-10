@@ -30,12 +30,19 @@ as painted on these lines.
 Now move and bend L to make it fit a skeleton, and see what happens to the normals:
 they move and rotate, deforming the pattern.
 '''
+# standard library
+import copy
+import math
+import re
+import random
+# local library
+import inkex
+import cubicsuperpath
+import bezmisc
+import pathmodifier
+import simpletransform
 
-import inkex, cubicsuperpath, bezmisc
-import pathmodifier,simpletransform
-import copy, math, re, random
-import gettext
-_ = gettext.gettext
+inkex.localize()
 
 def flipxy(path):
     for pathcomp in path:
@@ -117,6 +124,10 @@ class PathAlongPath(pathmodifier.Diffeo):
                         action="store", type="inkbool", 
                         dest="duplicate", default=False,
                         help="duplicate pattern before deformation")
+        self.OptionParser.add_option("--tab",
+                        action="store", type="string",
+                        dest="tab",
+                        help="The selected UI-tab when OK was pressed")
 
     def prepareSelectionList(self):
 
@@ -216,9 +227,11 @@ class PathAlongPath(pathmodifier.Diffeo):
         if self.options.vertical:
             #flipxy(bbox)...
             bbox=(-bbox[3],-bbox[2],-bbox[1],-bbox[0])
-            
+
         width=bbox[1]-bbox[0]
         dx=width+self.options.space
+        if dx < 0.01:
+            exit(_("The total length of the pattern is too small :\nPlease choose a larger object or set 'Space between copies' > 0"))
 
         for id, node in self.patterns.iteritems():
             if node.tag == inkex.addNS('path','svg') or node.tag=='path':
@@ -260,6 +273,8 @@ class PathAlongPath(pathmodifier.Diffeo):
                             offset(sub,xoffset,yoffset)
 
                         if self.options.stretch:
+                            if not width:
+                                exit(_("The 'stretch' option requires that the pattern must have non-zero width :\nPlease edit the pattern width."))
                             for sub in p:
                                 stretch(sub,length/width,1,self.skelcomp[0])
 
@@ -278,4 +293,4 @@ if __name__ == '__main__':
     e.affect()
 
                     
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99

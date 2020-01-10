@@ -13,17 +13,12 @@
 #ifndef INKSCAPE_UI_DIALOG_DOCK_BEHAVIOR_H
 #define INKSCAPE_UI_DIALOG_DOCK_BEHAVIOR_H
 
-#include <map>
-
-#include <gtkmm/buttonbox.h>
-#include <gtkmm/frame.h>
-#include <gtkmm/paned.h>
-
 #include "ui/widget/dock-item.h"
-
-#include "libgdl/libgdl.h"
-
 #include "behavior.h"
+
+namespace Gtk {
+	class Paned;
+}
 
 namespace Inkscape {
 namespace UI {
@@ -79,6 +74,7 @@ private:
 
     /** Internal signal handlers */
     void _onHide();
+    void _onShow();
     bool _onDeleteEvent(GdkEventAny *event);
     void _onStateChanged(Widget::DockItem::State prev_state, Widget::DockItem::State new_state);
     bool _onKeyPress(GdkEventKey *event);
@@ -104,4 +100,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

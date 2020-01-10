@@ -5,17 +5,22 @@
  *   Bryce W. Harrington <bryce@bryceharrington.org>
  *   Gustav Broberg <broberg@kth.se>
  *   Niko Kiirala <niko@kiirala.com>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2004--2008 Authors
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "ui/widget/object-composite-settings.h"
+
 #include <glibmm/i18n.h>
 
+#include "desktop.h"
 #include "desktop-handles.h"
 #include "desktop-style.h"
 #include "document.h"
+#include "document-undo.h"
 #include "filter-chemistry.h"
 #include "inkscape.h"
 #include "selection.h"
@@ -26,15 +31,16 @@
 #include "xml/repr.h"
 #include "widgets/icon.h"
 #include "ui/icon-names.h"
-#include "ui/widget/object-composite-settings.h"
 #include "display/sp-canvas.h"
+#include "ui/widget/style-subject.h"
+#include "ui/widget/gimpspinscale.h"
 
 namespace Inkscape {
 namespace UI {
 namespace Widget {
 
-void ObjectCompositeSettings::_on_desktop_activate(
-    Inkscape::Application */*application*/,
+/*void ObjectCompositeSettings::_on_desktop_activate(
+    Inkscape::Application *application,
     SPDesktop *desktop,
     ObjectCompositeSettings *w
 ) {
@@ -44,52 +50,54 @@ void ObjectCompositeSettings::_on_desktop_activate(
 }
 
 void ObjectCompositeSettings::_on_desktop_deactivate(
-    Inkscape::Application */*application*/,
-    SPDesktop */*desktop*/,
+    Inkscape::Application *application,
+    SPDesktop *desktop,
     ObjectCompositeSettings *w
 ) {
     if (w->_subject) {
         w->_subject->setDesktop(NULL);
     }
-}
+}*/
 
 ObjectCompositeSettings::ObjectCompositeSettings(unsigned int verb_code, char const *history_prefix, int flags)
 : _verb_code(verb_code),
   _blur_tag(Glib::ustring(history_prefix) + ":blur"),
   _opacity_tag(Glib::ustring(history_prefix) + ":opacity"),
   _opacity_vbox(false, 0),
-  _opacity_label_box(false, 0),
-  _opacity_label(_("Opacity, %"), 0.0, 1.0, true),
-  _opacity_adjustment(100.0, 0.0, 100.0, 1.0, 1.0, 0.0),
-  _opacity_hscale(_opacity_adjustment),
-  _opacity_spin_button(_opacity_adjustment, 0.01, 1),
+  _opacity_scale(_("Opacity (%)"), 100.0, 0.0, 100.0, 1.0, 1.0, 1),
   _fe_cb(flags),
   _fe_vbox(false, 0),
-  _fe_alignment(1, 1, 1, 1),
   _blocked(false)
 {
+
     // Filter Effects
     pack_start(_fe_vbox, false, false, 2);
-    _fe_alignment.set_padding(0, 0, 4, 0);
-    _fe_alignment.add(_fe_cb);
-    _fe_vbox.pack_start(_fe_alignment, false, false, 0);
+    _fe_vbox.pack_start(_fe_cb, false, false, 0);
     _fe_cb.signal_blend_blur_changed().connect(sigc::mem_fun(*this, &ObjectCompositeSettings::_blendBlurValueChanged));
 
     // Opacity
     pack_start(_opacity_vbox, false, false, 2);
-    _opacity_label_box.pack_start(_opacity_label, false, false, 4);
-    _opacity_vbox.pack_start(_opacity_label_box, false, false, 0);
-    _opacity_vbox.pack_start(_opacity_hbox, false, false, 0);
-    _opacity_hbox.pack_start(_opacity_hscale, true, true, 4);
-    _opacity_hbox.pack_start(_opacity_spin_button, false, false, 0);
-    _opacity_hscale.set_draw_value(false);
-    _opacity_hscale.set_update_policy(Gtk::UPDATE_DELAYED);
-    _opacity_adjustment.signal_value_changed().connect(sigc::mem_fun(*this, &ObjectCompositeSettings::_opacityValueChanged));
+    _opacity_vbox.pack_start(_opacity_scale);
+
+    _opacity_scale.set_appearance("compact");
+
+    _opacity_scale.signal_value_changed().connect(sigc::mem_fun(*this, &ObjectCompositeSettings::_opacityValueChanged));
+
+    SPDesktop *desktop = SP_ACTIVE_DESKTOP;
+    _opacity_scale.set_focuswidget(GTK_WIDGET(desktop->canvas));
+
+    /* SizeGroup keeps the blur and opacity labels aligned in Fill & Stroke dlg */
+/*
+    GtkSizeGroup *labels = gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL);
+    gtk_size_group_add_widget(labels, GTK_WIDGET(_opacity_label.gobj()));
+    gtk_size_group_add_widget(labels, GTK_WIDGET(_fe_cb.get_blur_label()->gobj()));
+*/
 
     show_all_children();
 
-    _desktop_activated = g_signal_connect ( G_OBJECT (INKSCAPE), "activate_desktop", G_CALLBACK (&ObjectCompositeSettings::_on_desktop_activate), this );
-    _desktop_activated = g_signal_connect ( G_OBJECT (INKSCAPE), "deactivate_desktop", G_CALLBACK (&ObjectCompositeSettings::_on_desktop_deactivate), this );
+    // These signals dont properly detect change in desktop, rely on owner dialog to call setSubject() from setTargetDesktop()
+    //_desktop_activated = g_signal_connect ( G_OBJECT (INKSCAPE), "activate_desktop", G_CALLBACK (&ObjectCompositeSettings::_on_desktop_activate), this );
+    //_desktop_activated = g_signal_connect ( G_OBJECT (INKSCAPE), "deactivate_desktop", G_CALLBACK (&ObjectCompositeSettings::_on_desktop_deactivate), this );
 }
 
 ObjectCompositeSettings::~ObjectCompositeSettings() {
@@ -144,7 +152,7 @@ ObjectCompositeSettings::_blendBlurValueChanged()
         }
 
         SPItem * item = SP_ITEM(*i);
-        SPStyle *style = SP_OBJECT_STYLE(item);
+        SPStyle *style = item->style;
         g_assert(style != NULL);
 
         if (blendmode != "normal") {
@@ -168,7 +176,7 @@ ObjectCompositeSettings::_blendBlurValueChanged()
                                      SP_OBJECT_STYLE_MODIFIED_FLAG ));
     }
 
-    sp_document_maybe_done (document, _blur_tag.c_str(), _verb_code,
+    DocumentUndo::maybeDone(document, _blur_tag.c_str(), _verb_code,
                             _("Change blur"));
 
     // resume interruptibility
@@ -201,14 +209,14 @@ ObjectCompositeSettings::_opacityValueChanged()
     SPCSSAttr *css = sp_repr_css_attr_new ();
 
     Inkscape::CSSOStringStream os;
-    os << CLAMP (_opacity_adjustment.get_value() / 100, 0.0, 1.0);
+    os << CLAMP (_opacity_scale.get_adjustment()->get_value() / 100, 0.0, 1.0);
     sp_repr_css_set_property (css, "opacity", os.str().c_str());
 
     _subject->setCSS(css);
 
     sp_repr_css_attr_unref (css);
 
-    sp_document_maybe_done (sp_desktop_document (desktop), _opacity_tag.c_str(), _verb_code,
+    DocumentUndo::maybeDone(sp_desktop_document (desktop), _opacity_tag.c_str(), _verb_code,
                             _("Change opacity"));
 
     // resume interruptibility
@@ -237,14 +245,14 @@ ObjectCompositeSettings::_subjectChanged() {
 
     switch (result) {
         case QUERY_STYLE_NOTHING:
-            _opacity_hbox.set_sensitive(false);
+            _opacity_vbox.set_sensitive(false);
             // gtk_widget_set_sensitive (opa, FALSE);
             break;
         case QUERY_STYLE_SINGLE:
         case QUERY_STYLE_MULTIPLE_AVERAGED: // TODO: treat this slightly differently
         case QUERY_STYLE_MULTIPLE_SAME:
-            _opacity_hbox.set_sensitive(true);
-            _opacity_adjustment.set_value(100 * SP_SCALE24_TO_FLOAT(query->opacity.value));
+            _opacity_vbox.set_sensitive(true);
+            _opacity_scale.get_adjustment()->set_value(100 * SP_SCALE24_TO_FLOAT(query->opacity.value));
             break;
     }
 
@@ -305,4 +313,4 @@ ObjectCompositeSettings::_subjectChanged() {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

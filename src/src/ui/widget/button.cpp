@@ -1,6 +1,4 @@
-/**
- * \brief Button and CheckButton widgets
- *
+/*
  * Author:
  *   buliabyak@gmail.com
  *
@@ -20,20 +18,34 @@ namespace UI {
 namespace Widget {
 
 Button::Button(Glib::ustring const &label, Glib::ustring const &tooltip)
-    : _tooltips()
 {
     set_use_underline (true);
     set_label (label);
-    _tooltips.set_tip(*this, tooltip);
+    set_tooltip_text(tooltip);
 }
 
 CheckButton::CheckButton(Glib::ustring const &label, Glib::ustring const &tooltip)
-    : _tooltips()
 {
     set_use_underline (true);
     set_label (label);
-    _tooltips.set_tip(*this, tooltip);
+    set_tooltip_text(tooltip);
 }
+
+CheckButton::CheckButton(Glib::ustring const &label, Glib::ustring const &tooltip, bool active)
+{
+    set_use_underline (true);
+    set_label (label);
+    set_tooltip_text(tooltip);
+    set_active(active);
+}
+
+RadioButton::RadioButton(Glib::ustring const &label, Glib::ustring const &tooltip)
+{
+    set_use_underline (true);
+    set_label (label);
+    set_tooltip_text(tooltip);
+}
+
 
 } // namespace Widget
 } // namespace UI

@@ -10,19 +10,28 @@
 #ifndef INKSCAPE_EXTENSION_DIALOG_H__
 #define INKSCAPE_EXTENSION_DIALOG_H__
 
-#include <glibmm/ustring.h>
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
-#include <gdkmm/types.h>
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
 
 #include <gtkmm/dialog.h>
-#include <gtkmm/checkbutton.h>
-#include <gtkmm/socket.h>
+#include <glibmm/value.h>
+#include <glibmm/ustring.h>
 
-#include "execution-env.h"
-#include "param/parameter.h"
+
+namespace Gtk {
+class CheckButton;
+}
 
 namespace Inkscape {
 namespace Extension {
+class Effect;
+class ExecutionEnv;
+class Parameter;
 
 /** \brief  A class to represent the preferences for an extension */
 class PrefDialog : public Gtk::Dialog {

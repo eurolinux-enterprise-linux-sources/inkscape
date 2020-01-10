@@ -8,14 +8,23 @@
 #include <glib.h>
 #include <2geom/point.h>
 
-struct SPDrawContext;
-struct SPCurve;
+namespace Inkscape {
+namespace UI {
+namespace Tools {
+
+class FreehandBase;
+
+}
+}
+}
+
+class SPCurve;
 struct SPCanvasItem;
 
 /// The drawing anchor.
 /// \todo Make this a regular knot, this will allow to set statusbar tips.
 struct SPDrawAnchor { 
-    SPDrawContext *dc;
+    Inkscape::UI::Tools::FreehandBase *dc;
     SPCurve *curve;
     guint start : 1;
     guint active : 1;
@@ -24,7 +33,7 @@ struct SPDrawAnchor {
 };
 
 
-SPDrawAnchor *sp_draw_anchor_new(SPDrawContext *dc, SPCurve *curve, gboolean start,
+SPDrawAnchor *sp_draw_anchor_new(Inkscape::UI::Tools::FreehandBase *dc, SPCurve *curve, gboolean start,
                                  Geom::Point delta);
 SPDrawAnchor *sp_draw_anchor_destroy(SPDrawAnchor *anchor);
 SPDrawAnchor *sp_draw_anchor_test(SPDrawAnchor *anchor, Geom::Point w, gboolean activate);
@@ -41,4 +50,4 @@ SPDrawAnchor *sp_draw_anchor_test(SPDrawAnchor *anchor, Geom::Point w, gboolean 
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

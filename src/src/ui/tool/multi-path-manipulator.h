@@ -13,14 +13,12 @@
 
 #include <stddef.h>
 #include <sigc++/connection.h>
-#include "display/display-forward.h"
-#include "forward.h"
-#include "ui/tool/commit-events.h"
-#include "ui/tool/manipulator.h"
-#include "ui/tool/modifier-tracker.h"
-#include "ui/tool/node.h"
-#include "ui/tool/node-types.h"
-#include "ui/tool/shape-record.h"
+#include "node.h"
+#include "commit-events.h"
+#include "manipulator.h"
+#include "modifier-tracker.h"
+#include "node-types.h"
+#include "shape-record.h"
 
 struct SPCanvasGroup;
 
@@ -38,7 +36,7 @@ class MultiPathManipulator : public PointManipulator {
 public:
     MultiPathManipulator(PathSharedData &data, sigc::connection &chg);
     virtual ~MultiPathManipulator();
-    virtual bool event(SPEventContext *, GdkEvent *event);
+    virtual bool event(Inkscape::UI::Tools::ToolBase *, GdkEvent *event);
 
     bool empty() { return _mmap.empty(); }
     unsigned size() { return _mmap.empty(); }
@@ -53,6 +51,7 @@ public:
     void setNodeType(NodeType t);
     void setSegmentType(SegmentType t);
 
+    void insertNodesAtExtrema(ExtremumType extremum);
     void insertNodes();
     void duplicateNodes();
     void joinNodes();
@@ -71,6 +70,7 @@ public:
     void setLiveOutline(bool set);
     void setLiveObjects(bool set);
     void updateOutlineColors();
+    void updateHandles();
     
     sigc::signal<void> signal_coords_changed; /// Emitted whenever the coordinates
         /// shown in the status bar need updating
@@ -104,8 +104,8 @@ private:
     }
 
     void _commit(CommitEvent cps);
-    void _done(gchar const *);
-    void _doneWithCleanup(gchar const *);
+    void _done(gchar const *reason, bool alert_LPE = false);
+    void _doneWithCleanup(gchar const *reason, bool alert_LPE = false);
     guint32 _getOutlineColor(ShapeRole role);
 
     MapType _mmap;
@@ -137,4 +137,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

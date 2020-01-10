@@ -1,5 +1,6 @@
-/** @file
- * @brief Document metadata dialog, Gtkmm-style
+/**
+ * @file
+ * Document metadata dialog, Gtkmm-style.
  */
 /* Authors:
  *   bulia byak <buliabyak@users.sf.net>
@@ -17,6 +18,7 @@
 # include <config.h>
 #endif
 
+#include "document-metadata.h"
 #include "desktop.h"
 #include "desktop-handles.h"
 #include "inkscape.h"
@@ -26,9 +28,6 @@
 #include "verbs.h"
 #include "xml/node-event-vector.h"
 
-#include "document-metadata.h"
-
-//using std::pair;
 
 namespace Inkscape {
 namespace UI {
@@ -62,14 +61,30 @@ DocumentMetadata::getInstance()
 
 
 DocumentMetadata::DocumentMetadata()
+#if WITH_GTKMM_3_0
+    : UI::Widget::Panel ("", "/dialogs/documentmetadata", SP_VERB_DIALOG_METADATA)
+#else
     : UI::Widget::Panel ("", "/dialogs/documentmetadata", SP_VERB_DIALOG_METADATA),
       _page_metadata1(1, 1), _page_metadata2(1, 1)
+#endif
 {
     hide();
-    _tt.enable();
     _getContents()->set_spacing (4);
     _getContents()->pack_start(_notebook, true, true);
 
+    _page_metadata1.set_border_width(2);
+    _page_metadata2.set_border_width(2);
+   
+#if WITH_GTKMM_3_0
+    _page_metadata1.set_column_spacing(2);
+    _page_metadata2.set_column_spacing(2);
+    _page_metadata1.set_row_spacing(2);
+    _page_metadata2.set_row_spacing(2);
+#else 
+    _page_metadata1.set_spacings(2);
+    _page_metadata2.set_spacings(2);
+#endif
+    
     _notebook.append_page(_page_metadata1, _("Metadata"));
     _notebook.append_page(_page_metadata2, _("License"));
 
@@ -85,7 +100,7 @@ DocumentMetadata::init()
 {
     update();
 
-    Inkscape::XML::Node *repr = SP_OBJECT_REPR(sp_desktop_namedview(getDesktop()));
+    Inkscape::XML::Node *repr = sp_desktop_namedview(getDesktop())->getRepr();
     repr->addListener (&_repr_events, this);
 
     show_all_children();
@@ -93,56 +108,11 @@ DocumentMetadata::init()
 
 DocumentMetadata::~DocumentMetadata()
 {
-    Inkscape::XML::Node *repr = SP_OBJECT_REPR(sp_desktop_namedview(getDesktop()));
+    Inkscape::XML::Node *repr = sp_desktop_namedview(getDesktop())->getRepr();
     repr->removeListenerByData (this);
 
-    for (RDElist::iterator it = _rdflist.begin(); it != _rdflist.end(); it++)
+    for (RDElist::iterator it = _rdflist.begin(); it != _rdflist.end(); ++it)
         delete (*it);
-}
-
-//========================================================================
-
-/**
- * Helper function that attachs widgets in a 3xn table. The widgets come in an
- * array that has two entries per table row. The two entries code for four
- * possible cases: (0,0) means insert space in first column; (0, non-0) means
- * widget in columns 2-3; (non-0, 0) means label in columns 1-3; and
- * (non-0, non-0) means two widgets in columns 2 and 3.
-**/
-inline void
-attach_all (Gtk::Table &table, const Gtk::Widget *arr[], unsigned size, int start = 0)
-{
-    for (unsigned i=0, r=start; i<size/sizeof(Gtk::Widget*); i+=2)
-    {
-        if (arr[i] && arr[i+1])
-        {
-            table.attach (const_cast<Gtk::Widget&>(*arr[i]),   1, 2, r, r+1,
-                      Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
-            table.attach (const_cast<Gtk::Widget&>(*arr[i+1]), 2, 3, r, r+1,
-                      Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
-        }
-        else
-        {
-            if (arr[i+1])
-                table.attach (const_cast<Gtk::Widget&>(*arr[i+1]), 1, 3, r, r+1,
-                      Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
-            else if (arr[i])
-            {
-                Gtk::Label& label = static_cast<Gtk::Label&> (const_cast<Gtk::Widget&>(*arr[i]));
-                label.set_alignment (0.0);
-                table.attach (label, 0, 3, r, r+1,
-                      Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
-            }
-            else
-            {
-                Gtk::HBox *space = manage (new Gtk::HBox);
-                space->set_size_request (SPACE_SIZE_X, SPACE_SIZE_Y);
-                table.attach (*space, 0, 1, r, r+1,
-                      (Gtk::AttachOptions)0, (Gtk::AttachOptions)0,0,0);
-            }
-        }
-        ++r;
-    }
 }
 
 void
@@ -152,46 +122,82 @@ DocumentMetadata::build_metadata()
 
     _page_metadata1.show();
 
-    Gtk::Label *label = manage (new Gtk::Label);
+    Gtk::Label *label = Gtk::manage (new Gtk::Label);
     label->set_markup (_("<b>Dublin Core Entities</b>"));
     label->set_alignment (0.0);
-    _page_metadata1.table().attach (*label, 0,3,0,1, Gtk::FILL, (Gtk::AttachOptions)0,0,0);
+
+#if WITH_GTKMM_3_0
+    label->set_valign(Gtk::ALIGN_CENTER);
+    _page_metadata1.attach(*label, 0, 0, 3, 1);
+#else
+    _page_metadata1.attach(*label, 0,3,0,1, Gtk::FILL, (Gtk::AttachOptions)0,0,0);
+#endif
+
      /* add generic metadata entry areas */
     struct rdf_work_entity_t * entity;
     int row = 1;
     for (entity = rdf_work_entities; entity && entity->name; entity++, row++) {
         if ( entity->editable == RDF_EDIT_GENERIC ) {
-            EntityEntry *w = EntityEntry::create (entity, _tt, _wr);
+            EntityEntry *w = EntityEntry::create (entity, _wr);
             _rdflist.push_back (w);
-            Gtk::HBox *space = manage (new Gtk::HBox);
+            Gtk::HBox *space = Gtk::manage (new Gtk::HBox);
             space->set_size_request (SPACE_SIZE_X, SPACE_SIZE_Y);
-            _page_metadata1.table().attach (*space, 0,1, row, row+1, Gtk::FILL, (Gtk::AttachOptions)0,0,0);
-            _page_metadata1.table().attach (w->_label, 1,2, row, row+1, Gtk::FILL, (Gtk::AttachOptions)0,0,0);
-            _page_metadata1.table().attach (*w->_packable, 2,3, row, row+1, Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
+
+#if WITH_GTKMM_3_0
+            space->set_valign(Gtk::ALIGN_CENTER);
+            _page_metadata1.attach(*space, 0, row, 1, 1);
+
+            w->_label.set_valign(Gtk::ALIGN_CENTER);
+            _page_metadata1.attach(w->_label, 1, row, 1, 1);
+
+            w->_packable->set_hexpand();
+            w->_packable->set_valign(Gtk::ALIGN_CENTER);
+            _page_metadata1.attach(*w->_packable, 2, row, 1, 1);
+#else
+            _page_metadata1.attach(*space, 0,1, row, row+1, Gtk::FILL, (Gtk::AttachOptions)0,0,0);
+            _page_metadata1.attach(w->_label, 1,2, row, row+1, Gtk::FILL, (Gtk::AttachOptions)0,0,0);
+            _page_metadata1.attach(*w->_packable, 2,3, row, row+1, Gtk::FILL|Gtk::EXPAND, (Gtk::AttachOptions)0,0,0);
+#endif
         }
     }
 
     _page_metadata2.show();
 
     row = 0;
-    Gtk::Label *llabel = manage (new Gtk::Label);
+    Gtk::Label *llabel = Gtk::manage (new Gtk::Label);
     llabel->set_markup (_("<b>License</b>"));
     llabel->set_alignment (0.0);
-    _page_metadata2.table().attach (*llabel, 0,3, row, row+1, Gtk::FILL, (Gtk::AttachOptions)0,0,0);
+
+#if WITH_GTKMM_3_0
+    llabel->set_valign(Gtk::ALIGN_CENTER);
+    _page_metadata2.attach(*llabel, 0, row, 3, 1);
+#else
+    _page_metadata2.attach(*llabel, 0,3, row, row+1, Gtk::FILL, (Gtk::AttachOptions)0,0,0);
+#endif
+
     /* add license selector pull-down and URI */
     ++row;
-    _licensor.init (_tt, _wr);
-    Gtk::HBox *space = manage (new Gtk::HBox);
+    _licensor.init (_wr);
+    Gtk::HBox *space = Gtk::manage (new Gtk::HBox);
     space->set_size_request (SPACE_SIZE_X, SPACE_SIZE_Y);
-    _page_metadata2.table().attach (*space, 0,1, row, row+1, Gtk::FILL, (Gtk::AttachOptions)0,0,0);
-    _page_metadata2.table().attach (_licensor, 1,3, row, row+1, Gtk::EXPAND|Gtk::FILL, (Gtk::AttachOptions)0,0,0);
+
+#if WITH_GTKMM_3_0
+    space->set_valign(Gtk::ALIGN_CENTER);
+    _page_metadata2.attach(*space, 0, row, 1, 1);
+
+    _licensor.set_hexpand();
+    _licensor.set_valign(Gtk::ALIGN_CENTER);
+    _page_metadata2.attach(_licensor, 1, row, 2, 1);
+#else
+    _page_metadata2.attach(*space, 0,1, row, row+1, Gtk::FILL, (Gtk::AttachOptions)0,0,0);
+    _page_metadata2.attach(_licensor, 1,3, row, row+1, Gtk::EXPAND|Gtk::FILL, (Gtk::AttachOptions)0,0,0);
+#endif
 }
 
 /**
  * Update dialog widgets from desktop.
  */
-void
-DocumentMetadata::update()
+void DocumentMetadata::update()
 {
     if (_wr.isUpdating()) return;
 
@@ -200,7 +206,7 @@ DocumentMetadata::update()
 
     //-----------------------------------------------------------meta pages
     /* update the RDF entities */
-    for (RDElist::iterator it = _rdflist.begin(); it != _rdflist.end(); it++)
+    for (RDElist::iterator it = _rdflist.begin(); it != _rdflist.end(); ++it)
         (*it)->update (SP_ACTIVE_DOCUMENT);
 
     _licensor.update (SP_ACTIVE_DOCUMENT);
@@ -211,7 +217,7 @@ DocumentMetadata::update()
 void 
 DocumentMetadata::_handleDocumentReplaced(SPDesktop* desktop, SPDocument *)
 {
-    Inkscape::XML::Node *repr = SP_OBJECT_REPR(sp_desktop_namedview(desktop));
+    Inkscape::XML::Node *repr = sp_desktop_namedview(desktop)->getRepr();
     repr->addListener (&_repr_events, this);
     update();
 }
@@ -219,7 +225,7 @@ DocumentMetadata::_handleDocumentReplaced(SPDesktop* desktop, SPDocument *)
 void 
 DocumentMetadata::_handleActivateDesktop(Inkscape::Application *, SPDesktop *desktop)
 {
-    Inkscape::XML::Node *repr = SP_OBJECT_REPR(sp_desktop_namedview(desktop));
+    Inkscape::XML::Node *repr = sp_desktop_namedview(desktop)->getRepr();
     repr->addListener(&_repr_events, this);
     update();
 }
@@ -227,7 +233,7 @@ DocumentMetadata::_handleActivateDesktop(Inkscape::Application *, SPDesktop *des
 void
 DocumentMetadata::_handleDeactivateDesktop(Inkscape::Application *, SPDesktop *desktop)
 {
-    Inkscape::XML::Node *repr = SP_OBJECT_REPR(sp_desktop_namedview(desktop));
+    Inkscape::XML::Node *repr = sp_desktop_namedview(desktop)->getRepr();
     repr->removeListenerByData(this);
 }
 
@@ -236,8 +242,7 @@ DocumentMetadata::_handleDeactivateDesktop(Inkscape::Application *, SPDesktop *d
 /**
  * Called when XML node attribute changed; updates dialog widgets.
  */
-static void
-on_repr_attr_changed (Inkscape::XML::Node *, gchar const *, gchar const *, gchar const *, bool, gpointer data)
+static void on_repr_attr_changed(Inkscape::XML::Node *, gchar const *, gchar const *, gchar const *, bool, gpointer data)
 {
     if (DocumentMetadata *dialog = static_cast<DocumentMetadata *>(data))
 	dialog->update();
@@ -256,4 +261,4 @@ on_repr_attr_changed (Inkscape::XML::Node *, gchar const *, gchar const *, gchar
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

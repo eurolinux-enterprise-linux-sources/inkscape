@@ -68,13 +68,16 @@ find_parametric_bezier_roots(Geom::Point const *w, /* The control points  */
         break;
     }
 
-    // Otherwise, solve recursively after subdividing control polygon
-    std::vector<Geom::Point> Left(degree + 1);    // New left and right
-    std::vector<Geom::Point> Right(degree + 1);   // control polygons
-    Bezier(w, degree, 0.5, &Left[0], &Right[0]);
+    /* Otherwise, solve recursively after subdividing control polygon  */
+
+    //Geom::Point Left[degree+1],	/* New left and right  */
+    //    Right[degree+1];	/* control polygons  */
+    std::vector<Geom::Point> Left( degree+1 ), Right(degree+1);
+
+    Bezier(w, degree, 0.5, Left.data(), Right.data());
     total_subs ++;
-    find_parametric_bezier_roots(&Left[0],  degree, solutions, depth + 1);
-    find_parametric_bezier_roots(&Right[0], degree, solutions, depth + 1);
+    find_parametric_bezier_roots(Left.data(),  degree, solutions, depth+1);
+    find_parametric_bezier_roots(Right.data(), degree, solutions, depth+1);
 }
 
 
@@ -123,7 +126,8 @@ control_poly_flat_enough(Geom::Point const *V, /* Control points	*/
 
     const double abSquared = (a * a) + (b * b);
 
-    double distance[degree]; /* Distances from pts to line */
+    //double distance[degree]; /* Distances from pts to line */
+    std::vector<double> distance(degree); /* Distances from pts to line */
     for (unsigned i = 1; i < degree; i++) {
         /* Compute distance from each of the points to that line */
         double & dist(distance[i-1]);
@@ -191,10 +195,13 @@ Bezier(Geom::Point const *V, /* Control pts	*/
        Geom::Point *Left,	/* RETURN left half ctl pts */
        Geom::Point *Right)	/* RETURN right half ctl pts */
 {
-    Geom::Point Vtemp[degree+1][degree+1];
+    //Geom::Point Vtemp[degree+1][degree+1];
+    std::vector<std::vector<Geom::Point> > Vtemp(degree+1);
+    for ( size_t i = 0; i < degree + 1; ++i )
+        Vtemp.reserve(degree+1);
 
     /* Copy control points	*/
-    std::copy(V, V+degree+1, Vtemp[0]);
+    std::copy(V, V+degree+1, Vtemp[0].begin());
 
     /* Triangle computation	*/
     for (unsigned i = 1; i <= degree; i++) {	
@@ -222,4 +229,4 @@ Bezier(Geom::Point const *V, /* Control pts	*/
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

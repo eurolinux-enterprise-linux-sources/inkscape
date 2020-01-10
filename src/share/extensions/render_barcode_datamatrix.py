@@ -51,12 +51,45 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
     0.50    2009-10-25  Full functionality, up to 144x144.
                         ASCII and compressed digit encoding only.
 '''
+# local library
+import inkex
+import simplestyle
 
-import inkex, simplestyle
-
-import gettext
-_ = gettext.gettext
+inkex.localize()
     
+symbols = {
+    'sq10': (10, 10),
+    'sq12': (12, 12),
+    'sq14': (14, 14),
+    'sq16': (16, 16),
+    'sq18': (18, 18),
+    'sq20': (20, 20),
+    'sq22': (22, 22),
+    'sq24': (24, 24),
+    'sq26': (26, 26),
+    'sq32': (32, 32),
+    'sq36': (36, 36),
+    'sq40': (40, 40),
+    'sq44': (44, 44),
+    'sq48': (48, 48),
+    'sq52': (52, 52),
+    'sq64': (64, 64),
+    'sq72': (72, 72),
+    'sq80': (80, 80),
+    'sq88': (88, 88),
+    'sq96': (96, 96),
+    'sq104': (104, 104),
+    'sq120': (120, 120),
+    'sq132': (132, 132),
+    'sq144': (144, 144),
+    'rect8x18': (8, 18),
+    'rect8x32': (8, 32),
+    'rect12x26': (12, 26),
+    'rect12x36': (12, 36),
+    'rect16x36': (16, 36),
+    'rect16x48': (16, 48),
+}
+
 #ENCODING ROUTINES ===================================================
 #   Take an input string and convert it to a sequence (or sequences)
 #   of codewords as specified in ISO/IEC 16022:2006 (section 5.2.3)
@@ -107,7 +140,7 @@ def get_parameters(nrow, ncol):
     elif ( nrow ==  20 and ncol ==  20 ):
         return 18, 18, 1, 1, 22, 18, 1
     elif ( nrow ==  22 and ncol ==  22 ):
-        return 18, 18, 1, 1, 30, 20, 1
+        return 20, 20, 1, 1, 30, 20, 1
     elif ( nrow ==  24 and ncol ==  24 ):
         return 22, 22, 1, 1, 36, 24, 1
     elif ( nrow ==  26 and ncol ==  26 ):
@@ -167,6 +200,7 @@ def get_parameters(nrow, ncol):
     #RETURN ERROR
     else:
         inkex.errormsg(_('Unrecognised DataMatrix size'))
+        exit(0)
     
     return None
     
@@ -616,6 +650,9 @@ class DataMatrix(inkex.Effect):
         self.OptionParser.add_option("--text",
             action="store", type="string",
             dest="TEXT", default='Inkscape')
+        self.OptionParser.add_option("--symbol",
+            action="store", type="string",
+            dest="SYMBOL", default='')
         self.OptionParser.add_option("--rows",
             action="store", type="int",
             dest="ROWS", default=10)
@@ -628,7 +665,14 @@ class DataMatrix(inkex.Effect):
             
     def effect(self):
         
+        scale = self.unittouu('1px')    # convert to document units
         so = self.options
+        
+        rows = so.ROWS
+        cols = so.COLS
+        if (so.SYMBOL != '' and (so.SYMBOL in symbols)):
+            rows = symbols[so.SYMBOL][0]
+            cols = symbols[so.SYMBOL][1]
         
         if so.TEXT == '':  #abort if converting blank text
             inkex.errormsg(_('Please enter an input string'))
@@ -637,18 +681,18 @@ class DataMatrix(inkex.Effect):
             #INKSCAPE GROUP TO CONTAIN EVERYTHING
             
             centre = self.view_center   #Put in in the centre of the current view
-            grp_transform = 'translate' + str( centre )
+            grp_transform = 'translate' + str( centre ) + ' scale(%f)' % scale
             grp_name = 'DataMatrix'
             grp_attribs = {inkex.addNS('label','inkscape'):grp_name,
                            'transform':grp_transform }
             grp = inkex.etree.SubElement(self.current_layer, 'g', grp_attribs)#the group to put everything in
             
             #GENERATE THE DATAMATRIX
-            encoded = encode( so.TEXT, (so.ROWS, so.COLS) ) #get the pattern of squares
-            render_data_matrix( encoded, so.SIZE, so.COLS*so.SIZE*1.5, grp )    # generate the SVG elements
+            encoded = encode( so.TEXT, (rows, cols) ) #get the pattern of squares
+            render_data_matrix( encoded, so.SIZE, cols*so.SIZE*1.5, grp )    # generate the SVG elements
             
 if __name__ == '__main__':
     e = DataMatrix()
     e.affect()
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99

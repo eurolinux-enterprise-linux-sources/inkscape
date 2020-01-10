@@ -1,14 +1,17 @@
-#ifndef __SP_PATH_H__
-#define __SP_PATH_H__
+#ifndef SEEN_SP_PATH_H
+#define SEEN_SP_PATH_H
 
 /*
  * SVG <path> implementation
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
+ *   Ximian, Inc.
+ *   Johan Engelen
  *
  * Copyright (C) 1999-2002 Lauris Kaplinski
  * Copyright (C) 2000-2001 Ximian, Inc.
+ * Copyright (C) 1999-2012 Authors
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -16,30 +19,50 @@
 #include "sp-shape.h"
 #include "sp-conn-end-pair.h"
 
+class SPCurve;
 
-#define SP_TYPE_PATH (sp_path_get_type ())
-#define SP_PATH(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_PATH, SPPath))
-#define SP_IS_PATH(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_PATH))
+#define SP_PATH(obj) (dynamic_cast<SPPath*>((SPObject*)obj))
+#define SP_IS_PATH(obj) (dynamic_cast<const SPPath*>((SPObject*)obj) != NULL)
 
-struct SPPath : public SPShape {
-    SPCurve *original_curve;
+/**
+ * SVG <path> implementation
+ */
+class SPPath : public SPShape {
+public:
+	SPPath();
+	virtual ~SPPath();
 
+    gint nodesInPath() const;
+
+    // still in lowercase because the names should be clearer on whether curve, curve->copy or curve-ref is returned.
+    void     set_original_curve (SPCurve *curve, unsigned int owner, bool write);
+    SPCurve* get_original_curve () const;
+    SPCurve* get_curve_for_edit () const;
+    const SPCurve* get_curve_reference() const;
+
+public: // should be made protected
+    SPCurve* get_curve();
+    friend class SPConnEndPair;
+
+public:
     SPConnEndPair connEndPair;
+
+	virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
+	virtual void release();
+	virtual void update(SPCtx* ctx, guint flags);
+
+	virtual void set(unsigned int key, gchar const* value);
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags);
+
+        virtual const char* displayName() const;
+	virtual gchar* description() const;
+	virtual Geom::Affine set_transform(Geom::Affine const &transform);
+    virtual void convert_to_guides() const;
+
+    virtual void update_patheffect(bool write);
 };
 
-struct SPPathClass {
-    SPShapeClass shape_class;
-};
-
-GType sp_path_get_type (void);
-gint sp_nodes_in_path(SPPath *path);
-
-void     sp_path_set_original_curve (SPPath *path, SPCurve *curve, unsigned int owner, bool write);
-SPCurve* sp_path_get_original_curve (SPPath *path);
-SPCurve* sp_path_get_curve_for_edit (SPPath *path);
-const SPCurve* sp_path_get_curve_reference (SPPath *path);
-
-#endif
+#endif // SEEN_SP_PATH_H
 
 /*
   Local Variables:

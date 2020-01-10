@@ -1,6 +1,4 @@
-/** \file
- * Inkscape::IO::Resource - simple resource API
- *
+/*
  * Copyright 2006 MenTaLguY <mental@rydia.net>
  *
  * This program is free software; you can redistribute it and/or
@@ -21,6 +19,9 @@ namespace Inkscape {
 
 namespace IO {
 
+/**
+ * simple resource API
+ */
 namespace Resource {
 
 enum Type {
@@ -63,4 +64,4 @@ Util::ptr_shared<char> get_path(Domain domain, Type type,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

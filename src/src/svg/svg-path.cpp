@@ -40,7 +40,7 @@
 #include <2geom/path.h>
 #include <2geom/curves.h>
 #include <2geom/sbasis-to-bezier.h>
-#include <2geom/svg-path.h>
+#include <2geom/path-sink.h>
 #include <2geom/svg-path-parser.h>
 #include <2geom/exception.h>
 #include <2geom/angle.h>
@@ -59,13 +59,13 @@ Geom::PathVector sp_svg_read_pathv(char const * str)
 
     typedef std::back_insert_iterator<Geom::PathVector> Inserter;
     Inserter iter(pathv);
-    Geom::SVGPathGenerator<Inserter> generator(iter);
+    Geom::PathIteratorSink<Inserter> generator(iter);
 
     try {
         Geom::parse_svg_path(str, generator);
     }
-    catch (Geom::SVGPathParseError e) {
-        generator.finish();
+    catch (Geom::SVGPathParseError &e) {
+        generator.flush();
         // This warning is extremely annoying when testing
         //g_warning("Malformed SVG path, truncated path up to where error was found.\n Input path=\"%s\"\n Parsed path=\"%s\"", str, sp_svg_write_path(pathv));
     }
@@ -90,9 +90,9 @@ static void sp_svg_write_curve(Inkscape::SVG::PathString & str, Geom::Curve cons
                      (*cubic_bezier)[3][0], (*cubic_bezier)[3][1] );
     }
     else if(Geom::SVGEllipticalArc const *svg_elliptical_arc = dynamic_cast<Geom::SVGEllipticalArc const *>(c)) {
-        str.arcTo( svg_elliptical_arc->ray(0), svg_elliptical_arc->ray(1),
-                   Geom::rad_to_deg(svg_elliptical_arc->rotation_angle()),
-                   svg_elliptical_arc->large_arc_flag(), svg_elliptical_arc->sweep_flag(),
+        str.arcTo( svg_elliptical_arc->ray(Geom::X), svg_elliptical_arc->ray(Geom::Y),
+                   Geom::rad_to_deg(svg_elliptical_arc->rotationAngle()),
+                   svg_elliptical_arc->largeArc(), svg_elliptical_arc->sweep(),
                    svg_elliptical_arc->finalPoint() );
     }
     else if(Geom::HLineSegment const *hline_segment = dynamic_cast<Geom::HLineSegment const  *>(c)) {
@@ -114,7 +114,7 @@ static void sp_svg_write_curve(Inkscape::SVG::PathString & str, Geom::Curve cons
 static void sp_svg_write_path(Inkscape::SVG::PathString & str, Geom::Path const & p) {
     str.moveTo( p.initialPoint()[0], p.initialPoint()[1] );
 
-    for(Geom::Path::const_iterator cit = p.begin(); cit != p.end_open(); cit++) {
+    for(Geom::Path::const_iterator cit = p.begin(); cit != p.end_open(); ++cit) {
         sp_svg_write_curve(str, &(*cit));
     }
 
@@ -126,7 +126,7 @@ static void sp_svg_write_path(Inkscape::SVG::PathString & str, Geom::Path const 
 gchar * sp_svg_write_path(Geom::PathVector const &p) {
     Inkscape::SVG::PathString str;
 
-    for(Geom::PathVector::const_iterator pit = p.begin(); pit != p.end(); pit++) {
+    for(Geom::PathVector::const_iterator pit = p.begin(); pit != p.end(); ++pit) {
         sp_svg_write_path(str, *pit);
     }
 
@@ -150,4 +150,4 @@ gchar * sp_svg_write_path(Geom::Path const &p) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

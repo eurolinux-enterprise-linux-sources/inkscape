@@ -1,12 +1,14 @@
-#ifndef __INKSCAPE_IO_GZIPSTREAM_H__
-#define __INKSCAPE_IO_GZIPSTREAM_H__
+#ifndef SEEN_INKSCAPE_IO_GZIPSTREAM_H
+#define SEEN_INKSCAPE_IO_GZIPSTREAM_H
 /**
- * Zlib-enabled input and output streams
+ * @file
+ * Zlib-enabled input and output streams.
  *
  * This is a thin wrapper of libz calls, in order
  * to provide a simple interface to our developers
  * for gzip input and output.
- *
+ */
+/*
  * Authors:
  *   Bob Jamison <rjamison@titan.com>
  *
@@ -15,7 +17,7 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-
+#include <vector>
 #include "inkscapestream.h"
 #include <zlib.h>
 
@@ -96,7 +98,7 @@ public:
     
     virtual void flush();
     
-    virtual void put(int ch);
+    virtual int put(gunichar ch);
 
 private:
 

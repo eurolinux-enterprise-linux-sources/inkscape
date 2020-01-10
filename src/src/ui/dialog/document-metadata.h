@@ -13,15 +13,22 @@
 #ifndef INKSCAPE_UI_DIALOG_DOCUMENT_METADATA_H
 #define INKSCAPE_UI_DIALOG_DOCUMENT_METADATA_H
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include <list>
 #include <stddef.h>
-#include <sigc++/sigc++.h>
-#include <gtkmm/notebook.h>
-#include <glibmm/i18n.h>
-
 #include "ui/widget/panel.h"
+#include <gtkmm/notebook.h>
+
+#if WITH_GTKMM_3_0
+# include <gtkmm/grid.h>
+#else
+# include <gtkmm/table.h>
+#endif
+
 #include "ui/widget/licensor.h"
-#include "ui/widget/notebook-page.h"
 #include "ui/widget/registry.h"
 
 namespace Inkscape {
@@ -52,11 +59,15 @@ protected:
     void _handleActivateDesktop(Inkscape::Application *application, SPDesktop *desktop);
     void _handleDeactivateDesktop(Inkscape::Application *application, SPDesktop *desktop);
 
-    Gtk::Tooltips _tt;
     Gtk::Notebook  _notebook;
 
-    UI::Widget::NotebookPage _page_metadata1;
-    UI::Widget::NotebookPage _page_metadata2;
+#if WITH_GTKMM_3_0
+    Gtk::Grid     _page_metadata1;
+    Gtk::Grid     _page_metadata2;
+#else
+    Gtk::Table     _page_metadata1;
+    Gtk::Table     _page_metadata2;
+#endif
 
     //---------------------------------------------------------------
     RDElist _rdflist;
@@ -84,4 +95,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

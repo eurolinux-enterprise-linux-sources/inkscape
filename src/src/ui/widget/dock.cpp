@@ -1,5 +1,6 @@
-/** @file
- * @brief A desktop dock pane to dock dialogs.
+/**
+ * @file
+ * A desktop dock pane to dock dialogs.
  */
 /* Author:
  *   Gustav Broberg <broberg@kth.se>
@@ -9,13 +10,14 @@
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
 
+#include "dock.h"
 #include "inkscape.h"
 #include "preferences.h"
 #include "desktop.h"
 
-#include "dock.h"
-
 #include <gtkmm/adjustment.h>
+#include <gtkmm/paned.h>
+#include <gtkmm/scrolledwindow.h>
 
 namespace Inkscape {
 namespace UI {
@@ -23,19 +25,19 @@ namespace Widget {
 
 namespace {
 
-void hideCallback(GtkObject */*object*/, gpointer dock_ptr)
+void hideCallback(GObject * /*object*/, gpointer dock_ptr)
 {
     g_return_if_fail( dock_ptr != NULL );
 
-    Dock *dock = (Dock *)dock_ptr;
+    Dock *dock = static_cast<Dock *>(dock_ptr);
     dock->hide();
 }
 
-void unhideCallback(GtkObject */*object*/, gpointer dock_ptr)
+void unhideCallback(GObject * /*object*/, gpointer dock_ptr)
 {
     g_return_if_fail( dock_ptr != NULL );
 
-    Dock *dock = (Dock *)dock_ptr;
+    Dock *dock = static_cast<Dock *>(dock_ptr);
     dock->show();
 }
 
@@ -46,12 +48,33 @@ const int Dock::_default_dock_bar_width = 36;
 
 
 Dock::Dock(Gtk::Orientation orientation)
-    : _gdl_dock (GDL_DOCK (gdl_dock_new())),
-      _gdl_dock_bar (GDL_DOCK_BAR (gdl_dock_bar_new(GDL_DOCK(_gdl_dock)))),
+    : _gdl_dock(gdl_dock_new()),
+#if WITH_GDL_3_6
+      _gdl_dock_bar(GDL_DOCK_BAR(gdl_dock_bar_new(G_OBJECT(_gdl_dock)))),
+#else
+      _gdl_dock_bar(GDL_DOCK_BAR(gdl_dock_bar_new(GDL_DOCK(_gdl_dock)))),
+#endif
       _scrolled_window (Gtk::manage(new Gtk::ScrolledWindow))
 {
-    gdl_dock_bar_set_orientation(_gdl_dock_bar, static_cast<GtkOrientation>(orientation));
+#if WITH_GDL_3_6
+    gtk_orientable_set_orientation(GTK_ORIENTABLE(_gdl_dock_bar),
+                                   static_cast<GtkOrientation>(orientation));
+#else
+    gdl_dock_bar_set_orientation(_gdl_dock_bar,
+                                 static_cast<GtkOrientation>(orientation));
+#endif
 
+#if WITH_GTKMM_3_0
+    switch(orientation) {
+        case Gtk::ORIENTATION_VERTICAL:
+            _dock_box = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL));
+            break;
+        case Gtk::ORIENTATION_HORIZONTAL:
+            _dock_box = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_VERTICAL));
+    }
+    
+    _paned = Gtk::manage(new Gtk::Paned(orientation));
+#else
     switch (orientation) {
         case Gtk::ORIENTATION_VERTICAL:
             _dock_box = Gtk::manage(new Gtk::HBox());
@@ -61,6 +84,7 @@ Dock::Dock(Gtk::Orientation orientation)
             _dock_box = Gtk::manage(new Gtk::VBox());
             _paned = Gtk::manage(new Gtk::HPaned());
     }
+#endif
 
     _scrolled_window->add(*_dock_box);
     _scrolled_window->set_policy(Gtk::POLICY_NEVER, Gtk::POLICY_AUTOMATIC);
@@ -79,10 +103,15 @@ Dock::Dock(Gtk::Orientation orientation)
         static_cast<GdlSwitcherStyle>(prefs->getIntLimited("/options/dock/switcherstyle",
                                                                       GDL_SWITCHER_STYLE_BOTH, 0, 4));
 
-    g_object_set (GDL_DOCK_OBJECT(_gdl_dock)->master,
-                  "switcher-style", gdl_switcher_style,
-                  "expand-direction", GDL_DOCK_EXPANSION_DIRECTION_DOWN,
-                  NULL);
+    GdlDockMaster* master = NULL;
+    
+    g_object_get(GDL_DOCK_OBJECT(_gdl_dock),
+            "master", &master,
+            NULL);
+    
+    g_object_set(master,
+            "switcher-style", gdl_switcher_style,
+            NULL);
 
     GdlDockBarStyle gdl_dock_bar_style =
         static_cast<GdlDockBarStyle>(prefs->getIntLimited("/options/dock/dockbarstyle",
@@ -105,11 +134,12 @@ Dock::~Dock()
     g_free(_gdl_dock_bar);
 }
 
-void
-Dock::addItem(DockItem& item, DockItem::Placement placement)
+void Dock::addItem(DockItem& item, DockItem::Placement placement)
 {
     _dock_items.push_back(&item);
-    gdl_dock_add_item(_gdl_dock, GDL_DOCK_ITEM(item.gobj()), (GdlDockPlacement)placement);
+    gdl_dock_add_item(GDL_DOCK(_gdl_dock),
+                      GDL_DOCK_ITEM(item.gobj()),
+                      (GdlDockPlacement)placement);
 
     // FIXME: This is a hack to prevent the dock from expanding the main window, this can't be done
     // initially as the paned doesn't exist.
@@ -118,14 +148,12 @@ Dock::addItem(DockItem& item, DockItem::Placement placement)
     }
 }
 
-Gtk::Widget&
-Dock::getWidget()
+Gtk::Widget &Dock::getWidget()
 {
      return *_scrolled_window;
 }
 
-Gtk::Paned *
-Dock::getParentPaned()
+Gtk::Paned *Dock::getParentPaned()
 {
     g_return_val_if_fail(_dock_box, 0);
     Gtk::Container *parent = getWidget().get_parent();
@@ -133,20 +161,17 @@ Dock::getParentPaned()
 }
 
 
-Gtk::Paned *
-Dock::getPaned()
+Gtk::Paned *Dock::getPaned()
 {
     return _paned;
 }
 
-GtkWidget *
-Dock::getGdlWidget()
+GtkWidget *Dock::getGdlWidget()
 {
     return GTK_WIDGET(_gdl_dock);
 }
 
-bool
-Dock::isEmpty() const
+bool Dock::isEmpty() const
 {
     std::list<const DockItem *>::const_iterator
         i = _dock_items.begin(),
@@ -161,8 +186,7 @@ Dock::isEmpty() const
     return true;
 }
 
-bool
-Dock::hasIconifiedItems() const
+bool Dock::hasIconifiedItems() const
 {
     std::list<const DockItem *>::const_iterator
         i = _dock_items.begin(),
@@ -177,20 +201,17 @@ Dock::hasIconifiedItems() const
     return false;
 }
 
-void
-Dock::hide()
+void Dock::hide()
 {
     getWidget().hide();
 }
 
-void
-Dock::show()
+void Dock::show()
 {
     getWidget().show();
 }
 
-void
-Dock::toggleDockable(int width, int height)
+void Dock::toggleDockable(int width, int height)
 {
     static int prev_horizontal_position, prev_vertical_position;
 
@@ -213,8 +234,7 @@ Dock::toggleDockable(int width, int height)
 
 }
 
-void
-Dock::scrollToItem(DockItem& item)
+void Dock::scrollToItem(DockItem& item)
 {
     int item_x, item_y;
     item.getWidget().translate_coordinates(getWidget(), 0, 0, item_x, item_y);
@@ -236,17 +256,18 @@ Dock::signal_layout_changed()
                                     &_signal_layout_changed_proxy);
 }
 
-void
-Dock::_onLayoutChanged()
+void Dock::_onLayoutChanged()
 {
     if (isEmpty()) {
         if (hasIconifiedItems()) {
+            _paned->get_child1()->set_size_request(-1, -1);
             _scrolled_window->set_size_request(_default_dock_bar_width);
         } else {
+            _paned->get_child1()->set_size_request(-1, -1);
             _scrolled_window->set_size_request(_default_empty_width);
         }
-
         getParentPaned()->set_position(INT_MAX);
+
     } else {
         // unset any forced size requests
         _paned->get_child1()->set_size_request(-1, -1);
@@ -262,7 +283,7 @@ Dock::_onPanedButtonEvent(GdkEventButton *event)
         _paned->get_child1()->set_size_request(-1, -1);
 }
 
-gboolean
+gboolean 
 Dock::_on_paned_button_event(GtkWidget */*widget*/, GdkEventButton *event, gpointer user_data)
 {
     if (Dock *dock = static_cast<Dock *>(user_data))
@@ -294,4 +315,4 @@ Dock::_signal_layout_changed_proxy =
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

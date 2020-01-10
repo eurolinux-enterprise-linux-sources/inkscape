@@ -1,11 +1,12 @@
-#ifndef __SP_URI_REFERENCES_H__
-#define __SP_URI_REFERENCES_H__
+#ifndef SEEN_SP_URI_REFERENCES_H
+#define SEEN_SP_URI_REFERENCES_H
 
 /*
  * Helper methods for resolving URI References
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2001-2002 Lauris Kaplinski
  * Copyright (C) 2001 Ximian, Inc.
@@ -18,9 +19,11 @@
 #include <sigc++/trackable.h>
 
 #include "bad-uri-exception.h"
-#include "forward.h"
+#include "sp-object.h"
 
 namespace Inkscape {
+
+class URI;
 
 /**
  * A class encapsulating a reference to a particular URI; observers can
@@ -150,4 +153,15 @@ SPObject* sp_css_uri_reference_resolve( SPDocument *document, const gchar *uri )
 
 SPObject *sp_uri_reference_resolve (SPDocument *document, const gchar *uri);
 
-#endif
+#endif // SEEN_SP_URI_REFERENCES_H
+
+/*
+  Local Variables:
+  mode:c++
+  c-file-style:"stroustrup"
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  indent-tabs-mode:nil
+  fill-column:99
+  End:
+*/
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

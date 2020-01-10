@@ -10,6 +10,7 @@
 #include "extension/system.h"
 
 #include "blur.h"
+#include <Magick++.h>
 
 namespace Inkscape {
 namespace Extension {
@@ -36,8 +37,8 @@ Blur::init(void)
 		"<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
 			"<name>" N_("Blur") "</name>\n"
 			"<id>org.inkscape.effect.bitmap.blur</id>\n"
-			"<param name=\"radius\" gui-text=\"" N_("Radius") "\" type=\"float\" min=\"0\" max=\"100\">1</param>\n"
-			"<param name=\"sigma\"  gui-text=\"" N_("Sigma") "\"  type=\"float\" min=\"0\" max=\"100\">0.5</param>\n"
+			"<param name=\"radius\" gui-text=\"" N_("Radius:") "\" type=\"float\" min=\"0\" max=\"100\">1</param>\n"
+			"<param name=\"sigma\"  gui-text=\"" N_("Sigma:") "\"  type=\"float\" min=\"0\" max=\"100\">0.5</param>\n"
 			"<effect>\n"
 				"<object-type>all</object-type>\n"
 				"<effects-menu>\n"

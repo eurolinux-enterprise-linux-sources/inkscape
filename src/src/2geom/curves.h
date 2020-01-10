@@ -1,7 +1,7 @@
 /**
  * \file
- * \brief   this file is only a helper header to include all curve types at once
- *
+ * \brief Include all curve types
+ *//*
  * Authors:
  * 		MenTaLguY <mental@rydia.net>
  * 		Marco Cecchetti <mrcekets at gmail.com>
@@ -32,25 +32,17 @@
  * the specific language governing rights and limitations.
  */
 
-
-
-
-#ifndef _2GEOM_CURVES_H_
-#define _2GEOM_CURVES_H_
-
+#ifndef LIB2GEOM_SEEN_CURVES_H
+#define LIB2GEOM_SEEN_CURVES_H
 
 #include <2geom/curve.h>
 #include <2geom/sbasis-curve.h>
 #include <2geom/bezier-curve.h>
 #include <2geom/hvlinesegment.h>
-//#include <2geom/elliptical-arc.h>
+#include <2geom/elliptical-arc.h>
 #include <2geom/svg-elliptical-arc.h>
 
-
-#endif // _2GEOM_CURVES_H_
-
-
-
+#endif // LIB2GEOM_SEEN_CURVES_H
 
 /*
   Local Variables:
@@ -61,5 +53,5 @@
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
 

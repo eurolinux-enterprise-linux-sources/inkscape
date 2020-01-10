@@ -29,7 +29,7 @@ public:
     void toggle_finite (Proj::Axis axis);
     double get_infinite_angle (Proj::Axis axis) {
         if (has_finite_image(axis)) {
-            return 1e18; //this used to be NR_HUGE before 2geom conversion
+            return Geom::infinity();
         }
         Pt2 vp(column(axis));
         return Geom::atan2(Geom::Point(vp[0], vp[1])) * 180.0/M_PI;
@@ -47,8 +47,8 @@ public:
     gchar * pt_to_str (Proj::Axis axis);
 
     bool operator==(const TransfMat3x4 &rhs) const;
-    TransfMat3x4 operator*(Geom::Matrix const &A) const;
-    TransfMat3x4 &operator*=(Geom::Matrix const &A);
+    TransfMat3x4 operator*(Geom::Affine const &A) const;
+    TransfMat3x4 &operator*=(Geom::Affine const &A);
 
     void print() const;
 
@@ -78,4 +78,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

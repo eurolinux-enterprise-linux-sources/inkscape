@@ -7,12 +7,11 @@
 #include <require-config.h>
 #include "FontFactory.h"
 
-#include <libnr/nr-forward.h>
-#include <libnrtype/nrtype-forward.h>
 #include <libnrtype/font-style.h>
-#include <livarot/livarot-forward.h>
-#include "libnr/nr-rect.h"
 #include <2geom/d2.h>
+
+class font_factory;
+struct font_glyph;
 
 // the font_instance are the template of several raster_font; they provide metrics and outlines
 // that are drawn by the raster_font, so the raster_font needs info relative to the way the
@@ -30,7 +29,7 @@ public:
     // refcount
     int                   refCount;
     // font_factory owning this font_instance
-    font_factory*         daddy;
+    font_factory*         parent;
 
     // common glyph definitions for all the rasterfonts
     std::map<int, int>    id_to_no;
@@ -55,38 +54,19 @@ public:
 
     // nota: all coordinates returned by these functions are on a [0..1] scale; you need to multiply
     // by the fontsize to get the real sizes
-    Path*                Outline(int glyph_id, Path *copyInto=NULL);
-    // queries the outline of the glyph (in livarot Path form), and copies it into copyInto instead
-    // of allocating a new Path if copyInto != NULL
     Geom::PathVector*    PathVector(int glyph_id);
                          // returns the 2geom-type pathvector for this glyph. no refcounting needed, it's deallocated when the font_instance dies
     double               Advance(int glyph_id, bool vertical);
     // nominal advance of the font.
     bool                 FontMetrics(double &ascent, double &descent, double &leading);
+    bool                 FontDecoration(double &underline_position,     double &underline_thickness,
+                         double &linethrough_position,   double &linethrough_thickness);
     bool                 FontSlope(double &run, double &rise);
                                 // for generating slanted cursors for oblique fonts
     Geom::OptRect             BBox(int glyph_id);
 
-    // creates a rasterfont for the given style
-    raster_font*         RasterFont(Geom::Matrix const &trs, double stroke_width,
-                                    bool vertical = false, JoinType stroke_join = join_straight,
-                                    ButtType stroke_cap = butt_straight, float miter_limit = 4.0);
-    // the dashes array in iStyle is copied
-    raster_font*         RasterFont(font_style const &iStyle);
-    // private use: tells the font_instance that the raster_font 'who' has died
-    void                 RemoveRasterFont(raster_font *who);
-
-    // attribute queries
-    unsigned             Name(gchar *str, unsigned size);
-    unsigned             PSName(gchar *str, unsigned size);
-    unsigned             Family(gchar *str, unsigned size);
-    unsigned             Attribute(gchar const *key, gchar *str, unsigned size);
-
 private:
     void                 FreeTheFace();
-
-    // hashmap to get the raster_font for a given style
-    void*                loadedPtr;
 
 #ifdef USE_PANGO_WIN32
     HFONT                 theFace;

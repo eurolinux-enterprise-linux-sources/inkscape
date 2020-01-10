@@ -17,11 +17,11 @@
 #ifndef __INKSCAPE_POTRACE_H__
 #define __INKSCAPE_POTRACE_H__
 
-#include <gtkmm.h>
 #include <trace/trace.h>
-#include <trace/imagemap.h>
-
 #include "potracelib.h"
+
+struct GrayMap_def;
+typedef GrayMap_def GrayMap;
 
 namespace Inkscape {
 
@@ -245,7 +245,7 @@ class PotraceTracingEngine : public TracingEngine
     potrace_param_t *potraceParams;
     TraceType traceType;
 
-    //## do i invert at the end?
+    //## do I invert at the end?
     bool invert;
 
     //## Color-->b&w quantization
@@ -286,3 +286,13 @@ class PotraceTracingEngine : public TracingEngine
 #endif  //__INKSCAPE_POTRACE_H__
 
 
+/*
+  Local Variables:
+  mode:c++
+  c-file-style:"stroustrup"
+  c-file-offsets:((innamespace . 0)(inline-open . 0))
+  indent-tabs-mode:nil
+  fill-column:99
+  End:
+*/
+// vim: expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

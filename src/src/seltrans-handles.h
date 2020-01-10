@@ -1,5 +1,5 @@
-#ifndef __SP_SELTRANS_HANDLES_H__
-#define __SP_SELTRANS_HANDLES_H__
+#ifndef SEEN_SP_SELTRANS_HANDLES_H
+#define SEEN_SP_SELTRANS_HANDLES_H
 
 /*
  * Seltrans knots
@@ -12,48 +12,57 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <gdk/gdk.h>
-#include "display/sodipodi-ctrl.h"
 #include <2geom/forward.h>
+#include <gdk/gdk.h>
+#include "enums.h"
 
 namespace Inkscape
 {
   class SelTrans;
 }
 
-class SPSelTransHandle;
+guint32 const DEF_COLOR[] = { 0xff, 0xff6600, 0xff6600, 0xff, 0xff, 0xff };
+guint32 const CEN_COLOR[] = { 0x0, 0x0, 0x0, 0xff, 0xff0000b0, 0xff0000b0 };
 
-// request handlers
-gboolean sp_sel_trans_scale_request(Inkscape::SelTrans *seltrans,
-				    SPSelTransHandle const &handle, Geom::Point &p, guint state);
-gboolean sp_sel_trans_stretch_request(Inkscape::SelTrans *seltrans,
-				      SPSelTransHandle const &handle, Geom::Point &p, guint state);
-gboolean sp_sel_trans_skew_request(Inkscape::SelTrans *seltrans,
-				   SPSelTransHandle const &handle, Geom::Point &p, guint state);
-gboolean sp_sel_trans_rotate_request(Inkscape::SelTrans *seltrans,
-				     SPSelTransHandle const &handle, Geom::Point &p, guint state);
-gboolean sp_sel_trans_center_request(Inkscape::SelTrans *seltrans,
-				     SPSelTransHandle const &handle, Geom::Point &p, guint state);
-
-// action handlers
-void sp_sel_trans_scale(Inkscape::SelTrans *seltrans, SPSelTransHandle const &handle, Geom::Point &p, guint state);
-void sp_sel_trans_stretch(Inkscape::SelTrans *seltrans, SPSelTransHandle const &handle, Geom::Point &p, guint state);
-void sp_sel_trans_skew(Inkscape::SelTrans *seltrans, SPSelTransHandle const &handle, Geom::Point &p, guint state);
-void sp_sel_trans_rotate(Inkscape::SelTrans *seltrans, SPSelTransHandle const &handle, Geom::Point &p, guint state);
-void sp_sel_trans_center(Inkscape::SelTrans *seltrans, SPSelTransHandle const &handle, Geom::Point &p, guint state);
-
-struct SPSelTransHandle {
-	GtkAnchorType anchor;
-	GdkCursorType cursor;
-	guint control;
-	void (* action) (Inkscape::SelTrans *seltrans, SPSelTransHandle const &handle, Geom::Point &p, guint state);
-	gboolean (* request) (Inkscape::SelTrans *seltrans, SPSelTransHandle const &handle, Geom::Point &p, guint state);
-	gdouble x, y;
+enum SPSelTransType {
+    HANDLE_STRETCH,
+    HANDLE_SCALE,
+    HANDLE_SKEW,
+    HANDLE_ROTATE,
+    HANDLE_CENTER
 };
 
-extern SPSelTransHandle const handles_scale[8];
-extern SPSelTransHandle const handles_rotate[8];
-extern SPSelTransHandle const handle_center;
+struct SPSelTransTypeInfo {
+        guint32 const *color;
+        gchar const *tip;
+};
+// One per handle type in order
+extern SPSelTransTypeInfo const handtypes[5];
 
-#endif
+struct SPSelTransHandle;
+
+struct SPSelTransHandle {
+        SPSelTransType type;
+	SPAnchorType anchor;
+	GdkCursorType cursor;
+	guint control;
+	gdouble x, y;
+};
+// These are 4 * each handle type + 1 for center
+int const NUMHANDS = 17;
+extern SPSelTransHandle const hands[17];
+
+#endif // SEEN_SP_SELTRANS_HANDLES_H
+
+/*
+  Local Variables:
+  mode:c++
+  c-file-style:"stroustrup"
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  indent-tabs-mode:nil
+  fill-column:99
+  End:
+*/
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :
+
 

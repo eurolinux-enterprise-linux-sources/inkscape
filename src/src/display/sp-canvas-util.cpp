@@ -1,10 +1,9 @@
-#define __SP_CANVAS_UTILS_C__
-
 /*
  * Helper stuff for SPCanvas
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 1999-2002 authors
  * Copyright (C) 2001-2002 Ximian, Inc.
@@ -13,21 +12,19 @@
  */
 
 
-#include <2geom/matrix.h>
-#include "libnr/nr-pixops.h"
+#include <2geom/affine.h>
 #include "sp-canvas-util.h"
-#include <string.h>  /* for memset */
+#include "sp-canvas-item.h"
+#include "sp-canvas.h"
 
-
-void
-sp_canvas_update_bbox (SPCanvasItem *item, int x1, int y1, int x2, int y2)
+void sp_canvas_update_bbox(SPCanvasItem *item, int x1, int y1, int x2, int y2)
 {
-    sp_canvas_request_redraw (item->canvas, (int)item->x1, (int)item->y1, (int)item->x2, (int)item->y2);
+    item->canvas->requestRedraw((int)item->x1, (int)item->y1, (int)item->x2, (int)item->y2);
     item->x1 = x1;
     item->y1 = y1;
     item->x2 = x2;
     item->y2 = y2;
-    sp_canvas_request_redraw (item->canvas, (int)item->x1, (int)item->y1, (int)item->x2, (int)item->y2);
+    item->canvas->requestRedraw((int)item->x1, (int)item->y1, (int)item->x2, (int)item->y2);
 }
 
 void
@@ -39,44 +36,11 @@ sp_canvas_item_reset_bounds (SPCanvasItem *item)
     item->y2 = 0.0;
 }
 
-void
-sp_canvas_prepare_buffer (SPCanvasBuf *buf)
+void sp_canvas_prepare_buffer(SPCanvasBuf *)
 {
-    if (buf->is_empty) {
-        sp_canvas_clear_buffer(buf);
-        buf->is_empty = false;
-    }
 }
 
-void
-sp_canvas_clear_buffer (SPCanvasBuf *buf)
-{
-    unsigned char r, g, b;
-
-    r = (buf->bg_color >> 16) & 0xff;
-    g = (buf->bg_color >> 8) & 0xff;
-    b = buf->bg_color & 0xff;
-
-    if ((r != g) || (r != b)) {
-        int x, y;
-        for (y = buf->rect.y0; y < buf->rect.y1; y++) {
-            unsigned char *p;
-            p = buf->buf + (y - buf->rect.y0) * buf->buf_rowstride;
-            for (x = buf->rect.x0; x < buf->rect.x1; x++) {
-                *p++ = r;
-                *p++ = g;
-                *p++ = b;
-            }
-        }
-    } else {
-        int y;
-        for (y = buf->rect.y0; y < buf->rect.y1; y++) {
-            memset (buf->buf + (y - buf->rect.y0) * buf->buf_rowstride, r, 4 * (buf->rect.x1 - buf->rect.x0)); 
-        }
-    }
-}
-
-Geom::Matrix sp_canvas_item_i2p_affine (SPCanvasItem * item)
+Geom::Affine sp_canvas_item_i2p_affine (SPCanvasItem * item)
 {
     g_assert (item != NULL); /* this may be overly zealous - it is
                               * plausible that this gets called
@@ -85,7 +49,7 @@ Geom::Matrix sp_canvas_item_i2p_affine (SPCanvasItem * item)
     return item->xform;
 }
 
-Geom::Matrix  sp_canvas_item_i2i_affine (SPCanvasItem * from, SPCanvasItem * to)
+Geom::Affine  sp_canvas_item_i2i_affine (SPCanvasItem * from, SPCanvasItem * to)
 {
     g_assert (from != NULL);
     g_assert (to != NULL);
@@ -93,7 +57,7 @@ Geom::Matrix  sp_canvas_item_i2i_affine (SPCanvasItem * from, SPCanvasItem * to)
     return sp_canvas_item_i2w_affine(from) * sp_canvas_item_i2w_affine(to).inverse();
 }
 
-void sp_canvas_item_set_i2w_affine (SPCanvasItem * item,  Geom::Matrix const &i2w)
+void sp_canvas_item_set_i2w_affine (SPCanvasItem * item,  Geom::Affine const &i2w)
 {
     g_assert (item != NULL);
 
@@ -140,4 +104,4 @@ sp_canvas_item_compare_z (SPCanvasItem * a, SPCanvasItem * b)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

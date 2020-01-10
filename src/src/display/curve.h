@@ -1,9 +1,7 @@
 #ifndef SEEN_DISPLAY_CURVE_H
 #define SEEN_DISPLAY_CURVE_H
 
-/** \file
- * Wrapper around a Geom::PathVector objects.
- *
+/*
  * Author:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *
@@ -21,6 +19,9 @@
 
 #include <boost/optional.hpp>
 
+/**
+ * Wrapper around a Geom::PathVector objects.
+ */
 class SPCurve {
 public:
     /* Constructors */
@@ -66,7 +67,7 @@ public:
     void closepath_current();
     void backspace();
 
-    void transform(Geom::Matrix const &m);
+    void transform(Geom::Affine const &m);
     void stretch_endpoints(Geom::Point const &, Geom::Point const &);
     void move_endpoints(Geom::Point const &, Geom::Point const &);
     void last_point_additive_move(Geom::Point const & p);
@@ -100,4 +101,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

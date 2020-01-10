@@ -1,9 +1,9 @@
-#include <desktop-handles.h>
-#include <libnr/nr-point-fns.h>
-#include <sp-guide.h>
-#include <sp-guide-constraint.h>
-#include <sp-namedview.h>
-#include <approx-equal.h>
+#include <2geom/coord.h>
+#include "desktop-handles.h"
+#include "sp-guide.h"
+#include "sp-guide-constraint.h"
+#include "sp-namedview.h"
+#include "satisfied-guide-cns.h"
 
 void satisfied_guide_cns(SPDesktop const &desktop,
                          std::vector<Inkscape::SnapCandidatePoint> const &snappoints,
@@ -13,7 +13,7 @@ void satisfied_guide_cns(SPDesktop const &desktop,
     for (GSList const *l = nv.guides; l != NULL; l = l->next) {
         SPGuide &g = *SP_GUIDE(l->data);
         for (unsigned int i = 0; i < snappoints.size(); ++i) {
-            if (approx_equal( sp_guide_distance_from_pt(&g, snappoints[i].getPoint()), 0) ) {
+            if (Geom::are_near(g.getDistanceFrom(snappoints[i].getPoint()), 0, 1e-2)) {
                 cns.push_back(SPGuideConstraint(&g, i));
             }
         }
@@ -30,4 +30,4 @@ void satisfied_guide_cns(SPDesktop const &desktop,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

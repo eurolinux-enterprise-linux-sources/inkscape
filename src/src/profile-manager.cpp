@@ -2,6 +2,7 @@
  * Inkscape::ProfileManager - a view of a document's color profiles.
  *
  * Copyright 2007  Jon A. Cruz  <jon@joncruz.org>
+ *   Abhishek Sharma
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -12,13 +13,15 @@
 #include "document.h"
 #include "color-profile.h"
 
+#include <cstring>
+
 namespace Inkscape {
 
 ProfileManager::ProfileManager(SPDocument *document) :
     _doc(document),
     _knownProfiles()
 {
-    _resource_connection = sp_document_resources_changed_connect( _doc, "iccprofile", sigc::mem_fun(*this, &ProfileManager::_resourcesChanged) );
+    _resource_connection = _doc->connectResourcesChanged(  "iccprofile", sigc::mem_fun(*this, &ProfileManager::_resourcesChanged) );
 }
 
 ProfileManager::~ProfileManager()
@@ -31,7 +34,7 @@ void ProfileManager::_resourcesChanged()
 {
     std::vector<SPObject*> newList;
     if (_doc) {
-        const GSList *current = sp_document_get_resource_list( _doc, "iccprofile" );
+        const GSList *current = _doc->getResourceList( "iccprofile" );
         while ( current ) {
             newList.push_back(SP_OBJECT(current->data));
             current = g_slist_next(current);
@@ -75,7 +78,7 @@ ColorProfile* ProfileManager::find(gchar const* name)
         for ( unsigned int index = 0; index < howMany; index++ ) {
             SPObject *obj = nthChildOf(NULL, index);
             ColorProfile* prof = reinterpret_cast<ColorProfile*>(obj);
-            if ( prof && prof->name && !strcmp(name, prof->name) ) {
+            if (prof && (prof->name && !strcmp(name, prof->name))) {
                 match = prof;
                 break;
             }
@@ -96,4 +99,4 @@ ColorProfile* ProfileManager::find(gchar const* name)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

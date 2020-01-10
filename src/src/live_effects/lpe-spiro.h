@@ -8,10 +8,6 @@
  */
 
 #include "live_effects/effect.h"
-#include "live_effects/parameter/parameter.h"
-#include "live_effects/parameter/point.h"
-#include "ui/widget/registered-widget.h"
-
 
 
 namespace Inkscape {
@@ -22,7 +18,7 @@ public:
     LPESpiro(LivePathEffectObject *lpeobject);
     virtual ~LPESpiro();
 
-    virtual LPEPathFlashType pathFlashType() { return SUPPRESS_FLASH; }
+    virtual LPEPathFlashType pathFlashType() const { return SUPPRESS_FLASH; }
 
     virtual void doEffect(SPCurve * curve);
 

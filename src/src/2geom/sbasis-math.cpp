@@ -349,7 +349,7 @@ Piecewise<SBasis> reciprocal(Piecewise<SBasis> const &f, double tol, int order){
  */
 Piecewise<SBasis> interpolate(std::vector<double> times, std::vector<double> values, unsigned smoothness){
     assert ( values.size() == times.size() );
-    if ( values.size() == 0 ) return Piecewise<SBasis>();
+    if ( values.empty() ) return Piecewise<SBasis>();
     if ( values.size() == 1 ) return Piecewise<SBasis>(values[0]);//what about time??
 
     SBasis sk = shift(Linear(1.),smoothness);
@@ -377,4 +377,4 @@ Piecewise<SBasis> interpolate(std::vector<double> times, std::vector<double> val
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

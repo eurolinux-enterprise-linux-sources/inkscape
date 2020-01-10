@@ -23,9 +23,6 @@
 #include <stdlib.h>
 #include "svg/stringstream.h"
 
-
-gdouble fixed_g_ascii_strtod (const gchar *nptr, gchar **endptr);
-
 class NumberOptNumber {
 
 public:
@@ -123,6 +120,8 @@ public:
                 _set = FALSE;
                 optNumber_set = FALSE;
         }
+
+        g_strfreev(values);
     }
 
 };
@@ -138,4 +137,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

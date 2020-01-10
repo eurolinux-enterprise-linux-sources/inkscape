@@ -41,23 +41,23 @@ public:
 static ColorProfileTest *suite_ColorProfileTest = 0;
 
 static CxxTest::List Tests_ColorProfileTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<ColorProfileTest> suiteDescription_ColorProfileTest( "./color-profile-test.h", 13, "ColorProfileTest", Tests_ColorProfileTest, suite_ColorProfileTest, 45, 51 );
+CxxTest::DynamicSuiteDescription<ColorProfileTest> suiteDescription_ColorProfileTest( "./color-profile-test.h", 14, "ColorProfileTest", Tests_ColorProfileTest, suite_ColorProfileTest, 46, 52 );
 
 static class TestDescription_ColorProfileTest_testSetRenderingIntent : public CxxTest::RealTestDescription {
 public:
- TestDescription_ColorProfileTest_testSetRenderingIntent() : CxxTest::RealTestDescription( Tests_ColorProfileTest, suiteDescription_ColorProfileTest, 60, "testSetRenderingIntent" ) {}
+ TestDescription_ColorProfileTest_testSetRenderingIntent() : CxxTest::RealTestDescription( Tests_ColorProfileTest, suiteDescription_ColorProfileTest, 61, "testSetRenderingIntent" ) {}
  void runTest() { if ( suite_ColorProfileTest ) suite_ColorProfileTest->testSetRenderingIntent(); }
 } testDescription_ColorProfileTest_testSetRenderingIntent;
 
 static class TestDescription_ColorProfileTest_testSetLocal : public CxxTest::RealTestDescription {
 public:
- TestDescription_ColorProfileTest_testSetLocal() : CxxTest::RealTestDescription( Tests_ColorProfileTest, suiteDescription_ColorProfileTest, 89, "testSetLocal" ) {}
+ TestDescription_ColorProfileTest_testSetLocal() : CxxTest::RealTestDescription( Tests_ColorProfileTest, suiteDescription_ColorProfileTest, 90, "testSetLocal" ) {}
  void runTest() { if ( suite_ColorProfileTest ) suite_ColorProfileTest->testSetLocal(); }
 } testDescription_ColorProfileTest_testSetLocal;
 
 static class TestDescription_ColorProfileTest_testSetName : public CxxTest::RealTestDescription {
 public:
- TestDescription_ColorProfileTest_testSetName() : CxxTest::RealTestDescription( Tests_ColorProfileTest, suiteDescription_ColorProfileTest, 113, "testSetName" ) {}
+ TestDescription_ColorProfileTest_testSetName() : CxxTest::RealTestDescription( Tests_ColorProfileTest, suiteDescription_ColorProfileTest, 114, "testSetName" ) {}
  void runTest() { if ( suite_ColorProfileTest ) suite_ColorProfileTest->testSetName(); }
 } testDescription_ColorProfileTest_testSetName;
 
@@ -117,32 +117,13 @@ public:
 static Mod360Test suite_Mod360Test;
 
 static CxxTest::List Tests_Mod360Test = { 0, 0 };
-CxxTest::StaticSuiteDescription suiteDescription_Mod360Test( "./mod360-test.h", 12, "Mod360Test", suite_Mod360Test, Tests_Mod360Test );
+CxxTest::StaticSuiteDescription suiteDescription_Mod360Test( "./mod360-test.h", 10, "Mod360Test", suite_Mod360Test, Tests_Mod360Test );
 
 static class TestDescription_Mod360Test_testMod360 : public CxxTest::RealTestDescription {
 public:
- TestDescription_Mod360Test_testMod360() : CxxTest::RealTestDescription( Tests_Mod360Test, suiteDescription_Mod360Test, 18, "testMod360" ) {}
+ TestDescription_Mod360Test_testMod360() : CxxTest::RealTestDescription( Tests_Mod360Test, suiteDescription_Mod360Test, 16, "testMod360" ) {}
  void runTest() { suite_Mod360Test.testMod360(); }
 } testDescription_Mod360Test_testMod360;
-
-#include "./round-test.h"
-
-static RoundTest *suite_RoundTest = 0;
-
-static CxxTest::List Tests_RoundTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<RoundTest> suiteDescription_RoundTest( "./round-test.h", 10, "RoundTest", Tests_RoundTest, suite_RoundTest, 50, 51 );
-
-static class TestDescription_RoundTest_testNonNegRound : public CxxTest::RealTestDescription {
-public:
- TestDescription_RoundTest_testNonNegRound() : CxxTest::RealTestDescription( Tests_RoundTest, suiteDescription_RoundTest, 58, "testNonNegRound" ) {}
- void runTest() { if ( suite_RoundTest ) suite_RoundTest->testNonNegRound(); }
-} testDescription_RoundTest_testNonNegRound;
-
-static class TestDescription_RoundTest_testNonPosRoung : public CxxTest::RealTestDescription {
-public:
- TestDescription_RoundTest_testNonPosRoung() : CxxTest::RealTestDescription( Tests_RoundTest, suiteDescription_RoundTest, 67, "testNonPosRoung" ) {}
- void runTest() { if ( suite_RoundTest ) suite_RoundTest->testNonPosRoung(); }
-} testDescription_RoundTest_testNonPosRoung;
 
 #include "./preferences-test.h"
 
@@ -193,12 +174,31 @@ public:
  void runTest() { suite_PreferencesTest.testPreferencesEntryMethods(); }
 } testDescription_PreferencesTest_testPreferencesEntryMethods;
 
+#include "./round-test.h"
+
+static RoundTest *suite_RoundTest = 0;
+
+static CxxTest::List Tests_RoundTest = { 0, 0 };
+CxxTest::DynamicSuiteDescription<RoundTest> suiteDescription_RoundTest( "./round-test.h", 10, "RoundTest", Tests_RoundTest, suite_RoundTest, 50, 51 );
+
+static class TestDescription_RoundTest_testNonNegRound : public CxxTest::RealTestDescription {
+public:
+ TestDescription_RoundTest_testNonNegRound() : CxxTest::RealTestDescription( Tests_RoundTest, suiteDescription_RoundTest, 58, "testNonNegRound" ) {}
+ void runTest() { if ( suite_RoundTest ) suite_RoundTest->testNonNegRound(); }
+} testDescription_RoundTest_testNonNegRound;
+
+static class TestDescription_RoundTest_testNonPosRoung : public CxxTest::RealTestDescription {
+public:
+ TestDescription_RoundTest_testNonPosRoung() : CxxTest::RealTestDescription( Tests_RoundTest, suiteDescription_RoundTest, 67, "testNonPosRoung" ) {}
+ void runTest() { if ( suite_RoundTest ) suite_RoundTest->testNonPosRoung(); }
+} testDescription_RoundTest_testNonPosRoung;
+
 #include "./sp-style-elem-test.h"
 
 static SPStyleElemTest *suite_SPStyleElemTest = 0;
 
 static CxxTest::List Tests_SPStyleElemTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<SPStyleElemTest> suiteDescription_SPStyleElemTest( "./sp-style-elem-test.h", 12, "SPStyleElemTest", Tests_SPStyleElemTest, suite_SPStyleElemTest, 43, 48 );
+CxxTest::DynamicSuiteDescription<SPStyleElemTest> suiteDescription_SPStyleElemTest( "./sp-style-elem-test.h", 11, "SPStyleElemTest", Tests_SPStyleElemTest, suite_SPStyleElemTest, 43, 48 );
 
 static class TestDescription_SPStyleElemTest_testSetType : public CxxTest::RealTestDescription {
 public:
@@ -229,13 +229,25 @@ public:
 static StyleTest *suite_StyleTest = 0;
 
 static CxxTest::List Tests_StyleTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<StyleTest> suiteDescription_StyleTest( "./style-test.h", 11, "StyleTest", Tests_StyleTest, suite_StyleTest, 37, 43 );
+CxxTest::DynamicSuiteDescription<StyleTest> suiteDescription_StyleTest( "./style-test.h", 10, "StyleTest", Tests_StyleTest, suite_StyleTest, 36, 42 );
 
 static class TestDescription_StyleTest_testOne : public CxxTest::RealTestDescription {
 public:
  TestDescription_StyleTest_testOne() : CxxTest::RealTestDescription( Tests_StyleTest, suiteDescription_StyleTest, 52, "testOne" ) {}
  void runTest() { if ( suite_StyleTest ) suite_StyleTest->testOne(); }
 } testDescription_StyleTest_testOne;
+
+static class TestDescription_StyleTest_testTwo : public CxxTest::RealTestDescription {
+public:
+ TestDescription_StyleTest_testTwo() : CxxTest::RealTestDescription( Tests_StyleTest, suiteDescription_StyleTest, 248, "testTwo" ) {}
+ void runTest() { if ( suite_StyleTest ) suite_StyleTest->testTwo(); }
+} testDescription_StyleTest_testTwo;
+
+static class TestDescription_StyleTest_testThree : public CxxTest::RealTestDescription {
+public:
+ TestDescription_StyleTest_testThree() : CxxTest::RealTestDescription( Tests_StyleTest, suiteDescription_StyleTest, 390, "testThree" ) {}
+ void runTest() { if ( suite_StyleTest ) suite_StyleTest->testThree(); }
+} testDescription_StyleTest_testThree;
 
 #include "./verbs-test.h"
 
@@ -328,520 +340,6 @@ public:
  TestDescription_CurveTest_testPenultimatePoint() : CxxTest::RealTestDescription( Tests_CurveTest, suiteDescription_CurveTest, 233, "testPenultimatePoint" ) {}
  void runTest() { if ( suite_CurveTest ) suite_CurveTest->testPenultimatePoint(); }
 } testDescription_CurveTest_testPenultimatePoint;
-
-#include "./helper/units-test.h"
-
-static UnitsTest *suite_UnitsTest = 0;
-
-static CxxTest::List Tests_UnitsTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<UnitsTest> suiteDescription_UnitsTest( "./helper/units-test.h", 7, "UnitsTest", Tests_UnitsTest, suite_UnitsTest, 17, 18 );
-
-static class TestDescription_UnitsTest_testConversions : public CxxTest::RealTestDescription {
-public:
- TestDescription_UnitsTest_testConversions() : CxxTest::RealTestDescription( Tests_UnitsTest, suiteDescription_UnitsTest, 20, "testConversions" ) {}
- void runTest() { if ( suite_UnitsTest ) suite_UnitsTest->testConversions(); }
-} testDescription_UnitsTest_testConversions;
-
-static class TestDescription_UnitsTest_testUnitTable : public CxxTest::RealTestDescription {
-public:
- TestDescription_UnitsTest_testUnitTable() : CxxTest::RealTestDescription( Tests_UnitsTest, suiteDescription_UnitsTest, 54, "testUnitTable" ) {}
- void runTest() { if ( suite_UnitsTest ) suite_UnitsTest->testUnitTable(); }
-} testDescription_UnitsTest_testUnitTable;
-
-#include "./libnr/in-svg-plane-test.h"
-
-static InSvgPlaneTest *suite_InSvgPlaneTest = 0;
-
-static CxxTest::List Tests_InSvgPlaneTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<InSvgPlaneTest> suiteDescription_InSvgPlaneTest( "./libnr/in-svg-plane-test.h", 9, "InSvgPlaneTest", Tests_InSvgPlaneTest, suite_InSvgPlaneTest, 31, 32 );
-
-static class TestDescription_InSvgPlaneTest_testInSvgPlane : public CxxTest::RealTestDescription {
-public:
- TestDescription_InSvgPlaneTest_testInSvgPlane() : CxxTest::RealTestDescription( Tests_InSvgPlaneTest, suiteDescription_InSvgPlaneTest, 51, "testInSvgPlane" ) {}
- void runTest() { if ( suite_InSvgPlaneTest ) suite_InSvgPlaneTest->testInSvgPlane(); }
-} testDescription_InSvgPlaneTest_testInSvgPlane;
-
-#include "./libnr/nr-compose-test.h"
-
-static NrComposeTest *suite_NrComposeTest = 0;
-
-static CxxTest::List Tests_NrComposeTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<NrComposeTest> suiteDescription_NrComposeTest( "./libnr/nr-compose-test.h", 35, "NrComposeTest", Tests_NrComposeTest, suite_NrComposeTest, 110, 111 );
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_N : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_N() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 115, "testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_N" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_N(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_N;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_P : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_P() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 129, "testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_P" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_P(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_P;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_N : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_N() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 143, "testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_N" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_N(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_N;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_P : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_P() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 157, "testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_P" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_P(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_P;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_N : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_N() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 171, "testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_N" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_N(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_N;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_P : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_P() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 185, "testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_P" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_P(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_P;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 199, "testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_P : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_P() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 213, "testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_P" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_P(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_P;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_N_A8 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_N_A8() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 229, "testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_N_A8" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_N_A8(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_N_A8;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_P_A8 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_P_A8() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 238, "testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_P_A8" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_P_A8(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_R8G8B8A8_P_A8;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_N_A8 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_N_A8() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 247, "testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_N_A8" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_N_A8(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_N_A8;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_P_A8 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_P_A8() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 256, "testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_P_A8" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_P_A8(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_R8G8B8A8_P_A8;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_N_A8 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_N_A8() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 265, "testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_N_A8" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_N_A8(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_N_A8;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_P_A8 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_P_A8() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 274, "testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_P_A8" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_P_A8(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_R8G8B8A8_P_A8;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N_A8 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N_A8() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 283, "testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N_A8" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N_A8(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_N_A8;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_P_A8 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_P_A8() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 292, "testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_P_A8" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_P_A8(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_R8G8B8A8_P_A8;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_A8_RGBA32 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_A8_RGBA32() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 303, "testnr_R8G8B8A8_N_EMPTY_A8_RGBA32" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_N_EMPTY_A8_RGBA32(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_N_EMPTY_A8_RGBA32;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_A8_RGBA32 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_A8_RGBA32() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 319, "testnr_R8G8B8A8_P_EMPTY_A8_RGBA32" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_P_EMPTY_A8_RGBA32(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_P_EMPTY_A8_RGBA32;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_A8_RGBA32 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_A8_RGBA32() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 335, "testnr_R8G8B8_R8G8B8_A8_RGBA32" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8_R8G8B8_A8_RGBA32(); }
-} testDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_A8_RGBA32;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_A8_RGBA32 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_A8_RGBA32() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 351, "testnr_R8G8B8A8_N_R8G8B8A8_N_A8_RGBA32" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_N_R8G8B8A8_N_A8_RGBA32(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_N_R8G8B8A8_N_A8_RGBA32;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_A8_RGBA32 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_A8_RGBA32() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 367, "testnr_R8G8B8A8_P_R8G8B8A8_P_A8_RGBA32" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8A8_P_R8G8B8A8_P_A8_RGBA32(); }
-} testDescription_NrComposeTest_testnr_R8G8B8A8_P_R8G8B8A8_P_A8_RGBA32;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_N : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_N() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 385, "testnr_R8G8B8_R8G8B8_R8G8B8A8_N" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8_R8G8B8_R8G8B8A8_N(); }
-} testDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_N;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_P : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_P() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 399, "testnr_R8G8B8_R8G8B8_R8G8B8A8_P" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8_R8G8B8_R8G8B8A8_P(); }
-} testDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_P;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_N_A8 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_N_A8() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 413, "testnr_R8G8B8_R8G8B8_R8G8B8A8_N_A8" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8_R8G8B8_R8G8B8A8_N_A8(); }
-} testDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_N_A8;
-
-static class TestDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_P_A8 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_P_A8() : CxxTest::RealTestDescription( Tests_NrComposeTest, suiteDescription_NrComposeTest, 427, "testnr_R8G8B8_R8G8B8_R8G8B8A8_P_A8" ) {}
- void runTest() { if ( suite_NrComposeTest ) suite_NrComposeTest->testnr_R8G8B8_R8G8B8_R8G8B8A8_P_A8(); }
-} testDescription_NrComposeTest_testnr_R8G8B8_R8G8B8_R8G8B8A8_P_A8;
-
-#include "./libnr/nr-matrix-test.h"
-
-static NrMatrixTest *suite_NrMatrixTest = 0;
-
-static CxxTest::List Tests_NrMatrixTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<NrMatrixTest> suiteDescription_NrMatrixTest( "./libnr/nr-matrix-test.h", 23, "NrMatrixTest", Tests_NrMatrixTest, suite_NrMatrixTest, 44, 45 );
-
-static class TestDescription_NrMatrixTest_testCtorsAssignmentOp : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrMatrixTest_testCtorsAssignmentOp() : CxxTest::RealTestDescription( Tests_NrMatrixTest, suiteDescription_NrMatrixTest, 59, "testCtorsAssignmentOp" ) {}
- void runTest() { if ( suite_NrMatrixTest ) suite_NrMatrixTest->testCtorsAssignmentOp(); }
-} testDescription_NrMatrixTest_testCtorsAssignmentOp;
-
-static class TestDescription_NrMatrixTest_testScaleCtor : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrMatrixTest_testScaleCtor() : CxxTest::RealTestDescription( Tests_NrMatrixTest, suiteDescription_NrMatrixTest, 72, "testScaleCtor" ) {}
- void runTest() { if ( suite_NrMatrixTest ) suite_NrMatrixTest->testScaleCtor(); }
-} testDescription_NrMatrixTest_testScaleCtor;
-
-static class TestDescription_NrMatrixTest_testRotateCtor : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrMatrixTest_testRotateCtor() : CxxTest::RealTestDescription( Tests_NrMatrixTest, suiteDescription_NrMatrixTest, 81, "testRotateCtor" ) {}
- void runTest() { if ( suite_NrMatrixTest ) suite_NrMatrixTest->testRotateCtor(); }
-} testDescription_NrMatrixTest_testRotateCtor;
-
-static class TestDescription_NrMatrixTest_testTranslateCtor : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrMatrixTest_testTranslateCtor() : CxxTest::RealTestDescription( Tests_NrMatrixTest, suiteDescription_NrMatrixTest, 94, "testTranslateCtor" ) {}
- void runTest() { if ( suite_NrMatrixTest ) suite_NrMatrixTest->testTranslateCtor(); }
-} testDescription_NrMatrixTest_testTranslateCtor;
-
-static class TestDescription_NrMatrixTest_testIdentity : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrMatrixTest_testIdentity() : CxxTest::RealTestDescription( Tests_NrMatrixTest, suiteDescription_NrMatrixTest, 101, "testIdentity" ) {}
- void runTest() { if ( suite_NrMatrixTest ) suite_NrMatrixTest->testIdentity(); }
-} testDescription_NrMatrixTest_testIdentity;
-
-static class TestDescription_NrMatrixTest_testInverse : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrMatrixTest_testInverse() : CxxTest::RealTestDescription( Tests_NrMatrixTest, suiteDescription_NrMatrixTest, 116, "testInverse" ) {}
- void runTest() { if ( suite_NrMatrixTest ) suite_NrMatrixTest->testInverse(); }
-} testDescription_NrMatrixTest_testInverse;
-
-static class TestDescription_NrMatrixTest_testEllipticQuadraticForm : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrMatrixTest_testEllipticQuadraticForm() : CxxTest::RealTestDescription( Tests_NrMatrixTest, suiteDescription_NrMatrixTest, 126, "testEllipticQuadraticForm" ) {}
- void runTest() { if ( suite_NrMatrixTest ) suite_NrMatrixTest->testEllipticQuadraticForm(); }
-} testDescription_NrMatrixTest_testEllipticQuadraticForm;
-
-static class TestDescription_NrMatrixTest_testMatrixStarRotate : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrMatrixTest_testMatrixStarRotate() : CxxTest::RealTestDescription( Tests_NrMatrixTest, suiteDescription_NrMatrixTest, 141, "testMatrixStarRotate" ) {}
- void runTest() { if ( suite_NrMatrixTest ) suite_NrMatrixTest->testMatrixStarRotate(); }
-} testDescription_NrMatrixTest_testMatrixStarRotate;
-
-static class TestDescription_NrMatrixTest_testTranslateStarScale_ScaleStarTranslate : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrMatrixTest_testTranslateStarScale_ScaleStarTranslate() : CxxTest::RealTestDescription( Tests_NrMatrixTest, suiteDescription_NrMatrixTest, 155, "testTranslateStarScale_ScaleStarTranslate" ) {}
- void runTest() { if ( suite_NrMatrixTest ) suite_NrMatrixTest->testTranslateStarScale_ScaleStarTranslate(); }
-} testDescription_NrMatrixTest_testTranslateStarScale_ScaleStarTranslate;
-
-static class TestDescription_NrMatrixTest_testMatrixStarScale : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrMatrixTest_testMatrixStarScale() : CxxTest::RealTestDescription( Tests_NrMatrixTest, suiteDescription_NrMatrixTest, 169, "testMatrixStarScale" ) {}
- void runTest() { if ( suite_NrMatrixTest ) suite_NrMatrixTest->testMatrixStarScale(); }
-} testDescription_NrMatrixTest_testMatrixStarScale;
-
-#include "./libnr/nr-point-fns-test.h"
-
-static NrPointFnsTest *suite_NrPointFnsTest = 0;
-
-static CxxTest::List Tests_NrPointFnsTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<NrPointFnsTest> suiteDescription_NrPointFnsTest( "./libnr/nr-point-fns-test.h", 12, "NrPointFnsTest", Tests_NrPointFnsTest, suite_NrPointFnsTest, 37, 38 );
-
-static class TestDescription_NrPointFnsTest_testL1 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrPointFnsTest_testL1() : CxxTest::RealTestDescription( Tests_NrPointFnsTest, suiteDescription_NrPointFnsTest, 59, "testL1" ) {}
- void runTest() { if ( suite_NrPointFnsTest ) suite_NrPointFnsTest->testL1(); }
-} testDescription_NrPointFnsTest_testL1;
-
-static class TestDescription_NrPointFnsTest_testL2 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrPointFnsTest_testL2() : CxxTest::RealTestDescription( Tests_NrPointFnsTest, suiteDescription_NrPointFnsTest, 69, "testL2" ) {}
- void runTest() { if ( suite_NrPointFnsTest ) suite_NrPointFnsTest->testL2(); }
-} testDescription_NrPointFnsTest_testL2;
-
-static class TestDescription_NrPointFnsTest_testLInfty : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrPointFnsTest_testLInfty() : CxxTest::RealTestDescription( Tests_NrPointFnsTest, suiteDescription_NrPointFnsTest, 79, "testLInfty" ) {}
- void runTest() { if ( suite_NrPointFnsTest ) suite_NrPointFnsTest->testLInfty(); }
-} testDescription_NrPointFnsTest_testLInfty;
-
-static class TestDescription_NrPointFnsTest_testIsZero : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrPointFnsTest_testIsZero() : CxxTest::RealTestDescription( Tests_NrPointFnsTest, suiteDescription_NrPointFnsTest, 89, "testIsZero" ) {}
- void runTest() { if ( suite_NrPointFnsTest ) suite_NrPointFnsTest->testIsZero(); }
-} testDescription_NrPointFnsTest_testIsZero;
-
-static class TestDescription_NrPointFnsTest_testAtan2 : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrPointFnsTest_testAtan2() : CxxTest::RealTestDescription( Tests_NrPointFnsTest, suiteDescription_NrPointFnsTest, 99, "testAtan2" ) {}
- void runTest() { if ( suite_NrPointFnsTest ) suite_NrPointFnsTest->testAtan2(); }
-} testDescription_NrPointFnsTest_testAtan2;
-
-static class TestDescription_NrPointFnsTest_testUnitVector : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrPointFnsTest_testUnitVector() : CxxTest::RealTestDescription( Tests_NrPointFnsTest, suiteDescription_NrPointFnsTest, 106, "testUnitVector" ) {}
- void runTest() { if ( suite_NrPointFnsTest ) suite_NrPointFnsTest->testUnitVector(); }
-} testDescription_NrPointFnsTest_testUnitVector;
-
-static class TestDescription_NrPointFnsTest_testIsUnitVector : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrPointFnsTest_testIsUnitVector() : CxxTest::RealTestDescription( Tests_NrPointFnsTest, suiteDescription_NrPointFnsTest, 113, "testIsUnitVector" ) {}
- void runTest() { if ( suite_NrPointFnsTest ) suite_NrPointFnsTest->testIsUnitVector(); }
-} testDescription_NrPointFnsTest_testIsUnitVector;
-
-#include "./libnr/nr-rotate-test.h"
-
-static NrRotateTest *suite_NrRotateTest = 0;
-
-static CxxTest::List Tests_NrRotateTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<NrRotateTest> suiteDescription_NrRotateTest( "./libnr/nr-rotate-test.h", 13, "NrRotateTest", Tests_NrRotateTest, suite_NrRotateTest, 29, 30 );
-
-static class TestDescription_NrRotateTest_testCtorsCompares : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrRotateTest_testCtorsCompares() : CxxTest::RealTestDescription( Tests_NrRotateTest, suiteDescription_NrRotateTest, 41, "testCtorsCompares" ) {}
- void runTest() { if ( suite_NrRotateTest ) suite_NrRotateTest->testCtorsCompares(); }
-} testDescription_NrRotateTest_testCtorsCompares;
-
-static class TestDescription_NrRotateTest_testAssignmentOp : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrRotateTest_testAssignmentOp() : CxxTest::RealTestDescription( Tests_NrRotateTest, suiteDescription_NrRotateTest, 53, "testAssignmentOp" ) {}
- void runTest() { if ( suite_NrRotateTest ) suite_NrRotateTest->testAssignmentOp(); }
-} testDescription_NrRotateTest_testAssignmentOp;
-
-static class TestDescription_NrRotateTest_testInverse : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrRotateTest_testInverse() : CxxTest::RealTestDescription( Tests_NrRotateTest, suiteDescription_NrRotateTest, 61, "testInverse" ) {}
- void runTest() { if ( suite_NrRotateTest ) suite_NrRotateTest->testInverse(); }
-} testDescription_NrRotateTest_testInverse;
-
-static class TestDescription_NrRotateTest_testOpStarPointRotate : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrRotateTest_testOpStarPointRotate() : CxxTest::RealTestDescription( Tests_NrRotateTest, suiteDescription_NrRotateTest, 67, "testOpStarPointRotate" ) {}
- void runTest() { if ( suite_NrRotateTest ) suite_NrRotateTest->testOpStarPointRotate(); }
-} testDescription_NrRotateTest_testOpStarPointRotate;
-
-static class TestDescription_NrRotateTest_testOpStarRotateRotate : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrRotateTest_testOpStarRotateRotate() : CxxTest::RealTestDescription( Tests_NrRotateTest, suiteDescription_NrRotateTest, 78, "testOpStarRotateRotate" ) {}
- void runTest() { if ( suite_NrRotateTest ) suite_NrRotateTest->testOpStarRotateRotate(); }
-} testDescription_NrRotateTest_testOpStarRotateRotate;
-
-static class TestDescription_NrRotateTest_testOpDivRotateRotate : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrRotateTest_testOpDivRotateRotate() : CxxTest::RealTestDescription( Tests_NrRotateTest, suiteDescription_NrRotateTest, 91, "testOpDivRotateRotate" ) {}
- void runTest() { if ( suite_NrRotateTest ) suite_NrRotateTest->testOpDivRotateRotate(); }
-} testDescription_NrRotateTest_testOpDivRotateRotate;
-
-#include "./libnr/nr-rotate-fns-test.h"
-
-static NrRotateFnsTest *suite_NrRotateFnsTest = 0;
-
-static CxxTest::List Tests_NrRotateFnsTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<NrRotateFnsTest> suiteDescription_NrRotateFnsTest( "./libnr/nr-rotate-fns-test.h", 8, "NrRotateFnsTest", Tests_NrRotateFnsTest, suite_NrRotateFnsTest, 19, 20 );
-
-static class TestDescription_NrRotateFnsTest_testRotateDegrees : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrRotateFnsTest_testRotateDegrees() : CxxTest::RealTestDescription( Tests_NrRotateFnsTest, suiteDescription_NrRotateFnsTest, 24, "testRotateDegrees" ) {}
- void runTest() { if ( suite_NrRotateFnsTest ) suite_NrRotateFnsTest->testRotateDegrees(); }
-} testDescription_NrRotateFnsTest_testRotateDegrees;
-
-#include "./libnr/nr-scale-test.h"
-
-static NrScaleTest *suite_NrScaleTest = 0;
-
-static CxxTest::List Tests_NrScaleTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<NrScaleTest> suiteDescription_NrScaleTest( "./libnr/nr-scale-test.h", 6, "NrScaleTest", Tests_NrScaleTest, suite_NrScaleTest, 20, 21 );
-
-static class TestDescription_NrScaleTest_testXY_CtorArrayOperator : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrScaleTest_testXY_CtorArrayOperator() : CxxTest::RealTestDescription( Tests_NrScaleTest, suiteDescription_NrScaleTest, 29, "testXY_CtorArrayOperator" ) {}
- void runTest() { if ( suite_NrScaleTest ) suite_NrScaleTest->testXY_CtorArrayOperator(); }
-} testDescription_NrScaleTest_testXY_CtorArrayOperator;
-
-static class TestDescription_NrScaleTest_testCopyCtor_AssignmentOp_NotEquals : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrScaleTest_testCopyCtor_AssignmentOp_NotEquals() : CxxTest::RealTestDescription( Tests_NrScaleTest, suiteDescription_NrScaleTest, 38, "testCopyCtor_AssignmentOp_NotEquals" ) {}
- void runTest() { if ( suite_NrScaleTest ) suite_NrScaleTest->testCopyCtor_AssignmentOp_NotEquals(); }
-} testDescription_NrScaleTest_testCopyCtor_AssignmentOp_NotEquals;
-
-static class TestDescription_NrScaleTest_testAssignmentOp : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrScaleTest_testAssignmentOp() : CxxTest::RealTestDescription( Tests_NrScaleTest, suiteDescription_NrScaleTest, 46, "testAssignmentOp" ) {}
- void runTest() { if ( suite_NrScaleTest ) suite_NrScaleTest->testAssignmentOp(); }
-} testDescription_NrScaleTest_testAssignmentOp;
-
-static class TestDescription_NrScaleTest_testPointCtor : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrScaleTest_testPointCtor() : CxxTest::RealTestDescription( Tests_NrScaleTest, suiteDescription_NrScaleTest, 53, "testPointCtor" ) {}
- void runTest() { if ( suite_NrScaleTest ) suite_NrScaleTest->testPointCtor(); }
-} testDescription_NrScaleTest_testPointCtor;
-
-static class TestDescription_NrScaleTest_testOpStarPointScale : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrScaleTest_testOpStarPointScale() : CxxTest::RealTestDescription( Tests_NrScaleTest, suiteDescription_NrScaleTest, 59, "testOpStarPointScale" ) {}
- void runTest() { if ( suite_NrScaleTest ) suite_NrScaleTest->testOpStarPointScale(); }
-} testDescription_NrScaleTest_testOpStarPointScale;
-
-static class TestDescription_NrScaleTest_testOpStarScaleScale : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrScaleTest_testOpStarScaleScale() : CxxTest::RealTestDescription( Tests_NrScaleTest, suiteDescription_NrScaleTest, 65, "testOpStarScaleScale" ) {}
- void runTest() { if ( suite_NrScaleTest ) suite_NrScaleTest->testOpStarScaleScale(); }
-} testDescription_NrScaleTest_testOpStarScaleScale;
-
-static class TestDescription_NrScaleTest_testOpDivScaleScale : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrScaleTest_testOpDivScaleScale() : CxxTest::RealTestDescription( Tests_NrScaleTest, suiteDescription_NrScaleTest, 71, "testOpDivScaleScale" ) {}
- void runTest() { if ( suite_NrScaleTest ) suite_NrScaleTest->testOpDivScaleScale(); }
-} testDescription_NrScaleTest_testOpDivScaleScale;
-
-#include "./libnr/nr-translate-test.h"
-
-static NrTranslateTest *suite_NrTranslateTest = 0;
-
-static CxxTest::List Tests_NrTranslateTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<NrTranslateTest> suiteDescription_NrTranslateTest( "./libnr/nr-translate-test.h", 11, "NrTranslateTest", Tests_NrTranslateTest, suite_NrTranslateTest, 28, 29 );
-
-static class TestDescription_NrTranslateTest_testCtorsArrayOperator : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTranslateTest_testCtorsArrayOperator() : CxxTest::RealTestDescription( Tests_NrTranslateTest, suiteDescription_NrTranslateTest, 39, "testCtorsArrayOperator" ) {}
- void runTest() { if ( suite_NrTranslateTest ) suite_NrTranslateTest->testCtorsArrayOperator(); }
-} testDescription_NrTranslateTest_testCtorsArrayOperator;
-
-static class TestDescription_NrTranslateTest_testAssignmentOperator : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTranslateTest_testAssignmentOperator() : CxxTest::RealTestDescription( Tests_NrTranslateTest, suiteDescription_NrTranslateTest, 48, "testAssignmentOperator" ) {}
- void runTest() { if ( suite_NrTranslateTest ) suite_NrTranslateTest->testAssignmentOperator(); }
-} testDescription_NrTranslateTest_testAssignmentOperator;
-
-static class TestDescription_NrTranslateTest_testOpStarTranslateTranslate : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTranslateTest_testOpStarTranslateTranslate() : CxxTest::RealTestDescription( Tests_NrTranslateTest, suiteDescription_NrTranslateTest, 56, "testOpStarTranslateTranslate" ) {}
- void runTest() { if ( suite_NrTranslateTest ) suite_NrTranslateTest->testOpStarTranslateTranslate(); }
-} testDescription_NrTranslateTest_testOpStarTranslateTranslate;
-
-static class TestDescription_NrTranslateTest_testOpStarPointTranslate : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTranslateTest_testOpStarPointTranslate() : CxxTest::RealTestDescription( Tests_NrTranslateTest, suiteDescription_NrTranslateTest, 63, "testOpStarPointTranslate" ) {}
- void runTest() { if ( suite_NrTranslateTest ) suite_NrTranslateTest->testOpStarPointTranslate(); }
-} testDescription_NrTranslateTest_testOpStarPointTranslate;
-
-static class TestDescription_NrTranslateTest_testIdentity : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTranslateTest_testIdentity() : CxxTest::RealTestDescription( Tests_NrTranslateTest, suiteDescription_NrTranslateTest, 69, "testIdentity" ) {}
- void runTest() { if ( suite_NrTranslateTest ) suite_NrTranslateTest->testIdentity(); }
-} testDescription_NrTranslateTest_testIdentity;
-
-#include "./libnr/nr-types-test.h"
-
-static NrTypesTest *suite_NrTypesTest = 0;
-
-static CxxTest::List Tests_NrTypesTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<NrTypesTest> suiteDescription_NrTypesTest( "./libnr/nr-types-test.h", 8, "NrTypesTest", Tests_NrTypesTest, suite_NrTypesTest, 23, 24 );
-
-static class TestDescription_NrTypesTest_testXYValues : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTypesTest_testXYValues() : CxxTest::RealTestDescription( Tests_NrTypesTest, suiteDescription_NrTypesTest, 34, "testXYValues" ) {}
- void runTest() { if ( suite_NrTypesTest ) suite_NrTypesTest->testXYValues(); }
-} testDescription_NrTypesTest_testXYValues;
-
-static class TestDescription_NrTypesTest_testXYCtorAndArrayConst : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTypesTest_testXYCtorAndArrayConst() : CxxTest::RealTestDescription( Tests_NrTypesTest, suiteDescription_NrTypesTest, 40, "testXYCtorAndArrayConst" ) {}
- void runTest() { if ( suite_NrTypesTest ) suite_NrTypesTest->testXYCtorAndArrayConst(); }
-} testDescription_NrTypesTest_testXYCtorAndArrayConst;
-
-static class TestDescription_NrTypesTest_testCopyCtor : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTypesTest_testCopyCtor() : CxxTest::RealTestDescription( Tests_NrTypesTest, suiteDescription_NrTypesTest, 46, "testCopyCtor" ) {}
- void runTest() { if ( suite_NrTypesTest ) suite_NrTypesTest->testCopyCtor(); }
-} testDescription_NrTypesTest_testCopyCtor;
-
-static class TestDescription_NrTypesTest_testNonConstArrayOperator : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTypesTest_testNonConstArrayOperator() : CxxTest::RealTestDescription( Tests_NrTypesTest, suiteDescription_NrTypesTest, 54, "testNonConstArrayOperator" ) {}
- void runTest() { if ( suite_NrTypesTest ) suite_NrTypesTest->testNonConstArrayOperator(); }
-} testDescription_NrTypesTest_testNonConstArrayOperator;
-
-static class TestDescription_NrTypesTest_testBinaryPlusMinus : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTypesTest_testBinaryPlusMinus() : CxxTest::RealTestDescription( Tests_NrTypesTest, suiteDescription_NrTypesTest, 64, "testBinaryPlusMinus" ) {}
- void runTest() { if ( suite_NrTypesTest ) suite_NrTypesTest->testBinaryPlusMinus(); }
-} testDescription_NrTypesTest_testBinaryPlusMinus;
-
-static class TestDescription_NrTypesTest_testUnaryMinus : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTypesTest_testUnaryMinus() : CxxTest::RealTestDescription( Tests_NrTypesTest, suiteDescription_NrTypesTest, 73, "testUnaryMinus" ) {}
- void runTest() { if ( suite_NrTypesTest ) suite_NrTypesTest->testUnaryMinus(); }
-} testDescription_NrTypesTest_testUnaryMinus;
-
-static class TestDescription_NrTypesTest_testDot : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTypesTest_testDot() : CxxTest::RealTestDescription( Tests_NrTypesTest, suiteDescription_NrTypesTest, 85, "testDot" ) {}
- void runTest() { if ( suite_NrTypesTest ) suite_NrTypesTest->testDot(); }
-} testDescription_NrTypesTest_testDot;
-
-static class TestDescription_NrTypesTest_testL1L2LInftyNorms : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTypesTest_testL1L2LInftyNorms() : CxxTest::RealTestDescription( Tests_NrTypesTest, suiteDescription_NrTypesTest, 93, "testL1L2LInftyNorms" ) {}
- void runTest() { if ( suite_NrTypesTest ) suite_NrTypesTest->testL1L2LInftyNorms(); }
-} testDescription_NrTypesTest_testL1L2LInftyNorms;
-
-static class TestDescription_NrTypesTest_testOperatorPlusEquals : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTypesTest_testOperatorPlusEquals() : CxxTest::RealTestDescription( Tests_NrTypesTest, suiteDescription_NrTypesTest, 106, "testOperatorPlusEquals" ) {}
- void runTest() { if ( suite_NrTypesTest ) suite_NrTypesTest->testOperatorPlusEquals(); }
-} testDescription_NrTypesTest_testOperatorPlusEquals;
-
-static class TestDescription_NrTypesTest_testNormalize : public CxxTest::RealTestDescription {
-public:
- TestDescription_NrTypesTest_testNormalize() : CxxTest::RealTestDescription( Tests_NrTypesTest, suiteDescription_NrTypesTest, 120, "testNormalize" ) {}
- void runTest() { if ( suite_NrTypesTest ) suite_NrTypesTest->testNormalize(); }
-} testDescription_NrTypesTest_testNormalize;
 
 #include "./svg/css-ostringstream-test.h"
 
@@ -1179,6 +677,19 @@ public:
  void runTest() { if ( suite_SvgPathGeomTest ) suite_SvgPathGeomTest->testMinexpPrecision(); }
 } testDescription_SvgPathGeomTest_testMinexpPrecision;
 
+#include "./xml/rebase-hrefs-test.h"
+
+static RebaseHrefsTest *suite_RebaseHrefsTest = 0;
+
+static CxxTest::List Tests_RebaseHrefsTest = { 0, 0 };
+CxxTest::DynamicSuiteDescription<RebaseHrefsTest> suiteDescription_RebaseHrefsTest( "./xml/rebase-hrefs-test.h", 9, "RebaseHrefsTest", Tests_RebaseHrefsTest, suite_RebaseHrefsTest, 31, 32 );
+
+static class TestDescription_RebaseHrefsTest_testFlipples : public CxxTest::RealTestDescription {
+public:
+ TestDescription_RebaseHrefsTest_testFlipples() : CxxTest::RealTestDescription( Tests_RebaseHrefsTest, suiteDescription_RebaseHrefsTest, 51, "testFlipples" ) {}
+ void runTest() { if ( suite_RebaseHrefsTest ) suite_RebaseHrefsTest->testFlipples(); }
+} testDescription_RebaseHrefsTest_testFlipples;
+
 #include "./xml/repr-action-test.h"
 
 static XmlReprActionTest *suite_XmlReprActionTest = 0;
@@ -1209,17 +720,17 @@ public:
 static XmlQuoteTest *suite_XmlQuoteTest = 0;
 
 static CxxTest::List Tests_XmlQuoteTest = { 0, 0 };
-CxxTest::DynamicSuiteDescription<XmlQuoteTest> suiteDescription_XmlQuoteTest( "./xml/quote-test.h", 15, "XmlQuoteTest", Tests_XmlQuoteTest, suite_XmlQuoteTest, 26, 27 );
+CxxTest::DynamicSuiteDescription<XmlQuoteTest> suiteDescription_XmlQuoteTest( "./xml/quote-test.h", 12, "XmlQuoteTest", Tests_XmlQuoteTest, suite_XmlQuoteTest, 23, 24 );
 
 static class TestDescription_XmlQuoteTest_testXmlQuotedStrlen : public CxxTest::RealTestDescription {
 public:
- TestDescription_XmlQuoteTest_testXmlQuotedStrlen() : CxxTest::RealTestDescription( Tests_XmlQuoteTest, suiteDescription_XmlQuoteTest, 29, "testXmlQuotedStrlen" ) {}
+ TestDescription_XmlQuoteTest_testXmlQuotedStrlen() : CxxTest::RealTestDescription( Tests_XmlQuoteTest, suiteDescription_XmlQuoteTest, 26, "testXmlQuotedStrlen" ) {}
  void runTest() { if ( suite_XmlQuoteTest ) suite_XmlQuoteTest->testXmlQuotedStrlen(); }
 } testDescription_XmlQuoteTest_testXmlQuotedStrlen;
 
 static class TestDescription_XmlQuoteTest_testXmlQuoteStrdup : public CxxTest::RealTestDescription {
 public:
- TestDescription_XmlQuoteTest_testXmlQuoteStrdup() : CxxTest::RealTestDescription( Tests_XmlQuoteTest, suiteDescription_XmlQuoteTest, 50, "testXmlQuoteStrdup" ) {}
+ TestDescription_XmlQuoteTest_testXmlQuoteStrdup() : CxxTest::RealTestDescription( Tests_XmlQuoteTest, suiteDescription_XmlQuoteTest, 47, "testXmlQuoteStrdup" ) {}
  void runTest() { if ( suite_XmlQuoteTest ) suite_XmlQuoteTest->testXmlQuoteStrdup(); }
 } testDescription_XmlQuoteTest_testXmlQuoteStrdup;
 

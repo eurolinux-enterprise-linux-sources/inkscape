@@ -10,6 +10,7 @@
 #include "extension/system.h"
 
 #include "enhance.h"
+#include <Magick++.h>
 
 namespace Inkscape {
 namespace Extension {
@@ -22,7 +23,7 @@ Enhance::applyEffect(Magick::Image *image) {
 }
 
 void
-Enhance::refreshParameters(Inkscape::Extension::Effect *module) { }
+Enhance::refreshParameters(Inkscape::Extension::Effect */*module*/) { }
 
 #include "../clear-n_.h"
 
@@ -38,7 +39,7 @@ Enhance::init(void)
 				"<effects-menu>\n"
 					"<submenu name=\"" N_("Raster") "\" />\n"
 				"</effects-menu>\n"
-				"<menu-tip>" N_("Enhance selected bitmap(s) -- minimize noise.") "</menu-tip>\n"
+				"<menu-tip>" N_("Enhance selected bitmap(s); minimize noise") "</menu-tip>\n"
 			"</effect>\n"
 		"</inkscape-extension>\n", new Enhance());
 }

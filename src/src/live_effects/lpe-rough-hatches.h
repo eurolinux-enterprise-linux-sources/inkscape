@@ -15,7 +15,6 @@
  */
 
 #include "live_effects/effect.h"
-#include "live_effects/parameter/point.h"
 #include "live_effects/parameter/parameter.h"
 #include "live_effects/parameter/bool.h"
 #include "live_effects/parameter/random.h"
@@ -32,9 +31,9 @@ public:
     virtual Geom::Piecewise<Geom::D2<Geom::SBasis> >
     doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in);
 
-    virtual void resetDefaults(SPItem * item);
+    virtual void resetDefaults(SPItem const* item);
 
-    virtual void doBeforeEffect(SPLPEItem * item);
+    virtual void doBeforeEffect(SPLPEItem const* item);
 
   std::vector<double>
     generateLevels(Geom::Interval const &domain, double x_org);
@@ -64,7 +63,6 @@ private:
   ScalarParam stroke_width_bot;
   ScalarParam front_thickness, back_thickness;
 
-  //PointParam  bender;
   VectorParam direction;
   VectorParam bender;
 

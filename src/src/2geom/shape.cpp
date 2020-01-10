@@ -622,7 +622,7 @@ Shape sanitize(std::vector<Path> const & ps) {
 /* This transforms a shape by a matrix.  In the case that the matrix flips
  * the shape, it reverses the paths in order to preserve the fill.
  */
-Shape Shape::operator*(Matrix const &m) const {
+Shape Shape::operator*(Affine const &m) const {
     Shape ret;
     for(unsigned i = 0; i < size(); i++)
         ret.content.push_back(content[i] * m);
@@ -686,4 +686,4 @@ bool Shape::invariants() const {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

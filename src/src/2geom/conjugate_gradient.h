@@ -1,7 +1,7 @@
 /**
- * \file
- * \brief \todo brief description
- *
+ * @file
+ * @brief Routines for solving a system of linear equations using the conjugate gradient method
+ *//*
  * Copyright 2006 Nathan Hurst <njh@mail.csse.monash.edu.au>
  *
  * This library is free software; you can redistribute it and/or
@@ -29,10 +29,13 @@
  *
  */
 
-#ifndef _CONJUGATE_GRADIENT_H
-#define _CONJUGATE_GRADIENT_H
+#ifndef _2GEOM_CONJUGATE_GRADIENT_H
+#define _2GEOM_CONJUGATE_GRADIENT_H
 
 #include <valarray>
+
+namespace Geom
+{
 
 double
 inner(std::valarray<double> const &x, 
@@ -44,7 +47,10 @@ conjugate_gradient(std::valarray<double> const &A,
 		   std::valarray<double> const &b, 
 		   unsigned n, double tol,
 		   unsigned max_iterations, bool ortho1);
-#endif // _CONJUGATE_GRADIENT_H
+
+} // namespace Geom
+
+#endif // _2GEOM_CONJUGATE_GRADIENT_H
 
 /*
   Local Variables:
@@ -55,4 +61,4 @@ conjugate_gradient(std::valarray<double> const &A,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

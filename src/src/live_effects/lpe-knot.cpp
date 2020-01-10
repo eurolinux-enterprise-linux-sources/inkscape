@@ -1,10 +1,13 @@
-/** @file
- * @brief LPE knot effect implementation
+/**
+ * @file
+ * LPE knot effect implementation.
  */
 /* Authors:
  *   Jean-Francois Barraud <jf.barraud@gmail.com>
+ *   Abhishek Sharma
+ *   Johan Engelen
  *
- * Copyright (C) 2007 Authors
+ * Copyright (C) 2007-2012 Authors
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -16,13 +19,15 @@
 #include "svg/svg.h"
 #include "style.h"
 #include "knot-holder-entity.h"
+#include "knotholder.h"
+
+#include <glibmm/i18n.h>
 
 #include <2geom/sbasis-to-bezier.h>
 #include <2geom/sbasis.h>
 #include <2geom/d2.h>
 #include <2geom/d2-sbasis.h>
 #include <2geom/path.h>
-//#include <2geom/crossing.h>
 #include <2geom/bezier-to-sbasis.h>
 #include <2geom/basic-intersection.h>
 #include <2geom/exception.h>
@@ -30,24 +35,23 @@
 // for change crossing undo
 #include "verbs.h"
 #include "document.h"
+#include "document-undo.h"
 
 #include <exception>
 
 namespace Inkscape {
 namespace LivePathEffect {
 
-class KnotHolderEntityCrossingSwitcher : public LPEKnotHolderEntity
-{
+class KnotHolderEntityCrossingSwitcher : public LPEKnotHolderEntity {
 public:
-    virtual ~KnotHolderEntityCrossingSwitcher() {}
-
+    KnotHolderEntityCrossingSwitcher(LPEKnot *effect) : LPEKnotHolderEntity(effect) {};
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
-    virtual Geom::Point knot_get();
+    virtual Geom::Point knot_get() const;
     virtual void knot_click(guint state);
 };
 
 
-Geom::Path::size_type size_nondegenerate(Geom::Path const &path) {
+static Geom::Path::size_type size_nondegenerate(Geom::Path const &path) {
     Geom::Path::size_type retval = path.size_open();
 
     // if path is closed and closing segment is not degenerate
@@ -92,9 +96,10 @@ findShadowedTime(Geom::Path const &patha, std::vector<Geom::Point> const &pt_and
     using namespace Geom;
     Point T = unit_vector(pt_and_dir[1]);
     Point N = T.cw();
-    Point A = pt_and_dir[0]-3*width*T, B = A+6*width*T;
+    //Point A = pt_and_dir[0] - 3 * width * T;
+    //Point B = A+6*width*T;
 
-    Matrix mat = from_basis( T, N, pt_and_dir[0] );
+    Affine mat = from_basis( T, N, pt_and_dir[0] );
     mat = mat.inverse();
     Path p = patha * mat;
     
@@ -123,7 +128,7 @@ findShadowedTime(Geom::Path const &patha, std::vector<Geom::Point> const &pt_and
 
     double tmin = 0, tmax = size_nondegenerate(patha);
     double period = size_nondegenerate(patha);
-    if (times.size()>0){
+    if (!times.empty()){
         unsigned rk = upper_bound( times.begin(),  times.end(), ta ) - times.begin();
         if ( rk < times.size() ) 
             tmax = times[rk];
@@ -156,14 +161,14 @@ CrossingPoints::CrossingPoints(std::vector<Geom::Path> const &paths) : std::vect
             for( unsigned j=i; j<paths.size(); j++){
                 for( unsigned jj=(i==j?ii:0); jj < size_nondegenerate(paths[j]); jj++){
                     std::vector<std::pair<double,double> > times;
-                    if ( i==j && ii==jj){
+                    if ( (i==j) && (ii==jj) ) {
 
 //                         std::cout<<"--(self int)\n";
 //                         std::cout << paths[i][ii].toSBasis()[Geom::X] <<"\n";
 //                         std::cout << paths[i][ii].toSBasis()[Geom::Y] <<"\n";
 
                         find_self_intersections( times, paths[i][ii].toSBasis() );
-                    }else{
+                    } else {
 //                         std::cout<<"--(pair int)\n";
 //                         std::cout << paths[i][ii].toSBasis()[Geom::X] <<"\n";
 //                         std::cout << paths[i][ii].toSBasis()[Geom::Y] <<"\n";
@@ -175,15 +180,17 @@ CrossingPoints::CrossingPoints(std::vector<Geom::Path> const &paths) : std::vect
                     }
                     for (unsigned k=0; k<times.size(); k++){
                         //std::cout<<"intersection "<<i<<"["<<ii<<"]("<<times[k].first<<")= "<<j<<"["<<jj<<"]("<<times[k].second<<")\n";
-                        if (times[k].first == times[k].first && times[k].second == times[k].second ){//is this the way to test NaN?
+                        if ( !IS_NAN(times[k].first) && !IS_NAN(times[k].second) ){
                             double zero = 1e-4;
-                            if ( i==j && fabs(times[k].first+ii - times[k].second-jj)<=zero ){//this is just end=start of successive curves in a path.
+                            if ( (i==j) && (fabs(times[k].first+ii - times[k].second-jj) <= zero) )
+                            { //this is just end=start of successive curves in a path.
                                 continue;
                             }
-                            if ( i==j && ii == 0 && jj == size_nondegenerate(paths[i])-1 &&
-                                 paths[i].closed() &&
-                                 fabs(times[k].first) <= zero && 
-                                 fabs(times[k].second - 1) <= zero ){//this is just end=start of a closed path.
+                            if ( (i==j) && (ii == 0) && (jj == size_nondegenerate(paths[i])-1)
+                                 && paths[i].closed()
+                                 && (fabs(times[k].first) <= zero)
+                                 && (fabs(times[k].second - 1) <= zero) )
+                            {//this is just end=start of a closed path.
                                 continue;
                             }
                             CrossingPoint cp;
@@ -212,8 +219,8 @@ CrossingPoints::CrossingPoints(std::vector<Geom::Path> const &paths) : std::vect
             if (cp.j == i) cuts[cp.tj] = k;
         }
         unsigned count = 0;
-        for ( std::map < double, unsigned >::iterator m=cuts.begin(); m!=cuts.end(); m++ ){
-            if ( (*this)[m->second].i == i && (*this)[m->second].ti == m->first ){
+        for ( std::map < double, unsigned >::iterator m=cuts.begin(); m!=cuts.end(); ++m ){
+            if ( ((*this)[m->second].i == i) && ((*this)[m->second].ti == m->first) ){
                 (*this)[m->second].ni = count;
             }else{
                 (*this)[m->second].nj = count;
@@ -225,7 +232,7 @@ CrossingPoints::CrossingPoints(std::vector<Geom::Path> const &paths) : std::vect
 
 CrossingPoints::CrossingPoints(std::vector<double> const &input) : std::vector<CrossingPoint>()
 {
-    if (input.size()>0 && input.size()%9 ==0){
+    if ( (input.size() > 0) && (input.size()%9 == 0) ){
         using namespace Geom;
         for( unsigned n=0; n<input.size();  ){
             CrossingPoint cp;
@@ -268,24 +275,25 @@ CrossingPoint
 CrossingPoints::get(unsigned const i, unsigned const ni)
 {
     for (unsigned k=0; k<size(); k++){
-        if (
-            ((*this)[k].i==i && (*this)[k].ni==ni) ||
-            ((*this)[k].j==i && (*this)[k].nj==ni)
-            ) return (*this)[k];
+        if (    ( ((*this)[k].i==i) && ((*this)[k].ni==ni) )
+             || ( ((*this)[k].j==i) && ((*this)[k].nj==ni) )  )
+        {
+            return (*this)[k];
+        }
     }
     g_warning("LPEKnotNS::CrossingPoints::get error. %uth crossing along string %u not found.",ni,i);
     assert(false);//debug purpose...
     return CrossingPoint();
 }
 
-unsigned
+static unsigned
 idx_of_nearest(CrossingPoints const &cpts, Geom::Point const &p)
 {
     double dist=-1;
     unsigned result = cpts.size();
     for (unsigned k=0; k<cpts.size(); k++){
         double dist_k = Geom::L2(p-cpts[k].pt);
-        if (dist<0 || dist>dist_k){
+        if ( (dist < 0) || (dist > dist_k) ) {
             result = k;
             dist = dist_k;
         }
@@ -299,28 +307,28 @@ void
 CrossingPoints::inherit_signs(CrossingPoints const &other, int default_value)
 {
     bool topo_changed = false;
-    for (unsigned n=0; n<size(); n++){
-        if ( n<other.size() &&
-             other[n].i  == (*this)[n].i  &&
-             other[n].j  == (*this)[n].j  &&
-             other[n].ni == (*this)[n].ni &&
-             other[n].nj == (*this)[n].nj    )
+    for (unsigned n=0; n < size(); n++){
+        if ( (n < other.size())
+             && (other[n].i  == (*this)[n].i)
+             && (other[n].j  == (*this)[n].j)
+             && (other[n].ni == (*this)[n].ni)
+             && (other[n].nj == (*this)[n].nj) )
         {
             (*this)[n].sign = other[n].sign;
-        }else{
+        } else {
             topo_changed = true;
             break;
         }
     }
-    if (topo_changed){
+    if (topo_changed) {
         //TODO: Find a way to warn the user!!
 //        std::cout<<"knot topolgy changed!\n";
-        for (unsigned n=0; n<size(); n++){
+        for (unsigned n=0; n < size(); n++){
             Geom::Point p = (*this)[n].pt;
             unsigned idx = idx_of_nearest(other,p);
-            if (idx<other.size()){
+            if (idx < other.size()) {
                 (*this)[n].sign = other[idx].sign;
-            }else{
+            } else {
                 (*this)[n].sign = default_value;
             }
         }
@@ -339,13 +347,17 @@ CrossingPoints::inherit_signs(CrossingPoints const &other, int default_value)
 LPEKnot::LPEKnot(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
     // initialise your parameters here:
-    interruption_width(_("Fixed width"), _("Size of hidden region of lower string"), "interruption_width", &wr, this, 3),
-    prop_to_stroke_width(_("In units of stroke width"), _("Consider 'Interruption width' as a ratio of stroke width"), "prop_to_stroke_width", &wr, this, true),
-    add_stroke_width(_("Stroke width"), _("Add the stroke width to the interruption size"), "add_stroke_width", &wr, this, true),
-    add_other_stroke_width(_("Crossing path stroke width"), _("Add crossed stroke width to the interruption size"), "add_other_stroke_width", &wr, this, true),
-    switcher_size(_("Switcher size"), _("Orientation indicator/switcher size"), "switcher_size", &wr, this, 15),
+    interruption_width(_("Fi_xed width:"), _("Size of hidden region of lower string"), "interruption_width", &wr, this, 3),
+    prop_to_stroke_width(_("_In units of stroke width"), _("Consider 'Interruption width' as a ratio of stroke width"), "prop_to_stroke_width", &wr, this, true),
+    add_stroke_width(_("St_roke width"), _("Add the stroke width to the interruption size"), "add_stroke_width", &wr, this, true),
+    add_other_stroke_width(_("_Crossing path stroke width"), _("Add crossed stroke width to the interruption size"), "add_other_stroke_width", &wr, this, true),
+    switcher_size(_("S_witcher size:"), _("Orientation indicator/switcher size"), "switcher_size", &wr, this, 15),
     crossing_points_vector(_("Crossing Signs"), _("Crossings signs"), "crossing_points_vector", &wr, this),
-    gpaths(),gstroke_widths()
+    crossing_points(),
+    gpaths(),
+    gstroke_widths(),
+    selectedCrossing(0),
+    switcher(0.,0.)
 {
     // register all your parameters here, so Inkscape knows which parameters this effect has:
     registerParameter( dynamic_cast<Parameter *>(&interruption_width) );
@@ -355,10 +367,7 @@ LPEKnot::LPEKnot(LivePathEffectObject *lpeobject) :
     registerParameter( dynamic_cast<Parameter *>(&switcher_size) );
     registerParameter( dynamic_cast<Parameter *>(&crossing_points_vector) );
 
-    registerKnotHolderHandle(new KnotHolderEntityCrossingSwitcher(), _("Drag to select a crossing, click to flip it"));
-    crossing_points = LPEKnotNS::CrossingPoints();
-    selectedCrossing = 0;
-    switcher = Geom::Point(0,0);
+    _provides_knotholder_entities = true;
 }
 
 LPEKnot::~LPEKnot()
@@ -377,9 +386,7 @@ LPEKnot::updateSwitcher(){
         //std::cout<<"placing switcher at "<<switcher<<" \n";
     }else{
         //std::cout<<"hiding switcher!\n";
-        //TODO: is there a way to properly hide the helper.
-        //switcher = Geom::Point(Geom::infinity(),Geom::infinity());
-        switcher = Geom::Point(1e10,1e10);
+        switcher = Geom::Point(Geom::infinity(),Geom::infinity());
     }
 }
 
@@ -406,7 +413,7 @@ LPEKnot::doEffect_path (std::vector<Geom::Path> const &path_in)
         std::vector<Interval> dom;
         dom.push_back(Interval(0., size_nondegenerate(gpaths[i0])));
         for (unsigned p = 0; p < crossing_points.size(); p++){
-            if (crossing_points[p].i == i0 || crossing_points[p].j == i0){
+            if ( (crossing_points[p].i == i0) || (crossing_points[p].j == i0) ) {
                 unsigned i = crossing_points[p].i;
                 unsigned j = crossing_points[p].j;
                 double ti = crossing_points[p].ti;
@@ -463,20 +470,20 @@ LPEKnot::doEffect_path (std::vector<Geom::Path> const &path_in)
         }
 
         //If the all component is hidden, continue.
-        if ( dom.size() == 0){
+        if (dom.empty()){
             continue;
         }
 
         //If the current path is closed and the last/first point is still there, glue first and last piece.
         unsigned beg_comp = 0, end_comp = dom.size();
-        if ( gpaths[i0].closed() && dom.front().min() == 0 && dom.back().max() ==  size_nondegenerate(gpaths[i0]) ){
+        if ( gpaths[i0].closed() && (dom.front().min() == 0) && (dom.back().max() == size_nondegenerate(gpaths[i0])) ) {
             if ( dom.size() == 1){
                 path_out.push_back(gpaths[i0]);
                 continue;
             }else{
 //                std::cout<<"fusing first and last component\n";
-                beg_comp++;
-                end_comp--;
+                ++beg_comp;
+                --end_comp;
                 Path first = gpaths[i0].portion(dom.back());
                 //FIXME: STITCH_DISCONTINUOUS should not be necessary (?!?)
                 first.append(gpaths[i0].portion(dom.front()), Path::STITCH_DISCONTINUOUS);
@@ -484,7 +491,7 @@ LPEKnot::doEffect_path (std::vector<Geom::Path> const &path_in)
             }
         }
         for (unsigned comp = beg_comp; comp < end_comp; comp++){
-            assert(dom.at(comp).min() >=0 and dom.at(comp).max() <= size_nondegenerate(gpaths.at(i0)));
+            assert(dom.at(comp).min() >=0 && dom.at(comp).max() <= size_nondegenerate(gpaths.at(i0)));
             path_out.push_back(gpaths[i0].portion(dom.at(comp)));
         }
     }
@@ -494,7 +501,8 @@ LPEKnot::doEffect_path (std::vector<Geom::Path> const &path_in)
 
 
 //recursively collect gpaths and stroke widths (stolen from "sp-lpe_item.cpp").
-void collectPathsAndWidths (SPLPEItem const *lpeitem, std::vector<Geom::Path> &paths, std::vector<double> &stroke_widths){
+static void
+collectPathsAndWidths (SPLPEItem const *lpeitem, std::vector<Geom::Path> &paths, std::vector<double> &stroke_widths){
     if (SP_IS_GROUP(lpeitem)) {
         GSList const *item_list = sp_item_group_item_list(SP_GROUP(lpeitem));
         for ( GSList const *iter = item_list; iter; iter = iter->next ) {
@@ -507,16 +515,16 @@ void collectPathsAndWidths (SPLPEItem const *lpeitem, std::vector<Geom::Path> &p
     else if (SP_IS_SHAPE(lpeitem)) {
         SPCurve * c = NULL;
         if (SP_IS_PATH(lpeitem)) {
-            c = sp_path_get_curve_for_edit(SP_PATH(lpeitem));
+            c = SP_PATH(lpeitem)->get_curve_for_edit();
         } else {
-            c = sp_shape_get_curve(SP_SHAPE(lpeitem));
+            c = SP_SHAPE(lpeitem)->getCurve();
         }
         if (c) {
             Geom::PathVector subpaths = c->get_pathvector();
             for (unsigned i=0; i<subpaths.size(); i++){
                 paths.push_back(subpaths[i]);
                 //FIXME: do we have to be more carefull when trying to access stroke width?
-                stroke_widths.push_back(SP_ITEM(lpeitem)->style->stroke_width.computed);
+                stroke_widths.push_back(lpeitem->style->stroke_width.computed);
             }
         }
     }
@@ -524,13 +532,14 @@ void collectPathsAndWidths (SPLPEItem const *lpeitem, std::vector<Geom::Path> &p
 
 
 void
-LPEKnot::doBeforeEffect (SPLPEItem *lpeitem)
+LPEKnot::doBeforeEffect (SPLPEItem const* lpeitem)
 {
     using namespace Geom;
     original_bbox(lpeitem);
 
-    gpaths = std::vector<Geom::Path>();
-    gstroke_widths = std::vector<double>();
+    gpaths.clear();
+    gstroke_widths.clear();
+
     collectPathsAndWidths(lpeitem, gpaths, gstroke_widths);
 
 //     std::cout<<"\nPaths on input:\n";
@@ -576,49 +585,49 @@ LPEKnot::doBeforeEffect (SPLPEItem *lpeitem)
 //         std::cout<<crossing_points[toto].sign<<"),";
 //     }
     crossing_points.inherit_signs(old_crdata);
-    crossing_points_vector.param_set_and_write_new_value(crossing_points.to_vector());
+
+    // Don't write to XML here, only store it in the param itself. Will be written to SVG later
+    crossing_points_vector.param_setValue(crossing_points.to_vector());
+
     updateSwitcher();
 }
 
-
-static LPEKnot *
-get_effect(SPItem *item)
-{
-    Effect *effect = sp_lpe_item_get_current_lpe(SP_LPE_ITEM(item));
-    if (effect->effectType() != KNOT) {
-        g_print ("Warning: Effect is not of type LPEKnot!\n");
-        return NULL;
-    }
-    return static_cast<LPEKnot *>(effect);
-}
-
 void
-LPEKnot::addCanvasIndicators(SPLPEItem */*lpeitem*/, std::vector<Geom::PathVector> &hp_vec)
+LPEKnot::addCanvasIndicators(SPLPEItem const */*lpeitem*/, std::vector<Geom::PathVector> &hp_vec)
 {
     using namespace Geom;
     double r = switcher_size*.1;
     char const * svgd;
     //TODO: use a nice path!
-    if (selectedCrossing >= crossing_points.size()||crossing_points[selectedCrossing].sign > 0){
+    if ( (selectedCrossing >= crossing_points.size()) || (crossing_points[selectedCrossing].sign > 0) ) {
         //svgd = "M -10,0 A 10 10 0 1 0 0,-10 l  5,-1 -1,2";
         svgd = "m -7.07,7.07 c 3.9,3.91 10.24,3.91 14.14,0 3.91,-3.9 3.91,-10.24 0,-14.14 -3.9,-3.91 -10.24,-3.91 -14.14,0 l 2.83,-4.24 0.7,2.12";
-    }else if (crossing_points[selectedCrossing].sign < 0){
+    } else if (crossing_points[selectedCrossing].sign < 0) {
         //svgd = "M  10,0 A 10 10 0 1 1 0,-10 l -5,-1  1,2";
         svgd = "m 7.07,7.07 c -3.9,3.91 -10.24,3.91 -14.14,0 -3.91,-3.9 -3.91,-10.24 0,-14.14 3.9,-3.91 10.24,-3.91 14.14,0 l -2.83,-4.24 -0.7,2.12";
-    }else{
+    } else {
         //svgd = "M 10,0 A 10 10 0 1 0 -10,0 A 10 10 0 1 0 10,0 ";
         svgd = "M 10,0 C 10,5.52 5.52,10 0,10 -5.52,10 -10,5.52 -10,0 c 0,-5.52 4.48,-10 10,-10 5.52,0 10,4.48 10,10 z";
     }
     PathVector pathv = sp_svg_read_pathv(svgd);
-    pathv *= Matrix(r,0,0,r,0,0);
-    pathv+=switcher;
+    pathv *= Affine(r,0,0,r,0,0);
+    pathv += switcher;
     hp_vec.push_back(pathv);
 }
+
+void LPEKnot::addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item)
+{
+    KnotHolderEntity *e = new KnotHolderEntityCrossingSwitcher(this);
+    e->create( desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN,
+               _("Drag to select a crossing, click to flip it") );
+    knotholder->add(e);
+};
+
 
 void
 KnotHolderEntityCrossingSwitcher::knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint /*state*/)
 {
-    LPEKnot* lpe = get_effect(item);
+    LPEKnot* lpe = dynamic_cast<LPEKnot *>(_effect);
 
     lpe->selectedCrossing = idx_of_nearest(lpe->crossing_points,p);
     lpe->updateSwitcher();
@@ -627,16 +636,16 @@ KnotHolderEntityCrossingSwitcher::knot_set(Geom::Point const &p, Geom::Point con
 }
 
 Geom::Point
-KnotHolderEntityCrossingSwitcher::knot_get()
+KnotHolderEntityCrossingSwitcher::knot_get() const
 {
-    LPEKnot* lpe = get_effect(item);
-    return snap_knot_position(lpe->switcher);
+    LPEKnot const *lpe = dynamic_cast<LPEKnot const*>(_effect);
+    return lpe->switcher;
 }
 
 void
 KnotHolderEntityCrossingSwitcher::knot_click(guint state)
 {
-    LPEKnot* lpe = get_effect(item);
+    LPEKnot* lpe = dynamic_cast<LPEKnot *>(_effect);
     unsigned s = lpe->selectedCrossing;
     if (s < lpe->crossing_points.size()){
         if (state & GDK_SHIFT_MASK){
@@ -647,8 +656,8 @@ KnotHolderEntityCrossingSwitcher::knot_click(guint state)
             //std::cout<<"crossing set to"<<lpe->crossing_points[s].sign<<".\n";
         }
         lpe->crossing_points_vector.param_set_and_write_new_value(lpe->crossing_points.to_vector());
-        sp_document_done(lpe->getSPDoc(), SP_VERB_DIALOG_LIVE_PATH_EFFECT, /// @todo Is this the right verb?
-                 _("Change knot crossing"));
+        DocumentUndo::done(lpe->getSPDoc(), SP_VERB_DIALOG_LIVE_PATH_EFFECT, /// @todo Is this the right verb?
+                           _("Change knot crossing"));
 
         // FIXME: this should not directly ask for updating the item. It should write to SVG, which triggers updating.
 //        sp_lpe_item_update_patheffect (SP_LPE_ITEM(item), false, true);
@@ -670,5 +679,5 @@ KnotHolderEntityCrossingSwitcher::knot_click(guint state)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
 

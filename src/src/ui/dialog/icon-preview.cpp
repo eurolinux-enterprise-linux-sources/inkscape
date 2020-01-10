@@ -1,10 +1,12 @@
-/** @file
- * @brief A simple dialog for previewing icon representation.
+/**
+ * @file
+ * A simple dialog for previewing icon representation.
  */
 /* Authors:
  *   Jon A. Cruz
  *   Bob Jamison
  *   Other dudes from The Inkscape Organization
+ *   Abhishek Sharma
  *
  * Copyright (C) 2004 Bob Jamison
  * Copyright (C) 2005,2010 Jon A. Cruz
@@ -15,30 +17,42 @@
 # include <config.h>
 #endif
 
-#include <gtk/gtk.h>
-#include <glib.h>
-#include <glibmm/i18n.h>
-#include <gtkmm/alignment.h>
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
 #include <gtkmm/buttonbox.h>
+#include <boost/scoped_ptr.hpp>
+
+#include <glibmm/i18n.h>
+#include <glibmm/main.h>
+#include <glibmm/timer.h>
+
+#include <gtkmm/alignment.h>
+#include <gtkmm/checkbutton.h>
+#include <gtkmm/frame.h>
 #include <gtkmm/stock.h>
+#include "ui/widget/frame.h"
 
 #include "desktop.h"
 #include "desktop-handles.h"
-#include "display/nr-arena.h"
+#include "display/drawing.h"
 #include "document.h"
 #include "inkscape.h"
 #include "preferences.h"
 #include "selection.h"
 #include "sp-root.h"
 #include "xml/repr.h"
+#include "verbs.h"
 
 #include "icon-preview.h"
 
 extern "C" {
-// takes doc, root, icon, and icon name to produce pixels
+// takes doc, drawing, icon, and icon name to produce pixels
+// this is defined in widgets/icon.cpp
 guchar *
-sp_icon_doc_icon( SPDocument *doc, NRArenaItem *root,
-                  const gchar *name, unsigned int psize );
+sp_icon_doc_icon( SPDocument *doc, Inkscape::Drawing &drawing,
+                  const gchar *name, unsigned int psize, unsigned &stride);
 }
 
 #define noICON_VERBOSE 1
@@ -154,7 +168,7 @@ IconPreviewPanel::IconPreviewPanel() :
 
     Gtk::VBox* magBox = new Gtk::VBox();
 
-    Gtk::Frame *magFrame = Gtk::manage(new Gtk::Frame(_("Magnified:")));
+    UI::Widget::Frame *magFrame = Gtk::manage(new UI::Widget::Frame(_("Magnified:")));
     magFrame->add( magnified );
 
     magBox->pack_start( *magFrame, Gtk::PACK_EXPAND_WIDGET );
@@ -166,10 +180,11 @@ IconPreviewPanel::IconPreviewPanel() :
     int previous = 0;
     int avail = 0;
     for ( int i = numEntries - 1; i >= 0; --i ) {
-        pixMem[i] = new guchar[4 * sizes[i] * sizes[i]];
-        memset( pixMem[i], 0x00, 4 *  sizes[i] * sizes[i] );
+        int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, sizes[i]);
+        pixMem[i] = new guchar[sizes[i] * stride];
+        memset( pixMem[i], 0x00, sizes[i] * stride );
 
-        GdkPixbuf *pb = gdk_pixbuf_new_from_data( pixMem[i], GDK_COLORSPACE_RGB, TRUE, 8, sizes[i], sizes[i], sizes[i] * 4, /*(GdkPixbufDestroyNotify)g_free*/NULL, NULL );
+        GdkPixbuf *pb = gdk_pixbuf_new_from_data( pixMem[i], GDK_COLORSPACE_RGB, TRUE, 8, sizes[i], sizes[i], stride, /*(GdkPixbufDestroyNotify)g_free*/NULL, NULL );
         GtkImage* img = GTK_IMAGE( gtk_image_new_from_pixbuf( pb ) );
         images[i] = Glib::wrap(img);
         Glib::ustring label(*labels[i]);
@@ -184,7 +199,7 @@ IconPreviewPanel::IconPreviewPanel() :
             buttons[i]->set_icon_widget(*images[i]);
         }
 
-        tips.set_tip((*buttons[i]), label);
+        buttons[i]->set_tooltip_text(label);
 
         buttons[i]->signal_clicked().connect( sigc::bind<int>( sigc::mem_fun(*this, &IconPreviewPanel::on_button_clicked), i) );
 
@@ -192,12 +207,12 @@ IconPreviewPanel::IconPreviewPanel() :
         Gtk::Alignment *align = Gtk::manage(new Gtk::Alignment(0.5, 0.5, 0, 0));
         align->add(*buttons[i]);
 
-        int pad = 12;
         if ( !pack || ( (avail == 0) && (previous == 0) ) ) {
             verts->pack_end(*align, Gtk::PACK_SHRINK);
             previous = sizes[i];
             avail = sizes[i];
         } else {
+            int pad = 12;
             if ((avail < pad) || ((sizes[i] > avail) && (sizes[i] < previous))) {
                 horiz = 0;
             }
@@ -222,14 +237,14 @@ IconPreviewPanel::IconPreviewPanel() :
 
     iconBox.pack_start(splitter);
     splitter.pack1( *magBox, true, true );
-    Gtk::Frame *actuals = Gtk::manage(new Gtk::Frame(_("Actual Size:")));
+    UI::Widget::Frame *actuals = Gtk::manage(new UI::Widget::Frame (_("Actual Size:")));
     actuals->add(*verts);
     splitter.pack2( *actuals, false, false );
 
 
-    selectionButton = new Gtk::CheckButton(_("Selection")); // , GTK_RESPONSE_APPLY
+    selectionButton = new Gtk::CheckButton(C_("Icon preview window", "Sele_ction"), true);//selectionButton = (Gtk::ToggleButton*) gtk_check_button_new_with_mnemonic(_("_Selection")); // , GTK_RESPONSE_APPLY
     magBox->pack_start( *selectionButton, Gtk::PACK_SHRINK );
-    tips.set_tip((*selectionButton), _("Selection only or whole document"));
+    selectionButton->set_tooltip_text(_("Selection only or whole document"));
     selectionButton->signal_clicked().connect( sigc::mem_fun(*this, &IconPreviewPanel::modeToggled) );
 
     gint val = prefs->getBool("/iconpreview/selectionOnly");
@@ -354,11 +369,10 @@ void IconPreviewPanel::refreshPreview()
                     GSList const *items = sel->itemList();
                     while ( items && !target ) {
                         SPItem* item = SP_ITEM( items->data );
-                        SPObject * obj = SP_OBJECT(item);
-                        gchar const *id = obj->getId();
+                        gchar const *id = item->getId();
                         if ( id ) {
                             targetId = id;
-                            target = obj;
+                            target = item;
                         }
 
                         items = g_slist_next(items);
@@ -426,7 +440,7 @@ void IconPreviewPanel::modeToggled()
 
 void IconPreviewPanel::renderPreview( SPObject* obj )
 {
-    SPDocument * doc = SP_OBJECT_DOCUMENT(obj);
+    SPDocument * doc = obj->document;
     gchar const * id = obj->getId();
     if ( !renderTimer ) {
         renderTimer = new Glib::Timer();
@@ -437,33 +451,29 @@ void IconPreviewPanel::renderPreview( SPObject* obj )
     g_message("%s setting up to render '%s' as the icon", getTimestr().c_str(), id );
 #endif // ICON_VERBOSE
 
-    NRArenaItem *root = NULL;
+    Inkscape::Drawing drawing;
 
-    /* Create new arena */
-    NRArena *arena = NRArena::create();
-
-    /* Create ArenaItem and set transform */
-    unsigned int visionkey = sp_item_display_key_new(1);
-
-    root = sp_item_invoke_show ( SP_ITEM( SP_DOCUMENT_ROOT(doc) ),
-                                 arena, visionkey, SP_ITEM_SHOW_DISPLAY );
+    /* Create drawing items and set transform */
+    unsigned int visionkey = SPItem::display_key_new(1);
+    drawing.setRoot(doc->getRoot()->invoke_show( drawing, visionkey, SP_ITEM_SHOW_DISPLAY ));
 
     for ( int i = 0; i < numEntries; i++ ) {
-        guchar * px = sp_icon_doc_icon( doc, root, id, sizes[i] );
+        unsigned unused;
+        int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, sizes[i]);
+        guchar * px = sp_icon_doc_icon( doc, drawing, id, sizes[i], unused);
 //         g_message( " size %d %s", sizes[i], (px ? "worked" : "failed") );
         if ( px ) {
-            memcpy( pixMem[i], px, sizes[i] * sizes[i] * 4 );
+            memcpy( pixMem[i], px, sizes[i] * stride );
             g_free( px );
             px = 0;
         } else {
-            memset( pixMem[i], 0, sizes[i] * sizes[i] * 4 );
+            memset( pixMem[i], 0, sizes[i] * stride );
         }
         images[i]->queue_draw();
     }
     updateMagnify();
 
-    sp_item_invoke_hide(SP_ITEM(sp_document_root(doc)), visionkey);
-    nr_object_unref((NRObject *) arena);
+    doc->getRoot()->invoke_hide(visionkey);
     renderTimer->stop();
     minDelay = std::max( 0.1, renderTimer->elapsed() * 3.0 );
 #if ICON_VERBOSE
@@ -493,4 +503,4 @@ void IconPreviewPanel::updateMagnify()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

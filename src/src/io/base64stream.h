@@ -1,13 +1,15 @@
-#ifndef __INKSCAPE_IO_BASE64STREAM_H__
-#define __INKSCAPE_IO_BASE64STREAM_H__
+#ifndef SEEN_INKSCAPE_IO_BASE64STREAM_H
+#define SEEN_INKSCAPE_IO_BASE64STREAM_H
 
 /**
+ * @file
  * Base64-enabled input and output streams
  *
  * This class allows easy encoding and decoding
  * of Base64 data with a stream interface, hiding
  * the implementation from the user.
- *
+ */
+/*
  * Authors:
  *   Bob Jamison <rjamison@titan.com>
  *
@@ -86,7 +88,7 @@ public:
     
     virtual void flush();
     
-    virtual void put(int ch);
+    virtual int put(gunichar ch);
 
     /**
      * Sets the maximum line length for base64 output.  If
@@ -119,4 +121,4 @@ private:
 } // namespace Inkscape
 
 
-#endif /* __INKSCAPE_IO_BASE64STREAM_H__ */
+#endif // SEEN_INKSCAPE_IO_BASE64STREAM_H

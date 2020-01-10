@@ -14,8 +14,10 @@
 
 #include <vector>
 #include "desktop.h"
+#include "document.h"
 #include "selection.h"
 #include "helper/action.h"
+#include "helper/action-context.h"
 #include "preferences.h"
 #include "path-chemistry.h"
 #include "sp-item.h"
@@ -59,7 +61,7 @@ BlurEdge::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::View 
     int   steps = module->get_param_int("num-steps");
 
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    double old_offset = prefs->getDouble("/options/defaultoffsetwidth/value", 1.0);
+    double old_offset = prefs->getDouble("/options/defaultoffsetwidth/value", 1.0, "px");
 
     using Inkscape::Util::GSListConstIterator;
     // TODO need to properly refcount the items, at least
@@ -68,15 +70,15 @@ BlurEdge::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::View 
     selection->clear();
 
     for(std::list<SPItem *>::iterator item = items.begin();
-            item != items.end(); item++) {
+            item != items.end(); ++item) {
         SPItem * spitem = *item;
 
         std::vector<Inkscape::XML::Node *> new_items(steps);
-        Inkscape::XML::Document *xml_doc = sp_document_repr_doc(desktop->doc());
+        Inkscape::XML::Document *xml_doc = desktop->doc()->getReprDoc();
         Inkscape::XML::Node * new_group = xml_doc->createElement("svg:g");
-        (SP_OBJECT_REPR(spitem)->parent())->appendChild(new_group);
+        spitem->getRepr()->parent()->appendChild(new_group);
 
-        double orig_opacity = sp_repr_css_double_property(sp_repr_css_attr(SP_OBJECT_REPR(spitem), "style"), "opacity", 1.0);
+        double orig_opacity = sp_repr_css_double_property(sp_repr_css_attr(spitem->getRepr(), "style"), "opacity", 1.0);
         char opacity_string[64];
         g_ascii_formatd(opacity_string, sizeof(opacity_string), "%f",
                         orig_opacity / (steps));
@@ -84,7 +86,7 @@ BlurEdge::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::View 
         for (int i = 0; i < steps; i++) {
             double offset = (width / (float)(steps - 1) * (float)i) - (width / 2.0);
 
-            new_items[i] = (SP_OBJECT_REPR(spitem))->duplicate(xml_doc);
+            new_items[i] = spitem->getRepr()->duplicate(xml_doc);
 
             SPCSSAttr * css = sp_repr_css_attr(new_items[i], "style");
             sp_repr_css_set_property(css, "opacity", opacity_string);
@@ -92,16 +94,16 @@ BlurEdge::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::View 
 
             new_group->appendChild(new_items[i]);
             selection->add(new_items[i]);
-            sp_selected_path_to_curves(static_cast<SPDesktop *>(desktop));
+            sp_selected_path_to_curves(selection, static_cast<SPDesktop *>(desktop));
 
             if (offset < 0.0) {
                 /* Doing an inset here folks */
                 offset *= -1.0;
-                prefs->setDouble("/options/defaultoffsetwidth/value", offset);
-                sp_action_perform(Inkscape::Verb::get(SP_VERB_SELECTION_INSET)->get_action(desktop), NULL);
+                prefs->setDoubleUnit("/options/defaultoffsetwidth/value", offset, "px");
+                sp_action_perform(Inkscape::Verb::get(SP_VERB_SELECTION_INSET)->get_action(Inkscape::ActionContext(desktop)), NULL);
             } else if (offset > 0.0) {
-                prefs->setDouble("/options/defaultoffsetwidth/value", offset);
-                sp_action_perform(Inkscape::Verb::get(SP_VERB_SELECTION_OFFSET)->get_action(desktop), NULL);
+                prefs->setDoubleUnit("/options/defaultoffsetwidth/value", offset, "px");
+                sp_action_perform(Inkscape::Verb::get(SP_VERB_SELECTION_OFFSET)->get_action(Inkscape::ActionContext(desktop)), NULL);
             }
 
             selection->clear();
@@ -110,7 +112,7 @@ BlurEdge::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::View 
         Inkscape::GC::release(new_group);
     }
 
-    prefs->setDouble("/options/defaultoffsetwidth/value", old_offset);
+    prefs->setDoubleUnit("/options/defaultoffsetwidth/value", old_offset, "px");
 
     selection->clear();
     selection->add(items.begin(), items.end());
@@ -133,8 +135,8 @@ BlurEdge::init (void)
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
             "<name>" N_("Inset/Outset Halo") "</name>\n"
             "<id>org.inkscape.effect.bluredge</id>\n"
-            "<param name=\"blur-width\" gui-text=\"" N_("Width") "\" gui-description=\"" N_("Width in px of the halo") "\" scope=\"document\" type=\"float\" min=\"1.0\" max=\"50.0\">1.0</param>\n"
-            "<param name=\"num-steps\" gui-text=\"" N_("Number of steps") "\" gui-description=\"" N_("Number of inset/outset copies of the object to make") "\" scope=\"document\" type=\"int\" min=\"5\" max=\"100\">11</param>\n"
+            "<param name=\"blur-width\" gui-text=\"" N_("Width:") "\" gui-description=\"" N_("Width in px of the halo") "\" scope=\"document\" type=\"float\" min=\"1.0\" max=\"50.0\">1.0</param>\n"
+            "<param name=\"num-steps\" gui-text=\"" N_("Number of steps:") "\" gui-description=\"" N_("Number of inset/outset copies of the object to make") "\" scope=\"document\" type=\"int\" min=\"5\" max=\"100\">11</param>\n"
             "<effect>\n"
                 "<object-type>all</object-type>\n"
                 "<effects-menu>\n"

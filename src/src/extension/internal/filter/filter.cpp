@@ -46,22 +46,20 @@ Filter::~Filter (void) {
 	return;
 }
 
-bool
-Filter::load (Inkscape::Extension::Extension *module)
+bool Filter::load(Inkscape::Extension::Extension * /*module*/)
 {
-	return true;
+    return true;
 }
 
-Inkscape::Extension::Implementation::ImplementationDocumentCache *
-Filter::newDocCache (Inkscape::Extension::Extension * ext, Inkscape::UI::View::View * doc)
+Inkscape::Extension::Implementation::ImplementationDocumentCache *Filter::newDocCache(Inkscape::Extension::Extension * /*ext*/,
+										      Inkscape::UI::View::View * /*doc*/)
 {
-	return NULL;
+    return NULL;
 }
 
-gchar const *
-Filter::get_filter_text (Inkscape::Extension::Extension * ext)
+gchar const *Filter::get_filter_text(Inkscape::Extension::Extension * /*ext*/)
 {
-	return _filter;
+    return _filter;
 }
 
 Inkscape::XML::Document *
@@ -116,8 +114,8 @@ Filter::merge_filters( Inkscape::XML::Node * to, Inkscape::XML::Node * from,
 #define FILTER_SRC_GRAPHIC       "fbSourceGraphic"
 #define FILTER_SRC_GRAPHIC_ALPHA "fbSourceGraphicAlpha"
 
-void
-Filter::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::View *document, Inkscape::Extension::Implementation::ImplementationDocumentCache * docCache)
+void Filter::effect(Inkscape::Extension::Effect *module, Inkscape::UI::View::View *document,
+		    Inkscape::Extension::Implementation::ImplementationDocumentCache * /*docCache*/)
 {
 	Inkscape::XML::Document *filterdoc = get_filter(module);
 	if (filterdoc == NULL) {
@@ -132,13 +130,13 @@ Filter::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::View *d
     std::list<SPItem *> items;
     items.insert<GSListConstIterator<SPItem *> >(items.end(), selection->itemList(), NULL);
 
-	Inkscape::XML::Document * xmldoc = sp_document_repr_doc(document->doc());
-	Inkscape::XML::Node * defsrepr = SP_OBJECT_REPR(SP_DOCUMENT_DEFS(document->doc()));
+	Inkscape::XML::Document * xmldoc = document->doc()->getReprDoc();
+	Inkscape::XML::Node * defsrepr = document->doc()->getDefs()->getRepr();
 
     for(std::list<SPItem *>::iterator item = items.begin();
-            item != items.end(); item++) {
+            item != items.end(); ++item) {
         SPItem * spitem = *item;
-		Inkscape::XML::Node * node = SP_OBJECT_REPR(spitem);
+	Inkscape::XML::Node * node = spitem->getRepr();
 
 		SPCSSAttr * css = sp_repr_css_attr(node, "style");
 		gchar const * filter = sp_repr_css_property(css, "filter", NULL);
@@ -146,11 +144,11 @@ Filter::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::View *d
 		if (filter == NULL) {
 
 			Inkscape::XML::Node * newfilterroot = xmldoc->createElement("svg:filter");
+			merge_filters(newfilterroot, filterdoc->root(), xmldoc);
 			defsrepr->appendChild(newfilterroot);
 
 			Glib::ustring url = "url(#"; url += newfilterroot->attribute("id"); url += ")";
 
-			merge_filters(newfilterroot, filterdoc->root(), xmldoc);
 
       Inkscape::GC::release(newfilterroot);
 
@@ -174,7 +172,7 @@ Filter::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::View *d
 
 			// no filter
 			if (filternode == NULL) {
-				g_warning("no assoziating filter found!");
+				g_warning("no assigned filter found!");
 				continue;
 			}
 

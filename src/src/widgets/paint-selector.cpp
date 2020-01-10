@@ -1,4 +1,5 @@
-/** \file
+/**
+ * @file
  * SPPaintSelector: Generic paint selector widget.
  */
 
@@ -8,6 +9,7 @@
  *   bulia byak <buliabyak@users.sf.net>
  *   John Cliff <simarilius@yahoo.com>
  *   Jon A. Cruz <jon@joncruz.org>
+ *   Abhishek Sharma
  *
  * Copyright (C) Lauris Kaplinski 2002
  * Copyright (C) 2010 Authors
@@ -22,8 +24,11 @@
 #include <cstring>
 #include <string>
 
-#include <gtk/gtk.h>
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
 
+#include "widgets/swatch-selector.h"
 #include "../sp-pattern.h"
 #include <glibmm/i18n.h>
 #include "../widgets/icon.h"
@@ -31,8 +36,8 @@
 #include "xml/repr.h"
 
 #include "sp-color-notebook.h"
-#include "sp-linear-gradient-fns.h"
-#include "sp-radial-gradient-fns.h"
+#include "sp-linear-gradient.h"
+#include "sp-radial-gradient.h"
 /* fixme: Move it from dialogs to here */
 #include "gradient-selector.h"
 #include <inkscape.h>
@@ -45,7 +50,6 @@
 #include "io/sys.h"
 #include "helper/stock-items.h"
 #include "ui/icon-names.h"
-#include "widgets/swatch-selector.h"
 
 #include "paint-selector.h"
 
@@ -53,6 +57,7 @@
 #include "svg/svg-icc-color.h"
 #endif // SP_PS_VERBOSE
 
+#include <gtk/gtk.h>
 
 using Inkscape::Widgets::SwatchSelector;
 
@@ -68,9 +73,9 @@ enum {
 
 static void sp_paint_selector_class_init(SPPaintSelectorClass *klass);
 static void sp_paint_selector_init(SPPaintSelector *slider);
-static void sp_paint_selector_destroy(GtkObject *object);
+static void sp_paint_selector_dispose(GObject *object);
 
-static GtkWidget *sp_paint_selector_style_button_add(SPPaintSelector *psel, gchar const *px, SPPaintSelector::Mode mode, GtkTooltips *tt, gchar const *tip);
+static GtkWidget *sp_paint_selector_style_button_add(SPPaintSelector *psel, gchar const *px, SPPaintSelector::Mode mode, gchar const *tip);
 static void sp_paint_selector_style_button_toggled(GtkToggleButton *tb, SPPaintSelector *psel);
 static void sp_paint_selector_fillrule_toggled(GtkToggleButton *tb, SPPaintSelector *psel);
 
@@ -126,14 +131,14 @@ static SPGradientSelector *getGradientFromData(SPPaintSelector const *psel)
             grad = swatchsel->getGradientSelector();
         }
     } else {
-        grad = reinterpret_cast<SPGradientSelector*>(gtk_object_get_data(GTK_OBJECT(psel->selector), "gradient-selector"));
+        grad = reinterpret_cast<SPGradientSelector*>(g_object_get_data(G_OBJECT(psel->selector), "gradient-selector"));
     }
     return grad;
 }
 
 GType sp_paint_selector_get_type(void)
 {
-    static GtkType type = 0;
+    static GType type = 0;
     if (!type) {
         GTypeInfo info = {
             sizeof(SPPaintSelectorClass),
@@ -155,52 +160,54 @@ GType sp_paint_selector_get_type(void)
 static void
 sp_paint_selector_class_init(SPPaintSelectorClass *klass)
 {
-    GtkObjectClass *object_class;
-    GtkWidgetClass *widget_class;
+    GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
-    object_class = (GtkObjectClass *) klass;
-    widget_class = (GtkWidgetClass *) klass;
+    parent_class = GTK_VBOX_CLASS(g_type_class_peek_parent(klass));
 
-    parent_class = (GtkVBoxClass*)gtk_type_class(GTK_TYPE_VBOX);
+    psel_signals[MODE_CHANGED] = g_signal_new("mode_changed",
+                                                G_TYPE_FROM_CLASS(object_class),
+                                                (GSignalFlags)(G_SIGNAL_RUN_FIRST | G_SIGNAL_NO_RECURSE),
+                                                G_STRUCT_OFFSET(SPPaintSelectorClass, mode_changed),
+                                                NULL, NULL,
+                                                g_cclosure_marshal_VOID__UINT,
+                                                G_TYPE_NONE, 1, G_TYPE_UINT);
+    psel_signals[GRABBED] =  g_signal_new("grabbed",
+                                            G_TYPE_FROM_CLASS(object_class),
+                                            (GSignalFlags)(G_SIGNAL_RUN_FIRST | G_SIGNAL_NO_RECURSE),
+                                            G_STRUCT_OFFSET(SPPaintSelectorClass, grabbed),
+                                            NULL, NULL,
+                                            g_cclosure_marshal_VOID__VOID,
+                                            G_TYPE_NONE, 0);
+    psel_signals[DRAGGED] =  g_signal_new("dragged",
+                                            G_TYPE_FROM_CLASS(object_class),
+                                            (GSignalFlags)(G_SIGNAL_RUN_FIRST | G_SIGNAL_NO_RECURSE),
+                                            G_STRUCT_OFFSET(SPPaintSelectorClass, dragged),
+                                            NULL, NULL,
+                                            g_cclosure_marshal_VOID__VOID,
+                                            G_TYPE_NONE, 0);
+    psel_signals[RELEASED] = g_signal_new("released",
+                                            G_TYPE_FROM_CLASS(object_class),
+                                            (GSignalFlags)(G_SIGNAL_RUN_FIRST | G_SIGNAL_NO_RECURSE),
+                                            G_STRUCT_OFFSET(SPPaintSelectorClass, released),
+                                            NULL, NULL,
+                                            g_cclosure_marshal_VOID__VOID,
+                                            G_TYPE_NONE, 0);
+    psel_signals[CHANGED] =  g_signal_new("changed",
+                                            G_TYPE_FROM_CLASS(object_class),
+                                            (GSignalFlags)(G_SIGNAL_RUN_FIRST | G_SIGNAL_NO_RECURSE),
+                                            G_STRUCT_OFFSET(SPPaintSelectorClass, changed),
+                                            NULL, NULL,
+                                            g_cclosure_marshal_VOID__VOID,
+                                            G_TYPE_NONE, 0);
+    psel_signals[FILLRULE_CHANGED] = g_signal_new("fillrule_changed",
+                                                    G_TYPE_FROM_CLASS(object_class),
+                                                    (GSignalFlags)(G_SIGNAL_RUN_FIRST | G_SIGNAL_NO_RECURSE),
+                                                    G_STRUCT_OFFSET(SPPaintSelectorClass, fillrule_changed),
+                                                    NULL, NULL,
+                                                    g_cclosure_marshal_VOID__UINT,
+                                                    G_TYPE_NONE, 1, G_TYPE_UINT);
 
-    psel_signals[MODE_CHANGED] = gtk_signal_new("mode_changed",
-                                                (GtkSignalRunType)(GTK_RUN_FIRST | GTK_RUN_NO_RECURSE),
-                                                GTK_CLASS_TYPE(object_class),
-                                                GTK_SIGNAL_OFFSET(SPPaintSelectorClass, mode_changed),
-                                                gtk_marshal_NONE__UINT,
-                                                GTK_TYPE_NONE, 1, GTK_TYPE_UINT);
-    psel_signals[GRABBED] =  gtk_signal_new("grabbed",
-                                            (GtkSignalRunType)(GTK_RUN_FIRST | GTK_RUN_NO_RECURSE),
-                                            GTK_CLASS_TYPE(object_class),
-                                            GTK_SIGNAL_OFFSET(SPPaintSelectorClass, grabbed),
-                                            gtk_marshal_NONE__NONE,
-                                            GTK_TYPE_NONE, 0);
-    psel_signals[DRAGGED] =  gtk_signal_new("dragged",
-                                            (GtkSignalRunType)(GTK_RUN_FIRST | GTK_RUN_NO_RECURSE),
-                                            GTK_CLASS_TYPE(object_class),
-                                            GTK_SIGNAL_OFFSET(SPPaintSelectorClass, dragged),
-                                            gtk_marshal_NONE__NONE,
-                                            GTK_TYPE_NONE, 0);
-    psel_signals[RELEASED] = gtk_signal_new("released",
-                                            (GtkSignalRunType)(GTK_RUN_FIRST | GTK_RUN_NO_RECURSE),
-                                            GTK_CLASS_TYPE(object_class),
-                                            GTK_SIGNAL_OFFSET(SPPaintSelectorClass, released),
-                                            gtk_marshal_NONE__NONE,
-                                            GTK_TYPE_NONE, 0);
-    psel_signals[CHANGED] =  gtk_signal_new("changed",
-                                            (GtkSignalRunType)(GTK_RUN_FIRST | GTK_RUN_NO_RECURSE),
-                                            GTK_CLASS_TYPE(object_class),
-                                            GTK_SIGNAL_OFFSET(SPPaintSelectorClass, changed),
-                                            gtk_marshal_NONE__NONE,
-                                            GTK_TYPE_NONE, 0);
-    psel_signals[FILLRULE_CHANGED] = gtk_signal_new("fillrule_changed",
-                                                    (GtkSignalRunType)(GTK_RUN_FIRST | GTK_RUN_NO_RECURSE),
-                                                    GTK_CLASS_TYPE(object_class),
-                                                    GTK_SIGNAL_OFFSET(SPPaintSelectorClass, fillrule_changed),
-                                                    gtk_marshal_NONE__UINT,
-                                                    GTK_TYPE_NONE, 1, GTK_TYPE_UINT);
-
-    object_class->destroy = sp_paint_selector_destroy;
+    object_class->dispose = sp_paint_selector_dispose;
 }
 
 #define XPAD 4
@@ -209,35 +216,43 @@ sp_paint_selector_class_init(SPPaintSelectorClass *klass)
 static void
 sp_paint_selector_init(SPPaintSelector *psel)
 {
-    GtkTooltips *tt = gtk_tooltips_new();
-
     psel->mode = static_cast<SPPaintSelector::Mode>(-1); // huh?  do you mean 0xff?  --  I think this means "not in the enum"
 
     /* Paint style button box */
+#if GTK_CHECK_VERSION(3,0,0)
+    psel->style = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_set_homogeneous(GTK_BOX(psel->style), FALSE);
+#else
     psel->style = gtk_hbox_new(FALSE, 0);
+#endif
     gtk_widget_show(psel->style);
     gtk_container_set_border_width(GTK_CONTAINER(psel->style), 4);
     gtk_box_pack_start(GTK_BOX(psel), psel->style, FALSE, FALSE, 0);
 
     /* Buttons */
-    psel->none = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON_PAINT_NONE,
-                                                    SPPaintSelector::MODE_NONE, tt, _("No paint"));
-    psel->solid = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON_PAINT_SOLID,
-                                                     SPPaintSelector::MODE_COLOR_RGB, tt, _("Flat color"));
-    psel->gradient = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON_PAINT_GRADIENT_LINEAR,
-                                                        SPPaintSelector::MODE_GRADIENT_LINEAR, tt, _("Linear gradient"));
-    psel->radial = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON_PAINT_GRADIENT_RADIAL,
-                                                      SPPaintSelector::MODE_GRADIENT_RADIAL, tt, _("Radial gradient"));
-    psel->pattern = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON_PAINT_PATTERN,
-                                                       SPPaintSelector::MODE_PATTERN, tt, _("Pattern"));
-    psel->swatch = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON_PAINT_SWATCH,
-                                                       SPPaintSelector::MODE_SWATCH, tt, _("Swatch"));
-    psel->unset = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON_PAINT_UNKNOWN,
-                                                     SPPaintSelector::MODE_UNSET, tt, _("Unset paint (make it undefined so it can be inherited)"));
+    psel->none = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON("paint-none"),
+                                                    SPPaintSelector::MODE_NONE, _("No paint"));
+    psel->solid = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON("paint-solid"),
+                                                     SPPaintSelector::MODE_COLOR_RGB, _("Flat color"));
+    psel->gradient = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON("paint-gradient-linear"),
+                                                        SPPaintSelector::MODE_GRADIENT_LINEAR, _("Linear gradient"));
+    psel->radial = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON("paint-gradient-radial"),
+                                                      SPPaintSelector::MODE_GRADIENT_RADIAL, _("Radial gradient"));
+    psel->pattern = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON("paint-pattern"),
+                                                       SPPaintSelector::MODE_PATTERN, _("Pattern"));
+    psel->swatch = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON("paint-swatch"),
+                                                       SPPaintSelector::MODE_SWATCH, _("Swatch"));
+    psel->unset = sp_paint_selector_style_button_add(psel, INKSCAPE_ICON("paint-unknown"),
+                                                     SPPaintSelector::MODE_UNSET, _("Unset paint (make it undefined so it can be inherited)"));
 
     /* Fillrule */
     {
+#if GTK_CHECK_VERSION(3,0,0)
+    psel->fillrulebox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_set_homogeneous(GTK_BOX(psel->fillrulebox), FALSE);
+#else
         psel->fillrulebox = gtk_hbox_new(FALSE, 0);
+#endif
         gtk_box_pack_end(GTK_BOX(psel->style), psel->fillrulebox, FALSE, FALSE, 0);
 
         GtkWidget *w;
@@ -245,56 +260,72 @@ sp_paint_selector_init(SPPaintSelector *psel)
         gtk_button_set_relief(GTK_BUTTON(psel->evenodd), GTK_RELIEF_NONE);
         gtk_toggle_button_set_mode(GTK_TOGGLE_BUTTON(psel->evenodd), FALSE);
         // TRANSLATORS: for info, see http://www.w3.org/TR/2000/CR-SVG-20000802/painting.html#FillRuleProperty
-        gtk_tooltips_set_tip(tt, psel->evenodd, _("Any path self-intersections or subpaths create holes in the fill (fill-rule: evenodd)"), NULL);
-        gtk_object_set_data(GTK_OBJECT(psel->evenodd), "mode", GUINT_TO_POINTER(SPPaintSelector::FILLRULE_EVENODD));
-        w = sp_icon_new(Inkscape::ICON_SIZE_DECORATION, INKSCAPE_ICON_FILL_RULE_EVEN_ODD);
+        gtk_widget_set_tooltip_text(psel->evenodd, _("Any path self-intersections or subpaths create holes in the fill (fill-rule: evenodd)"));
+        g_object_set_data(G_OBJECT(psel->evenodd), "mode", GUINT_TO_POINTER(SPPaintSelector::FILLRULE_EVENODD));
+        w = sp_icon_new(Inkscape::ICON_SIZE_DECORATION, INKSCAPE_ICON("fill-rule-even-odd"));
         gtk_container_add(GTK_CONTAINER(psel->evenodd), w);
         gtk_box_pack_start(GTK_BOX(psel->fillrulebox), psel->evenodd, FALSE, FALSE, 0);
-        gtk_signal_connect(GTK_OBJECT(psel->evenodd), "toggled", GTK_SIGNAL_FUNC(sp_paint_selector_fillrule_toggled), psel);
+        g_signal_connect(G_OBJECT(psel->evenodd), "toggled", G_CALLBACK(sp_paint_selector_fillrule_toggled), psel);
 
-        psel->nonzero = gtk_radio_button_new(gtk_radio_button_group(GTK_RADIO_BUTTON(psel->evenodd)));
+        psel->nonzero = gtk_radio_button_new(gtk_radio_button_get_group(GTK_RADIO_BUTTON(psel->evenodd)));
         gtk_button_set_relief(GTK_BUTTON(psel->nonzero), GTK_RELIEF_NONE);
         gtk_toggle_button_set_mode(GTK_TOGGLE_BUTTON(psel->nonzero), FALSE);
         // TRANSLATORS: for info, see http://www.w3.org/TR/2000/CR-SVG-20000802/painting.html#FillRuleProperty
-        gtk_tooltips_set_tip(tt, psel->nonzero, _("Fill is solid unless a subpath is counterdirectional (fill-rule: nonzero)"), NULL);
-        gtk_object_set_data(GTK_OBJECT(psel->nonzero), "mode", GUINT_TO_POINTER(SPPaintSelector::FILLRULE_NONZERO));
-        w = sp_icon_new(Inkscape::ICON_SIZE_DECORATION, INKSCAPE_ICON_FILL_RULE_NONZERO);
+        gtk_widget_set_tooltip_text(psel->nonzero, _("Fill is solid unless a subpath is counterdirectional (fill-rule: nonzero)"));
+        g_object_set_data(G_OBJECT(psel->nonzero), "mode", GUINT_TO_POINTER(SPPaintSelector::FILLRULE_NONZERO));
+        w = sp_icon_new(Inkscape::ICON_SIZE_DECORATION, INKSCAPE_ICON("fill-rule-nonzero"));
         gtk_container_add(GTK_CONTAINER(psel->nonzero), w);
         gtk_box_pack_start(GTK_BOX(psel->fillrulebox), psel->nonzero, FALSE, FALSE, 0);
-        gtk_signal_connect(GTK_OBJECT(psel->nonzero), "toggled", GTK_SIGNAL_FUNC(sp_paint_selector_fillrule_toggled), psel);
+        g_signal_connect(G_OBJECT(psel->nonzero), "toggled", G_CALLBACK(sp_paint_selector_fillrule_toggled), psel);
     }
 
     /* Frame */
-    psel->frame = gtk_frame_new("");
+    psel->label = gtk_label_new("");
+#if GTK_CHECK_VERSION(3,0,0)
+    GtkWidget *lbbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    gtk_box_set_homogeneous(GTK_BOX(lbbox), FALSE);
+#else
+    GtkWidget *lbbox = gtk_hbox_new(FALSE, 4);
+#endif
+    gtk_widget_show(psel->label);
+    gtk_box_pack_start(GTK_BOX(lbbox), psel->label, false, false, 4);
+    gtk_box_pack_start(GTK_BOX(psel), lbbox, false, false, 4);
+
+#if GTK_CHECK_VERSION(3,0,0)
+    psel->frame = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_set_homogeneous(GTK_BOX(psel->frame), FALSE);
+#else
+    psel->frame = gtk_vbox_new(FALSE, 4);
+#endif
     gtk_widget_show(psel->frame);
-    gtk_container_set_border_width(GTK_CONTAINER(psel->frame), 0);
+    //gtk_container_set_border_width(GTK_CONTAINER(psel->frame), 0);
     gtk_box_pack_start(GTK_BOX(psel), psel->frame, TRUE, TRUE, 0);
+
 
     /* Last used color */
     psel->color.set( 0.0, 0.0, 0.0 );
     psel->alpha = 1.0;
 }
 
-static void
-sp_paint_selector_destroy(GtkObject *object)
+static void sp_paint_selector_dispose(GObject *object)
 {
     SPPaintSelector *psel = SP_PAINT_SELECTOR(object);
 
     // clean up our long-living pattern menu
     g_object_set_data(G_OBJECT(psel),"patternmenu",NULL);
 
-    if (((GtkObjectClass *) parent_class)->destroy)
-        (* ((GtkObjectClass *) parent_class)->destroy)(object);
+    if ((G_OBJECT_CLASS(parent_class))->dispose)
+        (* (G_OBJECT_CLASS(parent_class))->dispose)(object);
 }
 
 static GtkWidget *sp_paint_selector_style_button_add(SPPaintSelector *psel,
                                                      gchar const *pixmap, SPPaintSelector::Mode mode,
-                                                     GtkTooltips *tt, gchar const *tip)
+                                                     gchar const *tip)
 {
     GtkWidget *b, *w;
 
     b = gtk_toggle_button_new();
-    gtk_tooltips_set_tip(tt, b, tip, NULL);
+    gtk_widget_set_tooltip_text(b, tip);
     gtk_widget_show(b);
 
     gtk_container_set_border_width(GTK_CONTAINER(b), 0);
@@ -302,14 +333,14 @@ static GtkWidget *sp_paint_selector_style_button_add(SPPaintSelector *psel,
     gtk_button_set_relief(GTK_BUTTON(b), GTK_RELIEF_NONE);
 
     gtk_toggle_button_set_mode(GTK_TOGGLE_BUTTON(b), FALSE);
-    gtk_object_set_data(GTK_OBJECT(b), "mode", GUINT_TO_POINTER(mode));
+    g_object_set_data(G_OBJECT(b), "mode", GUINT_TO_POINTER(mode));
 
     w = sp_icon_new(Inkscape::ICON_SIZE_BUTTON, pixmap);
     gtk_widget_show(w);
     gtk_container_add(GTK_CONTAINER(b), w);
 
     gtk_box_pack_start(GTK_BOX(psel->style), b, FALSE, FALSE, 0);
-    gtk_signal_connect(GTK_OBJECT(b), "toggled", GTK_SIGNAL_FUNC(sp_paint_selector_style_button_toggled), psel);
+    g_signal_connect(G_OBJECT(b), "toggled", G_CALLBACK(sp_paint_selector_style_button_toggled), psel);
 
     return b;
 }
@@ -318,7 +349,7 @@ static void
 sp_paint_selector_style_button_toggled(GtkToggleButton *tb, SPPaintSelector *psel)
 {
     if (!psel->update && gtk_toggle_button_get_active(tb)) {
-        psel->setMode(static_cast<SPPaintSelector::Mode>(GPOINTER_TO_UINT(gtk_object_get_data(GTK_OBJECT(tb), "mode"))));
+        psel->setMode(static_cast<SPPaintSelector::Mode>(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(tb), "mode"))));
     }
 }
 
@@ -327,11 +358,11 @@ sp_paint_selector_fillrule_toggled(GtkToggleButton *tb, SPPaintSelector *psel)
 {
     if (!psel->update && gtk_toggle_button_get_active(tb)) {
         SPPaintSelector::FillRule fr = static_cast<SPPaintSelector::FillRule>(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(tb), "mode")));
-        gtk_signal_emit(GTK_OBJECT(psel), psel_signals[FILLRULE_CHANGED], fr);
+        g_signal_emit(G_OBJECT(psel), psel_signals[FILLRULE_CHANGED], 0, fr);
     }
 }
 
-void
+static void
 sp_paint_selector_show_fillrule(SPPaintSelector *psel, bool is_fill)
 {
     if (psel->fillrulebox) {
@@ -347,7 +378,7 @@ sp_paint_selector_show_fillrule(SPPaintSelector *psel, bool is_fill)
 
 SPPaintSelector *sp_paint_selector_new(FillOrStroke kind)
 {
-    SPPaintSelector *psel = static_cast<SPPaintSelector*>(gtk_type_new(SP_TYPE_PAINT_SELECTOR));
+    SPPaintSelector *psel = static_cast<SPPaintSelector*>(g_object_new(SP_TYPE_PAINT_SELECTOR, NULL));
 
     psel->setMode(SPPaintSelector::MODE_MULTIPLE);
 
@@ -398,7 +429,7 @@ void SPPaintSelector::setMode(Mode mode)
                 break;
         }
         this->mode = mode;
-        gtk_signal_emit(GTK_OBJECT(this), psel_signals[MODE_CHANGED], this->mode);
+        g_signal_emit(G_OBJECT(this), psel_signals[MODE_CHANGED], 0, this->mode);
         update = FALSE;
     }
 }
@@ -416,9 +447,9 @@ void SPPaintSelector::setColorAlpha(SPColor const &color, float alpha)
 {
     g_return_if_fail( ( 0.0 <= alpha ) && ( alpha <= 1.0 ) );
     SPColorSelector *csel = 0;
+/*
     guint32 rgba = 0;
 
-/*
     if ( sp_color_get_colorspace_type(color) == SP_COLORSPACE_TYPE_CMYK )
     {
 #ifdef SP_PS_VERBOSE
@@ -435,8 +466,8 @@ void SPPaintSelector::setColorAlpha(SPColor const &color, float alpha)
         setMode(MODE_COLOR_RGB);
     }
 
-    csel = reinterpret_cast<SPColorSelector*>(gtk_object_get_data(GTK_OBJECT(selector), "color-selector"));
-    rgba = color.toRGBA32( alpha );
+    csel = reinterpret_cast<SPColorSelector*>(g_object_get_data(G_OBJECT(selector), "color-selector"));
+    //rgba = color.toRGBA32( alpha );
     csel->base->setColorAlpha( color, alpha );
 }
 
@@ -449,7 +480,7 @@ void SPPaintSelector::setSwatch(SPGradient *vector )
 
     SwatchSelector *swatchsel = static_cast<SwatchSelector*>(g_object_get_data(G_OBJECT(selector), "swatch-selector"));
     if (swatchsel) {
-        swatchsel->setVector( (vector) ? SP_OBJECT_DOCUMENT(vector) : 0, vector );
+        swatchsel->setVector( (vector) ? vector->document : 0, vector );
     }
 }
 
@@ -463,7 +494,7 @@ void SPPaintSelector::setGradientLinear(SPGradient *vector)
     SPGradientSelector *gsel = getGradientFromData(this);
 
     gsel->setMode(SPGradientSelector::MODE_LINEAR);
-    gsel->setVector((vector) ? SP_OBJECT_DOCUMENT(vector) : 0, vector);
+    gsel->setVector((vector) ? vector->document : 0, vector);
 }
 
 void SPPaintSelector::setGradientRadial(SPGradient *vector)
@@ -477,7 +508,7 @@ void SPPaintSelector::setGradientRadial(SPGradient *vector)
 
     gsel->setMode(SPGradientSelector::MODE_RADIAL);
 
-    gsel->setVector((vector) ? SP_OBJECT_DOCUMENT(vector) : 0, vector);
+    gsel->setVector((vector) ? vector->document : 0, vector);
 }
 
 void SPPaintSelector::setGradientProperties( SPGradientUnits units, SPGradientSpread spread )
@@ -533,7 +564,7 @@ void SPPaintSelector::pushAttrsToGradient( SPGradient *gr ) const
     getGradientProperties( units, spread );
     gr->setUnits(units);
     gr->setSpread(spread);
-    SP_OBJECT(gr)->updateRepr();
+    gr->updateRepr();
 }
 
 static void
@@ -542,21 +573,6 @@ sp_paint_selector_clear_frame(SPPaintSelector *psel)
     g_return_if_fail( psel != NULL);
 
     if (psel->selector) {
-
-        /* before we destroy the frame contents, we must detach
-         * the patternmenu so that Gtk doesn't gtk_widget_destroy
-         * all the children of the menu.  (We also have a g_object_ref
-         * count set on it too so that the gtk_container_remove doesn't
-         * end up destroying it.
-         */
-        GtkWidget *patterns = (GtkWidget *)g_object_get_data(G_OBJECT(psel), "patternmenu");
-        if (patterns != NULL) {
-            GtkWidget * parent = gtk_widget_get_parent( GTK_WIDGET(patterns));
-            if ( parent != NULL ) {
-                g_assert( GTK_IS_CONTAINER(parent) );
-                gtk_container_remove( GTK_CONTAINER(parent), patterns );
-            }
-        }
 
         gtk_widget_destroy(psel->selector);
         psel->selector = NULL;
@@ -571,7 +587,7 @@ sp_paint_selector_set_mode_empty(SPPaintSelector *psel)
 
     sp_paint_selector_clear_frame(psel);
 
-    gtk_frame_set_label(GTK_FRAME(psel->frame), _("No objects"));
+    gtk_label_set_markup(GTK_LABEL(psel->label), _("<b>No objects</b>"));
 }
 
 static void
@@ -582,7 +598,7 @@ sp_paint_selector_set_mode_multiple(SPPaintSelector *psel)
 
     sp_paint_selector_clear_frame(psel);
 
-    gtk_frame_set_label(GTK_FRAME(psel->frame), _("Multiple styles"));
+    gtk_label_set_markup(GTK_LABEL(psel->label), _("<b>Multiple styles</b>"));
 }
 
 static void
@@ -593,7 +609,7 @@ sp_paint_selector_set_mode_unset(SPPaintSelector *psel)
 
     sp_paint_selector_clear_frame(psel);
 
-    gtk_frame_set_label(GTK_FRAME(psel->frame), _("Paint is undefined"));
+    gtk_label_set_markup(GTK_LABEL(psel->label), _("<b>Paint is undefined</b>"));
 }
 
 static void
@@ -604,24 +620,25 @@ sp_paint_selector_set_mode_none(SPPaintSelector *psel)
 
     sp_paint_selector_clear_frame(psel);
 
-    gtk_frame_set_label(GTK_FRAME(psel->frame), _("No paint"));
+    gtk_label_set_markup(GTK_LABEL(psel->label), _("<b>No paint</b>"));
+
 }
 
 /* Color paint */
 
 static void sp_paint_selector_color_grabbed(SPColorSelector * /*csel*/, SPPaintSelector *psel)
 {
-    gtk_signal_emit(GTK_OBJECT(psel), psel_signals[GRABBED]);
+    g_signal_emit(G_OBJECT(psel), psel_signals[GRABBED], 0);
 }
 
 static void sp_paint_selector_color_dragged(SPColorSelector * /*csel*/, SPPaintSelector *psel)
 {
-    gtk_signal_emit(GTK_OBJECT(psel), psel_signals[DRAGGED]);
+    g_signal_emit(G_OBJECT(psel), psel_signals[DRAGGED], 0);
 }
 
 static void sp_paint_selector_color_released(SPColorSelector * /*csel*/, SPPaintSelector *psel)
 {
-    gtk_signal_emit(GTK_OBJECT(psel), psel_signals[RELEASED]);
+    g_signal_emit(G_OBJECT(psel), psel_signals[RELEASED], 0);
 }
 
 static void
@@ -629,7 +646,7 @@ sp_paint_selector_color_changed(SPColorSelector *csel, SPPaintSelector *psel)
 {
     csel->base->getColorAlpha( psel->color, psel->alpha );
 
-    gtk_signal_emit(GTK_OBJECT(psel), psel_signals[CHANGED]);
+    g_signal_emit(G_OBJECT(psel), psel_signals[CHANGED], 0);
 }
 
 static void sp_paint_selector_set_mode_color(SPPaintSelector *psel, SPPaintSelector::Mode /*mode*/)
@@ -641,26 +658,32 @@ static void sp_paint_selector_set_mode_color(SPPaintSelector *psel, SPPaintSelec
 
     if ((psel->mode == SPPaintSelector::MODE_COLOR_RGB) || (psel->mode == SPPaintSelector::MODE_COLOR_CMYK)) {
         /* Already have color selector */
-        csel = (GtkWidget*)gtk_object_get_data(GTK_OBJECT(psel->selector), "color-selector");
+        csel = GTK_WIDGET(g_object_get_data(G_OBJECT(psel->selector), "color-selector"));
     } else {
 
         sp_paint_selector_clear_frame(psel);
         /* Create new color selector */
         /* Create vbox */
+#if GTK_CHECK_VERSION(3,0,0)
+    GtkWidget *vb = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_set_homogeneous(GTK_BOX(vb), FALSE);
+#else
         GtkWidget *vb = gtk_vbox_new(FALSE, 4);
+#endif
         gtk_widget_show(vb);
 
         /* Color selector */
         csel = sp_color_selector_new( SP_TYPE_COLOR_NOTEBOOK );
         gtk_widget_show(csel);
-        gtk_object_set_data(GTK_OBJECT(vb), "color-selector", csel);
+        g_object_set_data(G_OBJECT(vb), "color-selector", csel);
         gtk_box_pack_start(GTK_BOX(vb), csel, TRUE, TRUE, 0);
-        gtk_signal_connect(GTK_OBJECT(csel), "grabbed", GTK_SIGNAL_FUNC(sp_paint_selector_color_grabbed), psel);
-        gtk_signal_connect(GTK_OBJECT(csel), "dragged", GTK_SIGNAL_FUNC(sp_paint_selector_color_dragged), psel);
-        gtk_signal_connect(GTK_OBJECT(csel), "released", GTK_SIGNAL_FUNC(sp_paint_selector_color_released), psel);
-        gtk_signal_connect(GTK_OBJECT(csel), "changed", GTK_SIGNAL_FUNC(sp_paint_selector_color_changed), psel);
+        g_signal_connect(G_OBJECT(csel), "grabbed", G_CALLBACK(sp_paint_selector_color_grabbed), psel);
+        g_signal_connect(G_OBJECT(csel), "dragged", G_CALLBACK(sp_paint_selector_color_dragged), psel);
+        g_signal_connect(G_OBJECT(csel), "released", G_CALLBACK(sp_paint_selector_color_released), psel);
+        g_signal_connect(G_OBJECT(csel), "changed", G_CALLBACK(sp_paint_selector_color_changed), psel);
         /* Pack everything to frame */
         gtk_container_add(GTK_CONTAINER(psel->frame), vb);
+
         psel->selector = vb;
 
         /* Set color */
@@ -668,7 +691,8 @@ static void sp_paint_selector_set_mode_color(SPPaintSelector *psel, SPPaintSelec
 
     }
 
-    gtk_frame_set_label(GTK_FRAME(psel->frame), _("Flat color"));
+    gtk_label_set_markup(GTK_LABEL(psel->label), _("<b>Flat color</b>"));
+
 #ifdef SP_PS_VERBOSE
     g_print("Color req\n");
 #endif
@@ -678,22 +702,22 @@ static void sp_paint_selector_set_mode_color(SPPaintSelector *psel, SPPaintSelec
 
 static void sp_paint_selector_gradient_grabbed(SPColorSelector * /*csel*/, SPPaintSelector *psel)
 {
-    gtk_signal_emit(GTK_OBJECT(psel), psel_signals[GRABBED]);
+    g_signal_emit(G_OBJECT(psel), psel_signals[GRABBED], 0);
 }
 
 static void sp_paint_selector_gradient_dragged(SPColorSelector * /*csel*/, SPPaintSelector *psel)
 {
-    gtk_signal_emit(GTK_OBJECT(psel), psel_signals[DRAGGED]);
+    g_signal_emit(G_OBJECT(psel), psel_signals[DRAGGED], 0);
 }
 
 static void sp_paint_selector_gradient_released(SPColorSelector * /*csel*/, SPPaintSelector *psel)
 {
-    gtk_signal_emit(GTK_OBJECT(psel), psel_signals[RELEASED]);
+    g_signal_emit(G_OBJECT(psel), psel_signals[RELEASED], 0);
 }
 
 static void sp_paint_selector_gradient_changed(SPColorSelector * /*csel*/, SPPaintSelector *psel)
 {
-    gtk_signal_emit(GTK_OBJECT(psel), psel_signals[CHANGED]);
+    g_signal_emit(G_OBJECT(psel), psel_signals[CHANGED], 0);
 }
 
 static void sp_paint_selector_set_mode_gradient(SPPaintSelector *psel, SPPaintSelector::Mode mode)
@@ -711,30 +735,30 @@ static void sp_paint_selector_set_mode_gradient(SPPaintSelector *psel, SPPaintSe
 
     if ((psel->mode == SPPaintSelector::MODE_GRADIENT_LINEAR) || (psel->mode == SPPaintSelector::MODE_GRADIENT_RADIAL)) {
         /* Already have gradient selector */
-        gsel = (GtkWidget*)gtk_object_get_data(GTK_OBJECT(psel->selector), "gradient-selector");
+        gsel = GTK_WIDGET(g_object_get_data(G_OBJECT(psel->selector), "gradient-selector"));
     } else {
         sp_paint_selector_clear_frame(psel);
         /* Create new gradient selector */
         gsel = sp_gradient_selector_new();
         gtk_widget_show(gsel);
-        gtk_signal_connect(GTK_OBJECT(gsel), "grabbed", GTK_SIGNAL_FUNC(sp_paint_selector_gradient_grabbed), psel);
-        gtk_signal_connect(GTK_OBJECT(gsel), "dragged", GTK_SIGNAL_FUNC(sp_paint_selector_gradient_dragged), psel);
-        gtk_signal_connect(GTK_OBJECT(gsel), "released", GTK_SIGNAL_FUNC(sp_paint_selector_gradient_released), psel);
-        gtk_signal_connect(GTK_OBJECT(gsel), "changed", GTK_SIGNAL_FUNC(sp_paint_selector_gradient_changed), psel);
+        g_signal_connect(G_OBJECT(gsel), "grabbed", G_CALLBACK(sp_paint_selector_gradient_grabbed), psel);
+        g_signal_connect(G_OBJECT(gsel), "dragged", G_CALLBACK(sp_paint_selector_gradient_dragged), psel);
+        g_signal_connect(G_OBJECT(gsel), "released", G_CALLBACK(sp_paint_selector_gradient_released), psel);
+        g_signal_connect(G_OBJECT(gsel), "changed", G_CALLBACK(sp_paint_selector_gradient_changed), psel);
         /* Pack everything to frame */
         gtk_container_add(GTK_CONTAINER(psel->frame), gsel);
         psel->selector = gsel;
-        gtk_object_set_data(GTK_OBJECT(psel->selector), "gradient-selector", gsel);
+        g_object_set_data(G_OBJECT(psel->selector), "gradient-selector", gsel);
     }
 
     /* Actually we have to set option menu history here */
     if (mode == SPPaintSelector::MODE_GRADIENT_LINEAR) {
         SP_GRADIENT_SELECTOR(gsel)->setMode(SPGradientSelector::MODE_LINEAR);
         //sp_gradient_selector_set_mode(SP_GRADIENT_SELECTOR(gsel), SP_GRADIENT_SELECTOR_MODE_LINEAR);
-        gtk_frame_set_label(GTK_FRAME(psel->frame), _("Linear gradient"));
+        gtk_label_set_markup(GTK_LABEL(psel->label), _("<b>Linear gradient</b>"));
     } else {
         SP_GRADIENT_SELECTOR(gsel)->setMode(SPGradientSelector::MODE_RADIAL);
-        gtk_frame_set_label(GTK_FRAME(psel->frame), _("Radial gradient"));
+        gtk_label_set_markup(GTK_LABEL(psel->label), _("<b>Radial gradient</b>"));
     }
 #ifdef SP_PS_VERBOSE
     g_print("Gradient req\n");
@@ -761,7 +785,7 @@ static void sp_psel_pattern_destroy(GtkWidget *widget, SPPaintSelector * /*psel*
 
 static void sp_psel_pattern_change(GtkWidget * /*widget*/, SPPaintSelector *psel)
 {
-    gtk_signal_emit(GTK_OBJECT(psel), psel_signals[CHANGED]);
+    g_signal_emit(G_OBJECT(psel), psel_signals[CHANGED], 0);
 }
 
 
@@ -770,15 +794,15 @@ static void sp_psel_pattern_change(GtkWidget * /*widget*/, SPPaintSelector *psel
  *  Returns a list of patterns in the defs of the given source document as a GSList object
  *  Returns NULL if there are no patterns in the document.
  */
-GSList *
+static GSList *
 ink_pattern_list_get (SPDocument *source)
 {
     if (source == NULL)
         return NULL;
 
     GSList *pl = NULL;
-    GSList const *patterns = sp_document_get_resource_list(source, "pattern");
-    for (GSList *l = (GSList *) patterns; l != NULL; l = l->next) {
+    GSList const *patterns = source->getResourceList("pattern");
+    for (GSList *l = const_cast<GSList *>(patterns); l != NULL; l = l->next) {
         if (SP_PATTERN(l->data) == pattern_getroot(SP_PATTERN(l->data))) {  // only if this is a root pattern
             pl = g_slist_prepend(pl, l->data);
         }
@@ -792,51 +816,42 @@ ink_pattern_list_get (SPDocument *source)
  * Adds menu items for pattern list - derived from marker code, left hb etc in to make addition of previews easier at some point.
  */
 static void
-sp_pattern_menu_build (GtkWidget *m, GSList *pattern_list, SPDocument */*source*/)
+sp_pattern_menu_build (GtkWidget *combo, GSList *pattern_list, SPDocument */*source*/)
 {
+    GtkListStore *store = GTK_LIST_STORE(gtk_combo_box_get_model(GTK_COMBO_BOX(combo)));
+    GtkTreeIter iter;
 
     for (; pattern_list != NULL; pattern_list = pattern_list->next) {
-        Inkscape::XML::Node *repr = SP_OBJECT_REPR((SPItem *) pattern_list->data);
-                GtkWidget *i = gtk_menu_item_new();
-                gtk_widget_show(i);
 
-        if (repr->attribute("inkscape:stockid"))
-            g_object_set_data (G_OBJECT(i), "stockid", (void *) "true");
-        else
-            g_object_set_data (G_OBJECT(i), "stockid", (void *) "false");
+        Inkscape::XML::Node *repr = reinterpret_cast<SPItem *>(pattern_list->data)->getRepr();
 
-        gchar const *patid = repr->attribute("id");
-        g_object_set_data (G_OBJECT(i), "pattern", (void *) patid);
-
-                GtkWidget *hb = gtk_hbox_new(FALSE, 4);
-                gtk_widget_show(hb);
-
-        // create label
-                GtkWidget *l;
-                if (repr->attribute("inkscape:stockid"))
-                    l = gtk_label_new(_(repr->attribute("inkscape:stockid")));
-                else
-                    l = gtk_label_new(_(repr->attribute("id")));
-                gtk_widget_show(l);
-                gtk_misc_set_alignment(GTK_MISC(l), 0.0, 0.5);
-
-                gtk_box_pack_start(GTK_BOX(hb), l, TRUE, TRUE, 0);
-
-                gtk_widget_show(hb);
-                gtk_container_add(GTK_CONTAINER(i), hb);
-
-                gtk_menu_append(GTK_MENU(m), i);
-            }
+        // label for combobox
+        gchar const *label;
+        if (repr->attribute("inkscape:stockid")) {
+            label = _(repr->attribute("inkscape:stockid"));
+        } else {
+            label = _(repr->attribute("id"));
         }
 
+        gchar const *patid = repr->attribute("id");
+
+        gboolean stockid = false;
+        if (repr->attribute("inkscape:stockid")) {
+            stockid = true;
+        }
+
+        gtk_list_store_append(store, &iter);
+        gtk_list_store_set(store, &iter,
+                COMBO_COL_LABEL, label, COMBO_COL_STOCK, stockid, COMBO_COL_PATTERN, patid, COMBO_COL_SEP, FALSE, -1);
+
+    }
+}
+
 /**
- * sp_pattern_list_from_doc()
- *
- * \brief Pick up all patterns from source, except those that are in
- * current_doc (if non-NULL), and add items to the pattern menu
- *
+ * Pick up all patterns from source, except those that are in
+ * current_doc (if non-NULL), and add items to the pattern menu.
  */
-static void sp_pattern_list_from_doc (GtkWidget *m, SPDocument * /*current_doc*/, SPDocument *source, SPDocument * /*pattern_doc*/)
+static void sp_pattern_list_from_doc(GtkWidget *combo, SPDocument * /*current_doc*/, SPDocument *source, SPDocument * /*pattern_doc*/)
 {
     GSList *pl = ink_pattern_list_get(source);
     GSList *clean_pl = NULL;
@@ -850,17 +865,15 @@ static void sp_pattern_list_from_doc (GtkWidget *m, SPDocument * /*current_doc*/
         clean_pl = g_slist_prepend (clean_pl, pl->data);
     }
 
-    sp_pattern_menu_build (m, clean_pl, source);
+    sp_pattern_menu_build (combo, clean_pl, source);
 
     g_slist_free (pl);
     g_slist_free (clean_pl);
 }
 
 
-
-
 static void
-ink_pattern_menu_populate_menu(GtkWidget *m, SPDocument *doc)
+ink_pattern_menu_populate_menu(GtkWidget *combo, SPDocument *doc)
 {
     static SPDocument *patterns_doc = NULL;
 
@@ -868,57 +881,65 @@ ink_pattern_menu_populate_menu(GtkWidget *m, SPDocument *doc)
     if (patterns_doc == NULL) {
         char *patterns_source = g_build_filename(INKSCAPE_PATTERNSDIR, "patterns.svg", NULL);
         if (Inkscape::IO::file_test(patterns_source, G_FILE_TEST_IS_REGULAR)) {
-            patterns_doc = sp_document_new(patterns_source, FALSE);
+            patterns_doc = SPDocument::createNewDoc(patterns_source, FALSE);
         }
         g_free(patterns_source);
     }
 
     // suck in from current doc
-    sp_pattern_list_from_doc ( m, NULL, doc, patterns_doc );
+    sp_pattern_list_from_doc ( combo, NULL, doc, patterns_doc );
 
     // add separator
     {
-        GtkWidget *i = gtk_separator_menu_item_new();
-        gchar const *patid = "";
-        g_object_set_data (G_OBJECT(i), "pattern", (void *) patid);
-        gtk_widget_show(i);
-        gtk_menu_append(GTK_MENU(m), i);
+        GtkListStore *store = GTK_LIST_STORE(gtk_combo_box_get_model(GTK_COMBO_BOX(combo)));
+        GtkTreeIter iter;
+        gtk_list_store_append (store, &iter);
+        gtk_list_store_set(store, &iter,
+                COMBO_COL_LABEL, "", COMBO_COL_STOCK, false, COMBO_COL_PATTERN, "", COMBO_COL_SEP, true, -1);
     }
 
     // suck in from patterns.svg
     if (patterns_doc) {
-        sp_document_ensure_up_to_date(doc);
-        sp_pattern_list_from_doc ( m, doc, patterns_doc, NULL );
+        doc->ensureUpToDate();
+        sp_pattern_list_from_doc ( combo, doc, patterns_doc, NULL );
     }
 
 }
 
 
 static GtkWidget*
-ink_pattern_menu(GtkWidget *mnu)
+ink_pattern_menu(GtkWidget *combo)
 {
-   /* Create new menu widget */
-    GtkWidget *m = gtk_menu_new();
-    gtk_widget_show(m);
     SPDocument *doc = SP_ACTIVE_DOCUMENT;
 
+    GtkListStore *store = GTK_LIST_STORE(gtk_combo_box_get_model(GTK_COMBO_BOX(combo)));
+    GtkTreeIter iter;
+
     if (!doc) {
-        GtkWidget *i;
-        i = gtk_menu_item_new_with_label(_("No document selected"));
-        gtk_widget_show(i);
-        gtk_menu_append(GTK_MENU(m), i);
-        gtk_widget_set_sensitive(mnu, FALSE);
+
+        gtk_list_store_append (store, &iter);
+        gtk_list_store_set (store, &iter,
+                COMBO_COL_LABEL, _("No document selected"), COMBO_COL_STOCK, false, COMBO_COL_PATTERN, "", COMBO_COL_SEP, false, -1);
+        gtk_widget_set_sensitive(combo, FALSE);
+
     } else {
 
-       ink_pattern_menu_populate_menu(m, doc);
-        gtk_widget_set_sensitive(mnu, TRUE);
+        ink_pattern_menu_populate_menu(combo, doc);
+        gtk_widget_set_sensitive(combo, TRUE);
 
     }
-    gtk_option_menu_set_menu(GTK_OPTION_MENU(mnu), m);
 
-    /* Set history */
-    gtk_option_menu_set_history(GTK_OPTION_MENU(mnu), 0);
-    return mnu;
+    // Select the first item that is not a seperator
+    if (gtk_tree_model_get_iter_first (GTK_TREE_MODEL(store), &iter)) {
+        gboolean sep = false;
+        gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, COMBO_COL_SEP, &sep, -1);
+        if (sep) {
+            gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter);
+        }
+        gtk_combo_box_set_active_iter(GTK_COMBO_BOX(combo), &iter);
+    }
+
+    return combo;
 }
 
 
@@ -928,43 +949,41 @@ void SPPaintSelector::updatePatternList( SPPattern *pattern )
     if (update) {
         return;
     }
-    GtkWidget *mnu = GTK_WIDGET(g_object_get_data(G_OBJECT(this), "patternmenu"));
-    g_assert( mnu != NULL );
+    GtkWidget *combo = GTK_WIDGET(g_object_get_data(G_OBJECT(this), "patternmenu"));
+    g_assert( combo != NULL );
 
     /* Clear existing menu if any */
-    gtk_option_menu_remove_menu(GTK_OPTION_MENU(mnu));
+    GtkTreeModel *store = gtk_combo_box_get_model(GTK_COMBO_BOX(combo));
+    gtk_list_store_clear(GTK_LIST_STORE(store));
 
-    ink_pattern_menu(mnu);
+    ink_pattern_menu(combo);
 
     /* Set history */
 
-    if (pattern && !gtk_object_get_data(GTK_OBJECT(mnu), "update")) {
+    if (pattern && !g_object_get_data(G_OBJECT(combo), "update")) {
 
-        gtk_object_set_data(GTK_OBJECT(mnu), "update", GINT_TO_POINTER(TRUE));
+        g_object_set_data(G_OBJECT(combo), "update", GINT_TO_POINTER(TRUE));
+        gchar const *patname = pattern->getRepr()->attribute("id");
 
-        gchar *patname = (gchar *) SP_OBJECT_REPR(pattern)->attribute("id");
-
-        GtkMenu *m = GTK_MENU(gtk_option_menu_get_menu(GTK_OPTION_MENU(mnu)));
-
-        GList *kids = GTK_MENU_SHELL(m)->children;
-
-        int patpos = 0;
-        int i = 0;
-
-        for (; kids != NULL; kids = kids->next) {
-
-            gchar *men_pat = (gchar *) g_object_get_data(G_OBJECT(kids->data), "pattern");
-            if ( strcmp(men_pat, patname) == 0 ) {
-                patpos = i;
-            }
-            i++;
+        // Find this pattern and set it active in the combo_box
+        GtkTreeIter iter ;
+        gchar *patid = NULL;
+        bool valid = gtk_tree_model_get_iter_first (store, &iter);
+        if (!valid) {
+            return;
+        }
+        gtk_tree_model_get (store, &iter, COMBO_COL_PATTERN, &patid, -1);
+        while (valid && strcmp(patid, patname)  != 0) {
+            valid = gtk_tree_model_iter_next (store, &iter);
+            gtk_tree_model_get (store, &iter, COMBO_COL_PATTERN, &patid, -1);
         }
 
+        if (valid) {
+            gtk_combo_box_set_active_iter(GTK_COMBO_BOX(combo), &iter);
+        }
 
-        gtk_option_menu_set_history(GTK_OPTION_MENU(mnu), patpos);
-        gtk_object_set_data(GTK_OBJECT(mnu), "update", GINT_TO_POINTER(FALSE));
+        g_object_set_data(G_OBJECT(combo), "update", GINT_TO_POINTER(FALSE));
     }
-    //gtk_option_menu_set_history(GTK_OPTION_MENU(mnu), 0);
 }
 
 static void sp_paint_selector_set_mode_pattern(SPPaintSelector *psel, SPPaintSelector::Mode mode)
@@ -979,30 +998,59 @@ static void sp_paint_selector_set_mode_pattern(SPPaintSelector *psel, SPPaintSel
 
     if (psel->mode == SPPaintSelector::MODE_PATTERN) {
         /* Already have pattern menu */
-        tbl = (GtkWidget*)gtk_object_get_data(GTK_OBJECT(psel->selector), "pattern-selector");
+        tbl = GTK_WIDGET(g_object_get_data(G_OBJECT(psel->selector), "pattern-selector"));
     } else {
         sp_paint_selector_clear_frame(psel);
 
         /* Create vbox */
+#if GTK_CHECK_VERSION(3,0,0)
+    tbl = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_set_homogeneous(GTK_BOX(tbl), FALSE);
+#else
         tbl = gtk_vbox_new(FALSE, 4);
+#endif
         gtk_widget_show(tbl);
 
         {
+#if GTK_CHECK_VERSION(3,0,0)
+            GtkWidget *hb = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 1);
+            gtk_box_set_homogeneous(GTK_BOX(hb), FALSE);
+#else
             GtkWidget *hb = gtk_hbox_new(FALSE, 1);
+#endif
 
-            GtkWidget *mnu = gtk_option_menu_new();
-            ink_pattern_menu(mnu);
-            gtk_signal_connect(GTK_OBJECT(mnu), "changed", GTK_SIGNAL_FUNC(sp_psel_pattern_change), psel);
-            gtk_signal_connect(GTK_OBJECT(mnu), "destroy", GTK_SIGNAL_FUNC(sp_psel_pattern_destroy), psel);
-            gtk_object_set_data(GTK_OBJECT(psel), "patternmenu", mnu);
-            g_object_ref( G_OBJECT(mnu));
+            /**
+             * Create a combo_box and store with 4 columns,
+             * The label, a pointer to the pattern, is stockid or not, is a separator or not.
+             */
+            GtkListStore *store = gtk_list_store_new (COMBO_N_COLS, G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_BOOLEAN);
+            GtkWidget *combo = gtk_combo_box_new_with_model (GTK_TREE_MODEL (store));
+            gtk_combo_box_set_row_separator_func(GTK_COMBO_BOX(combo), SPPaintSelector::isSeparator, NULL, NULL);
 
-            gtk_container_add(GTK_CONTAINER(hb), mnu);
+            GtkCellRenderer *renderer = gtk_cell_renderer_text_new ();
+            gtk_cell_renderer_set_padding (renderer, 2, 0);
+            gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (combo), renderer, TRUE);
+            gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (combo), renderer, "text", COMBO_COL_LABEL, NULL);
+
+            ink_pattern_menu(combo);
+            g_signal_connect(G_OBJECT(combo), "changed", G_CALLBACK(sp_psel_pattern_change), psel);
+            g_signal_connect(G_OBJECT(combo), "destroy", G_CALLBACK(sp_psel_pattern_destroy), psel);
+            g_object_set_data(G_OBJECT(psel), "patternmenu", combo);
+            g_object_ref( G_OBJECT(combo));
+
+            gtk_container_add(GTK_CONTAINER(hb), combo);
             gtk_box_pack_start(GTK_BOX(tbl), hb, FALSE, FALSE, AUX_BETWEEN_BUTTON_GROUPS);
+
+            g_object_unref( G_OBJECT(store));
         }
 
         {
+#if GTK_CHECK_VERSION(3,0,0)
+            GtkWidget *hb = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+            gtk_box_set_homogeneous(GTK_BOX(hb), FALSE);
+#else
             GtkWidget *hb = gtk_hbox_new(FALSE, 0);
+#endif
             GtkWidget *l = gtk_label_new(NULL);
             gtk_label_set_markup(GTK_LABEL(l), _("Use the <b>Node tool</b> to adjust position, scale, and rotation of the pattern on canvas. Use <b>Object &gt; Pattern &gt; Objects to Pattern</b> to create a new pattern from selection."));
             gtk_label_set_line_wrap(GTK_LABEL(l), true);
@@ -1015,13 +1063,20 @@ static void sp_paint_selector_set_mode_pattern(SPPaintSelector *psel, SPPaintSel
 
         gtk_container_add(GTK_CONTAINER(psel->frame), tbl);
         psel->selector = tbl;
-        gtk_object_set_data(GTK_OBJECT(psel->selector), "pattern-selector", tbl);
+        g_object_set_data(G_OBJECT(psel->selector), "pattern-selector", tbl);
 
-        gtk_frame_set_label(GTK_FRAME(psel->frame), _("Pattern fill"));
+        gtk_label_set_markup(GTK_LABEL(psel->label), _("<b>Pattern fill</b>"));
     }
 #ifdef SP_PS_VERBOSE
     g_print("Pattern req\n");
 #endif
+}
+
+gboolean SPPaintSelector::isSeparator (GtkTreeModel *model, GtkTreeIter *iter, gpointer /*data*/) {
+
+    gboolean sep = FALSE;
+    gtk_tree_model_get(model, iter, COMBO_COL_SEP, &sep, -1);
+    return sep;
 }
 
 SPPattern *SPPaintSelector::getPattern()
@@ -1029,32 +1084,46 @@ SPPattern *SPPaintSelector::getPattern()
     SPPattern *pat = 0;
     g_return_val_if_fail((mode == MODE_PATTERN) , NULL);
 
-    GtkWidget *patmnu = (GtkWidget *) g_object_get_data(G_OBJECT(this), "patternmenu");
+    GtkWidget *combo = GTK_WIDGET(g_object_get_data(G_OBJECT(this), "patternmenu"));
+
     /* no pattern menu if we were just selected */
-    if ( patmnu == NULL ) return NULL;
-
-    GtkMenu *m = GTK_MENU(gtk_option_menu_get_menu(GTK_OPTION_MENU(patmnu)));
-
-    /* Get Pattern */
-    if (!g_object_get_data(G_OBJECT(gtk_menu_get_active(m)), "pattern"))
-    {
+    if ( combo == NULL ) {
         return NULL;
     }
-    gchar *patid = (gchar *) g_object_get_data(G_OBJECT(gtk_menu_get_active(m)),
-                                               "pattern");
-    //gchar *pattern = "";
+
+    GtkTreeModel *store = gtk_combo_box_get_model(GTK_COMBO_BOX(combo));
+
+    /* Get the selected pattern */
+    GtkTreeIter  iter;
+    if (!gtk_combo_box_get_active_iter (GTK_COMBO_BOX(combo), &iter) ||
+            !gtk_list_store_iter_is_valid(GTK_LIST_STORE(store), &iter)) {
+        return NULL;
+    }
+
+    gchar *patid = NULL;
+    gboolean stockid = FALSE;
+    gchar *label = NULL;
+    gtk_tree_model_get (store, &iter, COMBO_COL_LABEL, &label, COMBO_COL_STOCK, &stockid, COMBO_COL_PATTERN, &patid,  -1);
+    if (patid == NULL) {
+        return NULL;
+    }
+
     if (strcmp(patid, "none")){
 
-        gchar *stockid = (gchar *) g_object_get_data(G_OBJECT(gtk_menu_get_active(m)),
-                                                     "stockid");
-        gchar *paturn = patid;
-        if (!strcmp(stockid,"true")) paturn = g_strconcat("urn:inkscape:pattern:",patid,NULL);
+        gchar *paturn;
+        if (stockid) {
+            paturn = g_strconcat("urn:inkscape:pattern:",patid,NULL);
+        }
+        else {
+            paturn = g_strdup(patid);
+        }
         SPObject *pat_obj = get_stock_item(paturn);
         if (pat_obj) {
             pat = SP_PATTERN(pat_obj);
         }
+        g_free(paturn);
     } else {
-        pat = pattern_getroot(SP_PATTERN(g_object_get_data(G_OBJECT(gtk_menu_get_active(m)), "pattern")));
+        pat = pattern_getroot(SP_PATTERN(patid));
     }
 
     if (pat && !SP_IS_PATTERN(pat)) {
@@ -1072,10 +1141,8 @@ static void sp_paint_selector_set_mode_swatch(SPPaintSelector *psel, SPPaintSele
 
     gtk_widget_set_sensitive(psel->style, TRUE);
 
-    SwatchSelector *swatchsel = 0;
-
     if (psel->mode == SPPaintSelector::MODE_SWATCH){
-        swatchsel = static_cast<SwatchSelector*>(g_object_get_data(G_OBJECT(psel->selector), "swatch-selector"));
+        // swatchsel = static_cast<SwatchSelector*>(g_object_get_data(G_OBJECT(psel->selector), "swatch-selector"));
     } else {
         sp_paint_selector_clear_frame(psel);
         // Create new gradient selector
@@ -1090,9 +1157,9 @@ static void sp_paint_selector_set_mode_swatch(SPPaintSelector *psel, SPPaintSele
         // Pack everything to frame
         gtk_container_add(GTK_CONTAINER(psel->frame), GTK_WIDGET(swatchsel->gobj()));
         psel->selector = GTK_WIDGET(swatchsel->gobj());
-        gtk_object_set_data(GTK_OBJECT(psel->selector), "swatch-selector", swatchsel);
+        g_object_set_data(G_OBJECT(psel->selector), "swatch-selector", swatchsel);
 
-        gtk_frame_set_label(GTK_FRAME(psel->frame), _("Swatch fill"));
+        gtk_label_set_markup(GTK_LABEL(psel->label), _("<b>Swatch fill</b>"));
     }
 
 #ifdef SP_PS_VERBOSE
@@ -1179,4 +1246,4 @@ SPPaintSelector::Mode SPPaintSelector::getModeForStyle(SPStyle const & style, Fi
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

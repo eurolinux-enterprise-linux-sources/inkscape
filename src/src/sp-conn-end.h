@@ -6,9 +6,9 @@
 #include <sigc++/connection.h>
 
 #include "sp-use-reference.h"
-#include "connection-points.h"
 #include "conn-avoid-ref.h"
 
+class SPPath;
 
 class SPConnEnd {
 public:
@@ -16,15 +16,6 @@ public:
 
     SPUseReference ref;
     gchar *href;
-
-    /* In the following, type refers to connection point type,
-       i.e. default (one of the 9 combinations of right, centre,
-       left, top, bottom) or user-defined. The id serves to identify
-       the connection point in a list of connection points.
-    */
-
-    ConnPointType type;
-    int id;
 
     /** Change of href string (not a modification of the attributes of the referrent). */
     sigc::connection _changed_connection;
@@ -34,6 +25,9 @@ public:
 
     /** A sigc connection for transformed signal, used to do move compensation. */
     sigc::connection _transformed_connection;
+
+    /** A sigc connection for owning group transformed, used to do move compensation. */
+    sigc::connection _group_connection;
 
     void setAttacherHref(gchar const *, SPPath *);
     void setAttacherEndpoint(gchar const *, SPPath *);

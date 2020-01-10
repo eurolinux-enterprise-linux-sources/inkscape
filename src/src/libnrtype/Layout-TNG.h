@@ -14,11 +14,8 @@
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
-#include <libnr/nr-matrix-ops.h>
-#include <libnr/nr-rotate-ops.h>
-#include <libnr/nr-rect.h>
 #include <2geom/d2.h>
-#include <2geom/matrix.h>
+#include <2geom/affine.h>
 #include <glibmm/ustring.h>
 #include <pango/pango-break.h>
 #include <algorithm>
@@ -39,8 +36,7 @@ using Inkscape::Extension::Internal::CairoRenderContext;
 
 class SPStyle;
 class Shape;
-class NRArenaGroup;
-class SPPrintContext;
+struct SPPrintContext;
 class SVGLength;
 class Path;
 class SPCurve;
@@ -48,6 +44,8 @@ class font_instance;
 typedef struct _PangoFontDescription PangoFontDescription;
 
 namespace Inkscape {
+class DrawingGroup;
+
 namespace Text {
 
 /** \brief Generates the layout for either wrapped or non-wrapped text and stores the result
@@ -329,7 +327,7 @@ public:
      \param in_arena  The arena to add the glyphs group to
      \param paintbox  The current rendering tile
     */
-    void show(NRArenaGroup *in_arena, NRRect const *paintbox) const;
+    void show(DrawingGroup *in_arena, Geom::OptRect const &paintbox) const;
 
     /** Calculates the smallest rectangle completely enclosing all the
     glyphs.
@@ -337,7 +335,7 @@ public:
       \param transform     The transform to be applied to the entire object
                            prior to calculating its bounds.
     */
-    void getBoundingBox(NRRect *bounding_box, Geom::Matrix const &transform, int start = -1, int length = -1) const;
+    Geom::OptRect bounds(Geom::Affine const &transform, int start = -1, int length = -1) const;
 
     /** Sends all the glyphs to the given print context.
      \param ctx   I have
@@ -346,7 +344,7 @@ public:
      \param bbox  parameters
      \param ctm   do yet
     */
-    void print(SPPrintContext *ctx, NRRect const *pbox, NRRect const *dbox, NRRect const *bbox, Geom::Matrix const &ctm) const;
+    void print(SPPrintContext *ctx, Geom::OptRect const &pbox, Geom::OptRect const &dbox, Geom::OptRect const &bbox, Geom::Affine const &ctm) const;
 
 #ifdef HAVE_CAIRO_PDF    
     /** Renders all the glyphs to the given Cairo rendering context.
@@ -354,6 +352,9 @@ public:
      */
     void showGlyphs(CairoRenderContext *ctx) const;
 #endif
+
+    /** Returns the font family of the indexed span */
+    Glib::ustring getFontFamily(unsigned span_index) const;
 
     /** debug and unit test method. Creates a textual representation of the
     contents of this object. The output is designed to be both human-readable
@@ -380,7 +381,7 @@ public:
     /** Apply the given transform to all the output presently stored in
     this object. This only transforms the glyph positions, The glyphs
     themselves will not be transformed. */
-    void transform(Geom::Matrix const &transform);
+    void transform(Geom::Affine const &transform);
 
     //@}
 
@@ -431,16 +432,17 @@ public:
     iterator getLetterAt(double x, double y) const;
     inline iterator getLetterAt(Geom::Point &point) const;
 
-    /** Returns an iterator pointing to the character in the output which
+    /* Returns an iterator pointing to the character in the output which
     was created from the given input. If the character at the given byte
     offset was removed (soft hyphens, for example) the next character after
     it is returned. If no input was added with the given cookie, end() is
     returned. If more than one input has the same cookie, the first will
     be used regardless of the value of \a text_iterator. If
     \a text_iterator is out of bounds, the first or last character belonging
-    to the given input will be returned accordingly. */
+    to the given input will be returned accordingly.
     iterator sourceToIterator(void *source_cookie, Glib::ustring::const_iterator text_iterator) const;
-
+ */
+ 
     /** Returns an iterator pointing to the first character in the output
     which was created from the given source. If \a source_cookie is invalid,
     end() is returned. If more than one input has the same cookie, the
@@ -488,6 +490,8 @@ public:
     For rightmost text, the rightmost... you probably got it by now ;-)*/
     boost::optional<Geom::Point> baselineAnchorPoint() const;
 
+    Geom::Path baseline() const;
+
     /** This is that value to apply to the x,y attributes of tspan role=line
     elements, and hence it takes alignment into account. */
     Geom::Point chunkAnchorPoint(iterator const &it) const;
@@ -501,7 +505,7 @@ public:
     \a start to \a end and returns the union of these boxes. The return value
     is a list of zero or more quadrilaterals specified by a group of four
     points for each, thus size() is always a multiple of four. */
-    std::vector<Geom::Point> createSelectionShape(iterator const &it_start, iterator const &it_end, Geom::Matrix const &transform) const;
+    std::vector<Geom::Point> createSelectionShape(iterator const &it_start, iterator const &it_end, Geom::Affine const &transform) const;
 
     /** Returns true if \a it points to a character which is a valid cursor
     position, as defined by Pango. */
@@ -565,6 +569,9 @@ public:
         inline void setZero() {ascent = descent = leading = 0.0;}
         inline LineHeight& operator*=(double x) {ascent *= x; descent *= x; leading *= x; return *this;}
         void max(LineHeight const &other);   /// makes this object contain the largest of all three members between this object and other
+        inline double getAscent() const {return ascent; }
+        inline double getDescent() const {return descent; }
+        inline double getLeading() const {return leading; }
     };
 
     /// see _enum_converter()
@@ -714,6 +721,7 @@ private:
         float font_size;
         float x_start;   /// relative to the start of the chunk
         float x_end;     /// relative to the start of the chunk
+        inline float width() const {return std::abs(x_start - x_end);}
         LineHeight line_height;
         double baseline_shift;  /// relative to the line's baseline
         Direction direction;     /// See CSS3 section 3.2. Either rtl or ltr
@@ -746,7 +754,7 @@ private:
 
     /** gets the overall matrix that transforms the given glyph from local
     space to world space. */
-    void _getGlyphTransformMatrix(int glyph_index, Geom::Matrix *matrix) const;
+    void _getGlyphTransformMatrix(int glyph_index, Geom::Affine *matrix) const;
 
     // loads of functions to drill down the object tree, all of them
     // annoyingly similar and all of them requiring predicate functors.
@@ -810,7 +818,12 @@ class Layout::iterator {
 public:
     friend class Layout;
     // this is just so you can create uninitialised iterators - don't actually try to use one
-    iterator() : _parent_layout(NULL) {}
+    iterator() :
+        _parent_layout(NULL),
+        _glyph_index(-1),
+        _char_index(0),
+        _cursor_moving_vertically(false),
+        _x_coordinate(0.0){}
     // no copy constructor required, the default does what we want
     bool operator== (iterator const &other) const
         {return _glyph_index == other._glyph_index && _char_index == other._char_index;}
@@ -1062,4 +1075,4 @@ inline bool Layout::iterator::prevCharacter()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

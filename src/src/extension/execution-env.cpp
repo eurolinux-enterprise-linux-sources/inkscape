@@ -1,6 +1,7 @@
 /*
  * Authors:
  *   Ted Gould <ted@gould.cx>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2007-2008 Authors
  *
@@ -8,6 +9,14 @@
  */
 
 #include <config.h>
+
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
 
 #include "gtkmm/messagedialog.h"
 
@@ -18,6 +27,7 @@
 #include "selection.h"
 #include "effect.h"
 #include "document.h"
+#include "document-undo.h"
 #include "desktop.h"
 #include "ui/view/view.h"
 #include "sp-namedview.h"
@@ -127,7 +137,7 @@ ExecutionEnv::createWorkingDialog (void) {
 
     SPDesktop *desktop = (SPDesktop *)_doc;
     GtkWidget *toplevel = gtk_widget_get_toplevel(&(desktop->canvas->widget));
-    if (!toplevel || !GTK_WIDGET_TOPLEVEL (toplevel))
+    if (!toplevel || !gtk_widget_is_toplevel (toplevel))
         return;
     Gtk::Window *window = Glib::wrap(GTK_WINDOW(toplevel), false);
 
@@ -140,7 +150,10 @@ ExecutionEnv::createWorkingDialog (void) {
                                true); // modal
     _visibleDialog->signal_response().connect(sigc::mem_fun(this, &ExecutionEnv::workingCanceled));
     g_free(dlgmessage);
-    _visibleDialog->show();
+
+    if (!_effect->is_silent()){
+        _visibleDialog->show();
+    }
 
     return;
 }
@@ -162,14 +175,14 @@ ExecutionEnv::cancel (void) {
 
 void
 ExecutionEnv::undo (void) {
-    sp_document_cancel(_doc->doc());
+    DocumentUndo::cancel(_doc->doc());
     reselect();
     return;
 }
 
 void
 ExecutionEnv::commit (void) {
-    sp_document_done(_doc->doc(), SP_VERB_NONE, _(_effect->get_name()));
+    DocumentUndo::done(_doc->doc(), SP_VERB_NONE, _(_effect->get_name()));
     Effect::set_last_effect(_effect);
     _effect->get_imp()->commitDocument();
     killDocCache();
@@ -189,7 +202,7 @@ ExecutionEnv::reselect (void) {
 
     Inkscape::Selection * selection = sp_desktop_selection(desktop);
 
-    for (std::list<Glib::ustring>::iterator i = _selected.begin(); i != _selected.end(); i++) {
+    for (std::list<Glib::ustring>::iterator i = _selected.begin(); i != _selected.end(); ++i) {
         SPObject * obj = doc->getObjectById(i->c_str());
         if (obj != NULL) {
             selection->add(obj);

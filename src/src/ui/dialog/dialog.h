@@ -4,6 +4,7 @@
 /* Authors:
  *   Bryce W. Harrington <bryce@bryceharrington.org>
  *   Gustav Broberg <broberg@kth.se>
+ *   Kris De Gussem <Kris.DeGussem@gmail.com>
  *
  * Copyright (C) 2004--2007 Authors
  *
@@ -13,9 +14,6 @@
 #ifndef INKSCAPE_DIALOG_H
 #define INKSCAPE_DIALOG_H
 
-#include <gtkmm/dialog.h>
-#include <gtkmm/tooltips.h>
-
 #include "dock-behavior.h"
 #include "floating-behavior.h"
 
@@ -23,7 +21,7 @@ class SPDesktop;
 
 namespace Inkscape {
 class Selection;
-class Application;
+struct Application;
 }
 
 namespace Inkscape {
@@ -34,18 +32,38 @@ enum BehaviorType { FLOATING, DOCK };
 
 void sp_retransientize(Inkscape::Application *inkscape, SPDesktop *desktop, gpointer dlgPtr);
 gboolean sp_retransientize_again(gpointer dlgPtr);
-void sp_dialog_shutdown(GtkObject *object, gpointer dlgPtr);
+void sp_dialog_shutdown(GObject *object, gpointer dlgPtr);
 
 /**
- * @brief Base class for Inkscape dialogs
- * This class provides certain common behaviors and styles wanted of all dialogs
- * in the application.  Fundamental parts of the dialog's behavior are controlled by
- * a Dialog::Behavior subclass instance connected to the dialog.
+ * Base class for Inkscape dialogs.
+ * 
+ * UI::Dialog::Dialog is a base class for all dialogs in Inkscape.  The
+ * purpose of this class is to provide a unified place for ensuring
+ * style and behavior. Specifically, this class provides functionality
+ * for saving and restoring the size and position of dialogs (through
+ * the user's preferences file).
+ *
+ * It also provides some general purpose signal handlers for things like
+ * showing and hiding all dialogs.
+ *
+ * Fundamental parts of the dialog's behavior are controlled by
+ * a UI::Dialog::Behavior subclass instance connected to the dialog.
+ *
+ * @see UI::Widget::Panel panel class from which the dialogs are actually derived from.
+ * @see UI::Dialog::DialogManager manages the dialogs within inkscape.
+ * @see UI::Dialog::PanelDialog which links Panel and Dialog together in a dockable and floatable dialog.
  */
 class Dialog {
 
 public:
 
+    /**
+     * Constructor.
+     * 
+     * @param behavior_factory floating or docked.
+     * @param prefs_path characteristic path for loading/saving dialog position.
+     * @param verb_num the dialog verb.
+     */
     Dialog(Behavior::BehaviorFactory behavior_factory, const char *prefs_path = NULL,
            int verb_num = 0, Glib::ustring const &apply_label = "");
 
@@ -54,14 +72,14 @@ public:
     virtual void onDesktopActivated(SPDesktop*);
     virtual void onShutdown();
 
-    /** Hide and show dialogs */
+    /* Hide and show dialogs */
     virtual void onHideF12();
     virtual void onShowF12();
 
     virtual operator Gtk::Widget &();
     virtual GtkWidget *gobj();
     virtual void present();
-    virtual Gtk::VBox *get_vbox();
+    virtual Gtk::Box *get_vbox();
     virtual void show();
     virtual void hide();
     virtual void show_all_children();
@@ -81,8 +99,16 @@ public:
     bool           _user_hidden; // when it is closed by the user, to prevent repopping on f12
     bool           _hiddenF12;
 
+    /**
+     * Read window position from preferences.
+     */
     void           read_geometry();
+    
+    /**
+     * Save window position to preferences.
+     */
     void           save_geometry();
+    void           save_status(int visible, int state, int placement);
 
     bool retransientize_suppress; // when true, do not retransientize (prevents races when switching new windows too fast)
 
@@ -91,11 +117,8 @@ protected:
     int            _verb_num;
     Glib::ustring  _title;
     Glib::ustring  _apply_label;
-
-    /**
-     * Tooltips object for all descendants to use
-     */
-    Gtk::Tooltips tooltips;
+    SPDesktop *    _desktop;
+    bool           _is_active_desktop;
 
     virtual void   _handleResponse(int response_id);
 
@@ -104,6 +127,14 @@ protected:
     virtual bool   _onKeyPress(GdkEventKey *event);
 
     virtual void   _apply();
+    
+    /* Closes the dialog window.
+     *
+     * This code sends a delete_event to the dialog,
+     * instead of just destroying it, so that the
+     * dialog can do some housekeeping, such as remember
+     * its position.
+     */
     virtual void   _close();
     virtual void   _defocus();
 
@@ -141,4 +172,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

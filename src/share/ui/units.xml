@@ -39,21 +39,21 @@
     <name>millimeter</name>
     <plural>millimeters</plural>
     <abbr>mm</abbr>
-    <factor>3.543307</factor>
+    <factor>3.543307086614174</factor>
     <description>Millimeters (25.4 mm/in)</description>
 </unit>
 <unit type="LINEAR" pri="n">
     <name>centimeter</name>
     <plural>centimeters</plural>
     <abbr>cm</abbr>
-    <factor>35.43307</factor>
+    <factor>35.43307086614174</factor>
     <description>Centimeters (10 mm/cm)</description>
 </unit>
 <unit type="LINEAR" pri="n">
     <name>meter</name>
     <plural>meters</plural>
     <abbr>m</abbr>
-    <factor>3543.307</factor>
+    <factor>3543.307086614174</factor>
     <description>Meters (100 cm/m)</description>
 </unit>
 <unit type="LINEAR" pri="n">
@@ -66,7 +66,7 @@
 <unit type="RADIAL" pri="y">
     <name>degree</name>
     <plural>degrees</plural>
-    <abbr>deg</abbr>
+    <abbr>°</abbr>
     <factor>1.00</factor>
     <description>Degrees</description>
 </unit>
@@ -74,8 +74,22 @@
     <name>radian</name>
     <plural>radians</plural>
     <abbr>rad</abbr>
-    <factor>57.296</factor>
-    <description>Radians (57.296 deg/rad)</description>
+    <factor>57.29577951308232</factor>
+    <description>Radians (180/pi deg/rad)</description>
+</unit>
+<unit type="RADIAL" pri="n">
+    <name>gradian</name>
+    <plural>gradians</plural>
+    <abbr>grad</abbr>
+    <factor>0.9</factor>
+    <description>Gradians (360/400 deg/grad)</description>
+</unit>
+<unit type="RADIAL" pri="n">
+    <name>turn</name>
+    <plural>turns</plural>
+    <abbr>turn</abbr>
+    <factor>360</factor>
+    <description>Turns (360 deg/turn)</description>
 </unit>
 <unit type="FONT_HEIGHT" pri="y">
     <name>font-height</name>

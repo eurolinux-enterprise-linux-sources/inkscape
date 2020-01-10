@@ -1,11 +1,13 @@
-#ifndef __SP_CLIPPATH_H__
-#define __SP_CLIPPATH_H__
+#ifndef SEEN_SP_CLIPPATH_H
+#define SEEN_SP_CLIPPATH_H
 
 /*
  * SVG <clipPath> implementation
  *
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
+ *   Abhishek Sharma
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2001-2002 authors
  * Copyright (C) 2001 Ximian, Inc.
@@ -13,41 +15,64 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#define SP_TYPE_CLIPPATH (sp_clippath_get_type ())
-#define SP_CLIPPATH(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_CLIPPATH, SPClipPath))
-#define SP_CLIPPATH_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_CLIPPATH, SPClipPathClass))
-#define SP_IS_CLIPPATH(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_CLIPPATH))
-#define SP_IS_CLIPPATH_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_CLIPPATH))
+#define SP_CLIPPATH(obj) (dynamic_cast<SPClipPath*>((SPObject*)obj))
+#define SP_IS_CLIPPATH(obj) (dynamic_cast<const SPClipPath*>((SPObject*)obj) != NULL)
 
-class SPClipPathView;
+struct SPClipPathView;
 
-#include "display/nr-arena-forward.h"
-#include "libnr/nr-forward.h"
 #include "sp-object-group.h"
 #include "uri-references.h"
 #include "xml/node.h"
 
-struct SPClipPath : public SPObjectGroup {
-	class Reference;
+namespace Inkscape {
 
-	unsigned int clipPathUnits_set : 1;
-	unsigned int clipPathUnits : 1;
+class Drawing;
+class DrawingItem;
 
-	SPClipPathView *display;
+} // namespace Inkscape
+
+class SPClipPath : public SPObjectGroup {
+public:
+	SPClipPath();
+	virtual ~SPClipPath();
+
+    class Reference;
+
+    unsigned int clipPathUnits_set : 1;
+    unsigned int clipPathUnits : 1;
+
+    SPClipPathView *display;
+    static const gchar *create(GSList *reprs, SPDocument *document, Geom::Affine const* applyTransform);
+    static GType sp_clippath_get_type(void);
+
+    Inkscape::DrawingItem *show(Inkscape::Drawing &drawing, unsigned int key);
+    void hide(unsigned int key);
+
+    void setBBox(unsigned int key, Geom::OptRect const &bbox);
+    Geom::OptRect geometricBounds(Geom::Affine const &transform);
+
+protected:
+    virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
+	virtual void release();
+
+	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
+
+	virtual void set(unsigned int key, const gchar* value);
+
+	virtual void update(SPCtx* ctx, unsigned int flags);
+	virtual void modified(unsigned int flags);
+
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
 };
 
-struct SPClipPathClass {
-	SPObjectGroupClass parent_class;
-};
-
-GType sp_clippath_get_type (void);
 
 class SPClipPathReference : public Inkscape::URIReference {
 public:
-	SPClipPathReference(SPObject *obj) : URIReference(obj) {}
-	SPClipPath *getObject() const {
-		return (SPClipPath *)URIReference::getObject();
-	}
+    SPClipPathReference(SPObject *obj) : URIReference(obj) {}
+    SPClipPath *getObject() const {
+        return static_cast<SPClipPath *>(URIReference::getObject());
+    }
+
 protected:
     /**
      * If the owner element of this reference (the element with <... clippath="...">)
@@ -55,14 +80,16 @@ protected:
      * \return false if obj is not a clippath or if obj is a parent of this
      *         reference's owner element.  True otherwise.
      */
-	virtual bool _acceptObject(SPObject *obj) const {
-		if (!SP_IS_CLIPPATH(obj)) {
-		    return false;
-	    }
-	    SPObject * const owner = this->getOwner();
+    virtual bool _acceptObject(SPObject *obj) const {
+        if (!SP_IS_CLIPPATH(obj)) {
+            return false;
+        }
+        SPObject * const owner = this->getOwner();
         if (obj->isAncestorOf(owner)) {
-            Inkscape::XML::Node * const owner_repr = owner->repr;
-            Inkscape::XML::Node * const obj_repr = obj->repr;
+            //XML Tree being used directly here while it shouldn't be...
+            Inkscape::XML::Node * const owner_repr = owner->getRepr();
+            //XML Tree being used directly here while it shouldn't be...
+            Inkscape::XML::Node * const obj_repr = obj->getRepr();
             gchar const * owner_name = NULL;
             gchar const * owner_clippath = NULL;
             gchar const * obj_name = NULL;
@@ -82,15 +109,18 @@ protected:
             return false;
         }
         return true;
-	}
+    }
 };
 
-NRArenaItem *sp_clippath_show(SPClipPath *cp, NRArena *arena, unsigned int key);
-void sp_clippath_hide(SPClipPath *cp, unsigned int key);
+#endif // SEEN_SP_CLIPPATH_H
 
-void sp_clippath_set_bbox(SPClipPath *cp, unsigned int key, NRRect *bbox);
-void sp_clippath_get_bbox(SPClipPath *cp, NRRect *bbox, Geom::Matrix const &transform, unsigned const flags);
-
-const gchar *sp_clippath_create (GSList *reprs, SPDocument *document, Geom::Matrix const* applyTransform);
-
-#endif
+/*
+  Local Variables:
+  mode:c++
+  c-file-style:"stroustrup"
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  indent-tabs-mode:nil
+  fill-column:99
+  End:
+*/
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

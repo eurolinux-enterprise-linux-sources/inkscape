@@ -1,5 +1,6 @@
-/** @file
- * @brief Implementation of the file dialog interfaces defined in filedialog.h
+/**
+ * @file
+ * Implementation of the file dialog interfaces defined in filedialog.h.
  */
 /* Authors:
  *   Bob Jamison
@@ -14,12 +15,16 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "filedialog.h"
-#include "filedialogimpl-gtkmm.h"
 #include "filedialogimpl-win32.h"
+#include "filedialogimpl-gtkmm.h"
+#include "filedialog.h"
 
 #include "gc-core.h"
 #include <dialogs/dialog-events.h>
+#include "extension/output.h"
+#include "preferences.h"
+
+#include <glibmm/convert.h>
 
 namespace Inkscape
 {
@@ -84,7 +89,13 @@ FileOpenDialog *FileOpenDialog::create(Gtk::Window &parentWindow,
                                        const char *title)
 {
 #ifdef WIN32
-    FileOpenDialog *dialog = new FileOpenDialogImplWin32(parentWindow, path, fileTypes, title);
+    FileOpenDialog *dialog = NULL;
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    if (prefs->getBool( "/options/desktopintegration/value")) {
+        dialog = new FileOpenDialogImplWin32(parentWindow, path, fileTypes, title);
+    } else {
+        dialog = new FileOpenDialogImplGtk(parentWindow, path, fileTypes, title);
+    }
 #else
     FileOpenDialog *dialog = new FileOpenDialogImplGtk(parentWindow, path, fileTypes, title);
 #endif
@@ -113,7 +124,13 @@ FileSaveDialog *FileSaveDialog::create(Gtk::Window& parentWindow,
                                        const Inkscape::Extension::FileSaveMethod save_method)
 {
 #ifdef WIN32
-    FileSaveDialog *dialog = new FileSaveDialogImplWin32(parentWindow, path, fileTypes, title, default_key, docTitle, save_method);
+    FileSaveDialog *dialog = NULL;
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    if (prefs->getBool( "/options/desktopintegration/value")) {
+        dialog = new FileSaveDialogImplWin32(parentWindow, path, fileTypes, title, default_key, docTitle, save_method);
+    } else {
+        dialog = new FileSaveDialogImplGtk(parentWindow, path, fileTypes, title, default_key, docTitle, save_method);
+    }
 #else
     FileSaveDialog *dialog = new FileSaveDialogImplGtk(parentWindow, path, fileTypes, title, default_key, docTitle, save_method);
 #endif
@@ -137,6 +154,9 @@ Glib::ustring FileSaveDialog::getDocTitle()
 
 void FileSaveDialog::appendExtension(Glib::ustring& path, Inkscape::Extension::Output* outputExtension)
 {
+	if (!outputExtension)
+		return;
+
 	try {
 		bool appendExtension = true;
 		Glib::ustring utf8Name = Glib::filename_to_utf8( path );
@@ -199,4 +219,4 @@ FileExportDialog *FileExportDialog::create(Gtk::Window& parentWindow,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,6 +1,4 @@
-/**
- * \brief Very basic interface for classes that control attributes
- *
+/*
  * Authors:
  *   Nicholas Bishop <nicholasbishop@gmail.com>
  *   Rodrigo Kumpera <kumpera@gmail.com>
@@ -16,7 +14,6 @@
 #include "attributes.h"
 #include "sp-object.h"
 #include "xml/node.h"
-#include <gtkmm/tooltips.h>
 
 namespace Inkscape {
 namespace UI {
@@ -32,6 +29,9 @@ enum DefaultValueType
     T_CHARPTR
 };
 
+/**
+ * Very basic interface for classes that control attributes.
+ */
 class DefaultValueHolder
 {
     DefaultValueType type;
@@ -122,12 +122,12 @@ public:
         : _attr(a),
           _default(value)
     {}
-
+    
     AttrWidget(const SPAttributeEnum a, char* value)
         : _attr(a),
           _default(value)
     {}
-
+    
     AttrWidget(const SPAttributeEnum a)
         : _attr(a),
           _default()
@@ -154,14 +154,11 @@ protected:
     {
         const gchar* name = (const gchar*)sp_attribute_name(_attr);
         if(name && o) {
-            const gchar* val = SP_OBJECT_REPR(o)->attribute(name);
+            const gchar* val = o->getRepr()->attribute(name);
             return val;
         }
         return 0;
     }
-
-protected:
-    Gtk::Tooltips _tt;
 
 private:
     const SPAttributeEnum _attr;
@@ -184,4 +181,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

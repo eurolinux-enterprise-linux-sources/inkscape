@@ -6,6 +6,8 @@
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Ted Gould <ted@gould.cx>
+ *   Jon A. Cruz <jon@joncruz.org>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2002-2003 Authors
  *
@@ -22,6 +24,9 @@
 #include "extension/output.h"
 #include <vector>
 #include "xml/attribute-record.h"
+#include "xml/simple-document.h"
+#include "sp-root.h"
+#include "document.h"
 
 #ifdef WITH_GNOME_VFS
 # include <libgnomevfs/gnome-vfs.h>
@@ -38,27 +43,37 @@ using Inkscape::Util::List;
 using Inkscape::XML::AttributeRecord;
 using Inkscape::XML::Node;
 
-
-
-void pruneExtendedAttributes( Inkscape::XML::Node *repr )
+/*
+ * Removes all sodipodi and inkscape elements and attributes from an xml tree. 
+ * used to make plain svg output.
+ */
+static void pruneExtendedNamespaces( Inkscape::XML::Node *repr )
 {
     if (repr) {
         if ( repr->type() == Inkscape::XML::ELEMENT_NODE ) {
-            std::vector<gchar const*> toBeRemoved;
+            std::vector<gchar const*> attrsRemoved;
             for ( List<AttributeRecord const> it = repr->attributeList(); it; ++it ) {
                 const gchar* attrName = g_quark_to_string(it->key);
                 if ((strncmp("inkscape:", attrName, 9) == 0) || (strncmp("sodipodi:", attrName, 9) == 0)) {
-                    toBeRemoved.push_back(attrName);
+                    attrsRemoved.push_back(attrName);
                 }
             }
             // Can't change the set we're interating over while we are iterating.
-            for ( std::vector<gchar const*>::iterator it = toBeRemoved.begin(); it != toBeRemoved.end(); ++it ) {
+            for ( std::vector<gchar const*>::iterator it = attrsRemoved.begin(); it != attrsRemoved.end(); ++it ) {
                 repr->setAttribute(*it, 0);
             }
         }
 
+        std::vector<Inkscape::XML::Node *> nodesRemoved;
         for ( Node *child = repr->firstChild(); child; child = child->next() ) {
-            pruneExtendedAttributes(child);
+            if((strncmp("inkscape:", child->name(), 9) == 0) || strncmp("sodipodi:", child->name(), 9) == 0) {
+                nodesRemoved.push_back(child);
+            } else {
+                pruneExtendedNamespaces(child);
+            }
+        }
+        for ( std::vector<Inkscape::XML::Node *>::iterator it = nodesRemoved.begin(); it != nodesRemoved.end(); ++it ) {
+            repr->removeChild(*it);
         }
     }
 }
@@ -79,10 +94,8 @@ void pruneExtendedAttributes( Inkscape::XML::Node *repr )
 void
 Svg::init(void)
 {
-    Inkscape::Extension::Extension * ext;
-
     /* SVG in */
-    ext = Inkscape::Extension::build_from_mem(
+    Inkscape::Extension::build_from_mem(
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
             "<name>" N_("SVG Input") "</name>\n"
             "<id>" SP_MODULE_KEY_INPUT_SVG "</id>\n"
@@ -96,7 +109,7 @@ Svg::init(void)
         "</inkscape-extension>", new Svg());
 
     /* SVG out Inkscape */
-    ext = Inkscape::Extension::build_from_mem(
+    Inkscape::Extension::build_from_mem(
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
             "<name>" N_("SVG Output Inkscape") "</name>\n"
             "<id>" SP_MODULE_KEY_OUTPUT_SVG_INKSCAPE "</id>\n"
@@ -110,7 +123,7 @@ Svg::init(void)
         "</inkscape-extension>", new Svg());
 
     /* SVG out */
-    ext = Inkscape::Extension::build_from_mem(
+    Inkscape::Extension::build_from_mem(
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
             "<name>" N_("SVG Output") "</name>\n"
             "<id>" SP_MODULE_KEY_OUTPUT_SVG "</id>\n"
@@ -182,19 +195,19 @@ Svg::open (Inkscape::Extension::Input */*mod*/, const gchar *uri)
 #ifdef WITH_GNOME_VFS
     if (!gnome_vfs_initialized() || gnome_vfs_uri_is_local(gnome_vfs_uri_new(uri))) {
         // Use built-in loader instead of VFS for this
-        return sp_document_new(uri, TRUE);
+        return SPDocument::createNewDoc(uri, TRUE);
     }
     gchar * buffer = _load_uri(uri);
     if (buffer == NULL) {
         g_warning("Error:  Could not open file '%s' with VFS\n", uri);
         return NULL;
     }
-    SPDocument * doc = sp_document_new_from_mem(buffer, strlen(buffer), 1);
+    SPDocument * doc = SPDocument::createNewDocFromMem(buffer, strlen(buffer), 1);
 
     g_free(buffer);
     return doc;
 #else
-    return sp_document_new (uri, TRUE);
+    return SPDocument::createNewDoc(uri, TRUE);
 #endif
 }
 
@@ -227,35 +240,41 @@ Svg::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar const *filena
 {
     g_return_if_fail(doc != NULL);
     g_return_if_fail(filename != NULL);
-
-    gchar *save_path = g_path_get_dirname(filename);
+    Inkscape::XML::Document *rdoc = doc->rdoc;
 
     bool const exportExtensions = ( !mod->get_id()
       || !strcmp (mod->get_id(), SP_MODULE_KEY_OUTPUT_SVG_INKSCAPE)
       || !strcmp (mod->get_id(), SP_MODULE_KEY_OUTPUT_SVGZ_INKSCAPE));
 
-    Inkscape::XML::Document *rdoc = NULL;
-    Inkscape::XML::Node *repr = NULL;
-    if (exportExtensions) {
-        repr = sp_document_repr_root (doc);
-    } else {
-        rdoc = sp_repr_document_new ("svg:svg");
-        repr = rdoc->root();
-        repr = sp_document_root (doc)->updateRepr(rdoc, repr, SP_OBJECT_WRITE_BUILD);
+    if (!exportExtensions) {
+        // We make a duplicate document so we don't prune the in-use document
+        // and loose data. Perhaps the user intends to save as inkscape-svg next.
+        Inkscape::XML::Document *new_rdoc = new Inkscape::XML::SimpleDocument();
 
-        pruneExtendedAttributes(repr);
+        // Comments and PI nodes are not included in this duplication
+        // TODO: Move this code into xml/document.h and duplicate rdoc instead of root. 
+        new_rdoc->setAttribute("version", "1.0");
+        new_rdoc->setAttribute("standalone", "no");
+
+        // Get a new xml repr for the svg root node
+        Inkscape::XML::Node *root = rdoc->root()->duplicate(new_rdoc);
+
+        // Add the duplicated svg node as the document's rdoc
+        new_rdoc->appendChild(root);
+        Inkscape::GC::release(root);
+
+        pruneExtendedNamespaces(root);
+        rdoc = new_rdoc;
     }
 
-    if (!sp_repr_save_rebased_file(repr->document(), filename, SP_SVG_NS_URI,
-                                   doc->base, filename)) {
+    if (!sp_repr_save_rebased_file(rdoc, filename, SP_SVG_NS_URI,
+                                   doc->getBase(), filename)) {
         throw Inkscape::Extension::Output::save_failed();
     }
 
     if (!exportExtensions) {
         Inkscape::GC::release(rdoc);
     }
-
-    g_free(save_path);
 
     return;
 }

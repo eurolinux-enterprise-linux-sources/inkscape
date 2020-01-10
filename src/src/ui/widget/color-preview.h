@@ -1,9 +1,6 @@
-#ifndef __COLOR_PREVIEW_H__
-#define __COLOR_PREVIEW_H__
-
-/** \file
- * A simple color preview widget, mainly used within a picker button.
- *
+#ifndef SEEN_COLOR_PREVIEW_H
+#define SEEN_COLOR_PREVIEW_H
+/*
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Ralf Stephan <ralf@ark.in-berlin.de>
@@ -14,29 +11,52 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <gtkmm/eventbox.h>
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
+#include <gtkmm/widget.h>
 
 namespace Inkscape {
-    namespace UI {
-        namespace Widget {
+namespace UI {
+namespace Widget {
 
+/**
+ * A simple color preview widget, mainly used within a picker button.
+ */
 class ColorPreview : public Gtk::Widget {
 public:
     ColorPreview (guint32 rgba);
     void setRgba32 (guint32 rgba);
+    GdkPixbuf* toPixbuf (int width, int height);
 
 protected:
-    virtual void on_size_request (Gtk::Requisition *req);
     virtual void on_size_allocate (Gtk::Allocation &all);
-    virtual bool on_expose_event (GdkEventExpose *event);
-    void paint (GdkRectangle *area);
-   
+
+#if WITH_GTKMM_3_0
+    virtual void get_preferred_height_vfunc(int& minimum_height, int& natural_height) const;
+    virtual void get_preferred_height_for_width_vfunc(int width, int& minimum_height, int& natural_height) const;
+    virtual void get_preferred_width_vfunc(int& minimum_width, int& natural_width) const;
+    virtual void get_preferred_width_for_height_vfunc(int height, int& minimum_width, int& natural_width) const;
+#else
+    virtual void on_size_request (Gtk::Requisition *req);
+    virtual bool on_expose_event(GdkEventExpose *event);
+#endif
+
+    virtual bool on_draw(const Cairo::RefPtr<Cairo::Context>& cr);
+
     guint32 _rgba;
 };
 
-}}}
+} // namespace Widget
+} // namespace UI
+} // namespace Inkscape
 
-#endif
+#endif // SEEN_COLOR_PREVIEW_H
 
 /*
   Local Variables:

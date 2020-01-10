@@ -529,8 +529,7 @@ Future improvements:
 
   <bind action="DialogMetadata" />
   <bind action="DialogClonetiler" />
-  <bind action="DialogGridArrange" />
-  <bind action="DialogScript" />
+  <bind action="DialogArrange" />
   <bind action="DialogDebug" />
   <bind action="DialogInput" />
 
@@ -540,7 +539,6 @@ Future improvements:
 
 <!-- Help -->
 
-  <bind action="HelpKeys" />
   <bind action="HelpAboutExtensions" />
   <bind action="HelpAboutMemory" />
   <bind action="HelpAbout" />

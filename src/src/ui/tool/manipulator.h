@@ -18,7 +18,7 @@
 #include <glib.h>
 #include <gdk/gdk.h>
 #include <boost/shared_ptr.hpp>
-#include "event-context.h"
+#include "ui/tools/tool-base.h"
 
 class SPDesktop;
 namespace Inkscape {
@@ -40,8 +40,7 @@ public:
     virtual ~Manipulator() {}
     
     /// Handle input event. Returns true if handled.
-    virtual bool event(SPEventContext *, GdkEvent *)=0;
-protected:
+    virtual bool event(Inkscape::UI::Tools::ToolBase *, GdkEvent *)=0;
     SPDesktop *const _desktop;
 };
 
@@ -55,6 +54,14 @@ public:
         : Manipulator(d)
         , _selection(sel)
     {}
+
+    /// Type of extremum points to add in PathManipulator::insertNodeAtExtremum
+    enum ExtremumType {
+        EXTR_MIN_X = 0,
+        EXTR_MAX_X,
+        EXTR_MIN_Y,
+        EXTR_MAX_Y
+    };
 protected:
     ControlPointSelection &_selection;
 };
@@ -138,7 +145,7 @@ public:
         }
     }
     
-    virtual bool event(SPEventContext *event_context, GdkEvent *event) {
+    virtual bool event(Inkscape::UI::Tools::ToolBase *event_context, GdkEvent *event) {
         for (typename MapType::iterator i = _mmap.begin(); i != _mmap.end(); ++i) {
             if ((*i).second->event(event_context, event)) return true;
         }
@@ -164,4 +171,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

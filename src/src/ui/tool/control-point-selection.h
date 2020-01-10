@@ -19,13 +19,14 @@
 #include <2geom/forward.h>
 #include <2geom/point.h>
 #include <2geom/rect.h>
-#include "display/display-forward.h"
 #include "util/accumulators.h"
 #include "util/unordered-containers.h"
 #include "ui/tool/commit-events.h"
 #include "ui/tool/manipulator.h"
+#include "snap-candidate.h"
 
 class SPDesktop;
+struct SPCanvasGroup;
 
 namespace Inkscape {
 namespace UI {
@@ -89,9 +90,9 @@ public:
     void invertSelection();
     void spatialGrow(SelectableControlPoint *origin, int dir);
 
-    virtual bool event(SPEventContext *, GdkEvent *);
+    virtual bool event(Inkscape::UI::Tools::ToolBase *, GdkEvent *);
 
-    void transform(Geom::Matrix const &m);
+    void transform(Geom::Affine const &m);
     void align(Geom::Dim2 d);
     void distribute(Geom::Dim2 d);
 
@@ -109,6 +110,11 @@ public:
     sigc::signal<void> signal_update;
     sigc::signal<void, SelectableControlPoint *, bool> signal_point_changed;
     sigc::signal<void, CommitEvent> signal_commit;
+
+    void getOriginalPoints(std::vector<Inkscape::SnapCandidatePoint> &pts);
+    void getUnselectedPoints(std::vector<Inkscape::SnapCandidatePoint> &pts);
+    void setOriginalPoints();
+
 private:
     // The functions below are invoked from SelectableControlPoint.
     // Previously they were connected to handlers when selecting, but this
@@ -126,14 +132,14 @@ private:
     bool _keyboardRotate(GdkEventKey const &, int);
     bool _keyboardScale(GdkEventKey const &, int);
     bool _keyboardFlip(Geom::Dim2);
-    void _keyboardTransform(Geom::Matrix const &);
+    void _keyboardTransform(Geom::Affine const &);
     void _commitHandlesTransform(CommitEvent ce);
     double _rotationRadius(Geom::Point const &);
 
     set_type _points;
     set_type _all_points;
     INK_UNORDERED_MAP<SelectableControlPoint *, Geom::Point> _original_positions;
-    INK_UNORDERED_MAP<SelectableControlPoint *, Geom::Matrix> _last_trans;
+    INK_UNORDERED_MAP<SelectableControlPoint *, Geom::Affine> _last_trans;
     boost::optional<double> _rot_radius;
     boost::optional<double> _mouseover_rot_radius;
     Geom::OptRect _bounds;
@@ -160,4 +166,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

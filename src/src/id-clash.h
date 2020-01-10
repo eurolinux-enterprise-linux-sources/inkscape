@@ -4,6 +4,8 @@
 #include "document.h"
 
 void prevent_id_clashes(SPDocument *imported_doc, SPDocument *current_doc);
+void rename_id(SPObject *elem, Glib::ustring const &newname);
+void change_def_references(SPObject *replace_obj, SPObject *with_obj);
 
 #endif /* !SEEN_ID_CLASH_H */
 
@@ -16,4 +18,4 @@ void prevent_id_clashes(SPDocument *imported_doc, SPDocument *current_doc);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

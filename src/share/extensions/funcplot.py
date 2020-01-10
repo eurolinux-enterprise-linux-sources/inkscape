@@ -25,18 +25,28 @@ Changes:
  * 21-Jun-2007: Tavmjong: Added polar coordinates
 
 '''
-import inkex, simplepath, simplestyle
+# standard library
 from math import *
 from random import *
+from copy import deepcopy
+# local library
+import inkex
+import simplepath
+import simplestyle
+
+inkex.localize()
 
 def drawfunction(xstart, xend, ybottom, ytop, samples, width, height, left, bottom, 
-    fx = "sin(x)", fpx = "cos(x)", fponum = True, times2pi = False, polar = False, isoscale = True, drawaxis = True):
+    fx = "sin(x)", fpx = "cos(x)", fponum = True, times2pi = False, polar = False, isoscale = True, drawaxis = True, endpts = False):
 
     if times2pi == True:
         xstart = 2 * pi * xstart
         xend   = 2 * pi * xend   
       
     # coords and scales based on the source rect
+    if xstart == xend:
+        inkex.errormsg(_("x-interval cannot be zero. Please modify 'Start X' or 'End X'"))
+        return []
     scalex = width / (xend - xstart)
     xoff = left
     coordx = lambda x: (x - xstart) * scalex + xoff  #convert x-value to coordinate
@@ -46,6 +56,9 @@ def drawfunction(xstart, xend, ybottom, ytop, samples, width, height, left, bott
         polar_scalex = width/2.0
         coordx = lambda x: x * polar_scalex + centerx  #convert x-value to coordinate
 
+    if ytop == ybottom:
+        inkex.errormsg(_("y-interval cannot be zero. Please modify 'Y top' or 'Y bottom'"))
+        return []
     scaley = height / (ytop - ybottom)
     yoff = bottom
     coordy = lambda y: (ybottom - y) * scaley + yoff  #convert y-value to coordinate
@@ -122,7 +135,11 @@ def drawfunction(xstart, xend, ybottom, ytop, samples, width, height, left, bott
         dy0 = fp(xstart)
 
     # Start curve
-    a.append([' M ',[coordx(x0), coordy(y0)]]) # initial moveto
+    if endpts:
+        a.append([' M ',[left, coordy(0)]])
+        a.append([' L ',[coordx(x0), coordy(y0)]])
+    else:
+        a.append([' M ',[coordx(x0), coordy(y0)]]) # initial moveto
 
     for i in range(int(samples-1)):
         x1 = (i+1) * step + xstart
@@ -153,7 +170,9 @@ def drawfunction(xstart, xend, ybottom, ytop, samples, width, height, left, bott
         x0  = x1  # Next segment's start is this segments end
         y0  = y1
         dx0 = dx1 # Assume the function is smooth everywhere, so carry over the derivative too
-        dy0 = dy1    
+        dy0 = dy1
+    if endpts:
+        a.append([' L ',[left + width, coordy(0)]])
     return a
 
 class FuncPlot(inkex.Effect):
@@ -199,6 +218,10 @@ class FuncPlot(inkex.Effect):
                         action="store", type="string", 
                         dest="fpofx", default="cos(x)",
                         help="f'(x) for plotting") 
+        self.OptionParser.add_option("--clip",
+                        action="store", type="inkbool",
+                        dest="clip", default=False,
+                        help="If True, clip with copy of source rectangle")
         self.OptionParser.add_option("--remove",
                         action="store", type="inkbool", 
                         dest="remove", default=True,
@@ -211,6 +234,10 @@ class FuncPlot(inkex.Effect):
                         action="store", type="inkbool", 
                         dest="drawaxis", default=True,
                         help="If True, axis are drawn") 
+        self.OptionParser.add_option("--endpts",
+                        action="store", type="inkbool",
+                        dest="endpts", default=False,
+                        help="If True, end points are added")
         self.OptionParser.add_option("--tab",
                         action="store", type="string", 
                         dest="tab", default="sampling",
@@ -225,6 +252,7 @@ class FuncPlot(inkex.Effect):
                         help="dummy") 
 
     def effect(self):
+        newpath = None
         for id, node in self.selected.iteritems():
             if node.tag == inkex.addNS('rect','svg'):
                 # create new path with basic dimensions of selected rectangle
@@ -257,7 +285,8 @@ class FuncPlot(inkex.Effect):
                                 self.options.times2pi,
                                 self.options.polar,
                                 self.options.isoscale,
-                                self.options.drawaxis)))
+                                self.options.drawaxis,
+                                self.options.endpts)))
                 newpath.set('title', self.options.fofx)
                 
                 #newpath.setAttribute('desc', '!func;' + self.options.fofx + ';' 
@@ -269,13 +298,25 @@ class FuncPlot(inkex.Effect):
                                 
                 # add path into SVG structure
                 node.getparent().append(newpath)
+                # option whether to clip the path with rect or not.
+                if self.options.clip:
+                    defs = self.xpathSingle('/svg:svg//svg:defs')
+                    if defs == None:
+                        defs = inkex.etree.SubElement(self.document.getroot(),inkex.addNS('defs','svg'))
+                    clip = inkex.etree.SubElement(defs,inkex.addNS('clipPath','svg'))
+                    clip.append(deepcopy(node))
+                    clipId = self.uniqueId('clipPath')
+                    clip.set('id', clipId)
+                    newpath.set('clip-path', 'url(#'+clipId+')')
                 # option wether to remove the rectangle or not.
                 if self.options.remove:
                     node.getparent().remove(node)
-                
+        if newpath is None:
+            inkex.errormsg(_("Please select a rectangle"))
+
 if __name__ == '__main__':
     e = FuncPlot()
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99

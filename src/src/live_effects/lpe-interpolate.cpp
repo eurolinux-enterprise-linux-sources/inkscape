@@ -1,4 +1,3 @@
-#define INKSCAPE_LPE_INTERPOLATE_CPP
 /** \file
  * LPE interpolate implementation
  */
@@ -10,6 +9,8 @@
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
+
+#include <glibmm/i18n.h>
 
 #include "live_effects/lpe-interpolate.h"
 
@@ -27,9 +28,9 @@ namespace LivePathEffect {
 
 LPEInterpolate::LPEInterpolate(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    trajectory_path(_("Trajectory"), _("Path along which intermediate steps are created."), "trajectory", &wr, this, "M0,0 L0,0"),
-    number_of_steps(_("Steps"), _("Determines the number of steps from start to end path."), "steps", &wr, this, 5),
-    equidistant_spacing(_("Equidistant spacing"), _("If true, the spacing between intermediates is constant along the length of the path. If false, the distance depends on the location of the nodes of the trajectory path."), "equidistant_spacing", &wr, this, true)
+    trajectory_path(_("Trajectory:"), _("Path along which intermediate steps are created."), "trajectory", &wr, this, "M0,0 L0,0"),
+    number_of_steps(_("Steps_:"), _("Determines the number of steps from start to end path."), "steps", &wr, this, 5),
+    equidistant_spacing(_("E_quidistant spacing"), _("If true, the spacing between intermediates is constant along the length of the path. If false, the distance depends on the location of the nodes of the trajectory path."), "equidistant_spacing", &wr, this, true)
 {
     show_orig_path = true;
 
@@ -38,7 +39,7 @@ LPEInterpolate::LPEInterpolate(LivePathEffectObject *lpeobject) :
     registerParameter( dynamic_cast<Parameter *>(&number_of_steps) );
 
     number_of_steps.param_make_integer();
-    number_of_steps.param_set_range(2, NR_HUGE);
+    number_of_steps.param_set_range(2, Geom::infinity());
 }
 
 LPEInterpolate::~LPEInterpolate()
@@ -98,14 +99,14 @@ LPEInterpolate::doEffect_path (Geom::PathVector const & path_in)
 }
 
 void
-LPEInterpolate::resetDefaults(SPItem * item)
+LPEInterpolate::resetDefaults(SPItem const* item)
 {
     Effect::resetDefaults(item);
 
     if (!SP_IS_PATH(item))
         return;
 
-    SPCurve const *crv = sp_path_get_curve_reference(SP_PATH(item));
+    SPCurve const *crv = SP_PATH(item)->get_curve_reference();
     Geom::PathVector const &pathv = crv->get_pathvector();
     if ( (pathv.size() < 2) )
         return;

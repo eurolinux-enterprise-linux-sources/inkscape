@@ -1,6 +1,3 @@
-/** @file
- * @brief EEK preview stuff
- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -43,8 +40,12 @@
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
 
-G_BEGIN_DECLS
+/**
+ * @file
+ * Generic implementation of an object that can be shown by a preview.
+ */
 
+G_BEGIN_DECLS
 
 #define EEK_PREVIEW_TYPE            (eek_preview_get_type())
 #define EEK_PREVIEW(obj)            (G_TYPE_CHECK_INSTANCE_CAST( (obj), EEK_PREVIEW_TYPE, EekPreview))
@@ -88,31 +89,19 @@ typedef enum {
   PREVIEW_LINK_ALL = 31
 } LinkType;
 
+typedef enum {
+    BORDER_NONE = 0,
+    BORDER_SOLID,
+    BORDER_WIDE,
+    BORDER_SOLID_LAST_ROW,
+} BorderStyle;
+
 typedef struct _EekPreview       EekPreview;
 typedef struct _EekPreviewClass  EekPreviewClass;
-
 
 struct _EekPreview
 {
     GtkDrawingArea drawing;
-
-    int _r;
-    int _g;
-    int _b;
-    int _scaledW;
-    int _scaledH;
-
-    gboolean _hot;
-    gboolean _within;
-    gboolean _takesFocus;
-
-    PreviewStyle _prevstyle;
-    ViewType _view;
-    PreviewSize _size;
-    guint _ratio;
-    guint _linked;
-    GdkPixbuf* _previewPixbuf;
-    GdkPixbuf* _scaled;
 };
 
 struct _EekPreviewClass
@@ -122,11 +111,14 @@ struct _EekPreviewClass
     void (*clicked) (EekPreview* splat);
 };
 
-
 GType      eek_preview_get_type(void) G_GNUC_CONST;
 GtkWidget* eek_preview_new(void);
 
-void eek_preview_set_details( EekPreview* splat, PreviewStyle prevstyle, ViewType view, PreviewSize size, guint ratio );
+void eek_preview_set_details(EekPreview   *preview,
+                             ViewType      view,
+                             PreviewSize   size,
+                             guint         ratio, 
+                             guint         border);
 void eek_preview_set_color( EekPreview* splat, int r, int g, int b );
 void eek_preview_set_pixbuf( EekPreview* splat, GdkPixbuf* pixbuf );
 
@@ -151,4 +143,4 @@ G_END_DECLS
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

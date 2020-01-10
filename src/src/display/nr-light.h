@@ -13,9 +13,9 @@
 #include "display/nr-light-types.h"
 #include <2geom/forward.h>
 
-struct SPFeDistantLight;
-struct SPFePointLight;
-struct SPFeSpotLight;
+class SPFeDistantLight;
+class SPFePointLight;
+class SPFeSpotLight;
 
 namespace Inkscape {
 namespace Filters {
@@ -68,7 +68,7 @@ class PointLight {
          * employed in the sp light object) and current coordinate (those
          * employed in the rendering)
          */
-        PointLight(SPFePointLight *light, guint32 lighting_color, const Geom::Matrix &trans);
+        PointLight(SPFePointLight *light, guint32 lighting_color, const Geom::Affine &trans);
         virtual ~PointLight();
         /**
          * Computes the light vector of the distant light at point (x,y,z).
@@ -108,7 +108,7 @@ class SpotLight {
          * employed in the sp light object) and current coordinate (those
          * employed in the rendering)
          */
-        SpotLight(SPFeSpotLight *light, guint32 lighting_color, const Geom::Matrix &trans);
+        SpotLight(SPFeSpotLight *light, guint32 lighting_color, const Geom::Affine &trans);
         virtual ~SpotLight();
 
         /**
@@ -158,4 +158,4 @@ class SpotLight {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,6 +1,6 @@
 Name:           inkscape
-Version:        0.48.4
-Release:        7%{?dist}
+Version:        0.91
+Release:        2%{?dist}
 Summary:        Vector-based drawing program using SVG
 
 Group:          Applications/Productivity
@@ -8,13 +8,7 @@ License:        GPLv2+
 URL:            http://inkscape.sourceforge.net/
 Source0:        http://downloads.sourceforge.net/inkscape/%{name}-%{version}.tar.bz2
 Patch0:         inkscape-0.48.2-types.patch
-#Patch4:         inkscape-0.48.2-glib.patch
-#Patch5:         inkscape-0.48.2-png.patch
-#Patch6:         inkscape-0.48.2-png-write.patch
-#Patch7:         inkscape-0.48.2-gcc47.patch
-#Patch8:         inkscape-0.48.2-poppler_020.patch
-#Patch9:         inkscape-0.48.3.1-hugexml.patch
-Patch10:        inkscape-0.48.4-spuriouscomma.h
+Patch15:        inkscape-0.91-desktop.patch
 
 %if 0%{?fedora} && 0%{?fedora} < 18
 %define desktop_vendor fedora
@@ -27,7 +21,6 @@ BuildRequires:  gc-devel >= 6.4
 BuildRequires:  gettext
 BuildRequires:  gtkmm24-devel >= 2.8.0
 BuildRequires:  gtkspell-devel
-BuildRequires:  gnome-vfs2-devel >= 2.0
 BuildRequires:  libpng-devel >= 1.2
 BuildRequires:  libxml2-devel >= 2.6.11
 BuildRequires:  libxslt-devel >= 1.0.15
@@ -40,7 +33,7 @@ BuildRequires:  python-devel
 BuildRequires:  poppler-glib-devel
 BuildRequires:  boost-devel
 BuildRequires:  gsl-devel
-BuildRequires:  libwpg-devel
+BuildRequires:  libwpg-devel >= 0.3.0
 BuildRequires:  ImageMagick-c++-devel
 BuildRequires:  perl(XML::Parser)
 BuildRequires:  perl(ExtUtils::Embed)
@@ -127,13 +120,7 @@ graphics in W3C standard Scalable Vector Graphics (SVG) file format.
 %prep
 %setup -q
 %patch0 -p1 -b .types
-#%patch4 -p1 -b .glib
-#%patch5 -p0 -b .png
-#%patch6 -p0 -b .png-write
-#%patch7 -p0 -b .gcc47
-#%patch8 -p1 -b .poppler_020
-#%patch9 -p0 -b .hugexml
-%patch10 -p0 -b .spuriouscomma
+%patch15 -p1 -b .desktop
 
 # https://bugs.launchpad.net/inkscape/+bug/314381
 # A couple of files have executable bits set,
@@ -145,17 +132,20 @@ find share/extensions -name '*.py' | xargs chmod -x
 # Fix end of line encodings
 dos2unix -k -q share/extensions/*.py
 
-autoreconf -i
-
 
 %build
+# --disable-strict-build is needed due to gtkmm using a deprecated glibmm
+# method: https://lists.fedoraproject.org/pipermail/devel/2015-July/212652.html
+# If upstream gtkmm fixes https://bugzilla.gnome.org/show_bug.cgi?id=752797
+# this can be removed.
+export RPM_OPT_FLAGS="$RPM_OPT_FLAGS -std=c++11 -fno-strict-overflow"
 export CFLAGS="$RPM_OPT_FLAGS -fno-strict-aliasing"
 export CXXFLAGS="$RPM_OPT_FLAGS -fno-strict-aliasing"
 
 %configure                      \
         --with-python           \
         --with-perl             \
-        --with-gnome-vfs        \
+        --without-gnome-vfs        \
         --with-xft              \
         --enable-lcms           \
         --enable-poppler-cairo 
@@ -204,7 +194,9 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/inkscape
 %dir %{_datadir}/inkscape
-%{_datadir}/inkscape/clipart
+%{_datadir}/inkscape/attributes
+%{_datadir}/inkscape/branding
+%{_datadir}/inkscape/symbols
 %{_datadir}/inkscape/extensions
 %{_datadir}/inkscape/filters
 %{_datadir}/inkscape/fonts
@@ -240,6 +232,27 @@ fi
 
 
 %changelog
+* Fri Apr  1 2016 Jan Horak <jhorak@redhat.com> - 0.91-2
+- Rebase to version 0.91
+
+* Tue Jul 21 2015 Jan Horak <jhorak@redhat.com> - 0.48.4-15
+- Building without gnome-vfs
+
+* Thu May  7 2015 Jan Horak <jhorak@redhat.com> - 0.48.4-13
+- Added patch to support newer poppler
+
+* Thu Apr 30 2015 Jan Horak <jhorak@redhat.com> - 0.48.4-11
+- Fix for libwpg rebase
+
+* Fri Feb 28 2014 Jan Horak <jhorak@redhat.com> - 0.48.4-10
+- Get rid of SpSVG extension - rhbz#1023508
+
+* Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 0.48.4-9
+- Mass rebuild 2014-01-24
+
+* Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 0.48.4-8
+- Mass rebuild 2013-12-27
+
 * Tue Sep 24 2013 Jan Horak <jhorak@redhat.com> - 0.48.4-7
 - Added -fno-strict-aliasing to build flags
 

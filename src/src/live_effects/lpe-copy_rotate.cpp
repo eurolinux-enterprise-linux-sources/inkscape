@@ -1,16 +1,17 @@
-#define INKSCAPE_LPE_COPY_ROTATE_CPP
 /** \file
  * LPE <copy_rotate> implementation
  */
 /*
  * Authors:
- *   Maximilian Albert
+ *   Maximilian Albert <maximilian.albert@gmail.com>
+ *   Johan Engelen <j.b.c.engelen@alumnus.utwente.nl>
  *
- * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
- * Copyright (C) Maximilian Albert 2008 <maximilian.albert@gmail.com>
+ * Copyright (C) Authors 2007-2012
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
+
+#include <glibmm/i18n.h>
 
 #include "live_effects/lpe-copy_rotate.h"
 #include "sp-shape.h"
@@ -21,36 +22,40 @@
 #include <2geom/d2-sbasis.h>
 #include <2geom/angle.h>
 
+#include "knot-holder-entity.h"
+#include "knotholder.h"
+
 namespace Inkscape {
 namespace LivePathEffect {
 
 namespace CR {
 
-class KnotHolderEntityStartingAngle : public LPEKnotHolderEntity
-{
+class KnotHolderEntityStartingAngle : public LPEKnotHolderEntity {
 public:
+    KnotHolderEntityStartingAngle(LPECopyRotate *effect) : LPEKnotHolderEntity(effect) {};
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
-    virtual Geom::Point knot_get();
+    virtual Geom::Point knot_get() const;
 };
 
-class KnotHolderEntityRotationAngle : public LPEKnotHolderEntity
-{
+class KnotHolderEntityRotationAngle : public LPEKnotHolderEntity {
 public:
+    KnotHolderEntityRotationAngle(LPECopyRotate *effect) : LPEKnotHolderEntity(effect) {};
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
-    virtual Geom::Point knot_get();
+    virtual Geom::Point knot_get() const;
 };
 
 } // namespace CR
 
 LPECopyRotate::LPECopyRotate(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    starting_angle(_("Starting"), _("Angle of the first copy"), "starting_angle", &wr, this, 0.0),
-    rotation_angle(_("Rotation angle"), _("Angle between two successive copies"), "rotation_angle", &wr, this, 30.0),
-    num_copies(_("Number of copies"), _("Number of copies of the original path"), "num_copies", &wr, this, 5),
+    starting_angle(_("Starting:"), _("Angle of the first copy"), "starting_angle", &wr, this, 0.0),
+    rotation_angle(_("Rotation angle:"), _("Angle between two successive copies"), "rotation_angle", &wr, this, 30.0),
+    num_copies(_("Number of copies:"), _("Number of copies of the original path"), "num_copies", &wr, this, 5),
     origin(_("Origin"), _("Origin of the rotation"), "origin", &wr, this, "Adjust the origin of the rotation"),
     dist_angle_handle(100)
 {
     show_orig_path = true;
+    _provides_knotholder_entities = true;
 
     // register all your parameters here, so Inkscape knows which parameters this effect has:
     registerParameter( dynamic_cast<Parameter *>(&starting_angle) );
@@ -58,12 +63,8 @@ LPECopyRotate::LPECopyRotate(LivePathEffectObject *lpeobject) :
     registerParameter( dynamic_cast<Parameter *>(&num_copies) );
     registerParameter( dynamic_cast<Parameter *>(&origin) );
 
-    registerKnotHolderHandle(new CR::KnotHolderEntityStartingAngle(), _("Adjust the starting angle"));
-    registerKnotHolderHandle(new CR::KnotHolderEntityRotationAngle(), _("Adjust the rotation angle"));
-
     num_copies.param_make_integer(true);
     num_copies.param_set_range(0, 1000);
-
 }
 
 LPECopyRotate::~LPECopyRotate()
@@ -72,9 +73,9 @@ LPECopyRotate::~LPECopyRotate()
 }
 
 void
-LPECopyRotate::doOnApply(SPLPEItem *lpeitem)
+LPECopyRotate::doOnApply(SPLPEItem const* lpeitem)
 {
-    SPCurve *curve = SP_SHAPE(lpeitem)->curve;
+    SPCurve const *curve = SP_SHAPE(lpeitem)->_curve;
 
     A = *(curve->first_point());
     B = *(curve->last_point());
@@ -101,12 +102,12 @@ LPECopyRotate::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & p
 
     Piecewise<D2<SBasis> > output;
 
-    Matrix pre = Translate(-origin) * Rotate(-deg_to_rad(starting_angle));
+    Affine pre = Translate(-origin) * Rotate(-deg_to_rad(starting_angle));
     for (int i = 0; i < num_copies; ++i) {
         // I first suspected the minus sign to be a bug in 2geom but it is
         // likely due to SVG's choice of coordinate system orientation (max)
         Rotate rot(-deg_to_rad(rotation_angle * i));
-        Matrix t = pre * rot * Translate(origin);
+        Affine t = pre * rot * Translate(origin);
         output.concat(pwd2_in * t);
     }
 
@@ -114,7 +115,7 @@ LPECopyRotate::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & p
 }
 
 void
-LPECopyRotate::addCanvasIndicators(SPLPEItem */*lpeitem*/, std::vector<Geom::PathVector> &hp_vec)
+LPECopyRotate::addCanvasIndicators(SPLPEItem const */*lpeitem*/, std::vector<Geom::PathVector> &hp_vec)
 {
     using namespace Geom;
 
@@ -127,28 +128,31 @@ LPECopyRotate::addCanvasIndicators(SPLPEItem */*lpeitem*/, std::vector<Geom::Pat
     hp_vec.push_back(pathv);
 }
 
+void LPECopyRotate::addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item) {
+    {
+        KnotHolderEntity *e = new CR::KnotHolderEntityStartingAngle(this);
+        e->create( desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN,
+                   _("Adjust the starting angle") );
+        knotholder->add(e);
+    }
+    {
+        KnotHolderEntity *e = new CR::KnotHolderEntityRotationAngle(this);
+        e->create( desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN,
+                   _("Adjust the rotation angle") );
+        knotholder->add(e);
+    }
+};
+
 namespace CR {
 
 using namespace Geom;
 
-// TODO: make this more generic
-static LPECopyRotate *
-get_effect(SPItem *item)
-{
-    Effect *effect = sp_lpe_item_get_current_lpe(SP_LPE_ITEM(item));
-    if (effect->effectType() != COPY_ROTATE) {
-        g_print ("Warning: Effect is not of type LPECopyRotate!\n");
-        return NULL;
-    }
-    return static_cast<LPECopyRotate *>(effect);
-}
-
 void
 KnotHolderEntityStartingAngle::knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint state)
 {
-    LPECopyRotate* lpe = get_effect(item);
+    LPECopyRotate* lpe = dynamic_cast<LPECopyRotate *>(_effect);
 
-    Geom::Point const s = snap_knot_position(p);
+    Geom::Point const s = snap_knot_position(p, state);
 
     // I first suspected the minus sign to be a bug in 2geom but it is
     // likely due to SVG's choice of coordinate system orientation (max)
@@ -166,9 +170,9 @@ KnotHolderEntityStartingAngle::knot_set(Geom::Point const &p, Geom::Point const 
 void
 KnotHolderEntityRotationAngle::knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint state)
 {
-    LPECopyRotate* lpe = get_effect(item);
+    LPECopyRotate* lpe = dynamic_cast<LPECopyRotate *>(_effect);
 
-    Geom::Point const s = snap_knot_position(p);
+    Geom::Point const s = snap_knot_position(p, state);
 
     // I first suspected the minus sign to be a bug in 2geom but it is
     // likely due to SVG's choice of coordinate system orientation (max)
@@ -184,20 +188,22 @@ KnotHolderEntityRotationAngle::knot_set(Geom::Point const &p, Geom::Point const 
 }
 
 Geom::Point
-KnotHolderEntityStartingAngle::knot_get()
+KnotHolderEntityStartingAngle::knot_get() const
 {
-    LPECopyRotate* lpe = get_effect(item);
-    return snap_knot_position(lpe->start_pos);
+    LPECopyRotate const *lpe = dynamic_cast<LPECopyRotate const*>(_effect);
+    return lpe->start_pos;
 }
 
 Geom::Point
-KnotHolderEntityRotationAngle::knot_get()
+KnotHolderEntityRotationAngle::knot_get() const
 {
-    LPECopyRotate* lpe = get_effect(item);
-    return snap_knot_position(lpe->rot_pos);
+    LPECopyRotate const *lpe = dynamic_cast<LPECopyRotate const*>(_effect);
+    return lpe->rot_pos;
 }
 
 } // namespace CR
+
+
 
 /* ######################## */
 

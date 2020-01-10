@@ -1,7 +1,6 @@
-/**
- * \brief Abstraction for different style widget operands
- *
+/*
  * Copyright (C) 2007 MenTaLguY <mental@rydia.net>
+ *   Abhishek Sharma
  *
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
@@ -146,7 +145,7 @@ StyleSubject::iterator StyleSubject::CurrentLayer::begin() {
 Geom::OptRect StyleSubject::CurrentLayer::getBounds(SPItem::BBoxType type) {
     SPObject *layer = _getLayer();
     if (layer && SP_IS_ITEM(layer)) {
-        return sp_item_bbox_desktop(SP_ITEM(layer), type);
+        return SP_ITEM(layer)->desktopBounds(type);
     } else {
         return Geom::OptRect();
     }
@@ -191,4 +190,4 @@ void StyleSubject::CurrentLayer::_afterDesktopSwitch(SPDesktop *desktop) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,6 +1,3 @@
-#ifndef SP_ROOT_H_SEEN
-#define SP_ROOT_H_SEEN
-
 /** \file
  * SPRoot: SVG \<svg\> implementation.
  */
@@ -14,19 +11,25 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#define SP_TYPE_ROOT (sp_root_get_type())
-#define SP_ROOT(o) (G_TYPE_CHECK_INSTANCE_CAST((o), SP_TYPE_ROOT, SPRoot))
-#define SP_ROOT_CLASS(k) (G_TYPE_CHECK_CLASS_CAST((k), SP_TYPE_ROOT, SPRootClass))
-#define SP_IS_ROOT(o) (G_TYPE_CHECK_INSTANCE_TYPE((o), SP_TYPE_ROOT))
-#define SP_IS_ROOT_CLASS(k) (G_TYPE_CHECK_CLASS_TYPE((k), SP_TYPE_ROOT))
+#ifndef SP_ROOT_H_SEEN
+#define SP_ROOT_H_SEEN
 
 #include "version.h"
 #include "svg/svg-length.h"
-#include "enums.h"
 #include "sp-item-group.h"
+#include "viewbox.h"
+
+#define SP_ROOT(obj) (dynamic_cast<SPRoot*>((SPObject*)obj))
+#define SP_IS_ROOT(obj) (dynamic_cast<const SPRoot*>((SPObject*)obj) != NULL)
+
+class SPDefs;
 
 /** \<svg\> element */
-struct SPRoot : public SPGroup {
+class SPRoot : public SPGroup, public SPViewBox {
+public:
+	SPRoot();
+	virtual ~SPRoot();
+
     struct {
         Inkscape::Version svg;
         Inkscape::Version inkscape;
@@ -37,18 +40,6 @@ struct SPRoot : public SPGroup {
     SVGLength width;
     SVGLength height;
 
-    /* viewBox; */
-    unsigned int viewBox_set : 1;
-    NRRect viewBox;
-
-    /* preserveAspectRatio */
-    unsigned int aspect_set : 1;
-    unsigned int aspect_align : 4;
-    unsigned int aspect_clip : 1;
-
-    /** Child to parent additional transform. */
-    Geom::Matrix c2p;
-
     gchar *onload;
 
     /**
@@ -58,14 +49,21 @@ struct SPRoot : public SPGroup {
      * this \<svg\> element: see writers of this member in sp-root.cpp.
      */
     SPDefs *defs;
+
+	virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
+	virtual void release();
+	virtual void set(unsigned int key, gchar const* value);
+	virtual void update(SPCtx *ctx, guint flags);
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags);
+
+	virtual void modified(unsigned int flags);
+	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
+	virtual void remove_child(Inkscape::XML::Node* child);
+
+	virtual Inkscape::DrawingItem* show(Inkscape::Drawing &drawing, unsigned int key, unsigned int flags);
+	virtual void print(SPPrintContext *ctx);
+    virtual const char* displayName() const;
 };
-
-struct SPRootClass {
-    SPGroupClass parent_class;
-};
-
-GType sp_root_get_type();
-
 
 #endif /* !SP_ROOT_H_SEEN */
 
@@ -78,4 +76,4 @@ GType sp_root_get_type();
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,4 +1,3 @@
-#include "libnr/nr-point-fns.h"
 #include "livarot/sweep-event-queue.h"
 #include "livarot/sweep-tree-list.h"
 #include "livarot/sweep-tree.h"
@@ -132,8 +131,8 @@ SweepTree::Find(Geom::Point const &px, SweepTree *newOne, SweepTree *&insertL,
         }
     }
     if (y < 0) {
-        if (son[LEFT]) {
-            return (static_cast<SweepTree *>(son[LEFT]))->Find(px, newOne,
+        if (child[LEFT]) {
+            return (static_cast<SweepTree *>(child[LEFT]))->Find(px, newOne,
                                                                insertL, insertR,
                                                                sweepSens);
 	} else {
@@ -146,8 +145,8 @@ SweepTree::Find(Geom::Point const &px, SweepTree *newOne, SweepTree *&insertL,
 	    }
 	}
     } else {
-        if (son[RIGHT]) {
-            return (static_cast<SweepTree *>(son[RIGHT]))->Find(px, newOne,
+        if (child[RIGHT]) {
+            return (static_cast<SweepTree *>(child[RIGHT]))->Find(px, newOne,
                                                                 insertL, insertR,
                                                                 sweepSens);
 	} else {
@@ -190,9 +189,9 @@ SweepTree::Find(Geom::Point const &px, SweepTree * &insertL,
     }
   if (y < 0)
     {
-      if (son[LEFT])
+      if (child[LEFT])
 	{
-	  return (static_cast<SweepTree *>(son[LEFT]))->Find(px, insertL,
+	  return (static_cast<SweepTree *>(child[LEFT]))->Find(px, insertL,
 							    insertR);
 	}
       else
@@ -211,9 +210,9 @@ SweepTree::Find(Geom::Point const &px, SweepTree * &insertL,
     }
   else
     {
-      if (son[RIGHT])
+      if (child[RIGHT])
 	{
-	  return (static_cast<SweepTree *>(son[RIGHT]))->Find(px, insertL,
+	  return (static_cast<SweepTree *>(child[RIGHT]))->Find(px, insertL,
 							    insertR);
 	}
       else
@@ -556,4 +555,4 @@ SweepTree::Avance(Shape */*dstPts*/, int /*curPoint*/, Shape */*a*/, Shape */*b*
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,22 +1,20 @@
-#define INKSCAPE_LIVEPATHEFFECT_PARAMETER_POINT_CPP
-
 /*
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "ui/widget/registered-widget.h"
 #include "live_effects/parameter/point.h"
 #include "live_effects/effect.h"
 #include "svg/svg.h"
 #include "svg/stringstream.h"
-#include <gtkmm.h>
 #include "ui/widget/point.h"
 #include "widgets/icon.h"
-#include "ui/widget/registered-widget.h"
 #include "inkscape.h"
 #include "verbs.h"
 #include "knotholder.h"
+#include <glibmm/i18n.h>
 
 // needed for on-canvas editting:
 #include "desktop.h"
@@ -73,7 +71,7 @@ PointParam::param_getSVGValue() const
 }
 
 Gtk::Widget *
-PointParam::param_newWidget(Gtk::Tooltips * /*tooltips*/)
+PointParam::param_newWidget()
 {
     Inkscape::UI::Widget::RegisteredTransformedPoint * pointwdg = Gtk::manage(
         new Inkscape::UI::Widget::RegisteredTransformedPoint( param_label,
@@ -84,7 +82,7 @@ PointParam::param_newWidget(Gtk::Tooltips * /*tooltips*/)
                                                               param_effect->getSPDoc() ) );
     // TODO: fix to get correct desktop (don't use SP_ACTIVE_DESKTOP)
     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
-    Geom::Matrix transf = desktop->doc2dt();
+    Geom::Affine transf = desktop->doc2dt();
     pointwdg->setTransform(transf);
     pointwdg->setValue( *this );
     pointwdg->clearProgrammatically();
@@ -114,7 +112,7 @@ PointParam::param_set_and_write_new_value (Geom::Point newpoint)
 }
 
 void
-PointParam::param_transform_multiply(Geom::Matrix const& postmul, bool /*set*/)
+PointParam::param_transform_multiply(Geom::Affine const& postmul, bool /*set*/)
 {
     param_set_and_write_new_value( (*this) * postmul );
 }
@@ -128,13 +126,13 @@ PointParam::set_oncanvas_looks(SPKnotShapeType shape, SPKnotModeType mode, guint
     knot_color = color;
 }
 
-class PointParamKnotHolderEntity : public LPEKnotHolderEntity {
+class PointParamKnotHolderEntity : public KnotHolderEntity {
 public:
     PointParamKnotHolderEntity(PointParam *p) { this->pparam = p; }
     virtual ~PointParamKnotHolderEntity() {}
 
     virtual void knot_set(Geom::Point const &p, Geom::Point const &origin, guint state);
-    virtual Geom::Point knot_get();
+    virtual Geom::Point knot_get() const;
     virtual void knot_click(guint state);
 
 private:
@@ -142,15 +140,15 @@ private:
 };
 
 void
-PointParamKnotHolderEntity::knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint /*state*/)
+PointParamKnotHolderEntity::knot_set(Geom::Point const &p, Geom::Point const &/*origin*/, guint state)
 {
-    Geom::Point const s = snap_knot_position(p);
+    Geom::Point const s = snap_knot_position(p, state);
     pparam->param_setValue(s);
     sp_lpe_item_update_patheffect(SP_LPE_ITEM(item), false, false);
 }
 
 Geom::Point
-PointParamKnotHolderEntity::knot_get()
+PointParamKnotHolderEntity::knot_get() const
 {
     return *pparam;
 }
@@ -166,7 +164,7 @@ PointParam::addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SP
 {
     PointParamKnotHolderEntity *e = new PointParamKnotHolderEntity(this);
     // TODO: can we ditch handleTip() etc. because we have access to handle_tip etc. itself???
-    e->create(desktop, item, knotholder, handleTip(), knot_shape, knot_mode, knot_color);
+    e->create(desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN, handleTip(), knot_shape, knot_mode, knot_color);
     knotholder->add(e);
 
 }

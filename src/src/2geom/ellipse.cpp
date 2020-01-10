@@ -36,6 +36,7 @@
 #include <2geom/numeric/fitting-tool.h>
 #include <2geom/numeric/fitting-model.h>
 
+using std::swap;
 
 namespace Geom
 {
@@ -102,7 +103,7 @@ void Ellipse::set(double A, double B, double C, double D, double E, double F)
 
     // the solution is not unique so we choose always the ellipse
     // with a rotation angle between 0 and PI/2
-    if ( swap_axes ) std::swap(rx, ry);
+    if ( swap_axes ) swap(rx, ry);
     if (    are_near(rot,  M_PI/2)
          || are_near(rot, -M_PI/2)
          || are_near(rx, ry)       )
@@ -170,7 +171,7 @@ void Ellipse::set(std::vector<Point> const& points)
 }
 
 
-SVGEllipticalArc
+EllipticalArc *
 Ellipse::arc(Point const& initial, Point const& inner, Point const& final,
              bool _svg_compliant)
 {
@@ -212,22 +213,28 @@ Ellipse::arc(Point const& initial, Point const& inner, Point const& final,
         }
     }
 
-    SVGEllipticalArc ea( initial, ray(X), ray(Y), rot_angle(),
-                      large_arc_flag, sweep_flag, final, _svg_compliant);
-    return ea;
+    EllipticalArc *ret_arc;
+    if (_svg_compliant) {
+        ret_arc = new SVGEllipticalArc(initial, ray(X), ray(Y), rot_angle(),
+                      large_arc_flag, sweep_flag, final);
+    } else {
+        ret_arc = new EllipticalArc(initial, ray(X), ray(Y), rot_angle(),
+                      large_arc_flag, sweep_flag, final);
+    }
+    return ret_arc;
 }
 
-Ellipse Ellipse::transformed(Matrix const& m) const
+Ellipse Ellipse::transformed(Affine const& m) const
 {
     double cosrot = std::cos(rot_angle());
     double sinrot = std::sin(rot_angle());
-    Matrix A(  ray(X) * cosrot, ray(X) * sinrot,
+    Affine A(  ray(X) * cosrot, ray(X) * sinrot,
               -ray(Y) * sinrot, ray(Y) * cosrot,
                0,               0                );
     Point new_center = center() * m;
-    Matrix M = m.without_translation();
-    Matrix AM = A * M;
-    if ( are_near(AM.det(), 0) )
+    Affine M = m.withoutTranslation();
+    Affine AM = A * M;
+    if ( are_near(std::sqrt(fabs(AM.det())), 0) )
     {
         double angle;
         if (AM[0] != 0)
@@ -250,13 +257,13 @@ Ellipse Ellipse::transformed(Matrix const& m) const
     }
 
     std::vector<double> coeff = implicit_form_coefficients();
-    Matrix Q( coeff[0],   coeff[1]/2,
+    Affine Q( coeff[0],   coeff[1]/2,
               coeff[1]/2, coeff[2],
               0,          0   );
 
-    Matrix invm = M.inverse();
+    Affine invm = M.inverse();
     Q = invm * Q ;
-    std::swap( invm[1], invm[2] );
+    swap( invm[1], invm[2] );
     Q *= invm;
     Ellipse e(Q[0], 2*Q[1], Q[3], 0, 0, -1);
     e.m_centre = new_center;
@@ -282,6 +289,6 @@ Ellipse::Ellipse(Geom::Circle const &c)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
 
 

@@ -12,7 +12,7 @@
 ;    out wrong or this script didn't compile properly then you can define
 ;    INKSCAPE_VERSION by uncommenting the next line and setting the correct
 ;    value:
-;      !define INKSCAPE_VERSION "0.48.4"
+;      !define INKSCAPE_VERSION "0.48"
 ;    If you ever need to do a second, third or Nth release of the build or
 ;    of the installer, then change the RELEASE_REVISION value below:
        !define RELEASE_REVISION 1
@@ -123,10 +123,12 @@ ShowUninstDetails hide
 !insertmacro INKLANGFILE French
 !insertmacro INKLANGFILE Galician
 !insertmacro INKLANGFILE German
+!insertmacro INKLANGFILE Greek
 !insertmacro INKLANGFILE Indonesian
 !insertmacro INKLANGFILE Italian
 !insertmacro INKLANGFILE Japanese
 !insertmacro INKLANGFILE Polish
+!insertmacro INKLANGFILE PortugueseBR
 !insertmacro INKLANGFILE Romanian
 !insertmacro INKLANGFILE Russian
 !insertmacro INKLANGFILE Slovak
@@ -234,7 +236,7 @@ VIProductVersion ${VERSION_X.X.X.X}
 VIAddVersionKey ProductName Inkscape
 VIAddVersionKey Comments "Licensed under the GNU GPL"
 VIAddVersionKey CompanyName inkscape.org
-VIAddVersionKey LegalCopyright "© 2009 Inkscape"
+VIAddVersionKey LegalCopyright "© 2012 Inkscape"
 VIAddVersionKey FileDescription Inkscape
 VIAddVersionKey FileVersion ${VERSION_X.X.X.X}
 VIAddVersionKey ProductVersion ${VERSION_X.X.X.X}
@@ -313,14 +315,23 @@ Section $(Core) SecCore ; Mandatory Inkscape core files section {{{
   File /nonfatal /a /r /x *.??*.???* /x examples /x tutorials ..\..\inkscape\share
   !insertmacro UNINSTALL.LOG_CLOSE_INSTALL
   ; this files are added because it slips through the filter
-  SetOutPath $INSTDIR\share\clipart
+  SetOutPath $INSTDIR\share\branding
   !insertmacro UNINSTALL.LOG_OPEN_INSTALL
-  File /a ..\..\inkscape\share\clipart\inkscape.logo.svg
+  File /a ..\..\inkscape\share\branding\draw-freely.ru.svg
   !insertmacro UNINSTALL.LOG_CLOSE_INSTALL
   SetOutPath $INSTDIR\share\icons
   !insertmacro UNINSTALL.LOG_OPEN_INSTALL
   File /a ..\..\inkscape\share\icons\inkscape.file.png
   File /a ..\..\inkscape\share\icons\inkscape.file.svg
+  !insertmacro UNINSTALL.LOG_CLOSE_INSTALL
+  SetOutPath $INSTDIR\share\extensions
+  !insertmacro UNINSTALL.LOG_OPEN_INSTALL
+  File /a ..\..\inkscape\share\extensions\inkscape.extension.rng
+  !insertmacro UNINSTALL.LOG_CLOSE_INSTALL
+  SetOutPath $INSTDIR\share\extensions\test
+  !insertmacro UNINSTALL.LOG_OPEN_INSTALL
+  File /a ..\..\inkscape\share\extensions\test\inkwebjs-move.test.svg
+  File /a ..\..\inkscape\share\extensions\test\test_template.py.txt
   !insertmacro UNINSTALL.LOG_CLOSE_INSTALL
   SetOutPath $INSTDIR\modules
   !insertmacro UNINSTALL.LOG_OPEN_INSTALL
@@ -504,6 +515,7 @@ SectionGroup "$(Languages)" SecLanguages ; Languages sections {{{
   !insertmacro Language Byelorussian      be
   !insertmacro Language Bulgarian         bg
   !insertmacro Language Bengali           bn
+  !insertmacro Language BengaliBangladesh bn_BD
   !insertmacro Language Breton            br
   !insertmacro Language Catalan           ca
   !insertmacro Language CatalanValencia   ca@valencia
@@ -529,12 +541,14 @@ SectionGroup "$(Languages)" SecLanguages ; Languages sections {{{
   !insertmacro Language Hebrew            he
   !insertmacro Language Croatian          hr
   !insertmacro Language Hungarian         hu
+  !insertmacro Language Armenian          hy
   !insertmacro Language Indonesian        id
   !insertmacro Language Italian           it
   !insertmacro Language Japanese          ja
   !insertmacro Language Khmer             km
   !insertmacro Language Korean            ko
   !insertmacro Language Lithuanian        lt
+  !insertmacro Language Latvian           lv
   !insertmacro Language Mongolian         mn
   !insertmacro Language Macedonian        mk
   !insertmacro Language NorwegianBokmal   nb
@@ -554,7 +568,7 @@ SectionGroup "$(Languages)" SecLanguages ; Languages sections {{{
   !insertmacro Language Serbian           sr
   !insertmacro Language SerbianLatin      sr@latin
   !insertmacro Language Swedish           sv
-  !insertmacro Language Telugu            te_IN
+  !insertmacro Language Telugu            te
   !insertmacro Language Thai              th
   !insertmacro Language Turkish           tr
   !insertmacro Language Ukrainian         uk
@@ -647,6 +661,7 @@ Function .onInit ; initialise the installer {{{2
   !macroend
 
   ; No need for English to be detected as it's the default
+  !insertmacro LanguageAutoSelect PortugueseBrazil  1046
   !insertmacro LanguageAutoSelect Breton        1150
   !insertmacro LanguageAutoSelect Catalan       1027
   !insertmacro LanguageAutoSelect Czech         1029
@@ -655,6 +670,7 @@ Function .onInit ; initialise the installer {{{2
   !insertmacro LanguageAutoSelect French        1036
   !insertmacro LanguageAutoSelect Galician      1110
   !insertmacro LanguageAutoSelect German        1031
+  !insertmacro LanguageAutoSelect Greek         1032
   !insertmacro LanguageAutoSelect Indonesian    1057
   !insertmacro LanguageAutoSelect Italian       1040
   !insertmacro LanguageAutoSelect Japanese      1041
@@ -762,6 +778,7 @@ Function .onInit ; initialise the installer {{{2
   !insertmacro Parameter be             ${SecByelorussian}
   !insertmacro Parameter bg             ${SecBulgarian}
   !insertmacro Parameter bn             ${SecBengali}
+  !insertmacro Parameter bn_BD          ${SecBengaliBangladesh}
   !insertmacro Parameter br             ${SecBreton}
   !insertmacro Parameter ca             ${SecCatalan}
   !insertmacro Parameter ca@valencia    ${SecCatalanValencia}
@@ -787,12 +804,14 @@ Function .onInit ; initialise the installer {{{2
   !insertmacro Parameter he             ${SecHebrew}
   !insertmacro Parameter hr             ${SecCroatian}
   !insertmacro Parameter hu             ${SecHungarian}
+  !insertmacro Parameter hy             ${SecArmenian}
   !insertmacro Parameter id             ${SecIndonesian}
   !insertmacro Parameter it             ${SecItalian}
   !insertmacro Parameter ja             ${SecJapanese}
   !insertmacro Parameter km             ${SecKhmer}
   !insertmacro Parameter ko             ${SecKorean}
   !insertmacro Parameter lt             ${SecLithuanian}
+  !insertmacro Parameter lv             ${SecLatvian}
   !insertmacro Parameter mk             ${SecMacedonian}
   !insertmacro Parameter mn             ${SecMongolian}
   !insertmacro Parameter nb             ${SecNorwegianBokmal}
@@ -812,7 +831,7 @@ Function .onInit ; initialise the installer {{{2
   !insertmacro Parameter sr             ${SecSerbian}
   !insertmacro Parameter sr@latin       ${SecSerbianLatin}
   !insertmacro Parameter sv             ${SecSwedish}
-  !insertmacro Parameter te_IN          ${SecTelugu}
+  !insertmacro Parameter te             ${SecTelugu}
   !insertmacro Parameter th             ${SecThai}
   !insertmacro Parameter tr             ${SecTurkish}
   !insertmacro Parameter uk             ${SecUkrainian}

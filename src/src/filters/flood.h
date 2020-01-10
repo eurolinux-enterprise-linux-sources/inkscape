@@ -1,10 +1,6 @@
-#ifndef SP_FEFLOOD_H_SEEN
-#define SP_FEFLOOD_H_SEEN
-
-/** \file
- * SVG <feFlood> implementation, see Flood.cpp.
- */
-/*
+/** @file
+ * @brief SVG flood filter effect
+ *//*
  * Authors:
  *   Hugo Rodrigues <haa.rodrigues@gmail.com>
  *
@@ -13,29 +9,36 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "sp-filter.h"
-#include "flood-fns.h"
+#ifndef SP_FEFLOOD_H_SEEN
+#define SP_FEFLOOD_H_SEEN
+
+#include "sp-filter-primitive.h"
 #include "svg/svg-icc-color.h"
 
-#include "display/nr-filter.h"
-#include "display/nr-filter-flood.h"
+#define SP_FEFLOOD(obj) (dynamic_cast<SPFeFlood*>((SPObject*)obj))
+#define SP_IS_FEFLOOD(obj) (dynamic_cast<const SPFeFlood*>((SPObject*)obj) != NULL)
 
-/* FeFlood base class */
-class SPFeFloodClass;
+class SPFeFlood : public SPFilterPrimitive {
+public:
+	SPFeFlood();
+	virtual ~SPFeFlood();
 
-struct SPFeFlood : public SPFilterPrimitive {
-    /** FLOOD ATTRIBUTES HERE */
     guint32 color;
     SVGICCColor *icc;
     double opacity;
+
+protected:
+	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
+	virtual void release();
+
+	virtual void set(unsigned int key, const gchar* value);
+
+	virtual void update(SPCtx* ctx, unsigned int flags);
+
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
+
+	virtual void build_renderer(Inkscape::Filters::Filter* filter);
 };
-
-struct SPFeFloodClass {
-    SPFilterPrimitiveClass parent_class;
-};
-
-GType sp_feFlood_get_type();
-
 
 #endif /* !SP_FEFLOOD_H_SEEN */
 
@@ -48,4 +51,4 @@ GType sp_feFlood_get_type();
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

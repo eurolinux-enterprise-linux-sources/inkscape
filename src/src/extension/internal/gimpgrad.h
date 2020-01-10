@@ -1,7 +1,4 @@
-/** \file
- *
- * Implementation class of the GIMP gradient plugin.
- *
+/*
  * Authors:
  *   Ted Gould <ted@gould.cx>
  *
@@ -9,20 +6,24 @@
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
-
+// TODO add include guard
 #include <glibmm/ustring.h>
 
 #include "extension/implementation/implementation.h"
-#include "extension/extension-forward.h"
 
 namespace Inkscape {
 namespace Extension {
+
+class Extension;
+
 namespace Internal {
 
-/** \brief  Implementation class of the GIMP gradient plugin.  This mostly
-            just creates a namespace for the GIMP gradient plugin today.
-*/
-class GimpGrad : public Inkscape::Extension::Implementation::Implementation {
+/**
+ * Implementation class of the GIMP gradient plugin.
+ * This mostly just creates a namespace for the GIMP gradient plugin today.
+ */
+class GimpGrad : public Inkscape::Extension::Implementation::Implementation
+{
 public:
     bool load(Inkscape::Extension::Extension *module);
     void unload(Inkscape::Extension::Extension *module);
@@ -32,7 +33,9 @@ public:
 };
 
 
-} } }  /* namespace Internal; Extension; Inkscape */
+} // namespace Internal
+} // namespace Extension
+} // namespace Inkscape
 
 /*
   Local Variables:
@@ -43,4 +46,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

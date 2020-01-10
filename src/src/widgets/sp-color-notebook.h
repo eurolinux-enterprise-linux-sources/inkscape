@@ -31,7 +31,7 @@ public:
     virtual void init();
 
     SPColorSelector* getCurrentSelector();
-    void switchPage( GtkNotebook *notebook, GtkNotebookPage *page, guint page_num );
+    void switchPage( GtkNotebook *notebook, GtkWidget *page, guint page_num );
 
     GtkWidget* addPage( GType page_type, guint submode );
     void removePage( GType page_type, guint submode );
@@ -46,11 +46,14 @@ protected:
     static void _entryReleased( SPColorSelector *csel, SPColorNotebook *colorbook );
     static void _entryChanged( SPColorSelector *csel, SPColorNotebook *colorbook );
     static void _entryModified( SPColorSelector *csel, SPColorNotebook *colorbook );
+    static void _buttonClicked(GtkWidget *widget,  SPColorNotebook *colorbook);
+    static void _picker_clicked(GtkWidget *widget,  SPColorNotebook *colorbook);
 
     virtual void _colorChanged();
 
     void _rgbaEntryChanged( GtkEntry* entry );
     void _updateRgbaEntry( const SPColor& color, gfloat alpha );
+    void _setCurrentPage(int i);
 
     gboolean _updating : 1;
     gboolean _updatingrgba : 1;
@@ -58,10 +61,13 @@ protected:
     gulong _switchId;
     gulong _entryId;
     GtkWidget *_book;
+    GtkWidget *_buttonbox;
+    GtkWidget **_buttons;
     GtkWidget *_rgbal, *_rgbae; /* RGBA entry */
 #if defined(HAVE_LIBLCMS1) || defined(HAVE_LIBLCMS2)
     GtkWidget *_box_outofgamut, *_box_colormanaged, *_box_toomuchink;
 #endif //defined(HAVE_LIBLCMS1) || defined(HAVE_LIBLCMS2)
+    GtkWidget *_btn_picker;
     GtkWidget *_p; /* Color preview */
     GtkWidget *_btn;
     GtkWidget *_popup;
@@ -76,10 +82,10 @@ private:
 
 
 #define SP_TYPE_COLOR_NOTEBOOK (sp_color_notebook_get_type ())
-#define SP_COLOR_NOTEBOOK(o) (GTK_CHECK_CAST ((o), SP_TYPE_COLOR_NOTEBOOK, SPColorNotebook))
-#define SP_COLOR_NOTEBOOK_CLASS(k) (GTK_CHECK_CLASS_CAST ((k), SP_TYPE_COLOR_NOTEBOOK, SPColorNotebookClass))
-#define SP_IS_COLOR_NOTEBOOK(o) (GTK_CHECK_TYPE ((o), SP_TYPE_COLOR_NOTEBOOK))
-#define SP_IS_COLOR_NOTEBOOK_CLASS(k) (GTK_CHECK_CLASS_TYPE ((k), SP_TYPE_COLOR_NOTEBOOK))
+#define SP_COLOR_NOTEBOOK(o) (G_TYPE_CHECK_INSTANCE_CAST ((o), SP_TYPE_COLOR_NOTEBOOK, SPColorNotebook))
+#define SP_COLOR_NOTEBOOK_CLASS(k) (G_TYPE_CHECK_CLASS_CAST ((k), SP_TYPE_COLOR_NOTEBOOK, SPColorNotebookClass))
+#define SP_IS_COLOR_NOTEBOOK(o) (G_TYPE_CHECK_INSTANCE_TYPE ((o), SP_TYPE_COLOR_NOTEBOOK))
+#define SP_IS_COLOR_NOTEBOOK_CLASS(k) (G_TYPE_CHECK_CLASS_TYPE ((k), SP_TYPE_COLOR_NOTEBOOK))
 
 struct SPColorNotebook {
     SPColorSelector parent;    /* Parent */
@@ -114,5 +120,5 @@ GtkWidget *sp_color_notebook_new (void);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
 

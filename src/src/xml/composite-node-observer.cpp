@@ -277,7 +277,13 @@ struct vector_data_matches {
     
     bool operator()(NodeObserver const &observer) {
         VectorNodeObserver const *vo=dynamic_cast<VectorNodeObserver const *>(&observer);
-        return vo && vo->data == data;
+        bool OK = false;
+        if (vo) {
+            if (vo && vo->data == data) {
+                OK = true;
+            }
+        }
+        return OK;
     }
 };
 
@@ -308,4 +314,4 @@ void CompositeNodeObserver::removeListenerByData(void *data) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

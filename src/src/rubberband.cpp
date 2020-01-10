@@ -1,11 +1,9 @@
-#define __RUBBERBAND_C__
-
-/**
- * \file src/rubberband.cpp
- * \brief Rubberbanding selector
+/*
+ * Rubberbanding selector.
  *
  * Author:
  *   Lauris Kaplinski <lauris@kaplinski.com>
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 1999-2002 Lauris Kaplinski
  *
@@ -16,6 +14,8 @@
 #include "desktop.h"
 #include "desktop-handles.h"
 #include "rubberband.h"
+#include "display/sp-canvas.h"
+#include "display/sp-canvas-item.h"
 #include "display/canvas-bpath.h"
 #include "display/curve.h"
 
@@ -32,14 +32,14 @@ Inkscape::Rubberband::Rubberband(SPDesktop *dt)
 void Inkscape::Rubberband::delete_canvas_items()
 {
     if (_rect) {
-        GtkObject *temp = _rect;
+        SPCanvasItem *temp = _rect;
         _rect = NULL;
-        gtk_object_destroy(temp);
+        sp_canvas_item_destroy(temp);
     }
     if (_touchpath) {
-        GtkObject *temp = _touchpath;
+        SPCanvasItem *temp = _touchpath;
         _touchpath = NULL;
-        gtk_object_destroy(temp);
+        sp_canvas_item_destroy(temp);
     }
 }
 
@@ -55,7 +55,7 @@ void Inkscape::Rubberband::start(SPDesktop *d, Geom::Point const &p)
     _points.push_back(_desktop->d2w(p));
     _touchpath_curve->moveto(p);
 
-    sp_canvas_force_full_redraw_after_interruptions(_desktop->canvas, 5);
+    _desktop->canvas->forceFullRedrawAfterInterruptions(5);
 }
 
 void Inkscape::Rubberband::stop()
@@ -68,8 +68,9 @@ void Inkscape::Rubberband::stop()
 
     delete_canvas_items();
 
-    if (_desktop)
-        sp_canvas_end_forced_full_redraws(_desktop->canvas);
+    if (_desktop) {
+        _desktop->canvas->endForcedFullRedraws();
+    }
 }
 
 void Inkscape::Rubberband::move(Geom::Point const &p)
@@ -85,7 +86,7 @@ void Inkscape::Rubberband::move(Geom::Point const &p)
     // we want the points to be at most 0.5 screen pixels apart,
     // so that we don't lose anything small;
     // if they are farther apart, we interpolate more points
-    if (_points.size() > 0 && Geom::L2(next-_points.back()) > 0.5) {
+    if (!_points.empty() && Geom::L2(next-_points.back()) > 0.5) {
         Geom::Point prev = _points.back();
         int subdiv = 2 * (int) round(Geom::L2(next-prev) + 0.5);
         for (int i = 1; i <= subdiv; i ++) {
@@ -98,6 +99,7 @@ void Inkscape::Rubberband::move(Geom::Point const &p)
     if (_mode == RUBBERBAND_MODE_RECT) {
         if (_rect == NULL) {
             _rect = static_cast<CtrlRect *>(sp_canvas_item_new(sp_desktop_controls(_desktop), SP_TYPE_CTRLRECT, NULL));
+            _rect->setShadow(1, 0xffffffff);
         }
         _rect->setRectangle(Geom::Rect(_start, _end));
 
@@ -156,4 +158,4 @@ bool Inkscape::Rubberband::is_started()
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

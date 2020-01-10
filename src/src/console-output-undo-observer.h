@@ -1,22 +1,25 @@
-/**
- * Inkscape::ConsoleOutputUndoObserver - observer for tracing calls to
- * sp_document_undo, sp_document_redo, sp_document_maybe_done
- *
+/*
  * Authors:
  * David Yip <yipdw@alumni.rose-hulman.edu>
+ *   Abhishek Sharma
  *
  * Copyright (c) 2006 Authors
  *
  * Released under GNU GPL, see the file 'COPYING' for more information
  */
 
-#ifndef __INKSCAPE_CONSOLE_OUTPUT_UNDO_OBSERVER_H__
-#define __INKSCAPE_CONSOLE_OUTPUT_UNDO_OBSERVER_H__
+#ifndef SEEN_INKSCAPE_CONSOLE_OUTPUT_UNDO_OBSERVER_H
+#define SEEN_INKSCAPE_CONSOLE_OUTPUT_UNDO_OBSERVER_H
 
 #include "undo-stack-observer.h"
 
 namespace Inkscape {
 
+/**
+ * Inkscape::ConsoleOutputUndoObserver - observer for tracing calls to
+ * SPDocumentUndo::undo, SPDocumentUndo::redo, SPDocumentUndo::maybe_done.
+ *
+ */
 class ConsoleOutputUndoObserver : public UndoStackObserver {
 public:
     ConsoleOutputUndoObserver() : UndoStackObserver() { }
@@ -31,7 +34,7 @@ public:
 };
 }
 
-#endif
+#endif // SEEN_INKSCAPE_CONSOLE_OUTPUT_UNDO_OBSERVER_H
 
 /*
   Local Variables:
@@ -42,4 +45,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

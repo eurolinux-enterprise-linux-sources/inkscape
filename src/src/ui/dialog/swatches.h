@@ -10,9 +10,8 @@
 #ifndef SEEN_DIALOGS_SWATCHES_H
 #define SEEN_DIALOGS_SWATCHES_H
 
-#include <gtkmm/textview.h>
-
 #include "ui/widget/panel.h"
+#include "enums.h"
 
 namespace Inkscape {
 namespace UI {
@@ -36,7 +35,7 @@ public:
 
     static SwatchesPanel& getInstance();
 
-    virtual void setOrientation( Gtk::AnchorType how );
+    virtual void setOrientation(SPAnchorType how);
 
     virtual void setDesktop( SPDesktop* desktop );
     virtual SPDesktop* getDesktop() {return _currentDesktop;}
@@ -44,11 +43,13 @@ public:
     virtual int getSelectedIndex() {return _currentIndex;} // temporary
 
 protected:
+    static void handleDocumentDestroy(SPDocument *document);
     static void handleGradientsChange(SPDocument *document);
 
     virtual void _updateFromSelection();
     virtual void _handleAction( int setId, int itemId );
     virtual void _setDocument( SPDocument *document );
+    virtual void _setSelectedIndex( int index );
     virtual void _rebuild();
 
     virtual std::vector<SwatchPage*> _getSwatchSets() const;
@@ -90,4 +91,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

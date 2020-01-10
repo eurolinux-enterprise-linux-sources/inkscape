@@ -1,40 +1,34 @@
-/** @file
- * Multi path manipulator - implementation
+/**
+ * @file
+ * Multi path manipulator - implementation.
  */
 /* Authors:
  *   Krzysztof Kosiński <tweenk.pl@gmail.com>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2009 Authors
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
 #include <boost/shared_ptr.hpp>
-#include <glib.h>
+#include "node.h"
 #include <glibmm/i18n.h>
 #include "desktop.h"
 #include "desktop-handles.h"
 #include "document.h"
+#include "document-undo.h"
 #include "live_effects/lpeobject.h"
 #include "message-stack.h"
 #include "preferences.h"
 #include "sp-path.h"
 #include "ui/tool/control-point-selection.h"
 #include "ui/tool/event-utils.h"
-#include "ui/tool/node.h"
 #include "ui/tool/multi-path-manipulator.h"
 #include "ui/tool/path-manipulator.h"
 #include "util/unordered-containers.h"
+#include "verbs.h"
 
-#ifdef USE_GNU_HASHES
-namespace __gnu_cxx {
-template<>
-struct hash<Inkscape::UI::NodeList::iterator> {
-    size_t operator()(Inkscape::UI::NodeList::iterator const &n) const {
-        return reinterpret_cast<size_t>(n.ptr());
-    }
-};
-} // namespace __gnu_cxx
-#endif // USE_GNU_HASHES
+#include <gdk/gdkkeysyms.h>
 
 namespace Inkscape {
 namespace UI {
@@ -59,7 +53,6 @@ typedef std::pair<double, IterPair> DistanceMapItem;
 void find_join_iterators(ControlPointSelection &sel, IterPairList &pairs)
 {
     IterSet join_iters;
-    DistanceMap dists;
 
     // find all endnodes in selection
     for (ControlPointSelection::iterator i = sel.begin(); i != sel.end(); ++i) {
@@ -148,9 +141,11 @@ void MultiPathManipulator::cleanup()
     }
 }
 
-/** @brief Change the set of items to edit.
+/**
+ * Change the set of items to edit.
  *
- * This method attempts to preserve as much of the state as possible. */
+ * This method attempts to preserve as much of the state as possible.
+ */
 void MultiPathManipulator::setItems(std::set<ShapeRecord> const &s)
 {
     std::set<ShapeRecord> shapes(s);
@@ -218,10 +213,12 @@ void MultiPathManipulator::shiftSelection(int dir)
     SubpathList::iterator last_j;
     NodeList::iterator last_k;
     bool anything_found = false;
+    bool anynode_found = false;
 
     for (MapType::iterator i = _mmap.begin(); i != _mmap.end(); ++i) {
         SubpathList &sp = i->second->subpathList();
         for (SubpathList::iterator j = sp.begin(); j != sp.end(); ++j) {
+            anynode_found = true;
             for (NodeList::iterator k = (*j)->begin(); k != (*j)->end(); ++k) {
                 if (k->selected()) {
                     last_i = i;
@@ -243,10 +240,12 @@ void MultiPathManipulator::shiftSelection(int dir)
     if (!anything_found) {
         // select first / last node
         // this should never fail because there must be at least 1 non-empty manipulator
-        if (dir == 1) {
+        if (anynode_found) {
+          if (dir == 1) {
             _selection.insert((*_mmap.begin()->second->subpathList().begin())->begin().ptr());
-        } else {
+          } else {
             _selection.insert((--(*--(--_mmap.end())->second->subpathList().end())->end()).ptr());
+          }
         }
         return;
     }
@@ -329,18 +328,27 @@ void MultiPathManipulator::setSegmentType(SegmentType type)
 
 void MultiPathManipulator::insertNodes()
 {
+    if (_selection.empty()) return;
     invokeForAll(&PathManipulator::insertNodes);
     _done(_("Add nodes"));
+}
+void MultiPathManipulator::insertNodesAtExtrema(ExtremumType extremum)
+{
+    if (_selection.empty()) return;
+    invokeForAll(&PathManipulator::insertNodeAtExtremum, extremum);
+    _done(_("Add extremum nodes"));
 }
 
 void MultiPathManipulator::duplicateNodes()
 {
+    if (_selection.empty()) return;
     invokeForAll(&PathManipulator::duplicateNodes);
     _done(_("Duplicate nodes"));
 }
 
 void MultiPathManipulator::joinNodes()
 {
+    if (_selection.empty()) return;
     invokeForAll(&PathManipulator::hideDragPoint);
     // Node join has two parts. In the first one we join two subpaths by fusing endpoints
     // into one. In the second we fuse nodes in each subpath.
@@ -398,26 +406,27 @@ void MultiPathManipulator::joinNodes()
         invokeForAll(&PathManipulator::weldNodes, preserve_pos);
     }
 
-    _doneWithCleanup(_("Join nodes"));
+    _doneWithCleanup(_("Join nodes"), true);
 }
 
 void MultiPathManipulator::breakNodes()
 {
     if (_selection.empty()) return;
     invokeForAll(&PathManipulator::breakNodes);
-    _done(_("Break nodes"));
+    _done(_("Break nodes"), true);
 }
 
 void MultiPathManipulator::deleteNodes(bool keep_shape)
 {
     if (_selection.empty()) return;
     invokeForAll(&PathManipulator::deleteNodes, keep_shape);
-    _doneWithCleanup(_("Delete nodes"));
+    _doneWithCleanup(_("Delete nodes"), true);
 }
 
 /** Join selected endpoints to create segments. */
 void MultiPathManipulator::joinSegments()
 {
+    if (_selection.empty()) return;
     IterPairList joins;
     find_join_iterators(_selection, joins);
 
@@ -438,18 +447,19 @@ void MultiPathManipulator::joinSegments()
     if (joins.empty()) {
         invokeForAll(&PathManipulator::weldSegments);
     }
-    _doneWithCleanup("Join segments");
+    _doneWithCleanup("Join segments", true);
 }
 
 void MultiPathManipulator::deleteSegments()
 {
     if (_selection.empty()) return;
     invokeForAll(&PathManipulator::deleteSegments);
-    _doneWithCleanup("Delete segments");
+    _doneWithCleanup("Delete segments", true);
 }
 
 void MultiPathManipulator::alignNodes(Geom::Dim2 d)
 {
+    if (_selection.empty()) return;
     _selection.align(d);
     if (d == Geom::X) {
         _done("Align nodes to a horizontal line");
@@ -460,6 +470,7 @@ void MultiPathManipulator::alignNodes(Geom::Dim2 d)
 
 void MultiPathManipulator::distributeNodes(Geom::Dim2 d)
 {
+    if (_selection.empty()) return;
     _selection.distribute(d);
     if (d == Geom::X) {
         _done("Distrubute nodes horizontally");
@@ -481,6 +492,7 @@ void MultiPathManipulator::reverseSubpaths()
 
 void MultiPathManipulator::move(Geom::Point const &delta)
 {
+    if (_selection.empty()) return;
     _selection.transform(Geom::Translate(delta));
     _done("Move nodes");
 }
@@ -506,20 +518,24 @@ void MultiPathManipulator::showPathDirection(bool show)
     _show_path_direction = show;
 }
 
-/** @brief Set live outline update status
+/**
+ * Set live outline update status.
  * When set to true, outline will be updated continuously when dragging
  * or transforming nodes. Otherwise it will only update when changes are committed
- * to XML. */
+ * to XML.
+ */
 void MultiPathManipulator::setLiveOutline(bool set)
 {
     invokeForAll(&PathManipulator::setLiveOutline, set);
     _live_outline = set;
 }
 
-/** @brief Set live object update status
+/**
+ * Set live object update status.
  * When set to true, objects will be updated continuously when dragging
  * or transforming nodes. Otherwise they will only update when changes are committed
- * to XML. */
+ * to XML.
+ */
 void MultiPathManipulator::setLiveObjects(bool set)
 {
     invokeForAll(&PathManipulator::setLiveObjects, set);
@@ -533,7 +549,12 @@ void MultiPathManipulator::updateOutlineColors()
     //}
 }
 
-bool MultiPathManipulator::event(SPEventContext *event_context, GdkEvent *event)
+void MultiPathManipulator::updateHandles()
+{
+    invokeForAll(&PathManipulator::updateHandles);
+}
+
+bool MultiPathManipulator::event(Inkscape::UI::Tools::ToolBase *event_context, GdkEvent *event)
 {
     _tracker.event(event);
     guint key = 0;
@@ -564,21 +585,21 @@ bool MultiPathManipulator::event(SPEventContext *event_context, GdkEvent *event)
             switch (key) {
             // single handle functions
             // rotation
-            case GDK_bracketleft:
-            case GDK_braceleft:
+            case GDK_KEY_bracketleft:
+            case GDK_KEY_braceleft:
                 pm.rotateHandle(n, which, 1, one_pixel);
                 break;
-            case GDK_bracketright:
-            case GDK_braceright:
+            case GDK_KEY_bracketright:
+            case GDK_KEY_braceright:
                 pm.rotateHandle(n, which, -1, one_pixel);
                 break;
             // adjust length
-            case GDK_period:
-            case GDK_greater:
+            case GDK_KEY_period:
+            case GDK_KEY_greater:
                 pm.scaleHandle(n, which, 1, one_pixel);
                 break;
-            case GDK_comma:
-            case GDK_less:
+            case GDK_KEY_comma:
+            case GDK_KEY_less:
                 pm.scaleHandle(n, which, -1, one_pixel);
                 break;
             default:
@@ -594,13 +615,13 @@ bool MultiPathManipulator::event(SPEventContext *event_context, GdkEvent *event)
     switch (event->type) {
     case GDK_KEY_PRESS:
         switch (key) {
-        case GDK_Insert:
-        case GDK_KP_Insert:
+        case GDK_KEY_Insert:
+        case GDK_KEY_KP_Insert:
             // Insert - insert nodes in the middle of selected segments
             insertNodes();
             return true;
-        case GDK_i:
-        case GDK_I:
+        case GDK_KEY_i:
+        case GDK_KEY_I:
             if (held_only_shift(event->key)) {
                 // Shift+I - insert nodes (alternate keybinding for Mac keyboards
                 //           that don't have the Insert key)
@@ -608,14 +629,14 @@ bool MultiPathManipulator::event(SPEventContext *event_context, GdkEvent *event)
                 return true;
             }
             break;
-        case GDK_d:
-        case GDK_D:
+        case GDK_KEY_d:
+        case GDK_KEY_D:
             if (held_only_shift(event->key)) {
                 duplicateNodes();
                 return true;
             }
-        case GDK_j:
-        case GDK_J:
+        case GDK_KEY_j:
+        case GDK_KEY_J:
             if (held_only_shift(event->key)) {
                 // Shift+J - join nodes
                 joinNodes();
@@ -627,17 +648,17 @@ bool MultiPathManipulator::event(SPEventContext *event_context, GdkEvent *event)
                 return true;
             }
             break;
-        case GDK_b:
-        case GDK_B:
+        case GDK_KEY_b:
+        case GDK_KEY_B:
             if (held_only_shift(event->key)) {
                 // Shift+B - break nodes
                 breakNodes();
                 return true;
             }
             break;
-        case GDK_Delete:
-        case GDK_KP_Delete:
-        case GDK_BackSpace:
+        case GDK_KEY_Delete:
+        case GDK_KEY_KP_Delete:
+        case GDK_KEY_BackSpace:
             if (held_shift(event->key)) break;
             if (held_alt(event->key)) {
                 // Alt+Delete - delete segments
@@ -650,59 +671,62 @@ bool MultiPathManipulator::event(SPEventContext *event_context, GdkEvent *event)
                 // b) ctrl+del preserves shape (del_preserves_shape is false), and control is pressed
                 // Hence xor
                 deleteNodes(del_preserves_shape ^ held_control(event->key));
+
+                // Delete any selected gradient nodes as well
+                event_context->deleteSelectedDrag(held_control(event->key));
             }
             return true;
-        case GDK_c:
-        case GDK_C:
+        case GDK_KEY_c:
+        case GDK_KEY_C:
             if (held_only_shift(event->key)) {
                 // Shift+C - make nodes cusp
                 setNodeType(NODE_CUSP);
                 return true;
             }
             break;
-        case GDK_s:
-        case GDK_S:
+        case GDK_KEY_s:
+        case GDK_KEY_S:
             if (held_only_shift(event->key)) {
                 // Shift+S - make nodes smooth
                 setNodeType(NODE_SMOOTH);
                 return true;
             }
             break;
-        case GDK_a:
-        case GDK_A:
+        case GDK_KEY_a:
+        case GDK_KEY_A:
             if (held_only_shift(event->key)) {
                 // Shift+A - make nodes auto-smooth
                 setNodeType(NODE_AUTO);
                 return true;
             }
             break;
-        case GDK_y:
-        case GDK_Y:
+        case GDK_KEY_y:
+        case GDK_KEY_Y:
             if (held_only_shift(event->key)) {
                 // Shift+Y - make nodes symmetric
                 setNodeType(NODE_SYMMETRIC);
                 return true;
             }
             break;
-        case GDK_r:
-        case GDK_R:
+        case GDK_KEY_r:
+        case GDK_KEY_R:
             if (held_only_shift(event->key)) {
                 // Shift+R - reverse subpaths
                 reverseSubpaths();
                 return true;
             }
             break;
-        case GDK_l:
-        case GDK_L:
+        case GDK_KEY_l:
+        case GDK_KEY_L:
             if (held_only_shift(event->key)) {
                 // Shift+L - make segments linear
                 setSegmentType(SEGMENT_STRAIGHT);
                 return true;
             }
-        case GDK_u:
-        case GDK_U:
+        case GDK_KEY_u:
+        case GDK_KEY_U:
             if (held_only_shift(event->key)) {
-                // Shift+L - make segments curves
+                // Shift+U - make segments curves
                 setSegmentType(SEGMENT_CUBIC_BEZIER);
                 return true;
             }
@@ -785,25 +809,25 @@ void MultiPathManipulator::_commit(CommitEvent cps)
     _selection.signal_update.emit();
     invokeForAll(&PathManipulator::writeXML);
     if (key) {
-        sp_document_maybe_done(sp_desktop_document(_desktop), key, SP_VERB_CONTEXT_NODE, reason);
+        DocumentUndo::maybeDone(sp_desktop_document(_desktop), key, SP_VERB_CONTEXT_NODE, reason);
     } else {
-        sp_document_done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_NODE, reason);
+        DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_NODE, reason);
     }
     signal_coords_changed.emit();
 }
 
 /** Commits changes to XML and adds undo stack entry. */
-void MultiPathManipulator::_done(gchar const *reason) {
-    invokeForAll(&PathManipulator::update);
+void MultiPathManipulator::_done(gchar const *reason, bool alert_LPE) {
+    invokeForAll(&PathManipulator::update, alert_LPE);
     invokeForAll(&PathManipulator::writeXML);
-    sp_document_done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_NODE, reason);
+    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_NODE, reason);
     signal_coords_changed.emit();
 }
 
 /** Commits changes to XML, adds undo stack entry and removes empty manipulators. */
-void MultiPathManipulator::_doneWithCleanup(gchar const *reason) {
+void MultiPathManipulator::_doneWithCleanup(gchar const *reason, bool alert_LPE) {
     _changed.block();
-    _done(reason);
+    _done(reason, alert_LPE);
     cleanup();
     _changed.unblock();
 }
@@ -837,4 +861,4 @@ guint32 MultiPathManipulator::_getOutlineColor(ShapeRole role)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

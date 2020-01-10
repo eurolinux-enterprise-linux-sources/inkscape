@@ -1,49 +1,17 @@
-#define INKSCAPE_LIVEPATHEFFECT_CPP
-
 /*
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
+ *   Abhishek Sharma
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
-
-//#define LPE_ENABLE_TEST_EFFECTS
-
-#include "live_effects/effect.h"
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
 
-#include "xml/node-event-vector.h"
-#include "sp-object.h"
-#include "attributes.h"
-#include "message-stack.h"
-#include "desktop.h"
-#include "inkscape.h"
-#include "document.h"
-#include "document-private.h"
-#include "xml/document.h"
-#include <glibmm/i18n.h>
-#include "pen-context.h"
-#include "tools-switch.h"
-#include "message-stack.h"
-#include "desktop.h"
-#include "knotholder.h"
-#include "sp-lpe-item.h"
-#include "live_effects/lpeobject.h"
-#include "live_effects/parameter/parameter.h"
-#include <glibmm/ustring.h>
-#include "display/curve.h"
-#include <gtkmm.h>
-
-#include <exception>
-
-#include <2geom/sbasis-to-bezier.h>
-#include <2geom/matrix.h>
-#include <2geom/pathvector.h>
-
 // include effects:
 #include "live_effects/lpe-patternalongpath.h"
+#include "live_effects/effect.h"
 #include "live_effects/lpe-bendpath.h"
 #include "live_effects/lpe-sketch.h"
 #include "live_effects/lpe-vonkoch.h"
@@ -75,6 +43,35 @@
 #include "live_effects/lpe-line_segment.h"
 #include "live_effects/lpe-recursiveskeleton.h"
 #include "live_effects/lpe-extrude.h"
+#include "live_effects/lpe-powerstroke.h"
+#include "live_effects/lpe-clone-original.h"
+
+#include "xml/node-event-vector.h"
+#include "sp-object.h"
+#include "attributes.h"
+#include "message-stack.h"
+#include "desktop.h"
+#include "inkscape.h"
+#include "document.h"
+#include "document-private.h"
+#include "xml/document.h"
+#include <glibmm/i18n.h>
+#include "ui/tools/pen-tool.h"
+#include "tools-switch.h"
+#include "message-stack.h"
+#include "desktop.h"
+#include "knotholder.h"
+#include "sp-lpe-item.h"
+#include "live_effects/lpeobject.h"
+#include "live_effects/parameter/parameter.h"
+#include <glibmm/ustring.h>
+#include "display/curve.h"
+
+#include <exception>
+
+#include <2geom/sbasis-to-bezier.h>
+#include <2geom/affine.h>
+#include <2geom/pathvector.h>
 
 
 namespace Inkscape {
@@ -120,6 +117,9 @@ const Util::EnumData<EffectType> LPETypeData[] = {
     {ROUGH_HATCHES,         N_("Hatches (rough)"),         "rough_hatches"},
     {SKETCH,                N_("Sketch"),                  "sketch"},
     {RULER,                 N_("Ruler"),                   "ruler"},
+/* 0.49 */
+    {POWERSTROKE,           N_("Power stroke"), "powerstroke"},
+    {CLONE_ORIGINAL,        N_("Clone original path"), "clone_original"},
 };
 const Util::EnumDataConverter<EffectType> LPETypeConverter(LPETypeData, sizeof(LPETypeData)/sizeof(*LPETypeData));
 
@@ -237,6 +237,12 @@ Effect::New(EffectType lpenr, LivePathEffectObject *lpeobj)
         case EXTRUDE:
             neweffect = static_cast<Effect*> ( new LPEExtrude(lpeobj) );
             break;
+        case POWERSTROKE:
+            neweffect = static_cast<Effect*> ( new LPEPowerStroke(lpeobj) );
+            break;
+        case CLONE_ORIGINAL:
+            neweffect = static_cast<Effect*> ( new LPECloneOriginal(lpeobj) );
+            break;
         default:
             g_warning("LivePathEffect::Effect::New   called with invalid patheffect type (%d)", lpenr);
             neweffect = NULL;
@@ -244,26 +250,25 @@ Effect::New(EffectType lpenr, LivePathEffectObject *lpeobj)
     }
 
     if (neweffect) {
-        neweffect->readallParameters(SP_OBJECT_REPR(lpeobj));
+        neweffect->readallParameters(lpeobj->getRepr());
     }
 
     return neweffect;
 }
 
-void
-Effect::createAndApply(const char* name, SPDocument *doc, SPItem *item)
+void Effect::createAndApply(const char* name, SPDocument *doc, SPItem *item)
 {
     // Path effect definition
-    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(doc);
+    Inkscape::XML::Document *xml_doc = doc->getReprDoc();
     Inkscape::XML::Node *repr = xml_doc->createElement("inkscape:path-effect");
     repr->setAttribute("effect", name);
 
-    SP_OBJECT_REPR(SP_DOCUMENT_DEFS(doc))->addChild(repr, NULL); // adds to <defs> and assigns the 'id' attribute
+    doc->getDefs()->getRepr()->addChild(repr, NULL); // adds to <defs> and assigns the 'id' attribute
     const gchar * repr_id = repr->attribute("id");
     Inkscape::GC::release(repr);
 
     gchar *href = g_strdup_printf("#%s", repr_id);
-    sp_lpe_item_add_path_effect(SP_LPE_ITEM(item), href, true);
+    SP_LPE_ITEM(item)->addPathEffect(href, true);
     g_free(href);
 }
 
@@ -274,7 +279,8 @@ Effect::createAndApply(EffectType type, SPDocument *doc, SPItem *item)
 }
 
 Effect::Effect(LivePathEffectObject *lpeobject)
-    : oncanvasedit_it(0),
+    : _provides_knotholder_entities(false),
+      oncanvasedit_it(0),
       is_visible(_("Is visible?"), _("If unchecked, the effect remains applied to the object but is temporarily disabled on canvas"), "is_visible", &wr, this, true),
       show_orig_path(false),
       lpeobj(lpeobject),
@@ -291,7 +297,7 @@ Effect::~Effect()
 }
 
 Glib::ustring
-Effect::getName()
+Effect::getName() const
 {
     if (lpeobj->effecttype_set && LPETypeConverter.is_valid_id(lpeobj->effecttype) )
         return Glib::ustring( _(LPETypeConverter.get_label(lpeobj->effecttype).c_str()) );
@@ -300,7 +306,7 @@ Effect::getName()
 }
 
 EffectType
-Effect::effectType() {
+Effect::effectType() const {
     return lpeobj->effecttype;
 }
 
@@ -308,7 +314,7 @@ Effect::effectType() {
  * Is performed a single time when the effect is freshly applied to a path
  */
 void
-Effect::doOnApply (SPLPEItem */*lpeitem*/)
+Effect::doOnApply (SPLPEItem const*/*lpeitem*/)
 {
 }
 
@@ -316,7 +322,7 @@ Effect::doOnApply (SPLPEItem */*lpeitem*/)
  * Is performed each time before the effect is updated.
  */
 void
-Effect::doBeforeEffect (SPLPEItem */*lpeitem*/)
+Effect::doBeforeEffect (SPLPEItem const*/*lpeitem*/)
 {
     //Do nothing for simple effects
 }
@@ -335,8 +341,8 @@ Effect::doAcceptPathPreparations(SPLPEItem *lpeitem)
         tools_switch(desktop, TOOLS_FREEHAND_PEN);
     }
 
-    SPEventContext *ec = desktop->event_context;
-    SPPenContext *pc = SP_PEN_CONTEXT(ec);
+    Inkscape::UI::Tools::ToolBase *ec = desktop->event_context;
+    Inkscape::UI::Tools::PenTool *pc = SP_PEN_CONTEXT(ec);
     pc->expecting_clicks_for_LPE = this->acceptsNumClicks();
     pc->waiting_LPE = this;
     pc->waiting_item = lpeitem;
@@ -361,7 +367,7 @@ Effect::writeParamsToSVG() {
  * your LPE. But don't forget to call the parent method so that is_ready is set to true!
  */
 void
-Effect::acceptParamPath (SPPath */*param_path*/) {
+Effect::acceptParamPath (SPPath const*/*param_path*/) {
     setReady();
 }
 
@@ -415,7 +421,7 @@ Effect::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in)
 }
 
 void
-Effect::readallParameters(Inkscape::XML::Node * repr)
+Effect::readallParameters(Inkscape::XML::Node const* repr)
 {
     std::vector<Parameter *>::iterator it = param_vector.begin();
     while (it != param_vector.end()) {
@@ -432,7 +438,7 @@ Effect::readallParameters(Inkscape::XML::Node * repr)
             param->param_set_default();
         }
 
-        it++;
+        ++it;
     }
 }
 
@@ -460,12 +466,6 @@ Effect::registerParameter(Parameter * param)
     param_vector.push_back(param);
 }
 
-// TODO: should we provide a way to alter the handle's appearance?
-void
-Effect::registerKnotHolderHandle(KnotHolderEntity* entity, const char* descr)
-{
-    kh_entity_vector.push_back(std::make_pair(entity, descr));
-}
 
 /**
  * Add all registered LPE knotholder handles to the knotholder
@@ -483,29 +483,14 @@ Effect::addHandles(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item) {
     }
 }
 
-void
-Effect::addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item) {
-    // TODO: The entities in kh_entity_vector are already instantiated during the call
-    //       to registerKnotHolderHandle(), but they are recreated here. Also, we must not
-    //       delete them when the knotholder is destroyed, whence the clumsy function
-    //       isDeletable(). If we could create entities of different classes dynamically,
-    //       this would be much nicer. How to do this?
-    std::vector<std::pair<KnotHolderEntity*, const char*> >::iterator i;
-    for (i = kh_entity_vector.begin(); i != kh_entity_vector.end(); ++i) {
-        KnotHolderEntity *entity = i->first;
-        const char *descr = i->second;
-
-        entity->create(desktop, item, knotholder, descr);
-        knotholder->add(entity);
-    }
-}
-
 /**
- * Return a vector of PathVectors which contain all helperpaths that should be drawn by the effect.
- * This is the function called by external code like SPLPEItem.
+ * Return a vector of PathVectors which contain all canvas indicators for this effect.
+ * This is the function called by external code to get all canvas indicators (effect and its parameters)
+ * lpeitem = the item onto which this effect is applied
+ * @todo change return type to one pathvector, add all paths to one pathvector instead of maintaining a vector of pathvectors
  */
 std::vector<Geom::PathVector>
-Effect::getHelperPaths(SPLPEItem *lpeitem)
+Effect::getCanvasIndicators(SPLPEItem const* lpeitem)
 {
     std::vector<Geom::PathVector> hp_vec;
 
@@ -514,18 +499,10 @@ Effect::getHelperPaths(SPLPEItem *lpeitem)
         return hp_vec;
     }
 
-    // TODO: we can probably optimize this by using a lot more references
-    //       rather than copying PathVectors all over the place
-    if (show_orig_path) {
-        // add original path to helperpaths
-        SPCurve* curve = sp_shape_get_curve (SP_SHAPE(lpeitem));
-        hp_vec.push_back(curve->get_pathvector());
-    }
-
-    // add other helperpaths provided by the effect itself
+    // add indicators provided by the effect itself
     addCanvasIndicators(lpeitem, hp_vec);
 
-    // add helperpaths provided by the effect's parameters
+    // add indicators provided by the effect's parameters
     for (std::vector<Parameter *>::iterator p = param_vector.begin(); p != param_vector.end(); ++p) {
         (*p)->addCanvasIndicators(lpeitem, hp_vec);
     }
@@ -538,7 +515,7 @@ Effect::getHelperPaths(SPLPEItem *lpeitem)
  * This function should be overwritten by derived effects if they want to provide their own helperpaths.
  */
 void
-Effect::addCanvasIndicators(SPLPEItem */*lpeitem*/, std::vector<Geom::PathVector> &/*hp_vec*/)
+Effect::addCanvasIndicators(SPLPEItem const*/*lpeitem*/, std::vector<Geom::PathVector> &/*hp_vec*/)
 {
 }
 
@@ -547,7 +524,7 @@ Effect::addCanvasIndicators(SPLPEItem */*lpeitem*/, std::vector<Geom::PathVector
  * This *creates* a new widget, management of deletion should be done by the caller
  */
 Gtk::Widget *
-Effect::newWidget(Gtk::Tooltips * tooltips)
+Effect::newWidget()
 {
     // use manage here, because after deletion of Effect object, others might still be pointing to this widget.
     Gtk::VBox * vbox = Gtk::manage( new Gtk::VBox() );
@@ -558,34 +535,37 @@ Effect::newWidget(Gtk::Tooltips * tooltips)
     while (it != param_vector.end()) {
         if ((*it)->widget_is_visible) {
             Parameter * param = *it;
-            Gtk::Widget * widg = param->param_newWidget(tooltips);
+            Gtk::Widget * widg = param->param_newWidget();
             Glib::ustring * tip = param->param_getTooltip();
             if (widg) {
                 vbox->pack_start(*widg, true, true, 2);
-                if (tip != NULL) {
-                    tooltips->set_tip(*widg, *tip);
+                if (tip) {
+                    widg->set_tooltip_text(*tip);
+                } else {
+                    widg->set_tooltip_text("");
+                    widg->set_has_tooltip(false);
                 }
             }
         }
 
-        it++;
+        ++it;
     }
 
     return dynamic_cast<Gtk::Widget *>(vbox);
 }
 
 
-Inkscape::XML::Node *
-Effect::getRepr()
+Inkscape::XML::Node *Effect::getRepr()
 {
-    return SP_OBJECT_REPR(lpeobj);
+    return lpeobj->getRepr();
 }
 
-SPDocument *
-Effect::getSPDoc()
+SPDocument *Effect::getSPDoc()
 {
-    if (SP_OBJECT_DOCUMENT(lpeobj) == NULL) g_message("Effect::getSPDoc() returns NULL");
-    return SP_OBJECT_DOCUMENT(lpeobj);
+    if (lpeobj->document == NULL) {
+        g_message("Effect::getSPDoc() returns NULL");
+    }
+    return lpeobj->document;
 }
 
 Parameter *
@@ -600,7 +580,7 @@ Effect::getParameter(const char * key)
             return param;
         }
 
-        it++;
+        ++it;
     }
 
     return NULL;
@@ -654,7 +634,7 @@ Effect::editNextParamOncanvas(SPItem * item, SPDesktop * desktop)
 * The nice thing about this is that this function can use knowledge of the original path and set things accordingly for example to the size or origin of the original path!
 */
 void
-Effect::resetDefaults(SPItem * /*item*/)
+Effect::resetDefaults(SPItem const* /*item*/)
 {
     std::vector<Inkscape::LivePathEffect::Parameter *>::iterator p;
     for (p = param_vector.begin(); p != param_vector.end(); ++p) {
@@ -664,24 +644,25 @@ Effect::resetDefaults(SPItem * /*item*/)
 }
 
 void
-Effect::transform_multiply(Geom::Matrix const& postmul, bool set)
+Effect::transform_multiply(Geom::Affine const& postmul, bool set)
 {
     // cycle through all parameters. Most parameters will not need transformation, but path and point params do.
-    for (std::vector<Parameter *>::iterator it = param_vector.begin(); it != param_vector.end(); it++) {
+    for (std::vector<Parameter *>::iterator it = param_vector.begin(); it != param_vector.end(); ++it) {
         Parameter * param = *it;
         param->param_transform_multiply(postmul, set);
     }
 }
 
 bool
-Effect::providesKnotholder()
+Effect::providesKnotholder() const
 {
     // does the effect actively provide any knotholder entities of its own?
-    if (kh_entity_vector.size() > 0)
+    if (_provides_knotholder_entities) {
         return true;
+    }
 
     // otherwise: are there any parameters that have knotholderentities?
-    for (std::vector<Parameter *>::iterator p = param_vector.begin(); p != param_vector.end(); ++p) {
+    for (std::vector<Parameter *>::const_iterator p = param_vector.begin(); p != param_vector.end(); ++p) {
         if ((*p)->providesKnotHolderEntities()) {
             return true;
         }

@@ -15,7 +15,6 @@
 #include <gtkmm/box.h>
 #include <gtkmm/combobox.h>
 #include <gtkmm/togglebutton.h>
-#include <gtkmm/tooltips.h>
 #include <gtkmm/cellrenderertext.h>
 #include <gtkmm/treemodel.h>
 #include <gtkmm/liststore.h>
@@ -60,7 +59,6 @@ private:
 
     SPDesktop *_desktop;
 
-    Gtk::Tooltips _tooltips;
     Gtk::ComboBox _selector;
     Gtk::ToggleButton _visibility_toggle;
     Gtk::ToggleButton _lock_toggle;
@@ -70,7 +68,8 @@ private:
     Glib::RefPtr<Gtk::ListStore> _layer_model;
 
 //    sigc::connection _desktop_shutdown_connection;
-    sigc::connection _layer_changed_connection;
+    sigc::connection _layers_changed_connection;
+    sigc::connection _current_layer_changed_connection;
     sigc::connection _selection_changed_connection;
     sigc::connection _visibility_toggled_connection;
     sigc::connection _lock_toggled_connection;
@@ -78,6 +77,8 @@ private:
     SPObject *_layer;
 
     void _selectLayer(SPObject *layer);
+    void _layersChanged();
+
     void _setDesktopLayer();
 
     void _buildEntry(unsigned depth, SPObject &object);
@@ -107,4 +108,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

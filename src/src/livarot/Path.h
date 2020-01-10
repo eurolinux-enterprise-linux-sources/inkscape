@@ -11,12 +11,16 @@
 
 #include <vector>
 #include "LivarotDefs.h"
-#include "livarot/livarot-forward.h"
-#include "libnr/nr-point.h"
-#include <libnr/nr-rect-l.h>
-#include <2geom/forward.h>
+#include <2geom/point.h>
 
-struct SPStyle;
+struct PathDescr;
+struct PathDescrLineTo;
+struct PathDescrArcTo;
+struct PathDescrCubicTo;
+struct PathDescrBezierTo;
+struct PathDescrIntermBezierTo;
+
+class SPStyle;
 
 /*
  * the Path class: a structure to hold path description and their polyline approximation (not kept in sync)
@@ -113,7 +117,6 @@ public:
   // transforms a description in a polyline (for stroking and filling)
   // treshhold is the max length^2 (sort of)
   void Convert (double treshhold);
-  void Convert(NRRectL *area, double treshhold);
   void ConvertEvenLines (double treshhold);	// decomposes line segments too, for later recomposition
   // same function for use when you want to later recompose the curves from the polyline
   void ConvertWithBackData (double treshhold);
@@ -178,12 +181,12 @@ public:
   void  DashPolylineFromStyle(SPStyle *style, float scale, float min_len);
   
   //utilitaire pour inkscape
-  void  LoadPath(Geom::Path const &path, Geom::Matrix const &tr, bool doTransformation, bool append = false);
-  void  LoadPathVector(Geom::PathVector const &pv, Geom::Matrix const &tr, bool doTransformation);
+  void  LoadPath(Geom::Path const &path, Geom::Affine const &tr, bool doTransformation, bool append = false);
+  void  LoadPathVector(Geom::PathVector const &pv, Geom::Affine const &tr, bool doTransformation);
   void  LoadPathVector(Geom::PathVector const &pv);
   Geom::PathVector* MakePathVector();
 
-  void  Transform(const Geom::Matrix &trans);
+  void  Transform(const Geom::Affine &trans);
 
   // decompose le chemin en ses sous-chemin
   // killNoSurf=true -> oublie les chemins de surface nulle
@@ -332,7 +335,7 @@ public:
 			      PathDescrBezierTo & fin, bool before,
 			      Geom::Point & pos, Geom::Point & tgt, double &len, double &rad);
   static void OutlineJoin (Path * dest, Geom::Point pos, Geom::Point stNor, Geom::Point enNor,
-			   double width, JoinType join, double miter);
+			   double width, JoinType join, double miter, int nType);
 
   static bool IsNulCurve (std::vector<PathDescr*> const &cmd, int curD, Geom::Point const &curX);
 
@@ -401,4 +404,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

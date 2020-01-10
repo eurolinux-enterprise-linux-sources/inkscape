@@ -28,11 +28,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 # On failure, outputs an error message to stderr, and exits with a return
 # code of 1.
 
+# standard library
 import os
 import sys
 import tempfile
-import gettext
-_ = gettext.gettext
+# local library
+import inkex
+inkex.localize()
 
 def run(command_format, prog_name, uniconv_format):
     outfile = tempfile.mktemp(uniconv_format)
@@ -127,4 +129,4 @@ def get_command():
 
     return cmd
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99

@@ -1,4 +1,4 @@
-/* Copyright (C) 2001-2007 Peter Selinger.
+/* Copyright (C) 2001-2011 Peter Selinger.
    This file is part of Potrace. It is free software and it is covered
    by the GNU General Public License. See the file COPYING for details. */
 
@@ -26,10 +26,8 @@ typedef struct progress_s progress_t;
    given in the 0.0-1.0 range, which will be scaled and translated to
    the progress object's range. */
 static inline void progress_update(double d, progress_t *prog) {
-  double d_scaled;
-
-  if (prog->callback != NULL) {
-    d_scaled = prog->min * (1-d) + prog->max * d;
+  if (prog != NULL && prog->callback != NULL) {
+    double d_scaled = prog->min * (1-d) + prog->max * d;
     if (d == 1.0 || d_scaled >= prog->d_prev + prog->epsilon) {
       prog->callback(prog->min * (1-d) + prog->max * d, prog->data);
       prog->d_prev = d_scaled;
@@ -43,7 +41,7 @@ static inline void progress_update(double d, progress_t *prog) {
 static inline void progress_subrange_start(double a, double b, const progress_t *prog, progress_t *sub) {
   double min, max;
 
-  if (prog->callback == NULL) {
+  if (prog == NULL || prog->callback == NULL) {
     sub->callback = NULL;
     return;
   }
@@ -66,7 +64,7 @@ static inline void progress_subrange_start(double a, double b, const progress_t 
 }
 
 static inline void progress_subrange_end(progress_t *prog, progress_t *sub) {
-  if (prog->callback != NULL) {
+  if (prog != NULL && prog->callback != NULL) {
     if (sub->callback == NULL) {
       progress_update(sub->b, prog);
     } else {

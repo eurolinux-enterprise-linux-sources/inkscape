@@ -30,6 +30,7 @@ public:
 
     void setCurrentLayer( SPObject* obj );
     void renameLayer( SPObject* obj, gchar const *label, bool uniquify );
+    Glib::ustring getNextLayerName( SPObject* obj, gchar const *label);
 
     sigc::connection connectCurrentLayerChanged(const sigc::slot<void, SPObject *> & slot) {
         return _layer_changed_signal.connect(slot);
@@ -73,4 +74,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

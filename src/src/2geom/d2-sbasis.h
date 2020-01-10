@@ -1,11 +1,10 @@
 /**
  * \file
- * \brief  Do not include this file \todo brief description
+ * \brief  Do not include this file
  *
  * We don't actually want anyone to
- * include this, other than D2.h.  If somone else tries, D2
- * won't be defined.  If it is, this will already be included.
- *
+ * include this, other than D2.h.
+ *//*
  * Authors:
  *      ? <?@?.?>
  * 
@@ -36,16 +35,16 @@
  *
  */
 
-#ifdef _2GEOM_D2  /*This is intentional: we don't actually want anyone to
-                    include this, other than D2.h.  If somone else tries, D2
-                    won't be defined.  If it is, this will already be included. */
-#ifndef __2GEOM_SBASIS_CURVE_H
-#define __2GEOM_SBASIS_CURVE_H
+#ifdef SEEN_LIB2GEOM_D2_H  /*This is intentional: we don't actually want anyone to
+                             include this, other than D2.h.  If somone else tries, D2
+                             won't be defined.  If it is, this will already be included. */
+#ifndef SEEN_LIB2GEOM_D2_SBASIS_H
+#define SEEN_LIB2GEOM_D2_SBASIS_H
 
 #include <2geom/sbasis.h>
 #include <2geom/sbasis-2d.h>
 #include <2geom/piecewise.h>
-#include <2geom/matrix.h>
+#include <2geom/affine.h>
 
 //TODO: implement intersect
 
@@ -76,13 +75,18 @@ Piecewise<SBasis> dot(Piecewise<D2<SBasis> > const &a, Piecewise<D2<SBasis> > co
 Piecewise<SBasis> dot(Piecewise<D2<SBasis> > const &a, Point const &b);
 Piecewise<SBasis> cross(Piecewise<D2<SBasis> > const &a, Piecewise<D2<SBasis> > const &b);
 
-Piecewise<D2<SBasis> > operator*(Piecewise<D2<SBasis> > const &a, Matrix const &m);
+Piecewise<D2<SBasis> > operator*(Piecewise<D2<SBasis> > const &a, Affine const &m);
 
 Piecewise<D2<SBasis> > force_continuity(Piecewise<D2<SBasis> > const &f, double tol=0, bool closed=false);
 
 std::vector<Piecewise<D2<SBasis> > > fuse_nearby_ends(std::vector<Piecewise<D2<SBasis> > > const &f, double tol=0);
 
 std::vector<Geom::Piecewise<Geom::D2<Geom::SBasis> > > split_at_discontinuities (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwsbin, double tol = .0001);
+
+/**
+* note that -unitTangentAt(reverse(a),0.) == unitTangentAt(a,1.) but the former is more reliable (sometimes the sign is wrong for the latter)
+*/
+Point unitTangentAt(D2<SBasis> const & a, Coord t, unsigned n = 3);
 
 class CoordIterator
 : public std::iterator<std::input_iterator_tag, SBasis const>
@@ -138,6 +142,11 @@ inline OptRect bounds_local(D2<SBasis> const & s, OptInterval i, unsigned order=
     return retval;
 }
 
+std::vector<Interval> level_set( D2<SBasis> const &f, Rect region);
+std::vector<Interval> level_set( D2<SBasis> const &f, Point p, double tol);
+std::vector<std::vector<Interval> > level_sets( D2<SBasis> const &f, std::vector<Rect> regions);
+std::vector<std::vector<Interval> > level_sets( D2<SBasis> const &f, std::vector<Point> pts, double tol);
+
 }
 
 #endif
@@ -153,4 +162,4 @@ inline OptRect bounds_local(D2<SBasis> const & s, OptInterval i, unsigned order=
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

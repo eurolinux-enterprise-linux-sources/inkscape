@@ -1,18 +1,16 @@
-/** @file
- * Control point that is dragged during path drag
- */
 /* Authors:
  *   Krzysztof Kosiński <tweenk.pl@gmail.com>
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2009 Authors
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "ui/tool/curve-drag-point.h"
 #include <glib/gi18n.h>
 #include <2geom/bezier-curve.h>
 #include "desktop.h"
 #include "ui/tool/control-point-selection.h"
-#include "ui/tool/curve-drag-point.h"
 #include "ui/tool/event-utils.h"
 #include "ui/tool/multi-path-manipulator.h"
 #include "ui/tool/path-manipulator.h"
@@ -21,31 +19,20 @@
 namespace Inkscape {
 namespace UI {
 
-/**
- * @class CurveDragPoint
- * An invisible point used to drag curves. This point is used by PathManipulator to allow editing
- * of path segments by dragging them. It is defined in a separate file so that the node tool
- * can check if the mouseovered control point is a curve drag point and update the cursor
- * accordingly, without the need to drag in the full PathManipulator header.
- */
-
-// This point should be invisible to the user - use the invisible_cset from control-point.h
-// TODO make some methods from path-manipulator.cpp public so that this point doesn't have
-// to be declared as a friend
 
 bool CurveDragPoint::_drags_stroke = false;
 bool CurveDragPoint::_segment_was_degenerate = false;
 
-CurveDragPoint::CurveDragPoint(PathManipulator &pm)
-    : ControlPoint(pm._multi_path_manipulator._path_data.node_data.desktop, Geom::Point(),
-        Gtk::ANCHOR_CENTER, SP_CTRL_SHAPE_CIRCLE, 1.0, &invisible_cset,
-        pm._multi_path_manipulator._path_data.dragpoint_group)
-    , _pm(pm)
+CurveDragPoint::CurveDragPoint(PathManipulator &pm) :
+    ControlPoint(pm._multi_path_manipulator._path_data.node_data.desktop, Geom::Point(), SP_ANCHOR_CENTER,
+                 CTRL_TYPE_INVISIPOINT,
+                 invisible_cset, pm._multi_path_manipulator._path_data.dragpoint_group),
+      _pm(pm)
 {
     setVisible(false);
 }
 
-bool CurveDragPoint::_eventHandler(SPEventContext *event_context, GdkEvent *event)
+bool CurveDragPoint::_eventHandler(Inkscape::UI::Tools::ToolBase *event_context, GdkEvent *event)
 {
     // do not process any events when the manipulator is empty
     if (_pm.empty()) {
@@ -166,11 +153,11 @@ void CurveDragPoint::_insertNode(bool take_selection)
     }
     _pm._selection.insert(inserted.ptr());
 
-    _pm.update();
+    _pm.update(true);
     _pm._commit(_("Add node"));
 }
 
-Glib::ustring CurveDragPoint::_getTip(unsigned state)
+Glib::ustring CurveDragPoint::_getTip(unsigned state) const
 {
     if (_pm.empty()) return "";
     if (!first || !first.next()) return "";
@@ -206,4 +193,4 @@ Glib::ustring CurveDragPoint::_getTip(unsigned state)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

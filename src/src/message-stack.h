@@ -5,8 +5,10 @@
 /*
  * Authors:
  *   MenTaLguY <mental@rydia.net>
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2004 MenTaLguY
+ * Copyright (C) 2011 Jon A. Cruz
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -18,6 +20,7 @@
 #include <sigc++/sigc++.h>
 #include <glib.h>
 #include <stdarg.h>
+#include <glibmm/ustring.h>
 #include "gc-managed.h"
 #include "gc-finalized.h"
 #include "gc-anchored.h"
@@ -108,14 +111,26 @@ public:
       */
     void cancel(MessageId id);
 
-    /** @brief temporarily pushes a message onto the stack
-      *
-      * @param type the message type
-      * @param message the message text
-      *
-      * @return the id of the pushed message
-      */
+    /**
+     * Temporarily pushes a message onto the stack.
+     *
+     * @param type the message type
+     * @param message the message text
+     *
+     * @return the id of the pushed message
+     */
     MessageId flash(MessageType type, gchar const *message);
+
+    /**
+     * Temporarily pushes a message onto the stack.
+     *
+     * @param type the message type
+     * @param message the message text
+     *
+     * @return the id of the pushed message
+     */
+    MessageId flash(MessageType type, Glib::ustring const &message);
+
 
     /** @brief temporarily pushes a message onto the stack using
       *        printf-like formatting
@@ -175,4 +190,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

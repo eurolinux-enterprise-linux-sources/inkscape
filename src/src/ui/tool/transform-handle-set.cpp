@@ -3,6 +3,7 @@
  */
 /* Authors:
  *   Krzysztof Kosiński <tweenk.pl@gmail.com>
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2009 Authors
  * Released under GNU GPL, read the file 'COPYING' for more information
@@ -10,20 +11,24 @@
 
 #include <math.h>
 #include <algorithm>
-#include <glib.h>
+#include "control-point.h"
 #include <glib/gi18n.h>
-#include <gdk/gdk.h>
 #include <2geom/transforms.h>
 #include "desktop.h"
 #include "desktop-handles.h"
 #include "display/sodipodi-ctrlrect.h"
 #include "preferences.h"
 #include "snap.h"
+#include "snap-candidate.h"
 #include "sp-namedview.h"
 #include "ui/tool/commit-events.h"
-#include "ui/tool/control-point.h"
+#include "ui/tool/control-point-selection.h"
+#include "ui/tool/selectable-control-point.h"
 #include "ui/tool/event-utils.h"
 #include "ui/tool/transform-handle-set.h"
+#include "ui/tools/node-tool.h"
+#include "ui/tool/node.h"
+#include "seltrans.h"
 
 // FIXME BRAIN DAMAGE WARNING: this is a global variable in select-context.cpp
 // It should be moved to a header
@@ -34,20 +39,22 @@ namespace Inkscape {
 namespace UI {
 
 namespace {
-Gtk::AnchorType corner_to_anchor(unsigned c) {
+
+SPAnchorType corner_to_anchor(unsigned c) {
     switch (c % 4) {
-    case 0: return Gtk::ANCHOR_NE;
-    case 1: return Gtk::ANCHOR_NW;
-    case 2: return Gtk::ANCHOR_SW;
-    default: return Gtk::ANCHOR_SE;
+    case 0: return SP_ANCHOR_NE;
+    case 1: return SP_ANCHOR_NW;
+    case 2: return SP_ANCHOR_SW;
+    default: return SP_ANCHOR_SE;
     }
 }
-Gtk::AnchorType side_to_anchor(unsigned s) {
+
+SPAnchorType side_to_anchor(unsigned s) {
     switch (s % 4) {
-    case 0: return Gtk::ANCHOR_N;
-    case 1: return Gtk::ANCHOR_W;
-    case 2: return Gtk::ANCHOR_S;
-    default: return Gtk::ANCHOR_E;
+    case 0: return SP_ANCHOR_N;
+    case 1: return SP_ANCHOR_W;
+    case 2: return SP_ANCHOR_S;
+    default: return SP_ANCHOR_E;
     }
 }
 
@@ -58,81 +65,130 @@ double snap_angle(double a) {
     double unit_angle = M_PI / snaps;
     return CLAMP(unit_angle * round(a / unit_angle), -M_PI, M_PI);
 }
+
 double snap_increment_degrees() {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     int snaps = prefs->getIntLimited("/options/rotationsnapsperpi/value", 12, 1, 1000);
     return 180.0 / snaps;
 }
 
-ControlPoint::ColorSet thandle_cset = {
+} // anonymous namespace
+
+ControlPoint::ColorSet TransformHandle::thandle_cset = {
+    {0x000000ff, 0x000000ff},
+    {0x00ff6600, 0x000000ff},
+    {0x00ff6600, 0x000000ff},
+    //
     {0x000000ff, 0x000000ff},
     {0x00ff6600, 0x000000ff},
     {0x00ff6600, 0x000000ff}
 };
 
-ControlPoint::ColorSet center_cset = {
-    {0x00000000, 0x000000ff},
-    {0x00000000, 0xff0000b0},
-    {0x00000000, 0xff0000b0}    
-};
-} // anonymous namespace
+TransformHandle::TransformHandle(TransformHandleSet &th, SPAnchorType anchor, Glib::RefPtr<Gdk::Pixbuf> pb) :
+    ControlPoint(th._desktop, Geom::Point(), anchor,
+                 pb,
+                 thandle_cset, th._transform_handle_group),
+    _th(th)
+{
+    setVisible(false);
+}
 
-/** Base class for node transform handles to simplify implementation */
-class TransformHandle : public ControlPoint {
-public:
-    TransformHandle(TransformHandleSet &th, Gtk::AnchorType anchor, Glib::RefPtr<Gdk::Pixbuf> pb)
-        : ControlPoint(th._desktop, Geom::Point(), anchor, pb, &thandle_cset,
-            th._transform_handle_group)
-        , _th(th)
-    {
-        setVisible(false);
-    }
-protected:
-    virtual void startTransform() {}
-    virtual void endTransform() {}
-    virtual Geom::Matrix computeTransform(Geom::Point const &pos, GdkEventMotion *event) = 0;
-    virtual CommitEvent getCommitEvent() = 0;
+void TransformHandle::getNextClosestPoint(bool reverse)
+{
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    if (prefs->getBool("/options/snapclosestonly/value", false)) {
+        if (!_all_snap_sources_sorted.empty()) {
+            if (reverse) { // Shift-tab will find a closer point
+                if (_all_snap_sources_iter == _all_snap_sources_sorted.begin()) {
+                    _all_snap_sources_iter = _all_snap_sources_sorted.end();
+                }
+                --_all_snap_sources_iter;
+            } else { // Tab will find a point further away
+                ++_all_snap_sources_iter;
+                if (_all_snap_sources_iter == _all_snap_sources_sorted.end()) {
+                    _all_snap_sources_iter = _all_snap_sources_sorted.begin();
+                }
+            }
 
-    Geom::Matrix _last_transform;
-    Geom::Point _origin;
-    TransformHandleSet &_th;
-private:
-    virtual bool grabbed(GdkEventMotion *) {
-        _origin = position();
-        _last_transform.setIdentity();
-        startTransform();
+            _snap_points.clear();
+            _snap_points.push_back(*_all_snap_sources_iter);
 
-        _th._setActiveHandle(this);
-        _cset = &invisible_cset;
-        _setState(_state);
-        return false;
+        }
     }
-    virtual void dragged(Geom::Point &new_pos, GdkEventMotion *event)
-    {
-        Geom::Matrix t = computeTransform(new_pos, event);
-        // protect against degeneracies
-        if (t.isSingular()) return;
-        Geom::Matrix incr = _last_transform.inverse() * t;
-        if (incr.isSingular()) return;
-        _th.signal_transform.emit(incr);
-        _last_transform = t;
+}
+
+bool TransformHandle::grabbed(GdkEventMotion *)
+{
+    _origin = position();
+    _last_transform.setIdentity();
+    startTransform();
+
+    _th._setActiveHandle(this);
+    _setLurking(true);
+    _setState(_state);
+
+    // Collect the snap-candidates, one for each selected node. These will be stored in the _snap_points vector.
+    Inkscape::UI::Tools::NodeTool *nt = INK_NODE_TOOL(_th._desktop->event_context);
+    //ControlPointSelection *selection = nt->_selected_nodes.get();
+    ControlPointSelection* selection = nt->_selected_nodes;
+
+    selection->setOriginalPoints();
+    selection->getOriginalPoints(_snap_points);
+    selection->getUnselectedPoints(_unselected_points);
+
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    if (prefs->getBool("/options/snapclosestonly/value", false)) {
+        // Find the closest snap source candidate
+        _all_snap_sources_sorted = _snap_points;
+
+        // Calculate and store the distance to the reference point for each snap candidate point
+        for(std::vector<Inkscape::SnapCandidatePoint>::iterator i = _all_snap_sources_sorted.begin(); i != _all_snap_sources_sorted.end(); ++i) {
+            (*i).setDistance(Geom::L2((*i).getPoint() - _origin));
+        }
+
+        // Sort them ascending, using the distance calculated above as the single criteria
+        std::sort(_all_snap_sources_sorted.begin(), _all_snap_sources_sorted.end());
+
+        // Now get the closest snap source
+        _snap_points.clear();
+        if (!_all_snap_sources_sorted.empty()) {
+            _all_snap_sources_iter = _all_snap_sources_sorted.begin();
+            _snap_points.push_back(_all_snap_sources_sorted.front());
+        }
     }
-    virtual void ungrabbed(GdkEventButton *) {
-        _th._clearActiveHandle();
-        _cset = &thandle_cset;
-        _setState(_state);
-        endTransform();
-        _th.signal_commit.emit(getCommitEvent());
-    }
-};
+
+    return false;
+}
+
+void TransformHandle::dragged(Geom::Point &new_pos, GdkEventMotion *event)
+{
+    Geom::Affine t = computeTransform(new_pos, event);
+    // protect against degeneracies
+    if (t.isSingular()) return;
+    Geom::Affine incr = _last_transform.inverse() * t;
+    if (incr.isSingular()) return;
+    _th.signal_transform.emit(incr);
+    _last_transform = t;
+}
+
+void TransformHandle::ungrabbed(GdkEventButton *)
+{
+    _snap_points.clear();
+    _th._clearActiveHandle();
+    _setLurking(false);
+    _setState(_state);
+    endTransform();
+    _th.signal_commit.emit(getCommitEvent());
+}
+
 
 class ScaleHandle : public TransformHandle {
 public:
-    ScaleHandle(TransformHandleSet &th, Gtk::AnchorType anchor, Glib::RefPtr<Gdk::Pixbuf> pb)
+    ScaleHandle(TransformHandleSet &th, SPAnchorType anchor, Glib::RefPtr<Gdk::Pixbuf> pb)
         : TransformHandle(th, anchor, pb)
     {}
 protected:
-    virtual Glib::ustring _getTip(unsigned state) {
+    virtual Glib::ustring _getTip(unsigned state) const {
         if (state_held_control(state)) {
             if (state_held_shift(state)) {
                 return C_("Transform handle tip",
@@ -153,73 +209,110 @@ protected:
         return C_("Transform handle tip", "<b>Scale handle</b>: drag to scale the selection");
     }
 
-    virtual Glib::ustring _getDragTip(GdkEventMotion */*event*/) {
+    virtual Glib::ustring _getDragTip(GdkEventMotion */*event*/) const {
         return format_tip(C_("Transform handle tip",
             "Scale by %.2f%% x %.2f%%"), _last_scale_x * 100, _last_scale_y * 100);
     }
 
-    virtual bool _hasDragTips() { return true; }
+    virtual bool _hasDragTips() const { return true; }
 
     static double _last_scale_x, _last_scale_y;
 };
 double ScaleHandle::_last_scale_x = 1.0;
 double ScaleHandle::_last_scale_y = 1.0;
 
-/// Corner scaling handle for node transforms
+/**
+ * Corner scaling handle for node transforms.
+ */
 class ScaleCornerHandle : public ScaleHandle {
 public:
-    ScaleCornerHandle(TransformHandleSet &th, unsigned corner)
-        : ScaleHandle(th, corner_to_anchor(corner), _corner_to_pixbuf(corner))
-        , _corner(corner)
+
+    ScaleCornerHandle(TransformHandleSet &th, unsigned corner) :
+        ScaleHandle(th, corner_to_anchor(corner), _corner_to_pixbuf(corner)),
+        _corner(corner)
     {}
+
 protected:
     virtual void startTransform() {
         _sc_center = _th.rotationCenter();
         _sc_opposite = _th.bounds().corner(_corner + 2);
         _last_scale_x = _last_scale_y = 1.0;
     }
-    virtual Geom::Matrix computeTransform(Geom::Point const &new_pos, GdkEventMotion *event) {
+
+    virtual Geom::Affine computeTransform(Geom::Point const &new_pos, GdkEventMotion *event) {
         Geom::Point scc = held_shift(*event) ? _sc_center : _sc_opposite;
         Geom::Point vold = _origin - scc, vnew = new_pos - scc;
+
         // avoid exploding the selection
         if (Geom::are_near(vold[Geom::X], 0) || Geom::are_near(vold[Geom::Y], 0))
             return Geom::identity();
 
         double scale[2] = { vnew[Geom::X] / vold[Geom::X], vnew[Geom::Y] / vold[Geom::Y] };
+
         if (held_alt(*event)) {
             for (unsigned i = 0; i < 2; ++i) {
-                if (scale[i] >= 1.0) scale[i] = round(scale[i]);
-                else scale[i] = 1.0 / round(1.0 / scale[i]);
+                if (fabs(scale[i]) >= 1.0) {
+                    scale[i] = round(scale[i]);
+                } else {
+                    scale[i] = 1.0 / round(1.0 / MIN(scale[i],10));
+                }
             }
-        } else if (held_control(*event)) {
-            scale[0] = scale[1] = std::min(scale[0], scale[1]);
+        } else {
+            SnapManager &m = _th._desktop->namedview->snap_manager;
+            m.setupIgnoreSelection(_th._desktop, true, &_unselected_points);
+
+            Inkscape::SnappedPoint sp;
+            if (held_control(*event)) {
+                scale[0] = scale[1] = std::min(scale[0], scale[1]);
+                sp = m.constrainedSnapScale(_snap_points, _origin, Geom::Scale(scale[0], scale[1]), scc);
+            } else {
+                sp = m.freeSnapScale(_snap_points, _origin, Geom::Scale(scale[0], scale[1]), scc);
+            }
+            m.unSetup();
+
+            if (sp.getSnapped()) {
+                Geom::Point result = sp.getTransformation();
+                scale[0] = result[0];
+                scale[1] = result[1];
+            }
         }
+
         _last_scale_x = scale[0];
         _last_scale_y = scale[1];
-        Geom::Matrix t = Geom::Translate(-scc)
+        Geom::Affine t = Geom::Translate(-scc)
             * Geom::Scale(scale[0], scale[1])
             * Geom::Translate(scc);
         return t;
     }
+
     virtual CommitEvent getCommitEvent() {
         return _last_transform.isUniformScale()
             ? COMMIT_MOUSE_SCALE_UNIFORM
             : COMMIT_MOUSE_SCALE;
     }
+
 private:
+
     static Glib::RefPtr<Gdk::Pixbuf> _corner_to_pixbuf(unsigned c) {
-        sp_select_context_get_type();
+        //sp_select_context_get_type();
         switch (c % 2) {
-        case 0: return Glib::wrap(handles[1], true);
-        default: return Glib::wrap(handles[0], true);
+            case 0:
+                return Glib::wrap(handles[1], true);
+                break;
+            default:
+                return Glib::wrap(handles[0], true);
+                break;
         }
     }
+
     Geom::Point _sc_center;
     Geom::Point _sc_opposite;
     unsigned _corner;
 };
 
-/// Side scaling handle for node transforms
+/**
+ * Side scaling handle for node transforms.
+ */
 class ScaleSideHandle : public ScaleHandle {
 public:
     ScaleSideHandle(TransformHandleSet &th, unsigned side)
@@ -233,7 +326,7 @@ protected:
         _sc_opposite = Geom::middle_point(b.corner(_side + 2), b.corner(_side + 3));
         _last_scale_x = _last_scale_y = 1.0;
     }
-    virtual Geom::Matrix computeTransform(Geom::Point const &new_pos, GdkEventMotion *event) {
+    virtual Geom::Affine computeTransform(Geom::Point const &new_pos, GdkEventMotion *event) {
         Geom::Point scc = held_shift(*event) ? _sc_center : _sc_opposite;
         Geom::Point vs;
         Geom::Dim2 d1 = static_cast<Geom::Dim2>((_side + 1) % 2);
@@ -245,14 +338,34 @@ protected:
 
         vs[d1] = (new_pos - scc)[d1] / (_origin - scc)[d1];
         if (held_alt(*event)) {
-            if (vs[d1] >= 1.0) vs[d1] = round(vs[d1]);
-            else vs[d1] = 1.0 / round(1.0 / vs[d1]);
+            if (fabs(vs[d1]) >= 1.0) {
+                vs[d1] = round(vs[d1]);
+            } else {
+                vs[d1] = 1.0 / round(1.0 / MIN(vs[d1],10));
+            }
+            vs[d2] = 1.0;
+        } else {
+            SnapManager &m = _th._desktop->namedview->snap_manager;
+            m.setupIgnoreSelection(_th._desktop, true, &_unselected_points);
+
+            bool uniform = held_control(*event);
+            Inkscape::SnappedPoint sp = m.constrainedSnapStretch(_snap_points, _origin, vs[d1], scc, d1, uniform);
+            m.unSetup();
+
+            if (sp.getSnapped()) {
+                Geom::Point result = sp.getTransformation();
+                vs[d1] = result[d1];
+                vs[d2] = result[d2];
+            } else {
+                // on ctrl, apply uniform scaling instead of stretching
+                // Preserve aspect ratio, but never flip in the dimension not being edited (by using fabs())
+                vs[d2] = uniform ? fabs(vs[d1]) : 1.0;
+            }
         }
-        vs[d2] = held_control(*event) ? vs[d1] : 1.0;
 
         _last_scale_x = vs[Geom::X];
         _last_scale_y = vs[Geom::Y];
-        Geom::Matrix t = Geom::Translate(-scc)
+        Geom::Affine t = Geom::Translate(-scc)
             * Geom::Scale(vs)
             * Geom::Translate(scc);
         return t;
@@ -264,7 +377,7 @@ protected:
     }
 private:
     static Glib::RefPtr<Gdk::Pixbuf> _side_to_pixbuf(unsigned c) {
-        sp_select_context_get_type();
+        //sp_select_context_get_type();
         switch (c % 2) {
         case 0: return Glib::wrap(handles[3], true);
         default: return Glib::wrap(handles[2], true);
@@ -275,7 +388,9 @@ private:
     unsigned _side;
 };
 
-/// Rotation handle for node transforms
+/**
+ * Rotation handle for node transforms.
+ */
 class RotateHandle : public TransformHandle {
 public:
     RotateHandle(TransformHandleSet &th, unsigned corner)
@@ -290,15 +405,25 @@ protected:
         _last_angle = 0;
     }
 
-    virtual Geom::Matrix computeTransform(Geom::Point const &new_pos, GdkEventMotion *event)
+    virtual Geom::Affine computeTransform(Geom::Point const &new_pos, GdkEventMotion *event)
     {
         Geom::Point rotc = held_shift(*event) ? _rot_opposite : _rot_center;
         double angle = Geom::angle_between(_origin - rotc, new_pos - rotc);
         if (held_control(*event)) {
             angle = snap_angle(angle);
+        } else {
+            SnapManager &m = _th._desktop->namedview->snap_manager;
+            m.setupIgnoreSelection(_th._desktop, true, &_unselected_points);
+            Inkscape::SnappedPoint sp = m.constrainedSnapRotate(_snap_points, _origin, angle, rotc);
+            m.unSetup();
+
+            if (sp.getSnapped()) {
+                angle = sp.getTransformation()[0];
+            }
         }
+
         _last_angle = angle;
-        Geom::Matrix t = Geom::Translate(-rotc)
+        Geom::Affine t = Geom::Translate(-rotc)
             * Geom::Rotate(angle)
             * Geom::Translate(rotc);
         return t;
@@ -306,7 +431,7 @@ protected:
 
     virtual CommitEvent getCommitEvent() { return COMMIT_MOUSE_ROTATE; }
 
-    virtual Glib::ustring _getTip(unsigned state) {
+    virtual Glib::ustring _getTip(unsigned state) const {
         if (state_held_shift(state)) {
             if (state_held_control(state)) {
                 return format_tip(C_("Transform handle tip",
@@ -323,20 +448,20 @@ protected:
             "the selection around the rotation center");
     }
 
-    virtual Glib::ustring _getDragTip(GdkEventMotion */*event*/) {
+    virtual Glib::ustring _getDragTip(GdkEventMotion */*event*/) const {
         return format_tip(C_("Transform handle tip", "Rotate by %.2f°"),
-            _last_angle * 360.0);
+            _last_angle * 180.0 / M_PI);
     }
 
-    virtual bool _hasDragTips() { return true; }
+    virtual bool _hasDragTips() const { return true; }
 
 private:
     static Glib::RefPtr<Gdk::Pixbuf> _corner_to_pixbuf(unsigned c) {
-        sp_select_context_get_type();
+        //sp_select_context_get_type();
         switch (c % 4) {
-        case 0: return Glib::wrap(handles[10], true);
-        case 1: return Glib::wrap(handles[8], true);
-        case 2: return Glib::wrap(handles[6], true);
+        case 0: return Glib::wrap(handles[7], true);
+        case 1: return Glib::wrap(handles[6], true);
+        case 2: return Glib::wrap(handles[5], true);
         default: return Glib::wrap(handles[4], true);
         }
     }
@@ -364,57 +489,89 @@ protected:
         _last_horizontal = _side % 2;
     }
 
-    virtual Geom::Matrix computeTransform(Geom::Point const &new_pos, GdkEventMotion *event)
+    virtual Geom::Affine computeTransform(Geom::Point const &new_pos, GdkEventMotion *event)
     {
         Geom::Point scc = held_shift(*event) ? _skew_center : _skew_opposite;
-        // d1 and d2 are reversed with respect to ScaleSideHandle
-        Geom::Dim2 d1 = static_cast<Geom::Dim2>(_side % 2);
-        Geom::Dim2 d2 = static_cast<Geom::Dim2>((_side + 1) % 2);
-        Geom::Point proj, scale(1.0, 1.0);
+        Geom::Dim2 d1 = static_cast<Geom::Dim2>((_side + 1) % 2);
+        Geom::Dim2 d2 = static_cast<Geom::Dim2>(_side % 2);
+
+        Geom::Point const initial_delta = _origin - scc;
+
+        if (fabs(initial_delta[d1]) < 1e-15) {
+            return Geom::Affine();
+        }
+
+        // Calculate the scale factors, which can be either visual or geometric
+        // depending on which type of bbox is currently being used (see preferences -> selector tool)
+        Geom::Scale scale = calcScaleFactors(_origin, new_pos, scc, false);
+        Geom::Scale skew = calcScaleFactors(_origin, new_pos, scc, true);
+        scale[d2] = 1;
+        skew[d2] = 1;
 
         // Skew handles allow scaling up to integer multiples of the original size
         // in the second direction; prevent explosions
-        // TODO should the scaling part be only active with Alt?
-        if (!Geom::are_near(_origin[d2], scc[d2])) {
-            scale[d2] = (new_pos - scc)[d2] / (_origin - scc)[d2];
-        }
 
-        if (scale[d2] < 1.0) {
-            scale[d2] = copysign(1.0, scale[d2]);
+        if (fabs(scale[d1]) < 1) {
+            // Prevent shrinking of the selected object, while allowing mirroring
+            scale[d1] = copysign(1.0, scale[d1]);
         } else {
-            scale[d2] = floor(scale[d2]);
+            // Allow expanding of the selected object by integer multiples
+            scale[d1] = floor(scale[d1] + 0.5);
         }
 
-        // Calculate skew angle. The angle is calculated with regards to the point obtained
-        // by projecting the handle position on the relevant side of the bounding box.
-        // This avoids degeneracies when moving the skew angle over the rotation center
-        proj[d1] = new_pos[d1];
-        proj[d2] = scc[d2] + (_origin[d2] - scc[d2]) * scale[d2];
-        double angle = 0;
-        if (!Geom::are_near(proj[d2], scc[d2]))
-            angle = Geom::angle_between(_origin - scc, proj - scc);
-        if (held_control(*event)) angle = snap_angle(angle);
+        double angle = atan(skew[d1] / scale[d1]);
 
-        // skew matrix has the from [[1, k],[0, 1]] for horizontal skew
-        // and [[1,0],[k,1]] for vertical skew.
-        Geom::Matrix skew = Geom::identity();
-        // correct the sign of the tangent
-        skew[d2 + 1] = (d1 == Geom::X ? -1.0 : 1.0) * tan(angle);
+        if (held_control(*event)) {
+            angle = snap_angle(angle);
+            skew[d1] = tan(angle) * scale[d1];
+        } else {
+            SnapManager &m = _th._desktop->namedview->snap_manager;
+            m.setupIgnoreSelection(_th._desktop, true, &_unselected_points);
+
+            Geom::Point cvec; cvec[d2] = 1.0;
+            Inkscape::Snapper::SnapConstraint const constraint(cvec);
+            Inkscape::SnappedPoint sp = m.constrainedSnapSkew(_snap_points, _origin, constraint, Geom::Point(skew[d1], scale[d1]), scc, d2);
+            m.unSetup();
+
+            if (sp.getSnapped()) {
+                skew[d1] =  sp.getTransformation()[0];
+            }
+        }
 
         _last_angle = angle;
-        Geom::Matrix t = Geom::Translate(-scc)
-            * Geom::Scale(scale) * skew
+
+        // Update the handle position
+        Geom::Point new_new_pos;
+        new_new_pos[d2] = initial_delta[d1] * skew[d1] + _origin[d2];
+        new_new_pos[d1] = initial_delta[d1] * scale[d1] + scc[d1];
+
+        // Calculate the relative affine
+        Geom::Affine relative_affine = Geom::identity();
+        relative_affine[2*d1 + d1] = (new_new_pos[d1] - scc[d1]) / initial_delta[d1];
+        relative_affine[2*d1 + (d2)] = (new_new_pos[d2] - _origin[d2]) / initial_delta[d1];
+        relative_affine[2*(d2) + (d1)] = 0;
+        relative_affine[2*(d2) + (d2)] = 1;
+
+        for (int i = 0; i < 2; i++) {
+            if (fabs(relative_affine[3*i]) < 1e-15) {
+                relative_affine[3*i] = 1e-15;
+            }
+        }
+
+        Geom::Affine t = Geom::Translate(-scc)
+            * relative_affine
             * Geom::Translate(scc);
+
         return t;
     }
 
     virtual CommitEvent getCommitEvent() {
-        return _side % 2
+        return (_side % 2)
             ? COMMIT_MOUSE_SKEW_Y
             : COMMIT_MOUSE_SKEW_X;
     }
 
-    virtual Glib::ustring _getTip(unsigned state) {
+    virtual Glib::ustring _getTip(unsigned state) const {
         if (state_held_shift(state)) {
             if (state_held_control(state)) {
                 return format_tip(C_("Transform handle tip",
@@ -432,7 +589,7 @@ protected:
             "the opposite handle");
     }
 
-    virtual Glib::ustring _getDragTip(GdkEventMotion */*event*/) {
+    virtual Glib::ustring _getDragTip(GdkEventMotion */*event*/) const {
         if (_last_horizontal) {
             return format_tip(C_("Transform handle tip", "Skew horizontally by %.2f°"),
                 _last_angle * 360.0);
@@ -442,16 +599,16 @@ protected:
         }
     }
 
-    virtual bool _hasDragTips() { return true; }
+    virtual bool _hasDragTips() const { return true; }
 
 private:
 
     static Glib::RefPtr<Gdk::Pixbuf> _side_to_pixbuf(unsigned s) {
-        sp_select_context_get_type();
+        //sp_select_context_get_type();
         switch (s % 4) {
-        case 0: return Glib::wrap(handles[9], true);
-        case 1: return Glib::wrap(handles[7], true);
-        case 2: return Glib::wrap(handles[5], true);
+        case 0: return Glib::wrap(handles[10], true);
+        case 1: return Glib::wrap(handles[9], true);
+        case 2: return Glib::wrap(handles[8], true);
         default: return Glib::wrap(handles[11], true);
         }
     }
@@ -465,51 +622,36 @@ bool SkewHandle::_last_horizontal = false;
 double SkewHandle::_last_angle = 0;
 
 class RotationCenter : public ControlPoint {
+
 public:
-    RotationCenter(TransformHandleSet &th)
-        : ControlPoint(th._desktop, Geom::Point(), Gtk::ANCHOR_CENTER, _get_pixbuf(),
-            &center_cset, th._transform_handle_group)
-        , _th(th)
+    RotationCenter(TransformHandleSet &th) :
+        ControlPoint(th._desktop, Geom::Point(), SP_ANCHOR_CENTER,
+                     _get_pixbuf(),
+                     _center_cset, th._transform_handle_group),
+        _th(th)
     {
         setVisible(false);
     }
 
 protected:
     virtual void dragged(Geom::Point &new_pos, GdkEventMotion *event) {
-        SnapManager &sm = _desktop->namedview->snap_manager;
+        SnapManager &sm = _th._desktop->namedview->snap_manager;
+        sm.setup(_th._desktop);
         bool snap = !held_shift(*event) && sm.someSnapperMightSnap();
-        if (snap) {
-            sm.setup(_desktop);
-        }
         if (held_control(*event)) {
-            if (snap) {
-                // constrain to axes
-                Inkscape::SnappedPoint x, y;
-                Geom::Point origin = _last_drag_origin();
-                Inkscape::Snapper::ConstraintLine line_x(origin, Geom::Point(1, 0));
-                Inkscape::Snapper::ConstraintLine line_y(origin, Geom::Point(0, 1));
-                x = sm.constrainedSnap(Inkscape::SnapCandidatePoint(new_pos,
-                    SNAPSOURCE_ROTATION_CENTER), line_x);
-                y = sm.constrainedSnap(Inkscape::SnapCandidatePoint(new_pos,
-                    SNAPSOURCE_ROTATION_CENTER), line_y);
-
-                if (x.getSnapped() || y.getSnapped()) {
-                    if (x.isOtherSnapBetter(y, false)) {
-                        x = y;
-                    }
-                    x.getPoint(new_pos);
-                }
-            } else {
-                Geom::Point origin = _last_drag_origin();
-                Geom::Point delta = new_pos - origin;
-                Geom::Dim2 d = (fabs(delta[Geom::X]) < fabs(delta[Geom::Y])) ? Geom::X : Geom::Y;
-                new_pos[d] = origin[d];
-            }
+            // constrain to axes
+            Geom::Point origin = _last_drag_origin();
+            std::vector<Inkscape::Snapper::SnapConstraint> constraints;
+            constraints.push_back(Inkscape::Snapper::SnapConstraint(origin, Geom::Point(1, 0)));
+            constraints.push_back(Inkscape::Snapper::SnapConstraint(origin, Geom::Point(0, 1)));
+            new_pos = sm.multipleConstrainedSnaps(Inkscape::SnapCandidatePoint(new_pos,
+                SNAPSOURCE_ROTATION_CENTER), constraints, held_shift(*event)).getPoint();
         } else if (snap) {
             sm.freeSnapReturnByRef(new_pos, SNAPSOURCE_ROTATION_CENTER);
         }
+        sm.unSetup();
     }
-    virtual Glib::ustring _getTip(unsigned /*state*/) {
+    virtual Glib::ustring _getTip(unsigned /*state*/) const {
         return C_("Transform handle tip",
             "<b>Rotation center</b>: drag to change the origin of transforms");
     }
@@ -517,12 +659,24 @@ protected:
 private:
 
     static Glib::RefPtr<Gdk::Pixbuf> _get_pixbuf() {
-        sp_select_context_get_type();
+        //sp_select_context_get_type();
         return Glib::wrap(handles[12], true);
     }
 
+    static ColorSet _center_cset;
     TransformHandleSet &_th;
 };
+
+ControlPoint::ColorSet RotationCenter::_center_cset = {
+    {0x00000000, 0x000000ff},
+    {0x00000000, 0xff0000b0},
+    {0x00000000, 0xff0000b0},
+    //
+    {0x00000000, 0x000000ff},
+    {0x00000000, 0xff0000b0},
+    {0x00000000, 0xff0000b0}    
+};
+
 
 TransformHandleSet::TransformHandleSet(SPDesktop *d, SPCanvasGroup *th_group)
     : Manipulator(d)
@@ -555,16 +709,20 @@ TransformHandleSet::~TransformHandleSet()
     }
 }
 
-/** Sets the mode of transform handles (scale or rotate). */
 void TransformHandleSet::setMode(Mode m)
 {
     _mode = m;
     _updateVisibility(_visible);
 }
 
-Geom::Rect TransformHandleSet::bounds()
+Geom::Rect TransformHandleSet::bounds() const
 {
     return Geom::Rect(*_scale_corners[0], *_scale_corners[2]);
+}
+
+ControlPoint const &TransformHandleSet::rotationCenter() const
+{
+    return *_center;
 }
 
 ControlPoint &TransformHandleSet::rotationCenter()
@@ -596,12 +754,12 @@ void TransformHandleSet::setBounds(Geom::Rect const &r, bool preserve_center)
     }
 }
 
-bool TransformHandleSet::event(SPEventContext *, GdkEvent*)
+bool TransformHandleSet::event(Inkscape::UI::Tools::ToolBase *, GdkEvent*)
 {
     return false;
 }
 
-void TransformHandleSet::_emitTransform(Geom::Matrix const &t)
+void TransformHandleSet::_emitTransform(Geom::Affine const &t)
 {
     signal_transform.emit(t);
     _center->transform(t);
@@ -627,9 +785,6 @@ void TransformHandleSet::_clearActiveHandle()
     _updateVisibility(_visible);
 }
 
-/** Update the visibility of transformation handles according to settings and the dimensions
- * of the bounding box. It hides the handles that would have no effect or lead to
- * discontinuities. Additionally, side handles for which there is no space are not shown. */
 void TransformHandleSet::_updateVisibility(bool v)
 {
     if (v) {
@@ -689,4 +844,4 @@ void TransformHandleSet::_updateVisibility(bool v)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

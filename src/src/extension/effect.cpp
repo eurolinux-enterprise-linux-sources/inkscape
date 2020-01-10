@@ -1,12 +1,14 @@
 /*
  * Authors:
  *   Ted Gould <ted@gould.cx>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2002-2007 Authors
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "prefdialog.h"
 #include "inkscape-private.h"
 #include "helper/action.h"
 #include "ui/view/view.h"
@@ -36,7 +38,7 @@ Inkscape::XML::Node * Effect::_filters_list = NULL;
 Effect::Effect (Inkscape::XML::Node * in_repr, Implementation::Implementation * in_imp)
     : Extension(in_repr, in_imp),
       _id_noprefs(Glib::ustring(get_id()) + ".noprefs"),
-      _name_noprefs(Glib::ustring(get_name()) + _(" (No preferences)")),
+      _name_noprefs(Glib::ustring(_(get_name())) + _(" (No preferences)")),
       _verb(get_id(), get_name(), NULL, NULL, this, true),
       _verb_nopref(_id_noprefs.c_str(), _name_noprefs.c_str(), NULL, NULL, this, false),
       _menu_node(NULL), _workingDialog(true),
@@ -55,7 +57,7 @@ Effect::Effect (Inkscape::XML::Node * in_repr, Implementation::Implementation * 
 
     if (repr != NULL) {
 
-        for (Inkscape::XML::Node *child = sp_repr_children(repr); child != NULL; child = child->next()) {
+        for (Inkscape::XML::Node *child = repr->firstChild(); child != NULL; child = child->next()) {
             if (!strcmp(child->name(), INKSCAPE_EXTENSION_NS "effect")) {
                 if (child->attribute("needs-document") && !strcmp(child->attribute("needs-document"), "false")) {
                   no_doc = true;
@@ -63,10 +65,10 @@ Effect::Effect (Inkscape::XML::Node * in_repr, Implementation::Implementation * 
                 if (child->attribute("needs-live-preview") && !strcmp(child->attribute("needs-live-preview"), "false")) {
                   no_live_preview = true;
                 }
-                for (Inkscape::XML::Node *effect_child = sp_repr_children(child); effect_child != NULL; effect_child = effect_child->next()) {
+                for (Inkscape::XML::Node *effect_child = child->firstChild(); effect_child != NULL; effect_child = effect_child->next()) {
                     if (!strcmp(effect_child->name(), INKSCAPE_EXTENSION_NS "effects-menu")) {
                         // printf("Found local effects menu in %s\n", this->get_name());
-                        local_effects_menu = sp_repr_children(effect_child);
+                        local_effects_menu = effect_child->firstChild();
                         if (effect_child->attribute("hidden") && !strcmp(effect_child->attribute("hidden"), "true")) {
                             hidden = true;
                         }
@@ -74,12 +76,12 @@ Effect::Effect (Inkscape::XML::Node * in_repr, Implementation::Implementation * 
                     if (!strcmp(effect_child->name(), INKSCAPE_EXTENSION_NS "menu-name") ||
                             !strcmp(effect_child->name(), INKSCAPE_EXTENSION_NS "_menu-name")) {
                         // printf("Found local effects menu in %s\n", this->get_name());
-                        _verb.set_name(sp_repr_children(effect_child)->content());
+                        _verb.set_name(effect_child->firstChild()->content());
                     }
                     if (!strcmp(effect_child->name(), INKSCAPE_EXTENSION_NS "menu-tip") ||
                             !strcmp(effect_child->name(), INKSCAPE_EXTENSION_NS "_menu-tip")) {
                         // printf("Found local effects menu in %s\n", this->get_name());
-                        _verb.set_tip(sp_repr_children(effect_child)->content());
+                        _verb.set_tip(effect_child->firstChild()->content());
                     }
                 } // children of "effect"
                 break; // there can only be one effect
@@ -87,7 +89,7 @@ Effect::Effect (Inkscape::XML::Node * in_repr, Implementation::Implementation * 
         } // children of "inkscape-extension"
     } // if we have an XML file
 
-    if (INKSCAPE != NULL) {
+    if (INKSCAPE != NULL && inkscape_use_gui()) {
         if (_effects_list == NULL)
             _effects_list = find_menu(inkscape_get_menus(INKSCAPE), EFFECTS_LIST);
         if (_filters_list == NULL)
@@ -105,7 +107,7 @@ Effect::Effect (Inkscape::XML::Node * in_repr, Implementation::Implementation * 
                 local_effects_menu && 
                 local_effects_menu->attribute("name") && 
                 !strcmp(local_effects_menu->attribute("name"), ("Filters"))) {
-                merge_menu(_filters_list->parent(), _filters_list, sp_repr_children(local_effects_menu), _menu_node);
+                merge_menu(_filters_list->parent(), _filters_list, local_effects_menu->firstChild(), _menu_node);
             } else if (_effects_list) {
                 merge_menu(_effects_list->parent(), _effects_list, local_effects_menu, _menu_node);
             }
@@ -258,7 +260,7 @@ Effect::prefs (Inkscape::UI::View::View * doc)
     This function first insures that the extension is loaded, and if not,
     loads it.  It then calls the implemention to do the actual work.  It
     also resets the last effect pointer to be this effect.  Finally, it
-    executes a \c sp_document_done to commit the changes to the undo
+    executes a \c SPDocumentUndo::done to commit the changes to the undo
     stack.
 */
 void
@@ -295,18 +297,20 @@ Effect::effect (Inkscape::UI::View::View * doc)
 void
 Effect::set_last_effect (Effect * in_effect)
 {
-    gchar const * verb_id = in_effect->get_verb()->get_id();
-    gchar const * help_id_prefix = "org.inkscape.help.";
+    if (in_effect) {
+        gchar const * verb_id = in_effect->get_verb()->get_id();
+        gchar const * help_id_prefix = "org.inkscape.help.";
 
-    // We don't want these "effects" to register as the last effect,
-    // this wouldn't be helpful to the user who selects a real effect,
-    // then goes to the help file (implemented as an effect), then goes
-    // back to the effect, only to see it written over by the help file
-    // selection.
+        // We don't want these "effects" to register as the last effect,
+        // this wouldn't be helpful to the user who selects a real effect,
+        // then goes to the help file (implemented as an effect), then goes
+        // back to the effect, only to see it written over by the help file
+        // selection.
 
-    // This snippet should fix this bug:
-    // https://bugs.launchpad.net/inkscape/+bug/600671
-    if (strncmp(verb_id, help_id_prefix, strlen(help_id_prefix)) == 0) return;
+        // This snippet should fix this bug:
+        // https://bugs.launchpad.net/inkscape/+bug/600671
+        if (strncmp(verb_id, help_id_prefix, strlen(help_id_prefix)) == 0) return;
+    }
 
     if (in_effect == NULL) {
         Inkscape::Verb::get(SP_VERB_EFFECT_LAST)->sensitive(NULL, false);
@@ -323,7 +327,7 @@ Effect::set_last_effect (Effect * in_effect)
 Inkscape::XML::Node *
 Effect::find_menu (Inkscape::XML::Node * menustruct, const gchar *name)
 {
-    if (menustruct == NULL) return false;
+    if (menustruct == NULL) return NULL;
     for (Inkscape::XML::Node * child = menustruct;
             child != NULL;
             child = child->next()) {
@@ -354,29 +358,23 @@ Effect::set_pref_dialog (PrefDialog * prefdialog)
     return;
 }
 
-/** \brief  Create an action for a \c EffectVerb
-    \param  view  Which view the action should be created for
-    \return The built action.
-
-    Calls \c make_action_helper with the \c vector.
-*/
 SPAction *
-Effect::EffectVerb::make_action (Inkscape::UI::View::View * view)
+Effect::EffectVerb::make_action (Inkscape::ActionContext const & context)
 {
-    return make_action_helper(view, &vector, static_cast<void *>(this));
+    return make_action_helper(context, &perform, static_cast<void *>(this));
 }
 
 /** \brief  Decode the verb code and take appropriate action */
 void
-Effect::EffectVerb::perform( SPAction *action, void * data, void */*pdata*/ )
+Effect::EffectVerb::perform( SPAction *action, void * data )
 {
+    g_return_if_fail(ensure_desktop_valid(action));
     Inkscape::UI::View::View * current_view = sp_action_get_view(action);
-//  SPDocument * current_document = current_view->doc;
+
     Effect::EffectVerb * ev = reinterpret_cast<Effect::EffectVerb *>(data);
     Effect * effect = ev->_effect;
 
     if (effect == NULL) return;
-    if (current_view == NULL) return;
 
     if (ev->_showPrefs) {
         effect->prefs(current_view);
@@ -386,14 +384,6 @@ Effect::EffectVerb::perform( SPAction *action, void * data, void */*pdata*/ )
 
     return;
 }
-
-/**
- * Action vector to define functions called if a staticly defined file verb
- * is called.
- */
-SPActionEventVector Effect::EffectVerb::vector =
-            {{NULL}, Effect::EffectVerb::perform, NULL, NULL, NULL, NULL};
-
 
 } }  /* namespace Inkscape, Extension */
 

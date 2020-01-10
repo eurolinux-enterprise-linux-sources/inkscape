@@ -1,5 +1,3 @@
-#define __SP_PATH_CHEMISTRY_C__
-
 /*
  * Here are handlers for modifying selections, specific to paths
  *
@@ -7,6 +5,8 @@
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   bulia byak <buliabyak@users.sf.net>
  *   Jasper van de Gronde <th.v.d.gronde@hccnet.nl>
+ *   Jon A. Cruz <jon@joncruz.org>
+ *   Abhishek Sharma
  *
  * Copyright (C) 1999-2008 Authors
  * Copyright (C) 2001-2002 Ximian, Inc.
@@ -31,6 +31,7 @@
 #include "style.h"
 #include "desktop.h"
 #include "document.h"
+#include "document-undo.h"
 #include "message-stack.h"
 #include "selection.h"
 #include "desktop-handles.h"
@@ -38,6 +39,9 @@
 #include <2geom/pathvector.h>
 #include "selection-chemistry.h"
 #include "path-chemistry.h"
+#include "verbs.h"
+
+using Inkscape::DocumentUndo;
 
 void
 sp_selected_path_combine(SPDesktop *desktop)
@@ -74,15 +78,16 @@ sp_selected_path_combine(SPDesktop *desktop)
 
     items = g_slist_sort(items, (GCompareFunc) sp_item_repr_compare_position);
     items = g_slist_reverse(items);
+    assert(items); // cannot be NULL because of list length check at top of function
 
     // remember the position, id, transform and style of the topmost path, they will be assigned to the combined one
     gint position = 0;
     char const *id = NULL;
     char const *transform = NULL;
-    gchar *style = NULL;
-    gchar *path_effect = NULL;
+    char const *style = NULL;
+    char const *path_effect = NULL;
 
-    SPCurve* curve = 0;
+    SPCurve* curve = NULL;
     SPItem *first = NULL;
     Inkscape::XML::Node *parent = NULL; 
 
@@ -93,67 +98,67 @@ sp_selected_path_combine(SPDesktop *desktop)
     for (GSList *i = items; i != NULL; i = i->next) {  // going from top to bottom
 
         SPItem *item = (SPItem *) i->data;
-        if (!SP_IS_PATH(item))
+        if (!SP_IS_PATH(item)) {
             continue;
+        }
 
         if (!did) {
             selection->clear();
             did = true;
         }
 
-        SPCurve *c = sp_path_get_curve_for_edit(SP_PATH(item));
+        SPCurve *c = SP_PATH(item)->get_curve_for_edit();
         if (first == NULL) {  // this is the topmost path
             first = item;
-            parent = SP_OBJECT_REPR(first)->parent();
-            position = SP_OBJECT_REPR(first)->position();
-            id = SP_OBJECT_REPR(first)->attribute("id");
-            transform = SP_OBJECT_REPR(first)->attribute("transform");
+            parent = first->getRepr()->parent();
+            position = first->getRepr()->position();
+            id = first->getRepr()->attribute("id");
+            transform = first->getRepr()->attribute("transform");
             // FIXME: merge styles of combined objects instead of using the first one's style
-            style = g_strdup(SP_OBJECT_REPR(first)->attribute("style"));
-            path_effect = g_strdup(SP_OBJECT_REPR(first)->attribute("inkscape:path-effect"));
+            style = first->getRepr()->attribute("style");
+            path_effect = first->getRepr()->attribute("inkscape:path-effect");
             //c->transform(item->transform);
             curve = c;
         } else {
-            c->transform(item->getRelativeTransform(SP_OBJECT(first)));
+            c->transform(item->getRelativeTransform(first));
             curve->append(c, false);
             c->unref();
-        }
 
-        // unless this is the topmost object,
-        if (item != first) {
             // reduce position only if the same parent
-            if (SP_OBJECT_REPR(item)->parent() == parent)
+            if (item->getRepr()->parent() == parent) {
                 position--;
+            }
             // delete the object for real, so that its clones can take appropriate action
-            SP_OBJECT(item)->deleteObject();
+            item->deleteObject();
         }
     }
 
     g_slist_free(items);
 
     if (did) {
-        SP_OBJECT(first)->deleteObject(false);
+        first->deleteObject(false);
         // delete the topmost.
 
-        Inkscape::XML::Document *xml_doc = sp_document_repr_doc(desktop->doc());
+        Inkscape::XML::Document *xml_doc = desktop->doc()->getReprDoc();
         Inkscape::XML::Node *repr = xml_doc->createElement("svg:path");
 
         // restore id, transform, path effect, and style
         repr->setAttribute("id", id);
-        if (transform) repr->setAttribute("transform", transform);
+        if (transform) {
+            repr->setAttribute("transform", transform);
+        }
         repr->setAttribute("style", style);
-        g_free(style);
 
         repr->setAttribute("inkscape:path-effect", path_effect);
-        g_free(path_effect);
 
         // set path data corresponding to new curve
         gchar *dstring = sp_svg_write_path(curve->get_pathvector());
         curve->unref();
-        if (path_effect)
+        if (path_effect) {
             repr->setAttribute("inkscape:original-d", dstring);
-        else
+        } else {
             repr->setAttribute("d", dstring);
+        }
         g_free(dstring);
 
         // add the new group to the parent of the topmost
@@ -162,8 +167,8 @@ sp_selected_path_combine(SPDesktop *desktop)
         // move to the position of the topmost, reduced by the number of deleted items
         repr->setPosition(position > 0 ? position : 0);
 
-        sp_document_done(sp_desktop_document(desktop), SP_VERB_SELECTION_COMBINE, 
-                         _("Combine"));
+        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_SELECTION_COMBINE, 
+                           _("Combine"));
 
         selection->set(repr);
 
@@ -198,30 +203,34 @@ sp_selected_path_break_apart(SPDesktop *desktop)
 
         SPItem *item = (SPItem *) items->data;
 
-        if (!SP_IS_PATH(item))
+        if (!SP_IS_PATH(item)) {
             continue;
+        }
 
         SPPath *path = SP_PATH(item);
 
-        SPCurve *curve = sp_path_get_curve_for_edit(SP_PATH(path));
-        if (curve == NULL)
+        SPCurve *curve = path->get_curve_for_edit();
+        if (curve == NULL) {
             continue;
+        }
 
         did = true;
 
-        Inkscape::XML::Node *parent = SP_OBJECT_REPR(item)->parent();
-        gint pos = SP_OBJECT_REPR(item)->position();
-        char const *id = SP_OBJECT_REPR(item)->attribute("id");
+        Inkscape::XML::Node *parent = item->getRepr()->parent();
+        gint pos = item->getRepr()->position();
+        char const *id = item->getRepr()->attribute("id");
 
-        gchar *style = g_strdup(SP_OBJECT(item)->repr->attribute("style"));
-        gchar *path_effect = g_strdup(SP_OBJECT(item)->repr->attribute("inkscape:path-effect"));
+        // XML Tree being used directly here while it shouldn't be...
+        gchar *style = g_strdup(item->getRepr()->attribute("style"));
+        // XML Tree being used directly here while it shouldn't be...
+        gchar *path_effect = g_strdup(item->getRepr()->attribute("inkscape:path-effect"));
 
-        Geom::PathVector apv = curve->get_pathvector() * SP_ITEM(path)->transform;
+        Geom::PathVector apv = curve->get_pathvector() * path->transform;
 
         curve->unref();
 
         // it's going to resurrect as one of the pieces, so we delete without advertisement
-        SP_OBJECT(item)->deleteObject(false);
+        item->deleteObject(false);
 
         curve = new SPCurve(apv);
         g_assert(curve != NULL);
@@ -272,8 +281,8 @@ sp_selected_path_break_apart(SPDesktop *desktop)
     desktop->clearWaitingCursor();
 
     if (did) {
-        sp_document_done(sp_desktop_document(desktop), SP_VERB_SELECTION_BREAK_APART, 
-                         _("Break apart"));
+        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_SELECTION_BREAK_APART, 
+                           _("Break apart"));
     } else {
         sp_desktop_message_stack(desktop)->flash(Inkscape::ERROR_MESSAGE, _("<b>No path(s)</b> to break apart in the selection."));
     }
@@ -281,18 +290,16 @@ sp_selected_path_break_apart(SPDesktop *desktop)
 
 /* This function is an entry point from GUI */
 void
-sp_selected_path_to_curves(SPDesktop *desktop, bool interactive)
+sp_selected_path_to_curves(Inkscape::Selection *selection, SPDesktop *desktop, bool interactive)
 {
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
-
     if (selection->isEmpty()) {
-        if (interactive)
+        if (interactive && desktop)
             sp_desktop_message_stack(desktop)->flash(Inkscape::WARNING_MESSAGE, _("Select <b>object(s)</b> to convert to path."));
         return;
     }
 
     bool did = false;
-    if (interactive) {
+    if (interactive && desktop) {
         desktop->messageStack()->flash(Inkscape::IMMEDIATE_MESSAGE, _("Converting objects to paths..."));
         // set "busy" cursor
         desktop->setWaitingCursor();
@@ -311,11 +318,11 @@ sp_selected_path_to_curves(SPDesktop *desktop, bool interactive)
     g_slist_free (to_select);
     g_slist_free (selected);
 
-    if (interactive) {
+    if (interactive && desktop) {
         desktop->clearWaitingCursor();
         if (did) {
-            sp_document_done(sp_desktop_document(desktop), SP_VERB_OBJECT_TO_CURVE, 
-                             _("Object to path"));
+            DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_OBJECT_TO_CURVE, 
+                               _("Object to path"));
         } else {
             sp_desktop_message_stack(desktop)->flash(Inkscape::ERROR_MESSAGE, _("<b>No objects</b> to convert to path in the selection."));
             return;
@@ -332,20 +339,21 @@ void sp_selected_to_lpeitems(SPDesktop *desktop)
         return;
     }
 
-    bool did = false;
-
     GSList *selected = g_slist_copy((GSList *) selection->itemList());
     GSList *to_select = NULL;
     selection->clear();
     GSList *items = g_slist_copy(selected);
 
-    did = sp_item_list_to_curves(items, &selected, &to_select, true);
+    sp_item_list_to_curves(items, &selected, &to_select, true);
 
-    g_slist_free (items);
+    g_slist_free(items);
+    items = 0;
     selection->setReprList(to_select);
     selection->addList(selected);
-    g_slist_free (to_select);
-    g_slist_free (selected);
+    g_slist_free(to_select);
+    to_select = 0;
+    g_slist_free(selected);
+    selected = 0;
 }
 
 bool
@@ -358,7 +366,7 @@ sp_item_list_to_curves(const GSList *items, GSList **selected, GSList **to_selec
          items = items->next) {
 
         SPItem *item = SP_ITEM(items->data);
-    	SPDocument *document = item->document;
+        SPDocument *document = item->document;
 
         if ( skip_all_lpeitems &&
              SP_IS_LPE_ITEM(item) && 
@@ -367,13 +375,21 @@ sp_item_list_to_curves(const GSList *items, GSList **selected, GSList **to_selec
             continue;
         }
 
-        if (SP_IS_PATH(item) && !SP_PATH(item)->original_curve) {
+        if (SP_IS_PATH(item) && !SP_SHAPE(item)->_curve_before_lpe) {
+            // remove connector attributes
+            if (item->getAttribute("inkscape:connector-type") != NULL) {
+                item->removeAttribute("inkscape:connection-start");
+                item->removeAttribute("inkscape:connection-end");
+                item->removeAttribute("inkscape:connector-type");
+                item->removeAttribute("inkscape:connector-curvature");
+                did = true;
+            }
             continue; // already a path, and no path effect
         }
 
         if (SP_IS_BOX3D(item)) {
             // convert 3D box to ordinary group of paths; replace the old element in 'selected' with the new group
-            Inkscape::XML::Node *repr = SP_OBJECT_REPR(box3d_convert_to_group(SP_BOX3D(item)));
+            Inkscape::XML::Node *repr = box3d_convert_to_group(SP_BOX3D(item))->getRepr();
             
             if (repr) {
                 *to_select = g_slist_prepend (*to_select, repr);
@@ -385,7 +401,7 @@ sp_item_list_to_curves(const GSList *items, GSList **selected, GSList **to_selec
         }
         
         if (SP_IS_GROUP(item)) {
-            sp_lpe_item_remove_all_path_effects(SP_LPE_ITEM(item), true);
+            SP_LPE_ITEM(item)->removeAllPathEffects(true);
             GSList *item_list = sp_item_group_item_list(SP_GROUP(item));
             
             GSList *item_to_select = NULL;
@@ -409,18 +425,18 @@ sp_item_list_to_curves(const GSList *items, GSList **selected, GSList **to_selec
         *selected = g_slist_remove (*selected, item);
 
         // remember the position of the item
-        gint pos = SP_OBJECT_REPR(item)->position();
+        gint pos = item->getRepr()->position();
         // remember parent
-        Inkscape::XML::Node *parent = SP_OBJECT_REPR(item)->parent();
+        Inkscape::XML::Node *parent = item->getRepr()->parent();
         // remember id
-        char const *id = SP_OBJECT_REPR(item)->attribute("id");
+        char const *id = item->getRepr()->attribute("id");
         // remember title
         gchar *title = item->title();
         // remember description
         gchar *desc = item->desc();
 
         // It's going to resurrect, so we delete without notifying listeners.
-        SP_OBJECT(item)->deleteObject(false);
+        item->deleteObject(false);
 
         // restore id
         repr->setAttribute("id", id);
@@ -428,12 +444,12 @@ sp_item_list_to_curves(const GSList *items, GSList **selected, GSList **to_selec
         parent->appendChild(repr);
         SPObject* newObj = document->getObjectByRepr(repr);
         if (title && newObj) {
-        	newObj->setTitle(title);
-        	g_free(title);
+            newObj->setTitle(title);
+            g_free(title);
         }
         if (desc && newObj) {
-        	newObj->setDesc(desc);
-        	g_free(desc);
+            newObj->setDesc(desc);
+            g_free(desc);
         }
 
         // move to the saved position
@@ -454,26 +470,26 @@ sp_selected_item_to_curved_repr(SPItem *item, guint32 /*text_grouping_policy*/)
     if (!item)
         return NULL;
 
-    Inkscape::XML::Document *xml_doc = SP_OBJECT_REPR(item)->document();
+    Inkscape::XML::Document *xml_doc = item->getRepr()->document();
 
     if (SP_IS_TEXT(item) || SP_IS_FLOWTEXT(item)) {
         // Special treatment for text: convert each glyph to separate path, then group the paths
         Inkscape::XML::Node *g_repr = xml_doc->createElement("svg:g");
-        g_repr->setAttribute("transform", SP_OBJECT_REPR(item)->attribute("transform"));
+        g_repr->setAttribute("transform", item->getRepr()->attribute("transform"));
         /* Mask */
-        gchar *mask_str = (gchar *) SP_OBJECT_REPR(item)->attribute("mask");
+        gchar *mask_str = (gchar *) item->getRepr()->attribute("mask");
         if ( mask_str )
             g_repr->setAttribute("mask", mask_str);
         /* Clip path */
-        gchar *clip_path_str = (gchar *) SP_OBJECT_REPR(item)->attribute("clip-path");
+        gchar *clip_path_str = (gchar *) item->getRepr()->attribute("clip-path");
         if ( clip_path_str )
             g_repr->setAttribute("clip-path", clip_path_str);
         /* Rotation center */
-        g_repr->setAttribute("inkscape:transform-center-x", SP_OBJECT_REPR(item)->attribute("inkscape:transform-center-x"), false);
-        g_repr->setAttribute("inkscape:transform-center-y", SP_OBJECT_REPR(item)->attribute("inkscape:transform-center-y"), false);
+        g_repr->setAttribute("inkscape:transform-center-x", item->getRepr()->attribute("inkscape:transform-center-x"), false);
+        g_repr->setAttribute("inkscape:transform-center-y", item->getRepr()->attribute("inkscape:transform-center-y"), false);
         /* Whole text's style */
-        gchar *style_str = sp_style_write_difference(SP_OBJECT_STYLE(item),
-                                             SP_OBJECT_STYLE(SP_OBJECT_PARENT(item)));
+        gchar *style_str = sp_style_write_difference(item->style,
+                                                     item->parent->style);
         g_repr->setAttribute("style", style_str);
         g_free(style_str);
         Inkscape::Text::Layout::iterator iter = te_get_layout(item)->begin(); 
@@ -490,11 +506,11 @@ sp_selected_item_to_curved_repr(SPItem *item, guint32 /*text_grouping_policy*/)
             if (!rawptr || !SP_IS_OBJECT(rawptr)) // no source for glyph, abort
                 break;
             pos_obj = SP_OBJECT(rawptr);
-            while (SP_IS_STRING(pos_obj) && SP_OBJECT_PARENT(pos_obj)) {
-               pos_obj = SP_OBJECT_PARENT(pos_obj);   // SPStrings don't have style
+            while (SP_IS_STRING(pos_obj) && pos_obj->parent) {
+               pos_obj = pos_obj->parent;   // SPStrings don't have style
             }
-            gchar *style_str = sp_style_write_difference(SP_OBJECT_STYLE(pos_obj),
-                                                 SP_OBJECT_STYLE(SP_OBJECT_PARENT(pos_obj)));
+            gchar *style_str = sp_style_write_difference(pos_obj->style,
+                                                         pos_obj->parent->style);
 
             // get path from iter to iter_next:
             SPCurve *curve = te_get_layout(item)->convertToCurves(iter, iter_next);
@@ -532,7 +548,7 @@ sp_selected_item_to_curved_repr(SPItem *item, guint32 /*text_grouping_policy*/)
 
     SPCurve *curve = NULL;
     if (SP_IS_SHAPE(item)) {
-        curve = sp_shape_get_curve(SP_SHAPE(item));
+        curve = SP_SHAPE(item)->getCurve();
     } 
 
     if (!curve)
@@ -548,26 +564,26 @@ sp_selected_item_to_curved_repr(SPItem *item, guint32 /*text_grouping_policy*/)
 
     Inkscape::XML::Node *repr = xml_doc->createElement("svg:path");
     /* Transformation */
-    repr->setAttribute("transform", SP_OBJECT_REPR(item)->attribute("transform"));
+    repr->setAttribute("transform", item->getRepr()->attribute("transform"));
     /* Style */
-    gchar *style_str = sp_style_write_difference(SP_OBJECT_STYLE(item),
-                                                 SP_OBJECT_STYLE(SP_OBJECT_PARENT(item)));
+    gchar *style_str = sp_style_write_difference(item->style,
+                                                 item->parent->style);
     repr->setAttribute("style", style_str);
     g_free(style_str);
 
     /* Mask */
-    gchar *mask_str = (gchar *) SP_OBJECT_REPR(item)->attribute("mask");
+    gchar *mask_str = (gchar *) item->getRepr()->attribute("mask");
     if ( mask_str )
         repr->setAttribute("mask", mask_str);
 
     /* Clip path */
-    gchar *clip_path_str = (gchar *) SP_OBJECT_REPR(item)->attribute("clip-path");
+    gchar *clip_path_str = (gchar *) item->getRepr()->attribute("clip-path");
     if ( clip_path_str )
         repr->setAttribute("clip-path", clip_path_str);
 
     /* Rotation center */
-    repr->setAttribute("inkscape:transform-center-x", SP_OBJECT_REPR(item)->attribute("inkscape:transform-center-x"), false);
-    repr->setAttribute("inkscape:transform-center-y", SP_OBJECT_REPR(item)->attribute("inkscape:transform-center-y"), false);
+    repr->setAttribute("inkscape:transform-center-x", item->getRepr()->attribute("inkscape:transform-center-x"), false);
+    repr->setAttribute("inkscape:transform-center-y", item->getRepr()->attribute("inkscape:transform-center-y"), false);
 
     /* Definition */
     gchar *def_str = sp_svg_write_path(curve->get_pathvector());
@@ -598,28 +614,29 @@ sp_selected_path_reverse(SPDesktop *desktop)
 
     for (GSList *i = items; i != NULL; i = i->next) {
 
-        if (!SP_IS_PATH(i->data))
+        if (!SP_IS_PATH(i->data)) {
             continue;
+        }
 
         did = true;
         SPPath *path = SP_PATH(i->data);
 
-        SPCurve *rcurve = sp_path_get_curve_reference(path)->create_reverse();
+        SPCurve *rcurve = path->get_curve_reference()->create_reverse();
 
         gchar *str = sp_svg_write_path(rcurve->get_pathvector());
-        if ( sp_lpe_item_has_path_effect_recursive(SP_LPE_ITEM(path)) ) {
-            SP_OBJECT_REPR(path)->setAttribute("inkscape:original-d", str);
+        if ( path->hasPathEffectRecursive() ) {
+            path->getRepr()->setAttribute("inkscape:original-d", str);
         } else {
-            SP_OBJECT_REPR(path)->setAttribute("d", str);
+            path->getRepr()->setAttribute("d", str);
         }
         g_free(str);
 
         rcurve->unref();
 
         // reverse nodetypes order (Bug #179866)
-        gchar *nodetypes = g_strdup(SP_OBJECT_REPR(path)->attribute("sodipodi:nodetypes"));
+        gchar *nodetypes = g_strdup(path->getRepr()->attribute("sodipodi:nodetypes"));
         if ( nodetypes ) {
-            SP_OBJECT_REPR(path)->setAttribute("sodipodi:nodetypes", g_strreverse(nodetypes));
+            path->getRepr()->setAttribute("sodipodi:nodetypes", g_strreverse(nodetypes));
             g_free(nodetypes);
         }
     }
@@ -627,8 +644,8 @@ sp_selected_path_reverse(SPDesktop *desktop)
     desktop->clearWaitingCursor();
 
     if (did) {
-        sp_document_done(sp_desktop_document(desktop), SP_VERB_SELECTION_REVERSE,
-                         _("Reverse path"));
+        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_SELECTION_REVERSE,
+                           _("Reverse path"));
     } else {
         sp_desktop_message_stack(desktop)->flash(Inkscape::ERROR_MESSAGE, _("<b>No paths</b> to reverse in the selection."));
     }
@@ -643,4 +660,4 @@ sp_selected_path_reverse(SPDesktop *desktop)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

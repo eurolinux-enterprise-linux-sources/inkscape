@@ -1,10 +1,5 @@
-#include <2geom/sbasis-geometric.h>
-#include <2geom/sbasis.h>
-#include <2geom/sbasis-math.h>
-//#include <2geom/solver.h>
-#include <2geom/sbasis-geometric.h>
-
 /** Geometric operators on D2<SBasis> (1D->2D).
+ * Copyright 2012 JBC Engelen
  * Copyright 2007 JF Barraud
  * Copyright 2007 N Hurst
  *
@@ -20,6 +15,11 @@
  *  osculating circle center?
  *  
  **/
+
+#include <2geom/sbasis-geometric.h>
+#include <2geom/sbasis.h>
+#include <2geom/sbasis-math.h>
+#include <2geom/sbasis-geometric.h>
 
 //namespace Geom{
 using namespace Geom;
@@ -151,7 +151,7 @@ Geom::cutAtRoots(Piecewise<D2<SBasis> > const &M, double ZERO){
  \param vect a piecewise parameteric curve.
  \param tol the maximum error allowed.
  \param order the maximum degree to use for approximation
-
+ \relates Piecewise
 */
 Piecewise<SBasis>
 Geom::atan2(Piecewise<D2<SBasis> > const &vect, double tol, unsigned order){
@@ -182,7 +182,7 @@ Geom::atan2(Piecewise<D2<SBasis> > const &vect, double tol, unsigned order){
  \param vect a piecewise parameteric curve.
  \param tol the maximum error allowed.
  \param order the maximum degree to use for approximation
-
+ \relates Piecewise, D2
 */
 Piecewise<SBasis>
 Geom::atan2(D2<SBasis> const &vect, double tol, unsigned order){
@@ -193,7 +193,7 @@ Geom::atan2(D2<SBasis> const &vect, double tol, unsigned order){
  \param angle a piecewise function of angle wrt t.
  \param tol the maximum error allowed.
  \param order the maximum degree to use for approximation
-
+ \relates D2, SBasis
 */
 D2<Piecewise<SBasis> >
 Geom::tan2(SBasis const &angle, double tol, unsigned order){
@@ -204,7 +204,7 @@ Geom::tan2(SBasis const &angle, double tol, unsigned order){
  \param angle a piecewise function of angle wrt t.
  \param tol the maximum error allowed.
  \param order the maximum degree to use for approximation
-
+ \relates Piecewise, D2
 */
 D2<Piecewise<SBasis> >
 Geom::tan2(Piecewise<SBasis> const &angle, double tol, unsigned order){
@@ -218,6 +218,8 @@ Geom::tan2(Piecewise<SBasis> const &angle, double tol, unsigned order){
 
 unitVector(x,y) is computed as (b,-a) where a and b are solutions of:
      ax+by=0 (eqn1)   and   a^2+b^2=1 (eqn2)
+
+ \relates Piecewise, D2
 */
 Piecewise<D2<SBasis> >
 Geom::unitVector(D2<SBasis> const &V_in, double tol, unsigned order){
@@ -296,6 +298,8 @@ Geom::unitVector(D2<SBasis> const &V_in, double tol, unsigned order){
 
 unitVector(x,y) is computed as (b,-a) where a and b are solutions of:
      ax+by=0 (eqn1)   and   a^2+b^2=1 (eqn2)
+
+ \relates Piecewise
 */
 Piecewise<D2<SBasis> >
 Geom::unitVector(Piecewise<D2<SBasis> > const &V, double tol, unsigned order){
@@ -314,7 +318,7 @@ Geom::unitVector(Piecewise<D2<SBasis> > const &V, double tol, unsigned order){
 /** returns a function giving the arclength at each point in M.
  \param M the Element.
  \param tol the maximum error allowed.
-
+ \relates Piecewise
 */
 Piecewise<SBasis> 
 Geom::arcLengthSb(Piecewise<D2<SBasis> > const &M, double tol){
@@ -328,7 +332,7 @@ Geom::arcLengthSb(Piecewise<D2<SBasis> > const &M, double tol){
 /** returns a function giving the arclength at each point in M.
  \param M the Element.
  \param tol the maximum error allowed.
-
+ \relates Piecewise, D2
 */
 Piecewise<SBasis> 
 Geom::arcLengthSb(D2<SBasis> const &M, double tol){
@@ -353,14 +357,12 @@ Geom::length(Piecewise<D2<SBasis> > const &M,
 /** returns a function giving the curvature at each point in M.
  \param M the Element.
  \param tol the maximum error allowed.
-
- Todo:
- * claimed incomplete.  Check.
+ \relates Piecewise, D2
+ \todo claimed incomplete.  Check.
 */
 Piecewise<SBasis>
 Geom::curvature(D2<SBasis> const &M, double tol) {
     D2<SBasis> dM=derivative(M);
-    Piecewise<SBasis> result;
     Piecewise<D2<SBasis> > unitv = unitVector(dM,tol);
     Piecewise<SBasis> dMlength = dot(Piecewise<D2<SBasis> >(dM),unitv);
     Piecewise<SBasis> k = cross(derivative(unitv),unitv);
@@ -371,9 +373,8 @@ Geom::curvature(D2<SBasis> const &M, double tol) {
 /** returns a function giving the curvature at each point in M.
  \param M the Element.
  \param tol the maximum error allowed.
-
- Todo:
- * claimed incomplete.  Check.
+ \relates Piecewise
+ \todo claimed incomplete.  Check.
 */
 Piecewise<SBasis> 
 Geom::curvature(Piecewise<D2<SBasis> > const &V, double tol){
@@ -395,7 +396,7 @@ Geom::curvature(Piecewise<D2<SBasis> > const &V, double tol){
  \param M the Element.
  \param tol the maximum error allowed.
  \param order the maximum degree to use for approximation
-
+ \relates Piecewise, D2
 */
 Piecewise<D2<SBasis> >
 Geom::arc_length_parametrization(D2<SBasis> const &M,
@@ -407,6 +408,9 @@ Geom::arc_length_parametrization(D2<SBasis> const &M,
     Piecewise<SBasis> s = arcLengthSb(Piecewise<D2<SBasis> >(M),tol);
     for (unsigned i=0; i < s.size();i++){
         double t0=s.cuts[i],t1=s.cuts[i+1];
+        if ( are_near(s(t0),s(t1)) ) {
+            continue;
+        }
         D2<SBasis> sub_M = compose(M,Linear(t0,t1));
         D2<SBasis> sub_u;
         for (unsigned dim=0;dim<2;dim++){
@@ -424,18 +428,17 @@ Geom::arc_length_parametrization(D2<SBasis> const &M,
  \param M the Element.
  \param tol the maximum error allowed.
  \param order the maximum degree to use for approximation
-
+ \relates Piecewise
 */
 Piecewise<D2<SBasis> >
 Geom::arc_length_parametrization(Piecewise<D2<SBasis> > const &M,
                                  unsigned order,
                                  double tol){
     Piecewise<D2<SBasis> > result;
-    for (unsigned i=0; i<M.size(); i++ ){
-        Piecewise<D2<SBasis> > uniform_seg=arc_length_parametrization(M[i],order,tol);
-        result.concat(uniform_seg);
+    for (unsigned i=0; i<M.size(); i++) {
+        result.concat( arc_length_parametrization(M[i],order,tol) );
     }
-    return(result);
+    return result;
 }
 
 #include <gsl/gsl_integration.h>
@@ -449,7 +452,7 @@ static double sb_length_integrating(double t, void* param) {
  \param tol the maximum error allowed.
  \param result variable to be incremented with the length of the path
  \param abs_error variable to be incremented with the estimated error
-
+ \relates D2
 If you only want the length, this routine may be faster/more accurate.
 */
 void Geom::length_integrating(D2<SBasis> const &B, double &result, double &abs_error, double tol) {
@@ -474,7 +477,7 @@ void Geom::length_integrating(D2<SBasis> const &B, double &result, double &abs_e
 /** Calculates the length of a D2<SBasis> through gsl integration.
  \param s the Element.
  \param tol the maximum error allowed.
-
+ \relates D2
 If you only want the total length, this routine faster and more accurate than constructing an arcLengthSb.
 */
 double
@@ -488,7 +491,7 @@ Geom::length(D2<SBasis> const &s,
 /** Calculates the length of a Piecewise<D2<SBasis> > through gsl integration.
  \param s the Element.
  \param tol the maximum error allowed.
-
+ \relates Piecewise
 If you only want the total length, this routine faster and more accurate than constructing an arcLengthSb.
 */
 double
@@ -507,7 +510,7 @@ Geom::length(Piecewise<D2<SBasis> > const &s,
  \param p the Element.
  \param centroid on return contains the centroid of the shape
  \param area on return contains the signed area of the shape.
- 
+ \relates Piecewise
 This approach uses green's theorem to compute the area and centroid using integrals.  For curved shapes this is much faster than converting to polyline.  Note that without an uncross operation the output is not the absolute area.
 
  * Returned values: 
@@ -620,6 +623,8 @@ solve_lambda0(double a0,double a1,double c0,double c1,
 * proportional to the given ones.
 * If insist_on_speed_signs == 0, allow speeds to point in the opposite direction (both at the same time) 
 * If insist_on_speed_signs == -1, allow speeds to point in both direction independantly. 
+*
+* \relates D2
 */
 std::vector<D2<SBasis> >
 Geom::cubics_fitting_curvature(Point const &M0,   Point const &M1,
@@ -662,13 +667,6 @@ Geom::cubics_fitting_curvature(Point const &M0,   Point const &M1,
             lambda1.push_back( a0*c1*c1 + c0 );
         }else{
             //find lamda0 by solving a deg 4 equation d0+d1*X+...+d4*X^4=0
-            double a[5];
-            a[0] = c1+a1*c0*c0;
-            a[1] = -1;
-            a[2] = 2*a1*a0*c0;
-            a[3] = 0;
-            a[4] = a1*a0*a0;
-            //vector<double> solns=solve_poly(a,4);
             vector<double> solns=solve_lambda0(a0,a1,c0,c1,insist_on_speed_signs);
             for (unsigned i=0;i<solns.size();i++){
                 double lbda0=solns[i];
@@ -741,17 +739,43 @@ Geom::cubics_with_prescribed_curvature(Point const &M0,   Point const &M1,
 }
 
 
+namespace Geom {
 /**
 * \brief returns all the parameter values of A whose tangent passes through P.
+* \relates D2
 */
 std::vector<double> find_tangents(Point P, D2<SBasis> const &A) {
     SBasis crs (cross(A - P, derivative(A)));
-    crs = shift(crs*Linear(-1, 0)*Linear(-1, 0), -2); // We know that there is a double root at t=0 so we divide out t^2
-// JFB points out that this is equivalent to (t-1)^2 followed by a divide by s^2 (shift)
     return roots(crs);
 }
 
+/**
+* \brief returns all the parameter values of A whose normal passes through P.
+* \relates D2
+*/
+std::vector<double> find_normals(Point P, D2<SBasis> const &A) {
+    SBasis crs (dot(A - P, derivative(A)));
+    return roots(crs);
+}
 
+/**
+* \brief returns all the parameter values of A whose normal is parallel to vector V.
+* \relates D2
+*/
+std::vector<double> find_normals_by_vector(Point V, D2<SBasis> const &A) {
+    SBasis crs = dot(derivative(A), V);
+    return roots(crs);
+}
+/**
+* \brief returns all the parameter values of A whose tangent is parallel to vector V.
+* \relates D2
+*/
+std::vector<double> find_tangents_by_vector(Point V, D2<SBasis> const &A) {
+    SBasis crs = dot(derivative(A), rot90(V));
+    return roots(crs);
+}
+
+}
 //}; // namespace
 
 
@@ -764,4 +788,4 @@ std::vector<double> find_tangents(Point P, D2<SBasis> const &A) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

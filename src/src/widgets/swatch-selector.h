@@ -1,14 +1,20 @@
 #ifndef SEEN_SP_SWATCH_SELECTOR_H
 #define SEEN_SP_SWATCH_SELECTOR_H
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
 
 #include <gtkmm/box.h>
 
 class SPDocument;
 class SPGradient;
-class SPColorSelector;
-class SPGradientSelector;
+struct SPColorSelector;
+struct SPGradientSelector;
 
 namespace Inkscape
 {
@@ -55,5 +61,5 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
 

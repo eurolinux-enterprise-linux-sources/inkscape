@@ -7,11 +7,12 @@
  * This file was created based on sp-use-reference.h
  *
  * Copyright (C) 2007 Gail Banaszkiewicz
+ *   Abhishek Sharma
  *
  * Released under GNU GPL, read the file 'COPYING' for more information.
  */
 
-#include <forward.h>
+#include "sp-item.h"
 #include <uri-references.h>
 #include <stddef.h>
 #include <sigc++/sigc++.h>
@@ -36,7 +37,7 @@ public:
     }
 
     SPItem *getObject() const {
-        return (SPItem *)URIReference::getObject();
+        return static_cast<SPItem *>(URIReference::getObject());
     }
    
     void updateObserver();

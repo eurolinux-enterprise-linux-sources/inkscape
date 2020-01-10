@@ -14,7 +14,6 @@
 #ifndef INKSCAPE_UI_DIALOG_MANAGER_H
 #define INKSCAPE_UI_DIALOG_MANAGER_H
 
-#include <glib.h>
 #include "dialog.h"
 #include <map>
 
@@ -45,8 +44,8 @@ public:
     void registerFactory(GQuark name, DialogFactory factory);
     Dialog *getDialog(gchar const* dlgName); 
     Dialog *getDialog(GQuark dlgName); 
-    void showDialog(gchar const *name);
-    void showDialog(GQuark name);
+    void showDialog(gchar const *name, bool grabfocus=true);
+    void showDialog(GQuark name, bool grabfocus=true);
 
 protected:
     DialogManager(DialogManager const &d); // no copy
@@ -71,4 +70,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

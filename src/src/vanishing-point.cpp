@@ -1,5 +1,3 @@
-#define __VANISHING_POINT_C__
-
 /*
  * Vanishing point for 3D perspectives
  *
@@ -7,6 +5,7 @@
  *   bulia byak <buliabyak@users.sf.net>
  *   Johan Engelen <j.b.c.engelen@ewi.utwente.nl>
  *   Maximilian Albert <Anhalter42@gmx.de>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2005-2007 authors
  *
@@ -18,20 +17,30 @@
 #include "vanishing-point.h"
 #include "desktop-handles.h"
 #include "desktop.h"
-#include "event-context.h"
+#include "display/sp-canvas-item.h"
+#include "display/sp-ctrlline.h"
+#include "ui/tools/tool-base.h"
 #include "xml/repr.h"
 #include "perspective-line.h"
 #include "shape-editor.h"
+#include "snap.h"
+#include "sp-namedview.h"
+#include "ui/control-manager.h"
+#include "document-undo.h"
+#include "verbs.h"
+
+using Inkscape::CTLINE_PRIMARY;
+using Inkscape::CTLINE_SECONDARY;
+using Inkscape::CTLINE_TERTIARY;
+using Inkscape::CTRL_TYPE_ANCHOR;
+using Inkscape::ControlManager;
+using Inkscape::CtrlLineType;
+using Inkscape::DocumentUndo;
 
 namespace Box3D {
 
 #define VP_KNOT_COLOR_NORMAL 0xffffff00
 #define VP_KNOT_COLOR_SELECTED 0x0000ff00
-
-#define VP_LINE_COLOR_FILL 0x0000ff7f
-#define VP_LINE_COLOR_STROKE_X 0xff00007f
-#define VP_LINE_COLOR_STROKE_Y 0x0000ff7f
-#define VP_LINE_COLOR_STROKE_Z 0xffff007f
 
 // screen pixels between knots when they snap:
 #define SNAP_DIST 5
@@ -76,12 +85,12 @@ have_VPs_of_same_perspective (VPDragger *dr1, VPDragger *dr2)
 }
 
 static void
-vp_knot_moved_handler (SPKnot */*knot*/, Geom::Point const *ppointer, guint state, gpointer data)
+vp_knot_moved_handler (SPKnot *knot, Geom::Point const &ppointer, guint state, gpointer data)
 {
     VPDragger *dragger = (VPDragger *) data;
     VPDrag *drag = dragger->parent;
 
-    Geom::Point p = *ppointer;
+    Geom::Point p = ppointer;
 
     // FIXME: take from prefs
     double snap_dist = SNAP_DIST / inkscape_active_desktop()->current_zoom();
@@ -119,8 +128,8 @@ vp_knot_moved_handler (SPKnot */*knot*/, Geom::Point const *ppointer, guint stat
             }
             // FIXME: Do we need to create a new dragger as well?
             dragger->updateZOrders ();
-            sp_document_done (sp_desktop_document (inkscape_active_desktop()), SP_VERB_CONTEXT_3DBOX,
-                              _("Split vanishing points"));
+            DocumentUndo::done(sp_desktop_document (inkscape_active_desktop()), SP_VERB_CONTEXT_3DBOX,
+			       _("Split vanishing points"));
             return;
         }
     }
@@ -164,16 +173,26 @@ vp_knot_moved_handler (SPKnot */*knot*/, Geom::Point const *ppointer, guint stat
                 //       deleted according to changes in the svg representation, not based on any user input
                 //       as is currently the case.
 
-                sp_document_done (sp_desktop_document (inkscape_active_desktop()), SP_VERB_CONTEXT_3DBOX,
-                                  _("Merge vanishing points"));
+                DocumentUndo::done(sp_desktop_document (inkscape_active_desktop()), SP_VERB_CONTEXT_3DBOX,
+				   _("Merge vanishing points"));
 
                 return;
             }
         }
+
+        // We didn't snap to another dragger, so we'll try a regular snap
+        SPDesktop *desktop = inkscape_active_desktop();
+        SnapManager &m = desktop->namedview->snap_manager;
+        m.setup(desktop);
+        Inkscape::SnappedPoint s = m.freeSnap(Inkscape::SnapCandidatePoint(p, Inkscape::SNAPSOURCE_OTHER_HANDLE));
+        m.unSetup();
+        if (s.getSnapped()) {
+            p = s.getPoint();
+            knot->moveto(p);
+        }
     }
 
-
-    dragger->point = p; // FIXME: Brauchen wir dragger->point überhaupt?
+    dragger->point = p; // FIXME: Is dragger->point being used at all?
 
     dragger->updateVPs(p);
     dragger->updateBoxDisplays();
@@ -185,7 +204,7 @@ vp_knot_moved_handler (SPKnot */*knot*/, Geom::Point const *ppointer, guint stat
     dragger->dragging_started = true;
 }
 
-void
+static void
 vp_knot_grabbed_handler (SPKnot */*knot*/, unsigned int /*state*/, gpointer data)
 {
     VPDragger *dragger = (VPDragger *) data;
@@ -220,8 +239,8 @@ vp_knot_ungrabbed_handler (SPKnot *knot, guint /*state*/, gpointer data)
     // TODO: Undo machinery!!
     g_return_if_fail (dragger->parent);
     g_return_if_fail (dragger->parent->document);
-    sp_document_done(dragger->parent->document, SP_VERB_CONTEXT_3DBOX,
-                     _("3D box: Move vanishing point"));
+    DocumentUndo::done(dragger->parent->document, SP_VERB_CONTEXT_3DBOX,
+		       _("3D box: Move vanishing point"));
 }
 
 unsigned int VanishingPoint::global_counter = 0;
@@ -258,20 +277,22 @@ VPDragger::VPDragger(VPDrag *parent, Geom::Point p, VanishingPoint &vp)
 
     if (vp.is_finite()) {
         // create the knot
-        this->knot = sp_knot_new (inkscape_active_desktop(), NULL);
+        this->knot = new SPKnot(inkscape_active_desktop(), NULL);
         this->knot->setMode(SP_KNOT_MODE_XOR);
         this->knot->setFill(VP_KNOT_COLOR_NORMAL, VP_KNOT_COLOR_NORMAL, VP_KNOT_COLOR_NORMAL);
         this->knot->setStroke(0x000000ff, 0x000000ff, 0x000000ff);
-        sp_knot_update_ctrl(this->knot);
+        this->knot->updateCtrl();
+        knot->item->ctrlType = CTRL_TYPE_ANCHOR;
+        ControlManager::getManager().track(knot->item);
 
         // move knot to the given point
-        sp_knot_set_position (this->knot, this->point, SP_KNOT_STATE_NORMAL);
-        sp_knot_show (this->knot);
+        this->knot->setPosition(this->point, SP_KNOT_STATE_NORMAL);
+        this->knot->show();
 
         // connect knot's signals
-        g_signal_connect (G_OBJECT (this->knot), "moved", G_CALLBACK (vp_knot_moved_handler), this);
-        g_signal_connect (G_OBJECT (this->knot), "grabbed", G_CALLBACK (vp_knot_grabbed_handler), this);
-        g_signal_connect (G_OBJECT (this->knot), "ungrabbed", G_CALLBACK (vp_knot_ungrabbed_handler), this);
+        this->_moved_connection = this->knot->moved_signal.connect(sigc::bind(sigc::ptr_fun(vp_knot_moved_handler), this));
+        this->_grabbed_connection = this->knot->grabbed_signal.connect(sigc::bind(sigc::ptr_fun(vp_knot_grabbed_handler), this));
+        this->_ungrabbed_connection = this->knot->ungrabbed_signal.connect(sigc::bind(sigc::ptr_fun(vp_knot_ungrabbed_handler), this));
 
         // add the initial VP (which may be NULL!)
         this->addVP (vp);
@@ -281,11 +302,12 @@ VPDragger::VPDragger(VPDrag *parent, Geom::Point p, VanishingPoint &vp)
 VPDragger::~VPDragger()
 {
     // disconnect signals
-    g_signal_handlers_disconnect_by_func(G_OBJECT(this->knot), (gpointer) G_CALLBACK (vp_knot_moved_handler), this);
-    g_signal_handlers_disconnect_by_func(G_OBJECT(this->knot), (gpointer) G_CALLBACK (vp_knot_grabbed_handler), this);
-    g_signal_handlers_disconnect_by_func(G_OBJECT(this->knot), (gpointer) G_CALLBACK (vp_knot_ungrabbed_handler), this);
+    this->_moved_connection.disconnect();
+    this->_grabbed_connection.disconnect();
+    this->_ungrabbed_connection.disconnect();
+
     /* unref should call destroy */
-    g_object_unref (G_OBJECT (this->knot));
+    knot_unref(this->knot);
 }
 
 /**
@@ -502,7 +524,7 @@ VPDrag::~VPDrag()
     this->draggers = NULL;
 
     for (GSList const *i = this->lines; i != NULL; i = i->next) {
-        gtk_object_destroy( GTK_OBJECT (i->data));
+        sp_canvas_item_destroy(SP_CANVAS_ITEM(i->data));
     }
     g_slist_free (this->lines);
     this->lines = NULL;
@@ -576,7 +598,7 @@ VPDrag::updateLines ()
 {
     // delete old lines
     for (GSList const *i = this->lines; i != NULL; i = i->next) {
-        gtk_object_destroy( GTK_OBJECT (i->data));
+        sp_canvas_item_destroy(SP_CANVAS_ITEM(i->data));
     }
     g_slist_free (this->lines);
     this->lines = NULL;
@@ -611,7 +633,7 @@ VPDrag::updateBoxHandles ()
         return;
     }
 
-    SPEventContext *ec = inkscape_active_event_context();
+    Inkscape::UI::Tools::ToolBase *ec = inkscape_active_event_context();
     g_assert (ec != NULL);
     if (ec->shape_editor != NULL) {
         ec->shape_editor->update_knotholder();
@@ -644,16 +666,22 @@ VPDrag::updateBoxDisplays ()
 /**
  * Depending on the value of all_lines, draw the front and/or rear perspective lines starting from the given corners.
  */
-void
-VPDrag::drawLinesForFace (const SPBox3D *box, Proj::Axis axis) //, guint corner1, guint corner2, guint corner3, guint corner4)
+void VPDrag::drawLinesForFace(const SPBox3D *box, Proj::Axis axis) //, guint corner1, guint corner2, guint corner3, guint corner4)
 {
-    guint color;
+    CtrlLineType type = CTLINE_PRIMARY;
     switch (axis) {
         // TODO: Make color selectable by user
-        case Proj::X: color = VP_LINE_COLOR_STROKE_X; break;
-        case Proj::Y: color = VP_LINE_COLOR_STROKE_Y; break;
-        case Proj::Z: color = VP_LINE_COLOR_STROKE_Z; break;
-        default: g_assert_not_reached();
+        case Proj::X:
+            type = CTLINE_SECONDARY;
+            break;
+        case Proj::Y:
+            type = CTLINE_PRIMARY;
+            break;
+        case Proj::Z:
+            type = CTLINE_TERTIARY;
+            break;
+        default:
+            g_assert_not_reached();
     }
 
     Geom::Point corner1, corner2, corner3, corner4;
@@ -666,13 +694,13 @@ VPDrag::drawLinesForFace (const SPBox3D *box, Proj::Axis axis) //, guint corner1
         Geom::Point pt = vp.affine();
         if (this->front_or_rear_lines & 0x1) {
             // draw 'front' perspective lines
-            this->addLine (corner1, pt, color);
-            this->addLine (corner2, pt, color);
+            this->addLine(corner1, pt, type);
+            this->addLine(corner2, pt, type);
         }
         if (this->front_or_rear_lines & 0x2) {
             // draw 'rear' perspective lines
-            this->addLine (corner3, pt, color);
-            this->addLine (corner4, pt, color);
+            this->addLine(corner3, pt, type);
+            this->addLine(corner4, pt, type);
         }
     } else {
         // draw perspective lines for infinite VPs
@@ -697,13 +725,13 @@ VPDrag::drawLinesForFace (const SPBox3D *box, Proj::Axis axis) //, guint corner1
         }
         if (this->front_or_rear_lines & 0x1) {
             // draw 'front' perspective lines
-            this->addLine (corner1, *pt1, color);
-            this->addLine (corner2, *pt2, color);
+            this->addLine(corner1, *pt1, type);
+            this->addLine(corner2, *pt2, type);
         }
         if (this->front_or_rear_lines & 0x2) {
             // draw 'rear' perspective lines
-            this->addLine (corner3, *pt3, color);
-            this->addLine (corner4, *pt4, color);
+            this->addLine(corner3, *pt3, type);
+            this->addLine(corner4, *pt4, type);
         }
     }
 }
@@ -750,18 +778,11 @@ VPDrag::swap_perspectives_of_VPs(Persp3D *persp2, Persp3D *persp1)
     }
 }
 
-/**
-Create a line from p1 to p2 and add it to the lines list
- */
-void
-VPDrag::addLine (Geom::Point p1, Geom::Point p2, guint32 rgba)
+void VPDrag::addLine(Geom::Point const &p1, Geom::Point const &p2, Inkscape::CtrlLineType type)
 {
-    SPCanvasItem *line = sp_canvas_item_new(sp_desktop_controls(inkscape_active_desktop()), SP_TYPE_CTRLLINE, NULL);
-    sp_ctrlline_set_coords(SP_CTRLLINE(line), p1, p2);
-    if (rgba != VP_LINE_COLOR_FILL) // fill is the default, so don't set color for it to speed up redraw
-        sp_ctrlline_set_rgba32 (SP_CTRLLINE(line), rgba);
-    sp_canvas_item_show (line);
-    this->lines = g_slist_append (this->lines, line);
+    SPCtrlLine *line = ControlManager::getManager().createControlLine(sp_desktop_controls(inkscape_active_desktop()), p1, p2, type);
+    sp_canvas_item_show(line);
+    this->lines = g_slist_append(this->lines, line);
 }
 
 } // namespace Box3D
@@ -775,4 +796,4 @@ VPDrag::addLine (Geom::Point p1, Geom::Point p2, guint32 rgba)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

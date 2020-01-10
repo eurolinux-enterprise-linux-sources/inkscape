@@ -4,17 +4,20 @@
 /*
 * Authors:
 *   Tim Dwyer <tgdwyer@gmail.com>
+ *   Abhishek Sharma
 *
 * Copyright (C) 2005 Authors
 *
 * Released under GNU LGPL.  Read the file 'COPYING' for more information.
 */
+#include <utility>
+#include <2geom/transforms.h>
 #include "util/glib-list-iterators.h"
 #include "sp-item.h"
 #include "sp-item-transform.h"
 #include "libvpsc/generate-constraints.h"
 #include "libvpsc/remove_rectangle_overlap.h"
-#include <utility>
+#include "removeoverlap.h"
 
 using vpsc::Rectangle;
 
@@ -24,7 +27,7 @@ namespace {
 		Geom::Point midpoint;
 		Rectangle *vspc_rect;
 
-		Record() {}
+		Record() : item(0), vspc_rect(0) {}
 		Record(SPItem *i, Geom::Point m, Rectangle *r)
 		: item(i), midpoint(m), vspc_rect(r) {}
 	};
@@ -48,7 +51,7 @@ void removeoverlap(GSList const *const items, double const xGap, double const yG
 		++it)
 	{
 		using Geom::X; using Geom::Y;
-		Geom::OptRect item_box(sp_item_bbox_desktop(*it));
+		Geom::OptRect item_box((*it)->desktopVisualBounds());
 		if (item_box) {
 			Geom::Point min(item_box->min() - .5*gap);
 			Geom::Point max(item_box->max() + .5*gap);

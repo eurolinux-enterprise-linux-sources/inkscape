@@ -12,13 +12,11 @@
  * Released under GNU GPL
  */
 
-#include "sp-canvas.h"
-
-
+#include <2geom/geom.h>
 
 #define SP_TYPE_CTRLQUADR (sp_ctrlquadr_get_type ())
-#define SP_CTRLQUADR(obj) (GTK_CHECK_CAST ((obj), SP_TYPE_CTRLQUADR, SPCtrlQuadr))
-#define SP_IS_CTRLQUADR(obj) (GTK_CHECK_TYPE ((obj), SP_TYPE_CTRLQUADR))
+#define SP_CTRLQUADR(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_CTRLQUADR, SPCtrlQuadr))
+#define SP_IS_CTRLQUADR(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_CTRLQUADR))
 
 struct SPCtrlQuadr;
 struct SPCtrlQuadrClass;
@@ -40,4 +38,4 @@ void sp_ctrlquadr_set_coords (SPCtrlQuadr *cl, const Geom::Point p1, const Geom:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

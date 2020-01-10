@@ -1,10 +1,6 @@
-#ifndef SP_FECOLORMATRIX_H_SEEN
-#define SP_FECOLORMATRIX_H_SEEN
-
-/** \file
- * SVG <feColorMatrix> implementation, see ColorMatrix.cpp.
- */
-/*
+/** @file
+ * @brief SVG color matrix filter effect
+ *//*
  * Authors:
  *   Hugo Rodrigues <haa.rodrigues@gmail.com>
  *
@@ -12,28 +8,37 @@
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
+#ifndef SP_FECOLORMATRIX_H_SEEN
+#define SP_FECOLORMATRIX_H_SEEN
 
-#include "sp-filter.h"
-#include "colormatrix-fns.h"
-#include "display/nr-filter-colormatrix.h"
 #include <vector>
+#include "sp-filter-primitive.h"
+#include "display/nr-filter-colormatrix.h"
 
-/* FeColorMatrix base class */
-class SPFeColorMatrixClass;
+#define SP_FECOLORMATRIX(obj) (dynamic_cast<SPFeColorMatrix*>((SPObject*)obj))
+#define SP_IS_FECOLORMATRIX(obj) (dynamic_cast<const SPFeColorMatrix*>((SPObject*)obj) != NULL)
 
-struct SPFeColorMatrix : public SPFilterPrimitive {
-    /** COLORMATRIX ATTRIBUTES HERE */
+class SPFeColorMatrix : public SPFilterPrimitive {
+public:
+	SPFeColorMatrix();
+	virtual ~SPFeColorMatrix();
+
     Inkscape::Filters::FilterColorMatrixType type;
     gdouble value;
     std::vector<gdouble> values;
+
+protected:
+	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
+	virtual void release();
+
+	virtual void set(unsigned int key, const gchar* value);
+
+	virtual void update(SPCtx* ctx, unsigned int flags);
+
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
+
+	virtual void build_renderer(Inkscape::Filters::Filter* filter);
 };
-
-struct SPFeColorMatrixClass {
-    SPFilterPrimitiveClass parent_class;
-};
-
-GType sp_feColorMatrix_get_type();
-
 
 #endif /* !SP_FECOLORMATRIX_H_SEEN */
 
@@ -46,4 +51,4 @@ GType sp_feColorMatrix_get_type();
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,26 +1,25 @@
-#define __COLOR_PICKER_C__
-
-/** \file
- * \brief  Color picker button & window
- *
+/*
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   bulia byak <buliabyak@users.sf.net>
  *   Ralf Stephan <ralf@ark.in-berlin.de>
+ *   Abhishek Sharma
  *
  * Copyright (C) Authors 2000-2005
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "color-picker.h"
 #include "inkscape.h"
 #include "desktop-handles.h"
 #include "document.h"
+#include "document-undo.h"
 #include "dialogs/dialog-events.h"
 
 #include "widgets/sp-color-notebook.h"
+#include "verbs.h"
 
-#include "color-picker.h"
 
 static bool _in_use = false;
 
@@ -39,7 +38,7 @@ ColorPicker::ColorPicker (const Glib::ustring& title, const Glib::ustring& tip,
     set_relief (Gtk::RELIEF_NONE);
     _preview.show();
     add (_preview);
-    _tt.set_tip (*this, tip);
+    set_tooltip_text (tip);
 }
 
 ColorPicker::~ColorPicker()
@@ -48,8 +47,7 @@ ColorPicker::~ColorPicker()
     _colorSelector = NULL;
 }
 
-void
-ColorPicker::setupDialog(const Glib::ustring &title)
+void ColorPicker::setupDialog(const Glib::ustring &title)
 {
     GtkWidget *dlg = GTK_WIDGET(_colorSelectorDialog.gobj());
     sp_transientize(dlg);
@@ -57,9 +55,15 @@ ColorPicker::setupDialog(const Glib::ustring &title)
     _colorSelectorDialog.hide();
     _colorSelectorDialog.set_title (title);
     _colorSelectorDialog.set_border_width (4);
-    _colorSelector = (SPColorSelector*)sp_color_selector_new(SP_TYPE_COLOR_NOTEBOOK);
+    _colorSelector = SP_COLOR_SELECTOR(sp_color_selector_new(SP_TYPE_COLOR_NOTEBOOK));
+
+#if WITH_GTKMM_3_0
+    _colorSelectorDialog.get_content_area()->pack_start (
+              *Glib::wrap(&_colorSelector->vbox), true, true, 0);
+#else
     _colorSelectorDialog.get_vbox()->pack_start (
               *Glib::wrap(&_colorSelector->vbox), true, true, 0);
+#endif
 
     g_signal_connect(G_OBJECT(_colorSelector), "dragged",
                          G_CALLBACK(sp_color_picker_color_mod), (void *)this);
@@ -72,11 +76,7 @@ ColorPicker::setupDialog(const Glib::ustring &title)
 
 }
 
-
-
-
-void
-ColorPicker::setRgba32 (guint32 rgba)
+void ColorPicker::setRgba32 (guint32 rgba)
 {
     if (_in_use) return;
 
@@ -90,14 +90,12 @@ ColorPicker::setRgba32 (guint32 rgba)
     }
 }
 
-void
-ColorPicker::closeWindow()
+void ColorPicker::closeWindow()
 {
     _colorSelectorDialog.hide();
 }
 
-void
-ColorPicker::on_clicked()
+void ColorPicker::on_clicked()
 {
     if (_colorSelector)
     {
@@ -108,13 +106,11 @@ ColorPicker::on_clicked()
     _colorSelectorDialog.show();
 }
 
-void
-ColorPicker::on_changed (guint32)
+void ColorPicker::on_changed (guint32)
 {
 }
 
-void
-sp_color_picker_color_mod(SPColorSelector *csel, GObject *cp)
+void sp_color_picker_color_mod(SPColorSelector *csel, GObject *cp)
 {
     if (_in_use) {
         return;
@@ -127,13 +123,13 @@ sp_color_picker_color_mod(SPColorSelector *csel, GObject *cp)
     csel->base->getColorAlpha(color, alpha);
     guint32 rgba = color.toRGBA32( alpha );
 
-    ColorPicker *ptr = (ColorPicker *)(cp);
+    ColorPicker *ptr = reinterpret_cast<ColorPicker *>(cp);
 
     (ptr->_preview).setRgba32 (rgba);
 
     if (ptr->_undo && SP_ACTIVE_DESKTOP)
-        sp_document_done(sp_desktop_document(SP_ACTIVE_DESKTOP), SP_VERB_NONE,
-                         /* TODO: annotate */ "color-picker.cpp:130");
+        DocumentUndo::done(sp_desktop_document(SP_ACTIVE_DESKTOP), SP_VERB_NONE,
+                           /* TODO: annotate */ "color-picker.cpp:130");
 
     ptr->on_changed (rgba);
     _in_use = false;
@@ -156,4 +152,4 @@ sp_color_picker_color_mod(SPColorSelector *csel, GObject *cp)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

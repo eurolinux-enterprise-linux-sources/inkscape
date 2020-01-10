@@ -5,6 +5,7 @@
 /*
  * Authors:
  *   Ted Gould <ted@gould.cx>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2004-2005 Authors
  *
@@ -24,18 +25,19 @@
 #include "gimpgrad.h"
 #include "streq.h"
 #include "strneq.h"
+#include "document.h"
+#include "extension/extension.h"
 
 namespace Inkscape {
 namespace Extension {
 namespace Internal {
 
 /**
-    \brief  A function to allocated anything -- just an example here
+    \brief  A function to allocate anything -- just an example here
     \param  module  Unused
     \return Whether the load was sucessful
 */
-bool
-GimpGrad::load (Inkscape::Extension::Extension */*module*/)
+bool GimpGrad::load (Inkscape::Extension::Extension */*module*/)
 {
     // std::cout << "Hey, I'm loading!\n" << std::endl;
     return TRUE;
@@ -46,15 +48,13 @@ GimpGrad::load (Inkscape::Extension::Extension */*module*/)
     \param  module  Unused
     \return None
 */
-void
-GimpGrad::unload (Inkscape::Extension::Extension */*module*/)
+void GimpGrad::unload (Inkscape::Extension::Extension */*module*/)
 {
     // std::cout << "Nooo! I'm being unloaded!" << std::endl;
     return;
 }
 
-static void
-append_css_num(Glib::ustring &str, double const num)
+static void append_css_num(Glib::ustring &str, double const num)
 {
     CSSOStringStream stream;
     stream << num;
@@ -73,8 +73,7 @@ append_css_num(Glib::ustring &str, double const num)
     hex values from 0 to 255 for color.  Otherwise mostly this is just
     turning the values into strings and returning it.
 */
-static Glib::ustring
-stop_svg(ColorRGBA const in_color, double const location)
+static Glib::ustring stop_svg(ColorRGBA const in_color, double const location)
 {
     Glib::ustring ret("<stop stop-color=\"");
 
@@ -225,7 +224,7 @@ GimpGrad::open (Inkscape::Extension::Input */*module*/, gchar const *filename)
                  * add some intermediate stops to convert to the linear/sRGB interpolation */
                 int type; /* enum: linear, curved, sine, sphere increasing, sphere decreasing. */
                 int color_interpolation; /* enum: rgb, hsv anticlockwise, hsv clockwise. */
-                if (sscanf(p, "%d %d", &type, &color_interpolation) != 2) {
+                if (sscanf(p, "%8d %8d", &type, &color_interpolation) != 2) {
                     continue;
                 }
             }
@@ -256,7 +255,7 @@ GimpGrad::open (Inkscape::Extension::Input */*module*/, gchar const *filename)
 
         fclose(gradient);
 
-        return sp_document_new_from_mem(outsvg.c_str(), outsvg.length(), TRUE);
+        return SPDocument::createNewDocFromMem(outsvg.c_str(), outsvg.length(), TRUE);
     }
 
 error:
@@ -266,8 +265,7 @@ error:
 
 #include "clear-n_.h"
 
-void
-GimpGrad::init (void)
+void GimpGrad::init (void)
 {
     Inkscape::Extension::build_from_mem(
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"

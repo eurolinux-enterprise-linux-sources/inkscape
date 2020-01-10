@@ -27,11 +27,19 @@ to implement deformations of the form X=f(x,y), Y=g(x,y)...
 TODO: Several handy functions are defined, that might in fact be of general
 interest and that should be shipped out in separate files...
 '''
-import inkex, cubicsuperpath, bezmisc, simplestyle
+# standard library
+import copy
+import math
+import re
+import random
+# local library
+import inkex
+import cubicsuperpath
+import bezmisc
+import simplestyle
 from simpletransform import *
-import copy, math, re, random
-import gettext
-_ = gettext.gettext
+
+inkex.localize()
 
 ####################################################################
 ##-- zOrder computation...
@@ -307,4 +315,4 @@ class Diffeo(PathModifier):
 #e.affect()
 
     
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99

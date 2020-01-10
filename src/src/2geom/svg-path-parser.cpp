@@ -45,7 +45,7 @@ namespace {
 
 class Parser {
 public:
-    Parser(SVGPathSink &sink) : _sink(sink) {}
+    Parser(PathSink &sink) : _absolute(false), _sink(sink) {}
 
     void parse(char const *str) throw(SVGPathParseError);
 
@@ -56,7 +56,7 @@ private:
     Point _cubic_tangent;
     Point _quad_tangent;
     std::vector<double> _params;
-    SVGPathSink &_sink;
+    PathSink &_sink;
 
     void _reset() {
         _absolute = false;
@@ -128,6 +128,9 @@ private:
     void _arcTo(double rx, double ry, double angle,
                 bool large_arc, bool sweep, Point p)
     {
+        if (are_near(_current, p)) {
+            return;
+        }
         _quad_tangent = _cubic_tangent = _current = p;
         _sink.arcTo(rx, ry, angle, large_arc, sweep, p);
     }
@@ -139,7 +142,6 @@ private:
 };
 
 
-#line 144 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.cpp"
 static const char _svg_path_actions[] = {
 	0, 1, 0, 1, 1, 1, 2, 1, 
 	3, 1, 4, 1, 5, 1, 15, 1, 
@@ -955,7 +957,7 @@ static const short _svg_path_indicies[] = {
 	1, 0
 };
 
-static const short _svg_path_trans_targs_wi[] = {
+static const short _svg_path_trans_targs[] = {
 	270, 0, 1, 2, 193, 3, 4, 5, 
 	194, 3, 4, 5, 194, 5, 194, 6, 
 	7, 8, 195, 9, 204, 7, 8, 195, 
@@ -1047,7 +1049,7 @@ static const short _svg_path_trans_targs_wi[] = {
 	268, 269
 };
 
-static const char _svg_path_trans_actions_wi[] = {
+static const char _svg_path_trans_actions[] = {
 	15, 0, 0, 0, 0, 9, 47, 47, 
 	47, 0, 1, 1, 1, 0, 0, 0, 
 	3, 17, 3, 17, 0, 0, 1, 0, 
@@ -1142,9 +1144,7 @@ static const char _svg_path_trans_actions_wi[] = {
 static const int svg_path_start = 1;
 static const int svg_path_first_final = 270;
 
-static const int svg_path_en_main = 1;
-
-#line 144 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
+//static const int svg_path_en_main = 1;
 
 
 void Parser::parse(char const *str)
@@ -1156,13 +1156,11 @@ throw(SVGPathParseError)
 
     _reset();
 
-    
-#line 1162 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.cpp"
 	{
 	cs = svg_path_start;
 	}
 
-#line 1167 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.cpp"
+
 	{
 	int _klen;
 	unsigned int _trans;
@@ -1191,7 +1189,7 @@ _resume:
 			else if ( (*p) > *_mid )
 				_lower = _mid + 1;
 			else {
-				_trans += (_mid - _keys);
+				_trans += (unsigned int)(_mid - _keys);
 				goto _match;
 			}
 		}
@@ -1214,7 +1212,7 @@ _resume:
 			else if ( (*p) > _mid[1] )
 				_lower = _mid + 2;
 			else {
-				_trans += ((_mid - _keys)>>1);
+				_trans += (unsigned int)((_mid - _keys)>>1);
 				goto _match;
 			}
 		}
@@ -1223,25 +1221,24 @@ _resume:
 
 _match:
 	_trans = _svg_path_indicies[_trans];
-	cs = _svg_path_trans_targs_wi[_trans];
+	cs = _svg_path_trans_targs[_trans];
 
-	if ( _svg_path_trans_actions_wi[_trans] == 0 )
+	if ( _svg_path_trans_actions[_trans] == 0 )
 		goto _again;
 
-	_acts = _svg_path_actions + _svg_path_trans_actions_wi[_trans];
+	_acts = _svg_path_actions + _svg_path_trans_actions[_trans];
 	_nacts = (unsigned int) *_acts++;
 	while ( _nacts-- > 0 )
 	{
 		switch ( *_acts++ )
 		{
 	case 0:
-#line 156 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             start = p;
         }
 	break;
 	case 1:
-#line 160 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
+
 	{
             char const *end=p;
             std::string buf(start, end);
@@ -1250,55 +1247,49 @@ _match:
         }
 	break;
 	case 2:
-#line 167 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
+
 	{
             _push(1.0);
         }
 	break;
 	case 3:
-#line 171 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
+
 	{
             _push(0.0);
         }
 	break;
 	case 4:
-#line 175 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
+
 	{
             _absolute = true;
         }
 	break;
 	case 5:
-#line 179 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             _absolute = false;
         }
 	break;
 	case 6:
-#line 183 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             _moveTo(_pop_point());
         }
 	break;
 	case 7:
-#line 187 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             _lineTo(_pop_point());
         }
 	break;
 	case 8:
-#line 191 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             _hlineTo(Point(_pop_coord(X), _current[Y]));
         }
 	break;
 	case 9:
-#line 195 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             _vlineTo(Point(_current[X], _pop_coord(Y)));
         }
 	break;
 	case 10:
-#line 199 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             Point p = _pop_point();
             Point c1 = _pop_point();
@@ -1307,7 +1298,6 @@ _match:
         }
 	break;
 	case 11:
-#line 206 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             Point p = _pop_point();
             Point c1 = _pop_point();
@@ -1315,7 +1305,6 @@ _match:
         }
 	break;
 	case 12:
-#line 212 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             Point p = _pop_point();
             Point c = _pop_point();
@@ -1323,14 +1312,12 @@ _match:
         }
 	break;
 	case 13:
-#line 218 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             Point p = _pop_point();
             _quadTo(_quad_tangent, p);
         }
 	break;
 	case 14:
-#line 223 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             Point point = _pop_point();
             bool sweep = _pop_flag();
@@ -1343,16 +1330,13 @@ _match:
         }
 	break;
 	case 15:
-#line 234 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 	{
             _closePath();
         }
 	break;
 	case 16:
-#line 370 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
-	{goto _out;}
+	{{p++; goto _out; }}
 	break;
-#line 1357 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.cpp"
 		}
 	}
 
@@ -1363,7 +1347,6 @@ _again:
 	goto _resume;
 	_out: {}
 	}
-#line 380 "/home/njh/svn/lib2geom/src/2geom/svg-path-parser.rl"
 
 
     if ( cs < svg_path_first_final ) {
@@ -1373,12 +1356,12 @@ _again:
 
 }
 
-void parse_svg_path(char const *str, SVGPathSink &sink)
+void parse_svg_path(char const *str, PathSink &sink)
 throw(SVGPathParseError)
 {
     Parser parser(sink);
     parser.parse(str);
-    sink.finish();
+    sink.flush();
 }
 
 }

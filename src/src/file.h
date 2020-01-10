@@ -1,5 +1,5 @@
-#ifndef __SP_FILE_H__
-#define __SP_FILE_H__
+#ifndef SEEN_SP_FILE_H
+#define SEEN_SP_FILE_H
 
 /*
  * File/Print operations
@@ -15,22 +15,26 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <gtkmm.h>
-#include <glib.h>
-#include <gtk/gtk.h>
-
-#include "extension/extension-forward.h"
+#include <glibmm/ustring.h>
+#include <string>
 #include "extension/system.h"
 
-struct SPDesktop;
-struct SPDocument;
+class SPDesktop;
+class SPDocument;
+class SPObject;
 
 namespace Inkscape {
     namespace Extension {
-        struct Extension;
+        class Extension;
     }
 }
 
+namespace Gtk {
+class Window;
+}
+
+// Get the name of the default template uri
+Glib::ustring sp_file_default_template_uri();
 
 /*######################
 ## N E W
@@ -40,7 +44,7 @@ namespace Inkscape {
  * Creates a new Inkscape document and window.
  * Return value is a pointer to the newly created desktop.
  */
-SPDesktop* sp_file_new (const Glib::ustring &templ);
+SPDesktop* sp_file_new (const std::string &templ);
 SPDesktop* sp_file_new_default (void);
 
 /*######################
@@ -59,6 +63,7 @@ void sp_file_exit (void);
 /**
  * Opens a new file and window from the given URI
  */
+
 bool sp_file_open(
     const Glib::ustring &uri,
     Inkscape::Extension::Extension *key,
@@ -120,6 +125,8 @@ bool sp_file_save_dialog (Gtk::Window &parentWindow, SPDocument *doc, Inkscape::
 ## I M P O R T
 ######################*/
 
+void sp_import_document(SPDesktop *desktop, SPDocument *clipdoc, bool in_place);
+
 /**
  * Displays a file selector dialog, to allow the
  * user to import data into the current document.
@@ -129,7 +136,7 @@ void sp_file_import (Gtk::Window &parentWindow);
 /**
  * Imports a resource
  */
-void file_import(SPDocument *in_doc, const Glib::ustring &uri,
+SPObject* file_import(SPDocument *in_doc, const Glib::ustring &uri,
                  Inkscape::Extension::Extension *key);
 
 /*######################
@@ -141,7 +148,7 @@ void file_import(SPDocument *in_doc, const Glib::ustring &uri,
  * additional type selection, to allow the user to export
  * the a document as a given type.
  */
-bool sp_file_export_dialog (Gtk::Window &parentWindow);
+//bool sp_file_export_dialog (Gtk::Window &parentWindow);
 
 
 /*######################
@@ -167,6 +174,11 @@ bool sp_file_export_dialog (Gtk::Window &parentWindow);
 /**
  * Import a document from OCAL
  */
+void on_import_from_ocal_response(Glib::ustring filename);
+
+/**
+ * Import a document from OCAL
+ */
 void sp_file_import_from_ocal (Gtk::Window &parentWindow );
 
 
@@ -183,11 +195,6 @@ would be useful as instance methods
  */
 void sp_file_print (Gtk::Window& parentWindow);
 
-/**
- *
- */
-void sp_file_print_preview (gpointer object, gpointer data);
-
 /*#####################
 ## U T I L I T Y
 #####################*/
@@ -195,10 +202,10 @@ void sp_file_print_preview (gpointer object, gpointer data);
 /**
  * clean unused defs out of file
  */
-void sp_file_vacuum ();
+void sp_file_vacuum (SPDocument *doc);
 
 
-#endif
+#endif // SEEN_SP_FILE_H
 
 
 /*

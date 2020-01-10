@@ -1,8 +1,6 @@
-#ifndef __INKSCAPE_IO_INKSCAPESTREAM_H__
-#define __INKSCAPE_IO_INKSCAPESTREAM_H__
-/**
- * Our base basic stream classes.  
- *
+#ifndef SEEN_INKSCAPE_IO_INKSCAPESTREAM_H
+#define SEEN_INKSCAPE_IO_INKSCAPESTREAM_H
+/*
  * Authors:
  *   Bob Jamison <rjamison@titan.com>
  *
@@ -11,9 +9,8 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-
 #include <cstdio>
-#include <glibmm.h>
+#include <glibmm/ustring.h>
 
 namespace Inkscape
 {
@@ -192,7 +189,7 @@ public:
     /**
      * Send one byte to the destination stream.
      */
-    virtual void put(int ch) = 0;
+    virtual int put(gunichar ch) = 0;
 
 
 }; // class OutputStream
@@ -215,7 +212,7 @@ public:
     
     virtual void flush();
     
-    virtual void put(int ch);
+    virtual int put(gunichar ch);
 
 protected:
 
@@ -241,8 +238,8 @@ public:
     void flush()
         { }
     
-    void put(int ch)
-        {  putchar(ch); }
+    int put(gunichar ch)
+        {return  putchar(ch); }
 
 };
 
@@ -667,4 +664,4 @@ void pipeStream(InputStream &source, OutputStream &dest);
 } // namespace Inkscape
 
 
-#endif /* __INKSCAPE_IO_INKSCAPESTREAM_H__ */
+#endif // SEEN_INKSCAPE_IO_INKSCAPESTREAM_H

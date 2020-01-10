@@ -1,4 +1,5 @@
-SUBDIRS = clipart \
+SUBDIRS = attributes \
+          branding \
           examples \
           extensions \
           filters \
@@ -10,6 +11,7 @@ SUBDIRS = clipart \
           palettes \
           patterns \
           screens \
+          symbols \
           templates \
           tutorials \
           ui

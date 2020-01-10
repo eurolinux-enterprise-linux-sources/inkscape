@@ -64,10 +64,13 @@ void find_intersections(std::vector< std::pair<double, double> > & xs,
 void split(vector<Point> const &p, double t, 
            vector<Point> &left, vector<Point> &right) {
     const unsigned sz = p.size();
-    Geom::Point Vtemp[sz][sz];
+    //Geom::Point Vtemp[sz][sz];
+    vector<vector<Point> > Vtemp(sz);
+    for ( size_t i = 0; i < sz; ++i )
+        Vtemp[i].reserve(sz);
 
     /* Copy control points	*/
-    std::copy(p.begin(), p.end(), Vtemp[0]);
+    std::copy(p.begin(), p.end(), Vtemp[0].begin());
 
     /* Triangle computation	*/
     for (unsigned i = 1; i < sz; i++) {
@@ -202,7 +205,7 @@ static void intersect_polish_root (D2<SBasis> const &A, double &s,
 
         // We're using the standard transformation matricies, which is numerically rather poor.  Much better to solve the equation using elimination.
 
-        Matrix jack(as[1][0], as[1][1],
+        Affine jack(as[1][0], as[1][1],
                     -bs[1][0], -bs[1][1],
                     0, 0);
         Point soln = (F)*jack.inverse();
@@ -422,4 +425,4 @@ double hausdorf(D2<SBasis>& A, D2<SBasis> const& B,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

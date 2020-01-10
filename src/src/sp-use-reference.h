@@ -9,7 +9,7 @@
  * Released under GNU GPL, read the file 'COPYING' for more information.
  */
 
-#include <forward.h>
+#include "sp-item.h"
 #include <uri-references.h>
 #include <stddef.h>
 #include <sigc++/sigc++.h>
@@ -18,7 +18,7 @@ class Path;
 
 namespace Inkscape {
 namespace XML {
-    struct Node;
+class Node;
 }
 }
 
@@ -28,7 +28,7 @@ public:
     SPUseReference(SPObject *owner) : URIReference(owner) {}
 
     SPItem *getObject() const {
-        return (SPItem *)URIReference::getObject();
+        return static_cast<SPItem *>(URIReference::getObject());
     }
 
 protected:

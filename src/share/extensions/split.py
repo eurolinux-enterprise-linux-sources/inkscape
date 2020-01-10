@@ -30,7 +30,10 @@ class Split(inkex.Effect):
                         action="store", type="inkbool", 
                         dest="preserve", default="True", 
                         help="Preserve original")
-
+        self.OptionParser.add_option("--tab",
+                        action="store", type="string",
+                        dest="tab",
+                        help="The selected UI-tab when OK was pressed")
 
     def split_lines(self, node):
         """Returns a list of lines"""
@@ -55,7 +58,7 @@ class Split(inkex.Effect):
                     fontsize = parseStyle(node.get("style"))["font-size"]
                 except:
                     fontsize = "12px"
-                fs = inkex.unittouu(fontsize)
+                fs = self.unittouu(fontsize)
                 
                 #selects the flowRegion's child (svg:rect) to get @X and @Y
                 id = node.get("id")
@@ -121,7 +124,7 @@ class Split(inkex.Effect):
                 fontsize = parseStyle(line.get("style"))["font-size"]
             except:
                 fontsize = "12px"
-            fs = inkex.unittouu(fontsize)
+            fs = self.unittouu(fontsize)
 
             #extract and returns a list of words
             words_list = "".join(plain_str(line)).split()
@@ -167,7 +170,7 @@ class Split(inkex.Effect):
                 fontsize = simplestyle.parseStyle(word.get("style"))["font-size"]
             except:
                 fontsize = "12px"
-            fs = inkex.unittouu(fontsize)
+            fs = self.unittouu(fontsize)
 
             #for each letter in element string
             for letter in word[0].text:

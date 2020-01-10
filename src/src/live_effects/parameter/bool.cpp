@@ -1,21 +1,19 @@
-#define INKSCAPE_LIVEPATHEFFECT_PARAMETER_BOOL_CPP
-
 /*
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "ui/widget/registered-widget.h"
 #include "live_effects/parameter/bool.h"
 #include "live_effects/effect.h"
 #include "svg/svg.h"
 #include "svg/stringstream.h"
-#include <gtkmm.h>
 #include "widgets/icon.h"
-#include "ui/widget/registered-widget.h"
 #include "inkscape.h"
 #include "verbs.h"
 #include "helper-fns.h"
+#include <glibmm/i18n.h>
 
 namespace Inkscape {
 
@@ -53,7 +51,7 @@ BoolParam::param_getSVGValue() const
 }
 
 Gtk::Widget *
-BoolParam::param_newWidget(Gtk::Tooltips * /*tooltips*/)
+BoolParam::param_newWidget()
 {
     Inkscape::UI::Widget::RegisteredCheckButton * checkwdg = Gtk::manage(
         new Inkscape::UI::Widget::RegisteredCheckButton( param_label,

@@ -15,7 +15,7 @@
 gboolean spinbutton_focus_in (GtkWidget *w, GdkEventKey *event, gpointer data);
 void spinbutton_undo (GtkWidget *w);
 gboolean spinbutton_keypress (GtkWidget *w, GdkEventKey *event, gpointer data);
-void spinbutton_defocus (GtkObject *container);
+void spinbutton_defocus (GtkWidget *container);
 
 /*
   Local Variables:
@@ -26,4 +26,4 @@ void spinbutton_defocus (GtkObject *container);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

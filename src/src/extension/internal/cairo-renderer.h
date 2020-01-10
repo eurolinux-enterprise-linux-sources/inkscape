@@ -7,6 +7,7 @@
 /*
  * Authors:
  * 	   Miklos Erdelyi <erdelyim@gmail.com>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2006 Miklos Erdelyi
  * 
@@ -23,11 +24,12 @@
 
 //#include "libnrtype/font-instance.h"
 #include "style.h"
-
+#include "sp-item.h"
 #include <cairo.h>
 
 class SPClipPath;
 class SPMask;
+class SPHatchPath;
 
 namespace Inkscape {
 namespace Extension {
@@ -52,14 +54,11 @@ public:
     /** Initializes the CairoRenderContext according to the specified
     SPDocument. A set*Target function can only be called on the context
     before setupDocument. */
-    bool setupDocument(CairoRenderContext *ctx, SPDocument *doc, bool pageBoundingBox, SPItem *base);
+    bool setupDocument(CairoRenderContext *ctx, SPDocument *doc, bool pageBoundingBox, float bleedmargin_px, SPItem *base);
 
     /** Traverses the object tree and invokes the render methods. */
     void renderItem(CairoRenderContext *ctx, SPItem *item);
-
-    /** If _omitText is true, no text will be output to the PDF document.
-        The PDF will be exactly the same as if the text was written to it and then erased. */
-    bool _omitText;
+    void renderHatchPath(CairoRenderContext *ctx, SPHatchPath const &hatchPath, unsigned key);
 };
 
 // FIXME: this should be a static method of CairoRenderer
@@ -81,4 +80,4 @@ void calculatePreserveAspectRatio(unsigned int aspect_align, unsigned int aspect
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -12,7 +12,7 @@
 #ifndef SEEN_DIALOGS_COLOR_ITEM_H
 #define SEEN_DIALOGS_COLOR_ITEM_H
 
-#include <gtkmm/tooltips.h>
+#include <boost/ptr_container/ptr_vector.hpp>
 
 #include "widgets/ege-paint-def.h"
 #include "ui/previewable.h"
@@ -33,7 +33,7 @@ public:
 
     Glib::ustring _name;
     int _prefWidth;
-    std::vector<ColorItem*> _colors;
+    boost::ptr_vector<ColorItem> _colors;
 };
 
 
@@ -53,13 +53,14 @@ public:
     virtual Gtk::Widget* getPreview(PreviewStyle style,
                                     ViewType view,
                                     ::PreviewSize size,
-                                    guint ratio);
+                                    guint ratio,
+                                    guint border);
     void buttonClicked(bool secondary = false);
 
     void setGradient(SPGradient *grad);
     SPGradient * getGradient() const { return _grad; }
-
-    void setPixData(guchar* px, int width, int height);
+    void setPattern(cairo_pattern_t *pattern);
+    void setName(const Glib::ustring name);
 
     void setState( bool fill, bool stroke );
     bool isFill() { return _isFill; }
@@ -93,7 +94,6 @@ private:
     void _linkTint( ColorItem& other, int percent );
     void _linkTone( ColorItem& other, int percent, int grayLevel );
 
-    Gtk::Tooltips tips;
     std::vector<Gtk::Widget*> _previews;
 
     bool _isFill;
@@ -104,9 +104,7 @@ private:
     int _linkGray;
     ColorItem* _linkSrc;
     SPGradient* _grad;
-    guchar *_pixData;
-    int _pixWidth;
-    int _pixHeight;
+    cairo_pattern_t *_pattern;
     std::vector<ColorItem*> _listeners;
 };
 
@@ -125,4 +123,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

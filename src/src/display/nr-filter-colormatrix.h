@@ -12,13 +12,14 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include <vector>
+#include <2geom/forward.h>
 #include "display/nr-filter-primitive.h"
-#include "display/nr-filter-slot.h"
-#include "display/nr-filter-units.h"
-#include<vector>
 
 namespace Inkscape {
 namespace Filters {
+
+class FilterSlot;
 
 enum FilterColorMatrixType {
     COLORMATRIX_MATRIX,
@@ -34,11 +35,22 @@ public:
     static FilterPrimitive *create();
     virtual ~FilterColorMatrix();
 
-    virtual int render(FilterSlot &slot, FilterUnits const &units);
-    virtual void area_enlarge(NRRectL &area, Geom::Matrix const &trans);
+    virtual void render_cairo(FilterSlot &slot);
+    virtual bool can_handle_affine(Geom::Affine const &);
+    virtual double complexity(Geom::Affine const &ctm);
+
     virtual void set_type(FilterColorMatrixType type);
     virtual void set_value(gdouble value);
-    virtual void set_values(std::vector<gdouble> &values);
+    virtual void set_values(std::vector<gdouble> const &values);
+
+public:
+    struct ColorMatrixMatrix {
+        ColorMatrixMatrix(std::vector<double> const &values);
+        guint32 operator()(guint32 in);
+    private:
+        gint32 _v[20];
+    };
+
 private:
     std::vector<gdouble> values;
     gdouble value;
@@ -58,4 +70,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

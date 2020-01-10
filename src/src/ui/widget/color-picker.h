@@ -13,16 +13,22 @@
 #ifndef __COLOR_PICKER_H__
 #define __COLOR_PICKER_H__
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include <stddef.h>
-#include <sigc++/sigc++.h>
-#include <gtkmm/button.h>
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
 #include <gtkmm/dialog.h>
-#include <gtkmm/tooltips.h>
-#include "widgets/sp-color-selector.h"
+#include <gtkmm/button.h>
+#include <sigc++/sigc++.h>
 #include "ui/widget/color-preview.h"
-//#include "ui/dialog/dialog.h"
 
-
+struct SPColorSelector;
 
 namespace Inkscape
 {
@@ -56,7 +62,6 @@ protected:
     virtual void on_changed (guint32);
 
     ColorPreview        _preview;
-    Gtk::Tooltips       _tt;
 
     /*const*/ Glib::ustring _title;
     sigc::signal<void,guint32> _changed_signal;
@@ -69,7 +74,6 @@ protected:
     //Inkscape::UI::Dialog::Dialog _colorSelectorDialog;
     Gtk::Dialog _colorSelectorDialog;
     SPColorSelector *_colorSelector;
-
 };
 
 }//namespace Widget
@@ -87,4 +91,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

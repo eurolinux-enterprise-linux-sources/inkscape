@@ -1,7 +1,6 @@
-#define INKSCAPE_LPEGROUPBBOX_CPP
-
 /*
  * Copyright (C) Steren Giannini 2008 <steren.giannini@gmail.com>
+ *   Abhishek Sharma
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -14,30 +13,27 @@ namespace Inkscape {
 namespace LivePathEffect {
 
 /**
- * \brief  Updates the \c boundingbox_X and \c boundingbox_Y values from the geometric bounding box of \c lpeitem.
+ * Updates the \c boundingbox_X and \c boundingbox_Y values from the geometric bounding box of \c lpeitem.
  *
- * \pre   lpeitem must have an existing geometric boundingbox (usually this is guaranteed when: \code SP_SHAPE(lpeitem)->curve != NULL \endcode )
-          It's not possible to run LPEs on items without their original-d having a bbox.
- * \param lpeitem   This is not allowed to be NULL.
- * \param absolute  Determines whether the bbox should be calculated of the untransformed lpeitem (\c absolute = \c false)
+ * @pre   lpeitem must have an existing geometric boundingbox (usually this is guaranteed when: \code SP_SHAPE(lpeitem)->curve != NULL \endcode )
+ *        It's not possible to run LPEs on items without their original-d having a bbox.
+ * @param lpeitem   This is not allowed to be NULL.
+ * @param absolute  Determines whether the bbox should be calculated of the untransformed lpeitem (\c absolute = \c false)
  *                  or of the transformed lpeitem (\c absolute = \c true) using sp_item_i2doc_affine.
- * \post Updated values of boundingbox_X and boundingbox_Y. These intervals are set to empty intervals when the precondition is not met.
+ * @post Updated values of boundingbox_X and boundingbox_Y. These intervals are set to empty intervals when the precondition is not met.
  */
-void
-GroupBBoxEffect::original_bbox(SPLPEItem *lpeitem, bool absolute)
+void GroupBBoxEffect::original_bbox(SPLPEItem const* lpeitem, bool absolute)
 {
     // Get item bounding box
-    SPItem* item = SP_ITEM(lpeitem);
-    
-    Geom::Matrix transform;
+    Geom::Affine transform;
     if (absolute) {
-        transform = sp_item_i2doc_affine(item);
+        transform = lpeitem->i2doc_affine();
     }
     else {
         transform = Geom::identity();
     }
 
-    Geom::OptRect bbox = item->getBounds(transform, SPItem::GEOMETRIC_BBOX);
+    Geom::OptRect bbox = lpeitem->geometricBounds(transform);
     if (bbox) {
         boundingbox_X = (*bbox)[Geom::X];
         boundingbox_Y = (*bbox)[Geom::Y];

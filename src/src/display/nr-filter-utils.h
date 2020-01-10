@@ -1,9 +1,11 @@
 #ifndef __NR_FILTER_UTILS_H__
 #define __NR_FILTER_UTILS_H__
 
-/** \file
- * filter utils. Definition of functions needed by several filters.
- *
+/**
+ * @file
+ * Definition of functions needed by several filters.
+ */
+/*
  * Authors:
  *   Jean-Rene Reinhard <jr@komite.net>
  *
@@ -82,4 +84,4 @@ inline int clamp_alpha(int const val, int const alpha) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

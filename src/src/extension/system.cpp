@@ -7,6 +7,8 @@
  * Authors:
  *   Ted Gould <ted@gould.cx>
  *   Johan Engelen <johan@shouraizou.nl>
+ *   Jon A. Cruz <jon@joncruz.org>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2006-2007 Johan Engelen
  * Copyright (C) 2002-2004 Ted Gould
@@ -19,6 +21,8 @@
 #endif
 
 #include <interface.h>
+#include <unistd.h>
+#include <glibmm/miscutils.h>
 
 #include "system.h"
 #include "preferences.h"
@@ -33,7 +37,9 @@
 #include "implementation/xslt.h"
 #include "xml/rebase-hrefs.h"
 #include "io/sys.h"
-/* #include "implementation/plugin.h" */
+#include "inkscape.h"
+#include "document-undo.h"
+
 
 namespace Inkscape {
 namespace Extension {
@@ -62,40 +68,10 @@ static Extension *build_from_reprdoc(Inkscape::XML::Document *doc, Implementatio
  *
  * Lastly, the open function is called in the module itself.
  */
-SPDocument *
-open(Extension *key, gchar const *filename)
+SPDocument *open(Extension *key, gchar const *filename)
 {
     Input *imod = NULL;
-    int relpath;
-    gchar * curdir;
 
-    // Convert to absolute pathname to tolerate chdir().
-    relpath = *filename != '/';
-#ifdef WIN32
-    relpath &= *filename != '\\' && !(isalpha(*filename) && filename[1] == ':');
-#endif
-
-    // Do not consider an URI as a relative path.
-    if (relpath) {
-        gchar const * cp = filename;
-
-        while (isalpha(*cp) || isdigit(*cp) || *cp == '+' || *cp == '-' || *cp == '.')
-            cp++;
-
-        relpath = *cp != ':' || cp[1] != '/' || cp[2] != '/';
-    }
-
-    if (relpath) {
-#ifndef WIN32
-        curdir = getcwd(NULL, 0);
-#else
-        curdir = _getcwd(NULL, 0);
-#endif
-
-        filename = g_build_filename(curdir, filename, NULL);
-        free(curdir);
-    }
-    
     if (key == NULL) {
         gpointer parray[2];
         parray[0] = (gpointer)filename;
@@ -115,6 +91,19 @@ open(Extension *key, gchar const *filename)
         throw Input::no_extension_found();
     }
 
+    // Hide pixbuf extensions depending on user preferences.
+    //g_warning("Extension: %s", imod->get_id());
+
+    bool show = true;
+    if (strlen(imod->get_id()) > 27) {
+        Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+        bool ask = prefs->getBool("/dialogs/import/ask");
+        Glib::ustring id = Glib::ustring(imod->get_id(), 28);
+        if (!ask && id.compare( "org.inkscape.input.gdkpixbuf") == 0) {
+            show = false;
+            imod->set_gui(false);
+        }
+    }
     imod->set_state(Extension::STATE_LOADED);
 
     if (!imod->loaded()) {
@@ -122,34 +111,28 @@ open(Extension *key, gchar const *filename)
     }
 
     if (!imod->prefs(filename)) {
-        if (relpath){
-            free((void *) filename);
-        }
         return NULL;
     }
 
     SPDocument *doc = imod->open(filename);
+
     if (!doc) {
         throw Input::open_failed();
     }
 
     if (last_chance_svg) {
-        /* We can't call sp_ui_error_dialog because we may be
-           running from the console, in which case calling sp_ui
-           routines will cause a segfault.  See bug 1000350 - bryce */
-        // sp_ui_error_dialog(_("Format autodetect failed. The file is being opened as SVG."));
-        g_warning(_("Format autodetect failed. The file is being opened as SVG."));
+        if ( inkscape_use_gui() ) {
+            sp_ui_error_dialog(_("Format autodetect failed. The file is being opened as SVG."));
+        } else {
+            g_warning("%s", _("Format autodetect failed. The file is being opened as SVG."));
+        }
     }
 
-    /* This kinda overkill as most of these are already set, but I want
-       to make sure for this release -- TJG */
-    doc->setModifiedSinceSave(false);
-
-    sp_document_set_uri(doc, filename);
-
-    if (relpath){
-        free((void *) filename);
+    doc->setUri(filename);
+    if (!show) {
+        imod->set_gui(true);
     }
+
     return doc;
 }
 
@@ -252,7 +235,6 @@ save(Extension *key, SPDocument *doc, gchar const *filename, bool setextension, 
     if (!dynamic_cast<Output *>(omod)) {
         g_warning("Unable to find output module to handle file: %s\n", filename);
         throw Output::no_extension_found();
-        return;
     }
 
     omod->set_state(Extension::STATE_LOADED);
@@ -293,26 +275,25 @@ save(Extension *key, SPDocument *doc, gchar const *filename, bool setextension, 
         throw Output::file_read_only();
     }
 
-    Inkscape::XML::Node *repr = sp_document_repr_root(doc);
+    Inkscape::XML::Node *repr = doc->getReprRoot();
 
 
     // remember attributes in case this is an unofficial save and/or overwrite fails
-    gchar *saved_uri = g_strdup(doc->uri);
-    bool saved_modified = false;
+    gchar *saved_uri = g_strdup(doc->getURI());
     gchar *saved_output_extension = NULL;
     gchar *saved_dataloss = NULL;
-    saved_modified = doc->isModifiedSinceSave();
+    bool saved_modified = doc->isModifiedSinceSave();
     saved_output_extension = g_strdup(get_file_save_extension(save_method).c_str());
     saved_dataloss = g_strdup(repr->attribute("inkscape:dataloss"));
     if (official) {
-        /* The document is changing name/uri. */
-        sp_document_change_uri_and_hrefs(doc, fileName);
+        // The document is changing name/uri.
+        doc->changeUriAndHrefs(fileName);
     }
 
     // Update attributes:
     {
-        bool const saved = sp_document_get_undo_sensitive(doc);
-        sp_document_set_undo_sensitive(doc, false);
+        bool const saved = DocumentUndo::getUndoSensitive(doc);
+        DocumentUndo::setUndoSensitive(doc, false);
         {
             // also save the extension for next use
             store_file_extension_in_prefs (omod->get_id(), save_method);
@@ -322,7 +303,7 @@ save(Extension *key, SPDocument *doc, gchar const *filename, bool setextension, 
                 repr->setAttribute("inkscape:dataloss", "true");
             }
         }
-        sp_document_set_undo_sensitive(doc, saved);
+        DocumentUndo::setUndoSensitive(doc, saved);
         doc->setModifiedSinceSave(false);
     }
 
@@ -332,14 +313,14 @@ save(Extension *key, SPDocument *doc, gchar const *filename, bool setextension, 
     catch(...) {
         // revert attributes in case of official and overwrite
         if(check_overwrite && official) {
-            bool const saved = sp_document_get_undo_sensitive(doc);
-            sp_document_set_undo_sensitive(doc, false);
+            bool const saved = DocumentUndo::getUndoSensitive(doc);
+            DocumentUndo::setUndoSensitive(doc, false);
             {
                 store_file_extension_in_prefs (saved_output_extension, save_method);
                 repr->setAttribute("inkscape:dataloss", saved_dataloss);
             }
-            sp_document_set_undo_sensitive(doc, saved);
-            sp_document_change_uri_and_hrefs(doc, saved_uri);
+            DocumentUndo::setUndoSensitive(doc, saved);
+            doc->changeUriAndHrefs(saved_uri);
         }
         doc->setModifiedSinceSave(saved_modified);
         // free used ressources
@@ -354,13 +335,13 @@ save(Extension *key, SPDocument *doc, gchar const *filename, bool setextension, 
 
     // If it is an unofficial save, set the modified attributes back to what they were.
     if ( !official) {
-        bool const saved = sp_document_get_undo_sensitive(doc);
-        sp_document_set_undo_sensitive(doc, false);
+        bool const saved = DocumentUndo::getUndoSensitive(doc);
+        DocumentUndo::setUndoSensitive(doc, false);
         {
             store_file_extension_in_prefs (saved_output_extension, save_method);
             repr->setAttribute("inkscape:dataloss", saved_dataloss);
         }
-        sp_document_set_undo_sensitive(doc, saved);
+        DocumentUndo::setUndoSensitive(doc, saved);
         doc->setModifiedSinceSave(saved_modified);
 
         g_free(saved_output_extension);
@@ -466,7 +447,7 @@ build_from_reprdoc(Inkscape::XML::Document *doc, Implementation::Implementation 
         return NULL;
     }
 
-    Inkscape::XML::Node *child_repr = sp_repr_children(repr);
+    Inkscape::XML::Node *child_repr = repr->firstChild();
     while (child_repr != NULL) {
         char const *element_name = child_repr->name();
         /* printf("Child: %s\n", child_repr->name()); */
@@ -491,7 +472,7 @@ build_from_reprdoc(Inkscape::XML::Document *doc, Implementation::Implementation 
         }
 
         //Inkscape::XML::Node *old_repr = child_repr;
-        child_repr = sp_repr_next(child_repr);
+        child_repr = child_repr->next();
         //Inkscape::GC::release(old_repr);
     }
 
@@ -575,7 +556,7 @@ build_from_file(gchar const *filename)
 }
 
 /**
- * \return   The module created
+ * \return   The module created, or NULL if buffer is invalid
  * \brief    This function creates a module from a buffer holding an
  *           XML description.
  * \param    buffer  The buffer holding the XML description of the module.
@@ -587,6 +568,7 @@ Extension *
 build_from_mem(gchar const *buffer, Implementation::Implementation *in_imp)
 {
     Inkscape::XML::Document *doc = sp_repr_read_mem(buffer, strlen(buffer), INKSCAPE_EXTENSION_URI);
+    g_return_val_if_fail(doc != NULL, NULL);
     Extension *ext = build_from_reprdoc(doc, in_imp);
     Inkscape::GC::release(doc);
     return ext;
@@ -611,10 +593,14 @@ get_file_save_extension (Inkscape::Extension::FileSaveMethod method) {
         case FILE_SAVE_METHOD_INKSCAPE_SVG:
             extension = SP_MODULE_KEY_OUTPUT_SVG_INKSCAPE;
             break;
+        case FILE_SAVE_METHOD_EXPORT:
+            /// \todo no default extension set for Export? defaults to SP_MODULE_KEY_OUTPUT_SVG_INKSCAPE is ok?
+            break;
     }
 
-    if(extension.empty())
+    if(extension.empty()) {
         extension = SP_MODULE_KEY_OUTPUT_SVG_INKSCAPE;
+    }
 
     return extension;
 }
@@ -623,12 +609,13 @@ Glib::ustring
 get_file_save_path (SPDocument *doc, FileSaveMethod method) {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     Glib::ustring path;
+    bool use_current_dir = true;
     switch (method) {
         case FILE_SAVE_METHOD_SAVE_AS:
         {
-            bool use_current_dir = prefs->getBool("/dialogs/save_as/use_current_dir", true);
-            if (doc->uri && use_current_dir) {
-                path = Glib::path_get_dirname(doc->uri);
+            use_current_dir = prefs->getBool("/dialogs/save_as/use_current_dir", true);
+            if (doc->getURI() && use_current_dir) {
+                path = Glib::path_get_dirname(doc->getURI());
             } else {
                 path = prefs->getString("/dialogs/save_as/path");
             }
@@ -638,23 +625,34 @@ get_file_save_path (SPDocument *doc, FileSaveMethod method) {
             path = prefs->getString("/dialogs/save_as/path");
             break;
         case FILE_SAVE_METHOD_SAVE_COPY:
-            path = prefs->getString("/dialogs/save_copy/path");
+            use_current_dir = prefs->getBool("/dialogs/save_copy/use_current_dir", prefs->getBool("/dialogs/save_as/use_current_dir", true));
+            if (doc->getURI() && use_current_dir) {
+                path = Glib::path_get_dirname(doc->getURI());
+            } else {
+                path = prefs->getString("/dialogs/save_copy/path");
+            }
             break;
         case FILE_SAVE_METHOD_INKSCAPE_SVG:
-            if (doc->uri) {
-                path = Glib::path_get_dirname(doc->uri);
+            if (doc->getURI()) {
+                path = Glib::path_get_dirname(doc->getURI());
             } else {
                 // FIXME: should we use the save_as path here or something else? Maybe we should
                 // leave this as a choice to the user.
                 path = prefs->getString("/dialogs/save_as/path");
             }
+            break;
+        case FILE_SAVE_METHOD_EXPORT:
+            /// \todo no default path set for Export? 
+            // defaults to g_get_home_dir()
+            break;
     }
 
-    if(path.empty())
+    if(path.empty()) {
         path = g_get_home_dir(); // Is this the most sensible solution? Note that we should avoid
                                  // g_get_current_dir because this leads to problems on OS X where
                                  // Inkscape opens the dialog inside application bundle when it is
                                  // invoked for the first teim.
+    }
 
     return path;
 }
@@ -671,6 +669,7 @@ store_file_extension_in_prefs (Glib::ustring extension, FileSaveMethod method) {
             prefs->setString("/dialogs/save_copy/default", extension);
             break;
         case FILE_SAVE_METHOD_INKSCAPE_SVG:
+        case FILE_SAVE_METHOD_EXPORT:
             // do nothing
             break;
     }
@@ -688,6 +687,7 @@ store_save_path_in_prefs (Glib::ustring path, FileSaveMethod method) {
             prefs->setString("/dialogs/save_copy/path", path);
             break;
         case FILE_SAVE_METHOD_INKSCAPE_SVG:
+        case FILE_SAVE_METHOD_EXPORT:
             // do nothing
             break;
     }

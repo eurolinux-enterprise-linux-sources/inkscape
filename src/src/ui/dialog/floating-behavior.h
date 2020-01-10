@@ -13,9 +13,12 @@
 #ifndef INKSCAPE_UI_DIALOG_FLOATING_BEHAVIOR_H
 #define INKSCAPE_UI_DIALOG_FLOATING_BEHAVIOR_H
 
-#include <gtkmm/dialog.h>
 #include <glibmm/property.h>
 #include "behavior.h"
+
+namespace Gtk {
+class Dialog;
+}
 
 namespace Inkscape {
 namespace UI {
@@ -33,7 +36,7 @@ public:
     operator Gtk::Widget &();
     GtkWidget *gobj();
     void present();
-    Gtk::VBox *get_vbox();
+    Gtk::Box *get_vbox();
     void show();
     void hide();
     void show_all_children();
@@ -63,7 +66,6 @@ private:
 
     Gtk::Dialog *_d;   //< the actual dialog
 
-#if GTK_VERSION_GE(2, 12)
     void _focus_event (void);
     bool _trans_timer (void);
 
@@ -72,8 +74,6 @@ private:
     float _trans_focus;  //< The percentage opacity when the dialog is focused
     float _trans_blur;   //< The percentage opactiy when the dialog is not focused
     int _trans_time;     //< The amount of time (in ms) for the dialog to change it's transparency
-#endif
-
 };
 
 } // namespace Behavior
@@ -92,4 +92,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -9,11 +9,9 @@
 #include <iostream>
 #include <math.h>
 
-using namespace std;
-
-typedef vector<vpsc::Constraint*> Constraints;
-typedef vector<vpsc::Variable*> Variables;
-typedef vector<pair<unsigned,double> > OffsetList;
+typedef std::vector<vpsc::Constraint*> Constraints;
+typedef std::vector<vpsc::Variable*> Variables;
+typedef std::vector<std::pair<unsigned, double> > OffsetList;
 
 class SimpleConstraint {
 public:
@@ -23,11 +21,16 @@ public:
     unsigned right;
     double gap;
 };
-typedef vector<SimpleConstraint*> SimpleConstraints;
+typedef std::vector<SimpleConstraint*> SimpleConstraints;
 class AlignmentConstraint {
 friend class GradientProjection;
 public:
-    AlignmentConstraint(double pos) : position(pos), variable(NULL) {}
+    AlignmentConstraint(double pos) :
+        offsets(),
+        guide(NULL),
+        position(pos),
+        variable(NULL)
+        {}
     void updatePosition() {
         position = variable->position();
     }
@@ -37,7 +40,7 @@ public:
 private:
     vpsc::Variable* variable;
 };
-typedef vector<AlignmentConstraint*> AlignmentConstraints;
+typedef std::vector<AlignmentConstraint*> AlignmentConstraints;
 
 class PageBoundaryConstraints {
 public:
@@ -63,7 +66,7 @@ private:
     double weight;
 };
 
-typedef vector<pair<unsigned,double> > CList;
+typedef std::vector<std::pair<unsigned, double> > CList;
 /**
  * A DummyVarPair is a pair of variables with an ideal distance between them and which have no
  * other interaction with other variables apart from through constraints.  This means that
@@ -76,7 +79,21 @@ typedef vector<pair<unsigned,double> > CList;
  */
 class DummyVarPair {
 public:
-    DummyVarPair(double desiredDist) : dist(desiredDist), lap2(1.0/(desiredDist*desiredDist)) { }
+    DummyVarPair(double desiredDist) :
+        leftof(),
+        rightof(),
+        place_l(0),
+        place_r(0),
+        dist(desiredDist),
+        b(0),
+        left(NULL),
+        right(NULL),
+        lap2(1.0/(desiredDist*desiredDist)),
+        g(0),
+        old_place_l(0),
+        old_place_r(0)
+        {}
+    
     CList leftof; // variables to which left dummy var must be to the left of
     CList rightof; // variables to which right dummy var must be to the right of
     double place_l;
@@ -170,19 +187,19 @@ friend class GradientProjection;
     double old_place_l; // old_place is where the descent vec g was computed
     double old_place_r;
 };
-typedef vector<DummyVarPair*> DummyVars;
+typedef std::vector<DummyVarPair*> DummyVars;
 
 enum Dim { HORIZONTAL, VERTICAL };
 
 class GradientProjection {
 public:
-	GradientProjection(
+    GradientProjection(
         const Dim k,
-		unsigned n, 
-		double** A,
-		double* x,
-		double tol,
-		unsigned max_iterations,
+        unsigned n, 
+        double** A,
+        double* x,
+        double tol,
+        unsigned max_iterations,
         AlignmentConstraints* acs=NULL,
         bool nonOverlapConstraints=false,
         vpsc::Rectangle** rs=NULL,
@@ -205,7 +222,7 @@ public:
                 vars.push_back(v);
                 for(OffsetList::iterator o=ac->offsets.begin();
                         o!=ac->offsets.end();
-                        o++) {
+                        ++o) {
                     gcs.push_back(new vpsc::Constraint(v,vars[o->first],o->second,true));
                 }
             }
@@ -222,12 +239,12 @@ public:
         if(!gcs.empty() || nonOverlapConstraints) {
             constrained=true;
         }
-	}
+    }
     virtual ~GradientProjection() {
         delete [] g;
         delete [] d;
         delete [] old_place;
-        for(Constraints::iterator i(gcs.begin()); i!=gcs.end(); i++) {
+        for(Constraints::iterator i(gcs.begin()); i!=gcs.end(); ++i) {
             delete *i;
         }
         gcs.clear();
@@ -236,16 +253,16 @@ public:
         }
     }
     void clearDummyVars();
-	unsigned solve(double* b);
+    unsigned solve(double* b);
     DummyVars dummy_vars; // special vars that must be considered in Lapl.
 private:
     vpsc::IncSolver* setupVPSC();
     void destroyVPSC(vpsc::IncSolver *vpsc);
     Dim k;
-	unsigned n; // number of actual vars
-	double** A; // Graph laplacian matrix
+    unsigned n; // number of actual vars
+    double** A; // Graph laplacian matrix
     double* place;
-	Variables vars; // all variables
+    Variables vars; // all variables
                           // computations
     Constraints gcs; /* global constraints - persist throughout all
                                 iterations */
@@ -255,9 +272,9 @@ private:
     double tolerance;
     AlignmentConstraints* acs;
     unsigned max_iterations;
-	double* g; /* gradient */
-	double* d;
-	double* old_place;
+    double* g; /* gradient */
+    double* d;
+    double* old_place;
     bool constrained;
 };
 

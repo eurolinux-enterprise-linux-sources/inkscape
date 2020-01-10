@@ -1,6 +1,3 @@
-/** @file
- * @brief EGE paint definition
- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -49,6 +46,9 @@ namespace ege
 typedef void (*ColorCallback)( void* data );
 
 
+/**
+ * Pure data representation of a color definition.
+ */
 class PaintDef
 {
 public:
@@ -108,4 +108,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

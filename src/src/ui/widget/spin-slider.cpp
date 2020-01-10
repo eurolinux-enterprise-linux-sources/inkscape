@@ -1,6 +1,4 @@
-/**
- * \brief Groups an HScale and a SpinButton together using the same Adjustment
- *
+/*
  * Author:
  *   Nicholas Bishop <nicholasbishop@gmail.com>
  *   Felipe C. da S. Sanches <juca@members.fsf.org>
@@ -10,18 +8,23 @@
  * Released under GNU GPL.  Read the file 'COPYING' for more information.
  */
 
-#include "glib.h"
-#include "glibmm/i18n.h"
-
 #include "spin-slider.h"
+
+#include <glibmm/i18n.h>
+#include <glibmm/stringutils.h>
 
 namespace Inkscape {
 namespace UI {
 namespace Widget {
 
 SpinSlider::SpinSlider(double value, double lower, double upper, double step_inc,
-                       double climb_rate, int digits, const SPAttributeEnum a, char* tip_text)
-    : AttrWidget(a, value), _adjustment(value, lower, upper, step_inc),
+                       double climb_rate, int digits, const SPAttributeEnum a, const char* tip_text)
+    : AttrWidget(a, value), 
+#if WITH_GTKMM_3_0
+      _adjustment(Gtk::Adjustment::create(value, lower, upper, step_inc)),
+#else
+      _adjustment(value, lower, upper, step_inc),
+#endif
       _scale(_adjustment), _spin(_adjustment, climb_rate, digits)
 {
     signal_value_changed().connect(signal_attr_changed().make_slot());
@@ -29,8 +32,8 @@ SpinSlider::SpinSlider(double value, double lower, double upper, double step_inc
     pack_start(_scale);
     pack_start(_spin, false, false);
     if (tip_text){
-        _tt.set_tip(_scale, tip_text);
-        _tt.set_tip(_spin, tip_text);
+        _scale.set_tooltip_text(tip_text);
+        _spin.set_tooltip_text(tip_text);
     }
 
     _scale.set_draw_value(false);
@@ -40,7 +43,11 @@ SpinSlider::SpinSlider(double value, double lower, double upper, double step_inc
 
 Glib::ustring SpinSlider::get_as_attribute() const
 {
+#if WITH_GTKMM_3_0
+    const double val = _adjustment->get_value();
+#else
     const double val = _adjustment.get_value();
+#endif
 
     if(_spin.get_digits() == 0)
         return Glib::Ascii::dtostr((int)val);
@@ -51,57 +58,88 @@ Glib::ustring SpinSlider::get_as_attribute() const
 void SpinSlider::set_from_attribute(SPObject* o)
 {
     const gchar* val = attribute_value(o);
+#if WITH_GTKMM_3_0
+    if(val)
+        _adjustment->set_value(Glib::Ascii::strtod(val));
+    else
+        _adjustment->set_value(get_default()->as_double());
+#else
     if(val)
         _adjustment.set_value(Glib::Ascii::strtod(val));
     else
         _adjustment.set_value(get_default()->as_double());
+#endif
 }
 
 Glib::SignalProxy0<void> SpinSlider::signal_value_changed()
 {
+#if WITH_GTKMM_3_0
+    return _adjustment->signal_value_changed();
+#else
     return _adjustment.signal_value_changed();
+#endif
 }
 
 double SpinSlider::get_value() const
 {
+#if WITH_GTKMM_3_0
+    return _adjustment->get_value();
+#else
     return _adjustment.get_value();
+#endif
 }
 
 void SpinSlider::set_value(const double val)
 {
+#if WITH_GTKMM_3_0
+    _adjustment->set_value(val);
+#else
     _adjustment.set_value(val);
+#endif
 }
 
+#if WITH_GTKMM_3_0
+const Glib::RefPtr<Gtk::Adjustment> SpinSlider::get_adjustment() const
+#else
 const Gtk::Adjustment& SpinSlider::get_adjustment() const
+#endif
 {
     return _adjustment;
 }
+#if WITH_GTKMM_3_0
+Glib::RefPtr<Gtk::Adjustment> SpinSlider::get_adjustment()
+#else
 Gtk::Adjustment& SpinSlider::get_adjustment()
+#endif
 {
     return _adjustment;
 }
 
+#if WITH_GTKMM_3_0
+const Gtk::Scale& SpinSlider::get_scale() const
+#else
 const Gtk::HScale& SpinSlider::get_scale() const
+#endif
 {
     return _scale;
 }
+
+#if WITH_GTKMM_3_0
+Gtk::Scale& SpinSlider::get_scale()
+#else
 Gtk::HScale& SpinSlider::get_scale()
+#endif
 {
     return _scale;
 }
 
-const Gtk::SpinButton& SpinSlider::get_spin_button() const
+const Inkscape::UI::Widget::SpinButton& SpinSlider::get_spin_button() const
 {
     return _spin;
 }
-Gtk::SpinButton& SpinSlider::get_spin_button()
+Inkscape::UI::Widget::SpinButton& SpinSlider::get_spin_button()
 {
     return _spin;
-}
-
-void SpinSlider::set_update_policy(const Gtk::UpdateType u)
-{
-    _scale.set_update_policy(u);
 }
 
 void SpinSlider::remove_scale()
@@ -114,16 +152,20 @@ DualSpinSlider::DualSpinSlider(double value, double lower, double upper, double 
     : AttrWidget(a),
       _s1(value, lower, upper, step_inc, climb_rate, digits, SP_ATTR_INVALID, tip_text1),
       _s2(value, lower, upper, step_inc, climb_rate, digits, SP_ATTR_INVALID, tip_text2),
-      //TRANSLATORS: only translate "string" in "context|string".
-      // For more details, see http://developer.gnome.org/doc/API/2.0/glib/glib-I18N.html#Q-:CAPS
-      // "Link" means to _link_ two sliders together
-      _link(Q_("sliders|Link"))
+      //TRANSLATORS: "Link" means to _link_ two sliders together
+      _link(C_("Sliders", "Link"))
 {
     signal_value_changed().connect(signal_attr_changed().make_slot());
 
+#if WITH_GTKMM_3_0
+    _s1.get_adjustment()->signal_value_changed().connect(_signal_value_changed.make_slot());
+    _s2.get_adjustment()->signal_value_changed().connect(_signal_value_changed.make_slot());
+    _s1.get_adjustment()->signal_value_changed().connect(sigc::mem_fun(*this, &DualSpinSlider::update_linked));
+#else
     _s1.get_adjustment().signal_value_changed().connect(_signal_value_changed.make_slot());
     _s2.get_adjustment().signal_value_changed().connect(_signal_value_changed.make_slot());
     _s1.get_adjustment().signal_value_changed().connect(sigc::mem_fun(*this, &DualSpinSlider::update_linked));
+#endif
     _link.signal_toggled().connect(sigc::mem_fun(*this, &DualSpinSlider::link_toggled));
 
     Gtk::VBox* vb = Gtk::manage(new Gtk::VBox);
@@ -152,7 +194,7 @@ void DualSpinSlider::set_from_attribute(SPObject* o)
         gchar** toks = g_strsplit(val, " ", 2);
 
         if(toks) {
-            double v1, v2;
+            double v1 = 0.0, v2 = 0.0;
             if(toks[0])
                 v1 = v2 = Glib::Ascii::strtod(toks[0]);
             if(toks[1])
@@ -160,8 +202,13 @@ void DualSpinSlider::set_from_attribute(SPObject* o)
 
             _link.set_active(toks[1] == 0);
 
+#if WITH_GTKMM_3_0
+            _s1.get_adjustment()->set_value(v1);
+            _s2.get_adjustment()->set_value(v2);
+#else
             _s1.get_adjustment().set_value(v1);
             _s2.get_adjustment().set_value(v2);
+#endif
 
             g_strfreev(toks);
         }
@@ -191,12 +238,6 @@ const SpinSlider& DualSpinSlider::get_spinslider2() const
 SpinSlider& DualSpinSlider::get_spinslider2()
 {
     return _s2;
-}
-
-void DualSpinSlider::set_update_policy(const Gtk::UpdateType u)
-{
-    _s1.set_update_policy(u);
-    _s2.set_update_policy(u);
 }
 
 void DualSpinSlider::remove_scale()

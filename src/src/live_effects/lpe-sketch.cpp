@@ -1,5 +1,6 @@
-/** @file
- * @brief LPE sketch effect implementation
+/**
+ * @file
+ * LPE sketch effect implementation.
  */
 /* Authors:
  *   Jean-Francois Barraud <jf.barraud@gmail.com>
@@ -11,6 +12,8 @@
  */
 
 #include "live_effects/lpe-sketch.h"
+
+#include <glibmm/i18n.h>
 
 // You might need to include other 2geom files. You can add them here:
 #include <2geom/path.h>
@@ -32,34 +35,34 @@ LPESketch::LPESketch(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
     // initialise your parameters here:
     //testpointA(_("Test Point A"), _("Test A"), "ptA", &wr, this, Geom::Point(100,100)),
-    nbiter_approxstrokes(_("Strokes"), _("Draw that many approximating strokes"), "nbiter_approxstrokes", &wr, this, 5),
-    strokelength(_("Max stroke length"),
+    nbiter_approxstrokes(_("Strokes:"), _("Draw that many approximating strokes"), "nbiter_approxstrokes", &wr, this, 5),
+    strokelength(_("Max stroke length:"),
                  _("Maximum length of approximating strokes"), "strokelength", &wr, this, 100.),
-    strokelength_rdm(_("Stroke length variation"),
+    strokelength_rdm(_("Stroke length variation:"),
                      _("Random variation of stroke length (relative to maximum length)"), "strokelength_rdm", &wr, this, .3),
-    strokeoverlap(_("Max. overlap"),
+    strokeoverlap(_("Max. overlap:"),
                   _("How much successive strokes should overlap (relative to maximum length)"), "strokeoverlap", &wr, this, .3),
-    strokeoverlap_rdm(_("Overlap variation"),
+    strokeoverlap_rdm(_("Overlap variation:"),
                       _("Random variation of overlap (relative to maximum overlap)"), "strokeoverlap_rdm", &wr, this, .3),
-    ends_tolerance(_("Max. end tolerance"),
+    ends_tolerance(_("Max. end tolerance:"),
                    _("Maximum distance between ends of original and approximating paths (relative to maximum length)"), "ends_tolerance", &wr, this, .1),
-    parallel_offset(_("Average offset"),
+    parallel_offset(_("Average offset:"),
                     _("Average distance each stroke is away from the original path"), "parallel_offset", &wr, this, 5.),
-    tremble_size(_("Max. tremble"),
+    tremble_size(_("Max. tremble:"),
                  _("Maximum tremble magnitude"), "tremble_size", &wr, this, 5.),
-    tremble_frequency(_("Tremble frequency"),
+    tremble_frequency(_("Tremble frequency:"),
                       _("Average number of tremble periods in a stroke"), "tremble_frequency", &wr, this, 1.)
 #ifdef LPE_SKETCH_USE_CONSTRUCTION_LINES
-    ,nbtangents(_("Construction lines"),
+    ,nbtangents(_("Construction lines:"),
                _("How many construction lines (tangents) to draw"), "nbtangents", &wr, this, 5),
-    tgtscale(_("Scale"),
+    tgtscale(_("Scale:"),
              _("Scale factor relating curvature and length of construction lines (try 5*offset)"), "tgtscale", &wr, this, 10.0),
-    tgtlength(_("Max. length"), _("Maximum length of construction lines"), "tgtlength", &wr, this, 100.0),
-    tgtlength_rdm(_("Length variation"), _("Random variation of the length of construction lines"), "tgtlength_rdm", &wr, this, .3),
-    tgt_places_rdmness(_("Placement randomness"), _("0: evenly distributed construction lines, 1: purely random placement"), "tgt_places_rdmness", &wr, this, 1.)
+    tgtlength(_("Max. length:"), _("Maximum length of construction lines"), "tgtlength", &wr, this, 100.0),
+    tgtlength_rdm(_("Length variation:"), _("Random variation of the length of construction lines"), "tgtlength_rdm", &wr, this, .3),
+    tgt_places_rdmness(_("Placement randomness:"), _("0: evenly distributed construction lines, 1: purely random placement"), "tgt_places_rdmness", &wr, this, 1.)
 #ifdef LPE_SKETCH_USE_CURVATURE
-    ,min_curvature(_("k_min"), _("min curvature"), "k_min", &wr, this, 4.0)
-    ,max_curvature(_("k_max"), _("max curvature"), "k_max", &wr, this, 1000.0)
+    ,min_curvature(_("k_min:"), _("min curvature"), "k_min", &wr, this, 4.0)
+    ,max_curvature(_("k_max:"), _("max curvature"), "k_max", &wr, this, 1000.0)
 #endif
 #endif
 {
@@ -89,24 +92,24 @@ LPESketch::LPESketch(LivePathEffectObject *lpeobject) :
 #endif
 
     nbiter_approxstrokes.param_make_integer();
-    nbiter_approxstrokes.param_set_range(0, NR_HUGE);
-    strokelength.param_set_range(1, NR_HUGE);
+    nbiter_approxstrokes.param_set_range(0, Geom::infinity());
+    strokelength.param_set_range(1, Geom::infinity());
     strokelength.param_set_increments(1., 5.);
     strokelength_rdm.param_set_range(0, 1.);
     strokeoverlap.param_set_range(0, 1.);
     strokeoverlap.param_set_increments(0.1, 0.30);
     ends_tolerance.param_set_range(0., 1.);
-    parallel_offset.param_set_range(0, NR_HUGE);
+    parallel_offset.param_set_range(0, Geom::infinity());
     tremble_frequency.param_set_range(0.01, 100.);
     tremble_frequency.param_set_increments(.5, 1.5);
     strokeoverlap_rdm.param_set_range(0, 1.);
 
 #ifdef LPE_SKETCH_USE_CONSTRUCTION_LINES
     nbtangents.param_make_integer();
-    nbtangents.param_set_range(0, NR_HUGE);
-    tgtscale.param_set_range(0, NR_HUGE);
+    nbtangents.param_set_range(0, Geom::infinity());
+    tgtscale.param_set_range(0, Geom::infinity());
     tgtscale.param_set_increments(.1, .5);
-    tgtlength.param_set_range(0, NR_HUGE);
+    tgtlength.param_set_range(0, Geom::infinity());
     tgtlength.param_set_increments(1., 5.);
     tgtlength_rdm.param_set_range(0, 1.);
     tgt_places_rdmness.param_set_range(0, 1.);
@@ -271,7 +274,7 @@ LPESketch::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_
                     }
                 }
                 times = roots(piecelength-s1);
-                if (times.size()==0) break;//we should not be there.
+                if (times.empty()) break;//we should not be there.
                 t1 = times[0];
 
                 //pick a rdm perturbation, and collect the perturbed piece into output.
@@ -343,7 +346,7 @@ LPESketch::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_
         //TODO: put this 4 as a parameter in the UI...
         //TODO: what if with v=0?
         double l = tgtlength*(1-tgtlength_rdm)/v_t.length();
-        double r = pow(v_t.length(),3)/cross(a_t,v_t);
+        double r = std::pow(v_t.length(),3)/cross(a_t,v_t);
         r = sqrt((2*fabs(r)-tgtscale)*tgtscale)/v_t.length();
         l=(r<l)?r:l;
         //collect the tgt segment into output.
@@ -359,7 +362,7 @@ LPESketch::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_
 }
 
 void
-LPESketch::doBeforeEffect (SPLPEItem */*lpeitem*/)
+LPESketch::doBeforeEffect (SPLPEItem const*/*lpeitem*/)
 {
     //init random parameters.
     parallel_offset.resetRandomizer();
@@ -387,4 +390,4 @@ LPESketch::doBeforeEffect (SPLPEItem */*lpeitem*/)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

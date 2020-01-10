@@ -35,9 +35,10 @@
 
 
 #include <2geom/path.h>
+#include <2geom/transforms.h>
 #include <algorithm>
 
-
+using std::swap;
 using namespace Geom::PathInternal;
 
 namespace Geom
@@ -46,8 +47,9 @@ namespace Geom
 OptRect Path::boundsFast() const {
   OptRect bounds;
   if (empty()) return bounds;
-  bounds=front().boundsFast();
+  bounds = front().boundsFast();
   const_iterator iter = begin();
+  // the closing path segment can be ignored, because it will always lie within the bbox of the rest of the path
   if ( iter != end() ) {
     for ( ++iter; iter != end() ; ++iter ) {
       bounds.unionWith(iter->boundsFast());
@@ -59,8 +61,9 @@ OptRect Path::boundsFast() const {
 OptRect Path::boundsExact() const {
   OptRect bounds;
   if (empty()) return bounds;
-  bounds=front().boundsExact();
+  bounds = front().boundsExact();
   const_iterator iter = begin();
+  // the closing path segment can be ignored, because it will always lie within the bbox of the rest of the path
   if ( iter != end() ) {
     for ( ++iter; iter != end() ; ++iter ) {
       bounds.unionWith(iter->boundsExact());
@@ -77,7 +80,7 @@ iter inc(iter const &x, unsigned n) {
   return ret;
 }
 
-Path &Path::operator*=(Matrix const &m) {
+Path &Path::operator*=(Affine const &m) {
   unshare();
   Sequence::iterator last = get_curves().end() - 1;
   Sequence::iterator it;
@@ -100,10 +103,39 @@ Path &Path::operator*=(Matrix const &m) {
   return *this;
 }
 
+Path &Path::operator*=(Translate const &m) {
+/* Somehow there is something wrong here, LPE Construct grid fails with this code
+  unshare();
+  Sequence::iterator last = get_curves().end() - 1;
+  Sequence::iterator it;
+  Point prev;
+  for (it = get_curves().begin() ; it != last ; ++it) {
+    // *(const_cast<Curve*>(&**it)) *= m;
+    const_cast<Curve*>(it->get())->operator*=(m);
+    if ( it != get_curves().begin() && (*it)->initialPoint() != prev ) {
+      THROW_CONTINUITYERROR();
+    }
+    prev = (*it)->finalPoint();
+  }
+  for ( int i = 0 ; i < 2 ; ++i ) {
+    final_->setPoint(i, (*final_)[i] + m.vector());
+  }
+  if (get_curves().size() > 1) {
+    if ( front().initialPoint() != initialPoint() || back().finalPoint() != finalPoint() ) {
+      THROW_CONTINUITYERROR();
+    }
+  }
+  return *this;
+*/
+  return this->operator*=(static_cast<Affine>(m));
+}
+
 std::vector<double>
 Path::allNearestPoints(Point const& _point, double from, double to) const
 {
-	if ( from > to ) std::swap(from, to);
+  using std::swap;
+
+	if ( from > to ) swap(from, to);
 	const Path& _path = *this;
 	unsigned int sz = _path.size();
 	if ( _path.closed() ) ++sz;
@@ -146,7 +178,7 @@ Path::allNearestPoints(Point const& _point, double from, double to) const
 	Rect bb(Geom::Point(0,0),Geom::Point(0,0));
 	for ( unsigned int i = si + 1; i < ei; ++i )
 	{
-		bb = *(_path[i].boundsFast());
+		bb = (_path[i].boundsFast());
 		dsq = distanceSq(_point, bb);
 		if ( mindistsq < dsq ) continue;
 		all_t = _path[i].allNearestPoints(_point);
@@ -165,7 +197,7 @@ Path::allNearestPoints(Point const& _point, double from, double to) const
 			ni.push_back(i);
 		}
 	}
-	bb = *(_path[ei].boundsFast());
+	bb = (_path[ei].boundsFast());
 	dsq = distanceSq(_point, bb);
 	if ( mindistsq >= dsq )
 	{
@@ -203,7 +235,7 @@ Path::nearestPointPerCurve(Point const& _point) const
 {
 	//return a single nearest point for each curve in this path
 	std::vector<double> np;
-	for (const_iterator it = begin() ; it != end_default(); ++it)
+	for (const_iterator it = begin() ; it != end_default() ; ++it)
 	//for (std::vector<Path>::const_iterator it = _path.begin(); it != _path.end(), ++it){
 	{
 	    np.push_back(it->nearestPoint(_point));
@@ -213,7 +245,9 @@ Path::nearestPointPerCurve(Point const& _point) const
 
 double Path::nearestPoint(Point const &_point, double from, double to, double *distance_squared) const
 {
-	if ( from > to ) std::swap(from, to);
+  using std::swap;
+
+	if ( from > to ) swap(from, to);
 	const Path& _path = *this;
 	unsigned int sz = _path.size();
 	if ( _path.closed() ) ++sz;
@@ -253,10 +287,9 @@ double Path::nearestPoint(Point const &_point, double from, double to, double *d
 	unsigned int ni = si;
 	double dsq;
 	double mindistsq = distanceSq(_point, _path[si].pointAt(nearest));
-	Rect bb(Geom::Point(0,0),Geom::Point(0,0));
 	for ( unsigned int i = si + 1; i < ei; ++i )
 	{
-		bb = *(_path[i].boundsFast());
+            Rect bb = (_path[i].boundsFast());
 		dsq = distanceSq(_point, bb);
 		if ( mindistsq <= dsq ) continue;
 		t = _path[i].nearestPoint(_point);
@@ -268,7 +301,7 @@ double Path::nearestPoint(Point const &_point, double from, double to, double *d
 			mindistsq = dsq;
 		}
 	}
-	bb = *(_path[ei].boundsFast());
+	Rect bb = (_path[ei].boundsFast());
 	dsq = distanceSq(_point, bb);
 	if ( mindistsq > dsq )
 	{
@@ -313,7 +346,7 @@ void Path::appendPortionTo(Path &ret, double from, double to) const {
   }
   if(from >= to) {
     const_iterator ender = end();
-    if(ender->initialPoint() == ender->finalPoint()) ender++;
+    if(ender->initialPoint() == ender->finalPoint()) ++ender;
     ret.insert(ret.end(), ++fromi, ender, STITCH_DISCONTINUOUS);
     ret.insert(ret.end(), begin(), toi, STITCH_DISCONTINUOUS);
   } else {
@@ -346,16 +379,15 @@ void Path::do_update(Sequence::iterator first_replaced,
 }
 
 void Path::do_append(Curve *c) {
-  boost::shared_ptr<Curve> curve(c);
   if ( get_curves().front().get() == final_ ) {
-    final_->setPoint(1, curve->initialPoint());
+    final_->setPoint(1, c->initialPoint());
   } else {
-    if (curve->initialPoint() != finalPoint()) {
+    if (c->initialPoint() != finalPoint()) {
       THROW_CONTINUITYERROR();
     }
   }
-  get_curves().insert(get_curves().end()-1, curve);
-  final_->setPoint(0, curve->finalPoint());
+  get_curves().insert(get_curves().end()-1, boost::shared_ptr<Curve>(c));
+  final_->setPoint(0, c->finalPoint());
 }
 
 void Path::stitch(Sequence::iterator first_replaced,
@@ -420,4 +452,4 @@ void Path::check_continuity(Sequence::iterator first_replaced,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

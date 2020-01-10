@@ -2,8 +2,10 @@
 #define INKSCAPE_HELPER_GEOM_NODETYPE_H
 
 /**
+ * @file
  * Specific nodetype geometry functions for Inkscape, not provided my lib2geom.
- *
+ */
+/*
  * Author:
  *   Johan Engelen <goejendaagh@zonnet.nl>
  *
@@ -51,4 +53,4 @@ NodeType get_nodetype(Curve const &c_incoming, Curve const &c_outgoing);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

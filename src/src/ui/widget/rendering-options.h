@@ -1,6 +1,4 @@
-/**
- * \brief Rendering Options Widget - A container for selecting rendering options
- *
+/*
  * Author:
  *   Kees Cook <kees@outflux.net>
  *
@@ -13,16 +11,25 @@
 #ifndef INKSCAPE_UI_WIDGET_RENDERING_OPTIONS_H
 #define INKSCAPE_UI_WIDGET_RENDERING_OPTIONS_H
 
-#include <gtkmm.h>
 #include "scalar.h"
+
+#include <gtkmm/frame.h>
+#include <gtkmm/radiobutton.h>
 
 namespace Inkscape {
 namespace UI {
 namespace Widget {
 
+/**
+ * A container for selecting rendering options.
+ */
 class RenderingOptions : public Gtk::VBox
 {
 public:
+
+    /**
+     * Construct a Rendering Options widget.
+     */
     RenderingOptions();
 
     bool as_bitmap();   // should we render as a bitmap?
@@ -37,9 +44,6 @@ protected:
     // Bitmap options
     Gtk::Frame       _frame_bitmap;
     Scalar           _dpi; // DPI of bitmap to render
-
-    // Tooltip manager
-    Gtk::Tooltips    _tt;
 
     // callback for bitmap button
     void _toggled();
@@ -60,4 +64,4 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

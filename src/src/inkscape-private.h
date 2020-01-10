@@ -1,5 +1,5 @@
-#ifndef __INKSCAPE_PRIVATE_H__
-#define __INKSCAPE_PRIVATE_H__
+#ifndef SEEN_INKSCAPE_PRIVATE_H
+#define SEEN_INKSCAPE_PRIVATE_H
 
 /*
  * Some forward declarations
@@ -12,16 +12,17 @@
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
+#include <glib-object.h>
 
 #define SP_TYPE_INKSCAPE (inkscape_get_type ())
-#define SP_INKSCAPE(obj) (GTK_CHECK_CAST ((obj), SP_TYPE_INKSCAPE, Inkscape))
-#define SP_INKSCAPE_CLASS(klass) (GTK_CHECK_CLASS_CAST ((klass), SP_TYPE_INKSCAPE, InkscapeClass))
-#define SP_IS_INKSCAPE(obj) (GTK_CHECK_TYPE ((obj), SP_TYPE_INKSCAPE))
-#define SP_IS_INKSCAPE_CLASS(klass) (GTK_CHECK_CLASS_TYPE ((klass), SP_TYPE_INKSCAPE))
+#define SP_INKSCAPE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_INKSCAPE, Inkscape))
+#define SP_INKSCAPE_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_INKSCAPE, InkscapeClass))
+#define SP_IS_INKSCAPE(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_INKSCAPE))
+#define SP_IS_INKSCAPE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_INKSCAPE))
 
-#include "forward.h"
 #include "inkscape.h"
 
+struct SPColor;
 namespace Inkscape { class Selection; }
 
 GType inkscape_get_type (void);
@@ -42,17 +43,15 @@ void inkscape_trackalt(guint);
 void inkscape_selection_modified (Inkscape::Selection *selection, guint flags);
 void inkscape_selection_changed (Inkscape::Selection * selection);
 void inkscape_selection_set (Inkscape::Selection * selection);
-void inkscape_eventcontext_set (SPEventContext * eventcontext);
+void inkscape_eventcontext_set (Inkscape::UI::Tools::ToolBase * eventcontext);
 void inkscape_add_desktop (SPDesktop * desktop);
 void inkscape_remove_desktop (SPDesktop * desktop);
 void inkscape_activate_desktop (SPDesktop * desktop);
 void inkscape_reactivate_desktop (SPDesktop * desktop);
-void inkscape_add_document (SPDocument *document);
-bool inkscape_remove_document (SPDocument *document);
 
 void inkscape_set_color (SPColor *color, float opacity);
 
-#endif
+#endif // SEEN_INKSCAPE_PRIVATE_H
 
 
 
@@ -65,4 +64,4 @@ void inkscape_set_color (SPColor *color, float opacity);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

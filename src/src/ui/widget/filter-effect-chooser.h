@@ -12,16 +12,20 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
 #include <gtkmm/box.h>
 #include <gtkmm/combobox.h>
-#include <gtkmm/liststore.h>
-#include <gtkmm/treeview.h>
 
 #include "combo-enums.h"
 #include "filter-enums.h"
-#include "labelled.h"
-#include "spin-slider.h"
-#include "sp-filter.h"
+#include "spin-scale.h"
 
 namespace Inkscape {
 namespace UI {
@@ -53,10 +57,10 @@ public:
 private:
     int _flags;
     Gtk::HBox _hb_blend;
-    Gtk::VBox _vb_blur;
-    Gtk::Label _lb_blend, _lb_blur;
+    Gtk::Label _lb_blend;
+
     ComboBoxEnum<Inkscape::Filters::FilterBlendMode> _blend;
-    SpinSlider _blur;
+    SpinScale _blur;
 
     sigc::signal<void> _signal_blend_blur_changed;
 };
@@ -76,4 +80,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

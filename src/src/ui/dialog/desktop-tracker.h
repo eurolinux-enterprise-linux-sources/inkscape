@@ -1,7 +1,3 @@
-/**
- * Glyph selector dialog.
- */
-
 /* Authors:
  *   Jon A. Cruz
  *
@@ -11,16 +7,15 @@
 #ifndef SEEN_DIALOG_DESKTOP_TRACKER
 #define SEEN_DIALOG_DESKTOP_TRACKER
 
-#include <stddef.h>
+#include <cstddef>
 #include <sigc++/connection.h>
-#include <glib.h>
 
 typedef struct _GtkWidget GtkWidget;
 class SPDesktop;
 
 namespace Inkscape {
 
-class Application;
+struct Application;
 
 namespace UI {
 namespace Dialog {
@@ -71,4 +66,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

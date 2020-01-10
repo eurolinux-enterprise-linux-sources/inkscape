@@ -27,10 +27,11 @@
 
 #include "gdl-i18n.h"
 
-#include "gdl-tools.h"
 #include "gdl-dock-master.h"
 #include "gdl-dock.h"
 #include "gdl-dock-item.h"
+#include "gdl-dock-notebook.h"
+#include "gdl-switcher.h"
 #include "libgdlmarshal.h"
 #include "libgdltypebuiltins.h"
 #ifdef WIN32
@@ -40,7 +41,6 @@
 /* ----- Private prototypes ----- */
 
 static void     gdl_dock_master_class_init    (GdlDockMasterClass *klass);
-static void     gdl_dock_master_instance_init (GdlDockMaster      *master);
 
 static void     gdl_dock_master_dispose       (GObject            *g_object);
 static void     gdl_dock_master_set_property  (GObject            *object,
@@ -82,8 +82,7 @@ enum {
     PROP_0,
     PROP_DEFAULT_TITLE,
     PROP_LOCKED,
-    PROP_SWITCHER_STYLE,
-    PROP_EXPANSION_DIRECTION
+    PROP_SWITCHER_STYLE
 };
 
 enum {
@@ -113,8 +112,6 @@ struct _GdlDockMasterPrivate {
     GHashTable     *unlocked_items;
     
     GdlSwitcherStyle switcher_style;
-
-    GdlDockExpansionDirection expansion_direction;
 };
 
 #define COMPUTE_LOCKED(master)                                          \
@@ -126,7 +123,7 @@ static guint master_signals [LAST_SIGNAL] = { 0 };
 
 /* ----- Private interface ----- */
 
-GDL_CLASS_BOILERPLATE (GdlDockMaster, gdl_dock_master, GObject, G_TYPE_OBJECT);
+G_DEFINE_TYPE (GdlDockMaster, gdl_dock_master, G_TYPE_OBJECT);
 
 static void
 gdl_dock_master_class_init (GdlDockMasterClass *klass)
@@ -163,15 +160,6 @@ gdl_dock_master_class_init (GdlDockMasterClass *klass)
                            GDL_SWITCHER_STYLE_BOTH,
                            G_PARAM_READWRITE));
 
-    g_object_class_install_property (
-        g_object_class, PROP_EXPANSION_DIRECTION,
-        g_param_spec_enum ("expand-direction", _("Expand direction"),
-                           _("Allow the master's dock items to expand their container "
-                             "dock objects in the given direction"),
-                           GDL_TYPE_EXPANSION_DIRECTION,
-                           GDL_DOCK_EXPANSION_DIRECTION_NONE,
-                           G_PARAM_READWRITE));
-
     master_signals [LAYOUT_CHANGED] = 
         g_signal_new ("layout-changed", 
                       G_TYPE_FROM_CLASS (klass),
@@ -187,7 +175,7 @@ gdl_dock_master_class_init (GdlDockMasterClass *klass)
 }
 
 static void
-gdl_dock_master_instance_init (GdlDockMaster *master)
+gdl_dock_master_init (GdlDockMaster *master)
 {
     master->dock_objects = g_hash_table_new_full (g_str_hash, g_str_equal,
                                                   g_free, NULL);
@@ -198,7 +186,6 @@ gdl_dock_master_instance_init (GdlDockMaster *master)
     master->_priv = g_new0 (GdlDockMasterPrivate, 1);
     master->_priv->number = 1;
     master->_priv->switcher_style = GDL_SWITCHER_STYLE_BOTH;
-    master->_priv->expansion_direction = GDL_DOCK_EXPANSION_DIRECTION_NONE;
     master->_priv->locked_items = g_hash_table_new (g_direct_hash, g_direct_equal);
     master->_priv->unlocked_items = g_hash_table_new (g_direct_hash, g_direct_equal);
 }
@@ -320,7 +307,7 @@ gdl_dock_master_dispose (GObject *g_object)
         master->_priv = NULL;
     }
 
-    GDL_CALL_PARENT (G_OBJECT_CLASS, dispose, (g_object));
+    G_OBJECT_CLASS (gdl_dock_master_parent_class)->dispose (g_object);
 }
 
 static void 
@@ -375,9 +362,6 @@ gdl_dock_master_set_property  (GObject      *object,
         case PROP_SWITCHER_STYLE:
             gdl_dock_master_set_switcher_style (master, g_value_get_enum (value));
             break;
-        case PROP_EXPANSION_DIRECTION:
-            master->_priv->expansion_direction = g_value_get_enum (value);
-            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
             break;
@@ -401,9 +385,6 @@ gdl_dock_master_get_property  (GObject      *object,
             break;
         case PROP_SWITCHER_STYLE:
             g_value_set_enum (value, master->_priv->switcher_style);
-            break;
-        case PROP_EXPANSION_DIRECTION:
-            g_value_set_enum (value, master->_priv->expansion_direction);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -481,6 +462,7 @@ gdl_dock_master_drag_motion (GdlDockItem *item,
     GdlDockMaster  *master;
     GdlDockRequest  my_request, *request;
     GdkWindow      *window;
+    GdkWindow      *widget_window;
     gint            win_x, win_y;
     gint            x, y;
     GdlDock        *dock = NULL;
@@ -505,15 +487,17 @@ gdl_dock_master_drag_motion (GdlDockItem *item,
         if (GTK_IS_WIDGET (widget)) {
             while (widget && (!GDL_IS_DOCK (widget) || 
 	           GDL_DOCK_OBJECT_GET_MASTER (widget) != master))
-                widget = widget->parent;
+                widget = gtk_widget_get_parent (widget);
             if (widget) {
                 gint win_w, win_h;
                 
+                widget_window = gtk_widget_get_window (widget);
+
                 /* verify that the pointer is still in that dock
                    (the user could have moved it) */
-                gdk_window_get_geometry (widget->window,
+                gdk_window_get_geometry (widget_window,
                                          NULL, NULL, &win_w, &win_h, NULL);
-                gdk_window_get_origin (widget->window, &win_x, &win_y);
+                gdk_window_get_origin (widget_window, &win_x, &win_y);
                 if (root_x >= win_x && root_x < win_x + win_w &&
                     root_y >= win_y && root_y < win_y + win_h)
                     dock = GDL_DOCK (widget);
@@ -522,9 +506,11 @@ gdl_dock_master_drag_motion (GdlDockItem *item,
     }
 
     if (dock) {
+        GdkWindow *dock_window = gtk_widget_get_window (GTK_WIDGET (dock));
+
         /* translate root coordinates into dock object coordinates
            (i.e. widget coordinates) */
-        gdk_window_get_origin (GTK_WIDGET (dock)->window, &win_x, &win_y);
+        gdk_window_get_origin (dock_window, &win_x, &win_y);
         x = root_x - win_x;
         y = root_y - win_y;
         may_dock = gdl_dock_object_dock_request (GDL_DOCK_OBJECT (dock),
@@ -535,10 +521,12 @@ gdl_dock_master_drag_motion (GdlDockItem *item,
 
         /* try to dock the item in all the docks in the ring in turn */
         for (l = master->toplevel_docks; l; l = l->next) {
+            GdkWindow *dock_window;
             dock = GDL_DOCK (l->data);
+            dock_window = gtk_widget_get_window (GTK_WIDGET (dock));
             /* translate root coordinates into dock object coordinates
                (i.e. widget coordinates) */
-            gdk_window_get_origin (GTK_WIDGET (dock)->window, &win_x, &win_y);
+            gdk_window_get_origin (dock_window, &win_x, &win_y);
             x = root_x - win_x;
             y = root_y - win_y;
             may_dock = gdl_dock_object_dock_request (GDL_DOCK_OBJECT (dock),
@@ -589,7 +577,7 @@ gdl_dock_master_drag_motion (GdlDockItem *item,
           my_request.rect.width == request->rect.width &&
           my_request.rect.height == request->rect.height &&
           dock == master->_priv->rect_owner)) {
-        
+
         /* erase the previous rectangle */
         if (master->_priv->rect_drawn)
             gdl_dock_master_xor_rect (master);
@@ -609,7 +597,6 @@ _gdl_dock_master_foreach (gpointer key,
                           gpointer value,
                           gpointer user_data)
 {
-    (void)key;
     struct {
         GFunc    function;
         gpointer user_data;
@@ -798,8 +785,7 @@ gdl_dock_master_add (GdlDockMaster *master,
                        master, object, object->name, found_object);
         }
         else {
-            g_object_ref (object);
-            gtk_object_sink (GTK_OBJECT (object));
+            g_object_ref_sink (object);
             g_hash_table_insert (master->dock_objects, g_strdup (object->name), object);
         }
     }

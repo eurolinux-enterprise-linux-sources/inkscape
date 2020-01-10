@@ -34,7 +34,6 @@ SPCurve::SPCurve()
   : _refcount(1),
     _pathv()
 {
-    _pathv.clear();
 }
 
 SPCurve::SPCurve(Geom::PathVector const& pathv)
@@ -150,7 +149,7 @@ SPCurve::concat(GSList const *list)
     SPCurve *new_curve = new SPCurve();
 
     for (GSList const *l = list; l != NULL; l = l->next) {
-        SPCurve *c = (SPCurve *) l->data;
+        SPCurve *c = static_cast<SPCurve *>(l->data);
         new_curve->_pathv.insert( new_curve->_pathv.end(), c->get_pathvector().begin(), c->get_pathvector().end() );
     }
 
@@ -180,7 +179,7 @@ SPCurve::split() const
  * Transform all paths in curve using matrix.
  */
 void
-SPCurve::transform(Geom::Matrix const &m)
+SPCurve::transform(Geom::Affine const &m)
 {
     _pathv *= m;
 }
@@ -322,7 +321,7 @@ SPCurve::is_closed() const
         return false;
     } else {
         bool closed = true;
-        for (Geom::PathVector::const_iterator it = _pathv.begin(); it != _pathv.end(); it++) {
+        for (Geom::PathVector::const_iterator it = _pathv.begin(); it != _pathv.end(); ++it) {
              if ( ! it->closed() ) {
                 closed = false;
                 break;
@@ -506,11 +505,11 @@ SPCurve::append(SPCurve const *curve2,
             _pathv.push_back( (*it) );
         }
 
-        for (it++; it != curve2->_pathv.end(); it++) {
+        for (it++; it != curve2->_pathv.end(); ++it) {
             _pathv.push_back( (*it) );
         }
     } else {
-        for (Geom::PathVector::const_iterator it = curve2->_pathv.begin(); it != curve2->_pathv.end(); it++) {
+        for (Geom::PathVector::const_iterator it = curve2->_pathv.begin(); it != curve2->_pathv.end(); ++it) {
             _pathv.push_back( (*it) );
         }
     }
@@ -553,7 +552,7 @@ SPCurve::append_continuous(SPCurve const *c1, gdouble tolerance)
         newfirstpath.setInitial(lastpath.finalPoint());
         lastpath.append( newfirstpath );
 
-        for (path_it++; path_it != c1->_pathv.end(); path_it++) {
+        for (++path_it; path_it != c1->_pathv.end(); ++path_it) {
             _pathv.push_back( (*path_it) );
         }
 
@@ -687,4 +686,4 @@ SPCurve::last_point_additive_move(Geom::Point const & p)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,7 +1,7 @@
 /**
  * \file
  * \brief   Lifts one dimensional objects into 2d 
- *
+ *//*
  * Copyright 2007 Michael Sloan <mgsloan@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -29,12 +29,13 @@
  *
  */
 
-#ifndef _2GEOM_D2  //If this is change, change the guard in rect.h as well.
-#define _2GEOM_D2
+#ifndef SEEN_LIB2GEOM_D2_H
+#define SEEN_LIB2GEOM_D2_H
 
 #include <2geom/point.h>
 #include <2geom/interval.h>
-#include <2geom/matrix.h>
+#include <2geom/affine.h>
+#include <2geom/rect.h>
 
 #include <boost/concept_check.hpp>
 #include <2geom/concepts.h>
@@ -71,13 +72,13 @@ class D2{
 
     //IMPL: FragmentConcept
     typedef Point output_type;
-    bool isZero() const {
+    bool isZero(double eps=EPSILON) const {
         boost::function_requires<FragmentConcept<T> >();
-        return f[X].isZero() && f[Y].isZero();
+        return f[X].isZero(eps) && f[Y].isZero(eps);
     }
-    bool isConstant() const {
+    bool isConstant(double eps=EPSILON) const {
         boost::function_requires<FragmentConcept<T> >();
-        return f[X].isConstant() && f[Y].isConstant();
+        return f[X].isConstant(eps) && f[Y].isConstant(eps);
     }
     bool isFinite() const {
         boost::function_requires<FragmentConcept<T> >();
@@ -149,7 +150,7 @@ template <typename T>
 inline bool
 are_near(D2<T> const &a, D2<T> const &b, double tol) {
     boost::function_requires<NearConcept<T> >();
-    return are_near(a[0], b[0]) && are_near(a[1], b[1]);
+    return are_near(a[0], b[0], tol) && are_near(a[1], b[1], tol);
 }
 
 //IMPL: AddableConcept
@@ -251,7 +252,7 @@ template <typename T>
 inline D2<T> operator/=(D2<T> & a, double b) { a[0] /= b; a[1] /= b; return a; }
 
 template<typename T>
-D2<T> operator*(D2<T> const &v, Matrix const &m) {
+D2<T> operator*(D2<T> const &v, Affine const &m) {
     boost::function_requires<AddableConcept<T> >();
     boost::function_requires<ScalableConcept<T> >();
     D2<T> ret;
@@ -426,7 +427,6 @@ inline std::ostream &operator<< (std::ostream &out_file, const Geom::D2<T> &in_d
 
 } //end namespace Geom
 
-#include <2geom/rect.h>
 #include <2geom/d2-sbasis.h>
 
 namespace Geom{
@@ -458,5 +458,5 @@ OptRect bounds_local(const D2<T> &a, const OptInterval &t) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
 #endif

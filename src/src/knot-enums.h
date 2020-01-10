@@ -1,9 +1,11 @@
 #ifndef SEEN_KNOT_ENUMS_H
 #define SEEN_KNOT_ENUMS_H
 
-/** \file 
+/**
+ * @file
  * Some enums used by SPKnot and by related types \& functions. 
- *
+ */
+/*
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *
@@ -55,4 +57,4 @@ enum {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

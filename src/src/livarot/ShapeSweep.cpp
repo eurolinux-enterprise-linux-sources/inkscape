@@ -10,14 +10,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <glib.h>
-
-#include <2geom/matrix.h>
+#include <2geom/affine.h>
 #include "Shape.h"
 #include "livarot/sweep-event-queue.h"
 #include "livarot/sweep-tree-list.h"
 #include "livarot/sweep-tree.h"
-
-#include "libnr/nr-matrix.h"
 
 //int   doDebug=0;
 
@@ -255,8 +252,7 @@ Shape::ConvertToShape (Shape * a, FillRule directed, bool invert)
       Geom::Point rPtX;
       rPtX[0]= Round (ptX[0]);
       rPtX[1]= Round (ptX[1]);
-      int lastPointNo = -1;
-      lastPointNo = AddPoint (rPtX);
+      int lastPointNo = AddPoint (rPtX);
       pData[lastPointNo].rx = rPtX;
 
       if (rPtX[1] > lastChange)
@@ -1056,8 +1052,7 @@ Shape::Booleen (Shape * a, Shape * b, BooleanOp mod,int cutPathID)
       Geom::Point rPtX;
       rPtX[0]= Round (ptX[0]);
       rPtX[1]= Round (ptX[1]);
-      int lastPointNo = -1;
-      lastPointNo = AddPoint (rPtX);
+      int lastPointNo = AddPoint (rPtX);
       pData[lastPointNo].rx = rPtX;
 
       if (rPtX[1] > lastChange)
@@ -2607,7 +2602,7 @@ Shape::TesteIntersection (Shape * ils, Shape * irs, int ilb, int irb,
   usvs = irs->pData[rSt].rx - ils->pData[lSt].rx;
 
   // pas sur de l'ordre des coefs de m
-  Geom::Matrix m(ldir[0], ldir[1],
+  Geom::Affine m(ldir[0], ldir[1],
 	       rdir[0], rdir[1],
 	       0, 0);
   double det = m.det();
@@ -2744,8 +2739,8 @@ Shape::CheckAdjacencies (int lastPointNo, int lastChgtPt, Shape * /*shapeHead*/,
 	    {
 	      if (TesteAdjacency (lS, lB, getPoint(n).x, n, false) ==
 		  false)
-		break;
-	      lS->swsData[lB].leftRnd = n;
+                break;
+              lS->swsData[lB].leftRnd = n;
 	    }
 	  for (int n = rgtN + 1; n < lastPointNo; n++)
 	    {
@@ -2771,7 +2766,7 @@ Shape::CheckAdjacencies (int lastPointNo, int lastChgtPt, Shape * /*shapeHead*/,
 	      if (TesteAdjacency (rS, rB, getPoint(n).x, n, false) ==
 		  false)
 		break;
-	      rS->swsData[rB].leftRnd = n;
+              rS->swsData[rB].leftRnd = n;
 	    }
 	  for (int n = rgtN + 1; n < lastPointNo; n++)
 	    {

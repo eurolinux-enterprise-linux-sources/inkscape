@@ -15,25 +15,17 @@
 
 #include <memory>
 
-#include <gtkmm/adjustment.h>
-#include <gtkmm/alignment.h>
-#include <gtkmm/box.h>
-#include <gtkmm/buttonbox.h>
-#include <gtkmm/comboboxtext.h>
-#include <gtkmm/drawingarea.h>
-#include <gtkmm/frame.h>
-#include <gtkmm/liststore.h>
-#include <gtkmm/menu.h>
-#include <gtkmm/notebook.h>
-#include <gtkmm/sizegroup.h>
-#include <gtkmm/treeview.h>
-
 #include "attributes.h"
 #include "ui/widget/panel.h"
 #include "sp-filter.h"
 #include "ui/widget/combo-enums.h"
 #include "ui/widget/spin-slider.h"
+#include "ui/widget/spin-scale.h"
 #include "xml/helper-observer.h"
+#include "ui/dialog/desktop-tracker.h"
+
+#include <gtkmm/notebook.h>
+#include <gtkmm/sizegroup.h>
 
 namespace Inkscape {
 namespace UI {
@@ -84,19 +76,17 @@ private:
             Gtk::TreeModelColumn<int> sel;
         };
 
-        static void on_activate_desktop(Application*, SPDesktop*, FilterModifier*);
-        static void on_deactivate_desktop(Application*, SPDesktop*, FilterModifier*);
-        void on_document_replaced(SPDesktop*, SPDocument*)
-        {
-            update_filters();
-        }
+        void setTargetDesktop(SPDesktop *desktop);
        
-        static void on_inkscape_change_selection(Application *, Selection *, FilterModifier*);
+        void on_document_replaced(SPDesktop *desktop, SPDocument *document);
+        void on_change_selection();
+        void on_modified_selection( guint flags );
         
         void update_selection(Selection *);
         void on_filter_selection_changed();
 
         void on_name_edited(const Glib::ustring&, const Glib::ustring&);
+        bool on_filter_move(const Glib::RefPtr<Gdk::DragContext>& /*context*/, int x, int y, guint /*time*/);
         void on_selection_toggled(const Glib::ustring&);
 
         void update_filters();
@@ -106,6 +96,22 @@ private:
         void duplicate_filter();
         void rename_filter();
 
+        /**
+         * Stores the current desktop.
+         */
+        SPDesktop *_desktop;
+
+        /**
+         * Auxiliary widget to keep track of desktop changes for the floating dialog.
+         */
+        DesktopTracker _deskTrack;
+
+        /**
+         * Link to callback function for a change in desktop (window).
+         */
+        sigc::connection desktopChangeConn;
+        sigc::connection _selectChangedConn;
+        sigc::connection _selectModifiedConn;
         sigc::connection _doc_replaced;
         sigc::connection _resource_changed;
 
@@ -145,11 +151,29 @@ private:
 
         static const int size = 24;
         
-        void set_text_width(const int w);
-        int get_text_width() const;
     protected:
+#if WITH_GTKMM_3_0
+        virtual void get_preferred_width_vfunc(Gtk::Widget& widget,
+                                               int& minimum_width,
+                                               int& natural_width) const;
+        
+        virtual void get_preferred_width_for_height_vfunc(Gtk::Widget& widget,
+                                                          int height,
+                                                          int& minimum_width,
+                                                          int& natural_width) const;
+
+        virtual void get_preferred_height_vfunc(Gtk::Widget& widget,
+                                                int& minimum_height,
+                                                int& natural_height) const;
+        
+        virtual void get_preferred_height_for_width_vfunc(Gtk::Widget& widget,
+                                                          int width,
+                                                          int& minimum_height,
+                                                          int& natural_height) const;
+#else
         virtual void get_size_vfunc(Gtk::Widget& widget, const Gdk::Rectangle* cell_area,
                                     int* x_offset, int* y_offset, int* width, int* height) const;
+#endif
     private:
         // void* should be SPFilterPrimitive*, some weirdness with properties prevents this
         Glib::Property<void*> _primitive;
@@ -171,20 +195,33 @@ private:
         void remove_selected();
 
         int primitive_count() const;
+        int get_input_type_width() const;
+
     protected:
+        bool on_draw_signal(const Cairo::RefPtr<Cairo::Context> &cr);
+
+#if !WITH_GTKMM_3_0
         bool on_expose_signal(GdkEventExpose*);
+#endif
+
         bool on_button_press_event(GdkEventButton*);
         bool on_motion_notify_event(GdkEventMotion*);
         bool on_button_release_event(GdkEventButton*);
         void on_drag_end(const Glib::RefPtr<Gdk::DragContext>&);
     private:
-        int init_text();
+        void init_text();
 
-        bool do_connection_node(const Gtk::TreeIter& row, const int input, std::vector<Gdk::Point>& points,
+	void draw_connection_node(const Cairo::RefPtr<Cairo::Context>& cr,
+                                  const std::vector<Gdk::Point>& points,
+				  const bool fill);
+
+	bool do_connection_node(const Gtk::TreeIter& row, const int input, std::vector<Gdk::Point>& points,
                                 const int ix, const int iy);
+
         const Gtk::TreeIter find_result(const Gtk::TreeIter& start, const int attr, int& src_id);
         int find_index(const Gtk::TreeIter& target);
-        void draw_connection(const Gtk::TreeIter&, const int attr, const int text_start_x,
+        void draw_connection(const Cairo::RefPtr<Cairo::Context>& cr,
+                             const Gtk::TreeIter&, const int attr, const int text_start_x,
                              const int x1, const int y1, const int row_count);
         void sanitize_connections(const Gtk::TreeIter& prim_iter);
         void on_primitive_selection_changed();
@@ -200,8 +237,11 @@ private:
         SPFilterPrimitive* _drag_prim;
         sigc::signal<void> _signal_primitive_changed;
         sigc::connection _scroll_connection;
-        int _autoscroll;
+        int _autoscroll_y;
+        int _autoscroll_x;
         std::auto_ptr<Inkscape::XML::SignalObserver> _observer;
+        int _input_type_width;
+        int _input_type_height;
     };
 
     void init_settings_widgets();
@@ -242,6 +282,7 @@ private:
     class Settings;
     class MatrixAttr;
     class ColorMatrixValues;
+    class ComponentTransferValues;
     class LightSourceControl;
     Settings* _settings;
     Settings* _filter_general_settings;
@@ -250,6 +291,9 @@ private:
     // Color Matrix
     ColorMatrixValues* _color_matrix_values;
 
+    // Component Transfer
+    ComponentTransferValues* _component_transfer_values;
+
     // Convolve Matrix
     MatrixAttr* _convolve_matrix;
     DualSpinButton* _convolve_order;
@@ -257,7 +301,6 @@ private:
 
     // For controlling setting sensitivity
     Gtk::Widget* _k1, *_k2, *_k3, *_k4;
-    Gtk::Widget* _ct_table, *_ct_slope, *_ct_intercept, *_ct_amplitude, *_ct_exponent, *_ct_offset;
 
     // To prevent unwanted signals
     bool _locked;
@@ -287,4 +330,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

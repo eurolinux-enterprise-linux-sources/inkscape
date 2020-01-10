@@ -1,5 +1,6 @@
-/** @file
- * @brief Object for managing a set of dialogs, including their signals and
+/**
+ * @file
+ * Object for managing a set of dialogs, including their signals and
  *        construction/caching/destruction of them.
  */
 /* Authors:
@@ -31,9 +32,10 @@
 #include "ui/dialog/livepatheffect-editor.h"
 #include "ui/dialog/memory.h"
 #include "ui/dialog/messages.h"
-#include "ui/dialog/scriptdialog.h"
+#include "ui/dialog/symbols.h"
 #include "ui/dialog/tile.h"
 #include "ui/dialog/tracedialog.h"
+#include "ui/dialog/pixelartdialog.h"
 #include "ui/dialog/transformation.h"
 #include "ui/dialog/undo-history.h"
 #include "ui/dialog/panel-dialog.h"
@@ -42,11 +44,16 @@
 #include "ui/dialog/floating-behavior.h"
 #include "ui/dialog/dock-behavior.h"
 //#include "ui/dialog/print-colors-preview-dialog.h"
+#include "util/ege-appear-time-tracker.h"
 #include "preferences.h"
-
-#ifdef ENABLE_SVG_FONTS
+#include "ui/dialog/object-attributes.h"
+#include "ui/dialog/object-properties.h"
+#include "ui/dialog/text-edit.h"
+#include "ui/dialog/spellcheck.h"
+#include "ui/dialog/export.h"
+#include "ui/dialog/xml-tree.h"
+#include "ui/dialog/clonetiler.h"
 #include "ui/dialog/svg-fonts-dialog.h"
-#endif // ENABLE_SVG_FONTS
 
 namespace Inkscape {
 namespace UI {
@@ -89,6 +96,9 @@ DialogManager::DialogManager() {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     int dialogs_type = prefs->getIntLimited("/options/dialogtype/value", DOCK, 0, 1);
 
+    // The preferences dialog is broken, the DockBehavior code resizes it's floating window to the smallest size
+    registerFactory("InkscapePreferences", &create<InkscapePreferences,  FloatingBehavior>);
+
     if (dialogs_type == FLOATING) {
         registerFactory("AlignAndDistribute",  &create<AlignAndDistribute,   FloatingBehavior>);
         registerFactory("DocumentMetadata",    &create<DocumentMetadata,     FloatingBehavior>);
@@ -99,22 +109,27 @@ DialogManager::DialogManager() {
         registerFactory("Find",                &create<Find,                 FloatingBehavior>);
         registerFactory("Glyphs",              &create<GlyphsPanel,          FloatingBehavior>);
         registerFactory("IconPreviewPanel",    &create<IconPreviewPanel,     FloatingBehavior>);
-        registerFactory("InkscapePreferences", &create<InkscapePreferences,  FloatingBehavior>);
         registerFactory("LayersPanel",         &create<LayersPanel,          FloatingBehavior>);
         registerFactory("LivePathEffect",      &create<LivePathEffectEditor, FloatingBehavior>);
         registerFactory("Memory",              &create<Memory,               FloatingBehavior>);
         registerFactory("Messages",            &create<Messages,             FloatingBehavior>);
+        registerFactory("ObjectAttributes",    &create<ObjectAttributes,     FloatingBehavior>);
+        registerFactory("ObjectProperties",    &create<ObjectProperties,     FloatingBehavior>);
 //        registerFactory("PrintColorsPreviewDialog",      &create<PrintColorsPreviewDialog,       FloatingBehavior>);
-        registerFactory("Script",              &create<ScriptDialog,         FloatingBehavior>);
-#ifdef ENABLE_SVG_FONTS
         registerFactory("SvgFontsDialog",      &create<SvgFontsDialog,       FloatingBehavior>);
-#endif
         registerFactory("Swatches",            &create<SwatchesPanel,        FloatingBehavior>);
-        registerFactory("TileDialog",          &create<TileDialog,           FloatingBehavior>);
+        registerFactory("TileDialog",          &create<ArrangeDialog,        FloatingBehavior>);
+        registerFactory("Symbols",             &create<SymbolsDialog,        FloatingBehavior>);
         registerFactory("Trace",               &create<TraceDialog,          FloatingBehavior>);
+        registerFactory("PixelArt",            &create<PixelArtDialog,       FloatingBehavior>);
         registerFactory("Transformation",      &create<Transformation,       FloatingBehavior>);
         registerFactory("UndoHistory",         &create<UndoHistory,          FloatingBehavior>);
         registerFactory("InputDevices",        &create<InputDialog,          FloatingBehavior>);
+        registerFactory("TextFont",            &create<TextEdit,             FloatingBehavior>);
+        registerFactory("SpellCheck",          &create<SpellCheck,           FloatingBehavior>);
+        registerFactory("Export",              &create<Export,               FloatingBehavior>);
+        registerFactory("CloneTiler",          &create<CloneTiler,           FloatingBehavior>);
+        registerFactory("XmlTree",             &create<XmlTree,              FloatingBehavior>);
 
     } else {
 
@@ -127,22 +142,27 @@ DialogManager::DialogManager() {
         registerFactory("Find",                &create<Find,                 DockBehavior>);
         registerFactory("Glyphs",              &create<GlyphsPanel,          DockBehavior>);
         registerFactory("IconPreviewPanel",    &create<IconPreviewPanel,     DockBehavior>);
-        registerFactory("InkscapePreferences", &create<InkscapePreferences,  DockBehavior>);
         registerFactory("LayersPanel",         &create<LayersPanel,          DockBehavior>);
         registerFactory("LivePathEffect",      &create<LivePathEffectEditor, DockBehavior>);
         registerFactory("Memory",              &create<Memory,               DockBehavior>);
         registerFactory("Messages",            &create<Messages,             DockBehavior>);
+        registerFactory("ObjectAttributes",    &create<ObjectAttributes,     DockBehavior>);
+        registerFactory("ObjectProperties",    &create<ObjectProperties,     DockBehavior>);
 //        registerFactory("PrintColorsPreviewDialog",      &create<PrintColorsPreviewDialog,       DockBehavior>);
-        registerFactory("Script",              &create<ScriptDialog,         DockBehavior>);
-#ifdef ENABLE_SVG_FONTS
         registerFactory("SvgFontsDialog",      &create<SvgFontsDialog,       DockBehavior>);
-#endif
         registerFactory("Swatches",            &create<SwatchesPanel,        DockBehavior>);
-        registerFactory("TileDialog",          &create<TileDialog,           DockBehavior>);
+        registerFactory("TileDialog",          &create<ArrangeDialog,        DockBehavior>);
+        registerFactory("Symbols",             &create<SymbolsDialog,        DockBehavior>);
         registerFactory("Trace",               &create<TraceDialog,          DockBehavior>);
+        registerFactory("PixelArt",            &create<PixelArtDialog,       DockBehavior>);
         registerFactory("Transformation",      &create<Transformation,       DockBehavior>);
         registerFactory("UndoHistory",         &create<UndoHistory,          DockBehavior>);
         registerFactory("InputDevices",        &create<InputDialog,          DockBehavior>);
+        registerFactory("TextFont",            &create<TextEdit,             DockBehavior>);
+        registerFactory("SpellCheck",          &create<SpellCheck,           DockBehavior>);
+        registerFactory("Export",              &create<Export,               DockBehavior>);
+        registerFactory("CloneTiler",          &create<CloneTiler,           DockBehavior>);
+        registerFactory("XmlTree",             &create<XmlTree,              DockBehavior>);
 
     }
 }
@@ -224,17 +244,31 @@ Dialog *DialogManager::getDialog(GQuark name) {
 /**
  * Shows the named dialog, creating it if necessary.
  */
-void DialogManager::showDialog(gchar const *name) {
-    showDialog(g_quark_from_string(name));
+void DialogManager::showDialog(gchar const *name, bool grabfocus) {
+    showDialog(g_quark_from_string(name), grabfocus);
 }
 
 /**
  * Shows the named dialog, creating it if necessary.
  */
-void DialogManager::showDialog(GQuark name) {
-    Dialog *dialog=getDialog(name);
-    if (dialog) {
+void DialogManager::showDialog(GQuark name, bool /*grabfocus*/) {
+    bool wantTiming = Inkscape::Preferences::get()->getBool("/dialogs/debug/trackAppear", false);
+    GTimer *timer = (wantTiming) ? g_timer_new() : 0; // if needed, must be created/started before getDialog()
+    Dialog *dialog = getDialog(name);
+    if ( dialog ) {
+        if ( wantTiming ) {
+            gchar const * nameStr = g_quark_to_string(name);
+            ege::AppearTimeTracker *tracker = new ege::AppearTimeTracker(timer, dialog->gobj(), nameStr);
+            tracker->setAutodelete(true);
+            timer = 0;
+        }
+        // should check for grabfocus, but lp:1348927 prevents it
         dialog->present();
+    }
+
+    if ( timer ) {
+        g_timer_destroy(timer);
+        timer = 0;
     }
 }
 
@@ -251,4 +285,4 @@ void DialogManager::showDialog(GQuark name) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

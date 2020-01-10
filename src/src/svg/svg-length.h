@@ -21,6 +21,7 @@
 class SVGLength
 {
 public:
+    SVGLength();
 
     enum Unit {
         NONE,
@@ -31,15 +32,23 @@ public:
         CM,
         INCH,
         FOOT,
+        MITRE,
         EM,
         EX,
         PERCENT,
         LAST_UNIT = PERCENT
     };
 
+    // The object's value is valid / exists in SVG.
     bool _set;
+
+    // The unit of value.
     Unit unit;
+
+    // The value of this SVGLength as found in the SVG.
     float value;
+
+    // The value in pixels (value * pixels/unit).
     float computed;
 
     float operator=(float v) {
@@ -68,4 +77,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

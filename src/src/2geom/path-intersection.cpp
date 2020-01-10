@@ -28,7 +28,7 @@ int winding(Path const &path, Point p) {
     if(iter == path.end_closed()) { return 0; }
     if(iter->initialPoint()[Y]!=p[Y])   { start = iter; break; }
     if(iter->finalPoint()[Y]!=p[Y])     { start = iter; break; }
-    if(iter->boundsFast()->height()!=0.){ start = iter; break; }
+    if(iter->boundsFast().height()!=0.){ start = iter; break; }
   }
   int wind = 0;
   unsigned cnt = 0;
@@ -39,18 +39,18 @@ int winding(Path const &path, Point p) {
     cnt++;
     if(cnt > path.size()) return wind;  //some bug makes this required
     starting = false;
-    Rect bounds = *(iter->boundsFast());
+    Rect bounds = (iter->boundsFast());
     Coord x = p[X], y = p[Y];
-
+    
     if(x > bounds.right() || !bounds[Y].contains(y)) continue; //ray doesn't intersect box
-
+    
     Point final = iter->finalPoint();
     Point initial = iter->initialPoint();
     Cmp final_to_ray = cmp(final[Y], y);
     Cmp initial_to_ray = cmp(initial[Y], y);
-
+    
     // if y is included, these will have opposite values, giving order.
-    Cmp c = cmp(final_to_ray, initial_to_ray);
+    Cmp c = cmp(final_to_ray, initial_to_ray); 
     if(x < bounds.left()) {
         // ray goes through bbox
         // winding delta determined by position of endpoints
@@ -70,10 +70,10 @@ int winding(Path const &path, Point p) {
         //Traverse segments until it breaks away from y
         //99.9% of the time this will happen the first go
         Path::const_iterator next = iter;
-        next++;
-        for(; ; next++) {
+        ++next;
+        for(; ; ++next) {
             if(next == path.end_closed()) next = path.begin();
-            Rect bnds = *(next->boundsFast());
+            Rect bnds = (next->boundsFast());
             //TODO: X considerations
             if(bnds.height() > 0) {
                 //It has diverged
@@ -100,7 +100,7 @@ int winding(Path const &path, Point p) {
         //Looks like it looped, which means everything's flat
         return 0;
     }
-
+    
     cont:(void)0;
   }
   return wind;
@@ -113,11 +113,12 @@ int winding(Path const &path, Point p) {
  */
 bool path_direction(Path const &p) {
     if(p.empty()) return false;
+
+    /*goto doh;
     //could probably be more efficient, but this is a quick job
     double y = p.initialPoint()[Y];
     double x = p.initialPoint()[X];
     Cmp res = cmp(p[0].finalPoint()[Y], y);
-    goto doh;
     for(unsigned i = 1; i < p.size(); i++) {
         Cmp final_to_ray = cmp(p[i].finalPoint()[Y], y);
         Cmp initial_to_ray = cmp(p[i].initialPoint()[Y], y);
@@ -135,10 +136,10 @@ bool path_direction(Path const &p) {
         } else if(final_to_ray == EQUAL_TO) goto doh;
     }
     return res < 0;
-
-    doh:
+    
+    doh:*/
         //Otherwise fallback on area
-
+        
         Piecewise<D2<SBasis> > pw = p.toPwSb();
         double area;
         Point centre;
@@ -163,20 +164,35 @@ void append(T &a, T const &b) {
 bool
 linear_intersect(Point A0, Point A1, Point B0, Point B1,
                  double &tA, double &tB, double &det) {
-    // kramers rule as cross products
+    bool both_lines_non_zero = (!are_near(A0, A1)) && (!are_near(B0, B1));
+
+    // Cramer's rule as cross products
     Point Ad = A1 - A0,
           Bd = B1 - B0,
            d = B0 - A0;
     det = cross(Ad, Bd);
-    if( 1.0 + det == 1.0 )
-        return false;
-    else
-    {
-        double detinv = 1.0 / det;
-        tA = cross(d, Bd) * detinv;
-        tB = cross(d, Ad) * detinv;
-        return tA >= 0. && tA <= 1. && tB >= 0. && tB <= 1.;
+
+    double det_rel = det; // Calculate the determinant of the normalized vectors
+    if (both_lines_non_zero) {
+        det_rel /= Ad.length();
+        det_rel /= Bd.length();
     }
+
+    if( fabs(det_rel) < 1e-12 ) { // If the cross product is NEARLY zero,
+        // Then one of the linesegments might have length zero
+        if (both_lines_non_zero) {
+            // If that's not the case, then we must have either:
+            // - parallel lines, with no intersections, or
+            // - coincident lines, with an infinite number of intersections
+            // Either is quite useless, so we'll just bail out
+            return false;
+        } // Else, one of the linesegments is zero, and we might still be able to calculate a single intersection point
+    } // Else we haven't bailed out, and we'll try to calculate the intersections
+
+    double detinv = 1.0 / det;
+    tA = cross(d, Bd) * detinv;
+    tB = cross(d, Ad) * detinv;
+    return (tA >= 0.) && (tA <= 1.) && (tB >= 0.) && (tB <= 1.);
 }
 
 
@@ -214,39 +230,39 @@ intersect_polish_f (const gsl_vector * x, void *params,
 {
     const double x0 = gsl_vector_get (x, 0);
     const double x1 = gsl_vector_get (x, 1);
-
-    Geom::Point dx = ((struct rparams *) params)->A(x0) -
+     
+    Geom::Point dx = ((struct rparams *) params)->A(x0) - 
         ((struct rparams *) params)->B(x1);
-
+     
     gsl_vector_set (f, 0, dx[0]);
     gsl_vector_set (f, 1, dx[1]);
-
+     
     return GSL_SUCCESS;
 }
 #endif
 
-static void
-intersect_polish_root (Curve const &A, double &s,
-                       Curve const &B, double &t) {
+static void 
+intersect_polish_root (Curve const &A, double &s, Curve const &B, double &t)
+{
     std::vector<Point> as, bs;
     as = A.pointAndDerivatives(s, 2);
     bs = B.pointAndDerivatives(t, 2);
     Point F = as[0] - bs[0];
     double best = dot(F, F);
-
+    
     for(int i = 0; i < 4; i++) {
-
+        
         /**
            we want to solve
            J*(x1 - x0) = f(x0)
-
+           
            |dA(s)[0]  -dB(t)[0]|  (X1 - X0) = A(s) - B(t)
-           |dA(s)[1]  -dB(t)[1]|
+           |dA(s)[1]  -dB(t)[1]| 
         **/
 
         // We're using the standard transformation matricies, which is numerically rather poor.  Much better to solve the equation using elimination.
 
-        Matrix jack(as[1][0], as[1][1],
+        Affine jack(as[1][0], as[1][1],
                     -bs[1][0], -bs[1][1],
                     0, 0);
         Point soln = (F)*jack.inverse();
@@ -257,7 +273,7 @@ intersect_polish_root (Curve const &A, double &s,
         else if (ns>1) ns=1;
         if (nt<0) nt=0;
         else if (nt>1) nt=1;
-
+        
         as = A.pointAndDerivatives(ns, 2);
         bs = B.pointAndDerivatives(nt, 2);
         F = as[0] - bs[0];
@@ -272,38 +288,38 @@ intersect_polish_root (Curve const &A, double &s,
 
 #ifdef HAVE_GSL
     if(0) { // the GSL version is more accurate, but taints this with GPL
+        int status;
+        size_t iter = 0;
         const size_t n = 2;
         struct rparams p = {A, B};
         gsl_multiroot_function f = {&intersect_polish_f, n, &p};
-
+     
         double x_init[2] = {s, t};
         gsl_vector *x = gsl_vector_alloc (n);
-
+     
         gsl_vector_set (x, 0, x_init[0]);
         gsl_vector_set (x, 1, x_init[1]);
-
+     
         const gsl_multiroot_fsolver_type *T = gsl_multiroot_fsolver_hybrids;
         gsl_multiroot_fsolver *sol = gsl_multiroot_fsolver_alloc (T, 2);
         gsl_multiroot_fsolver_set (sol, &f, x);
-
-        int status = 0;
-        size_t iter = 0;
+     
         do
         {
             iter++;
             status = gsl_multiroot_fsolver_iterate (sol);
-
+     
             if (status)   /* check if solver is stuck */
                 break;
-
+     
             status =
                 gsl_multiroot_test_residual (sol->f, 1e-12);
         }
         while (status == GSL_CONTINUE && iter < 1000);
-
+    
         s = gsl_vector_get (sol->x, 0);
         t = gsl_vector_get (sol->x, 1);
-
+    
         gsl_multiroot_fsolver_free (sol);
         gsl_vector_free (x);
     }
@@ -315,7 +331,7 @@ intersect_polish_root (Curve const &A, double &s,
  * It passes in the curves, time intervals, and keeps track of depth, while
  * returning the results through the Crossings parameter.
  */
-void pair_intersect(Curve const & A, double Al, double Ah,
+void pair_intersect(Curve const & A, double Al, double Ah, 
                     Curve const & B, double Bl, double Bh,
                     Crossings &ret,  unsigned depth = 0) {
    // std::cout << depth << "(" << Al << ", " << Ah << ")\n";
@@ -324,15 +340,15 @@ void pair_intersect(Curve const & A, double Al, double Ah,
 
     OptRect Br = B.boundsLocal(Interval(Bl, Bh));
     if (!Br) return;
-
+    
     if(! Ar->intersects(*Br)) return;
-
+    
     //Checks the general linearity of the function
-    if((depth > 12)) { // || (A.boundsLocal(Interval(Al, Ah), 1).maxExtent() < 0.1
+    if((depth > 12)) { // || (A.boundsLocal(Interval(Al, Ah), 1).maxExtent() < 0.1 
                     //&&  B.boundsLocal(Interval(Bl, Bh), 1).maxExtent() < 0.1)) {
         double tA, tB, c;
-        if(linear_intersect(A.pointAt(Al), A.pointAt(Ah),
-                            B.pointAt(Bl), B.pointAt(Bh),
+        if(linear_intersect(A.pointAt(Al), A.pointAt(Ah), 
+                            B.pointAt(Bl), B.pointAt(Bh), 
                             tA, tB, c)) {
             tA = tA * (Ah - Al) + Al;
             tB = tB * (Bh - Bl) + Bl;
@@ -385,8 +401,8 @@ void mono_intersect(Curve const &A, double Al, double Ah,
 
     if(depth > 12 || (Ar.maxExtent() < tol && Ar.maxExtent() < tol)) {
         double tA, tB, c;
-        if(linear_intersect(A.pointAt(Al), A.pointAt(Ah),
-                            B.pointAt(Bl), B.pointAt(Bh),
+        if(linear_intersect(A.pointAt(Al), A.pointAt(Ah), 
+                            B.pointAt(Bl), B.pointAt(Bh), 
                             tA, tB, c)) {
             tA = tA * (Ah - Al) + Al;
             tB = tB * (Bh - Bl) + Bl;
@@ -483,7 +499,7 @@ std::vector<double> offset_doubles(std::vector<double> const &x, double offs) {
 std::vector<double> path_mono_splits(Path const &p) {
     std::vector<double> ret;
     if(p.empty()) return ret;
-
+    
     bool pdx=2, pdy=2;  //Previous derivative direction
     for(unsigned i = 0; i < p.size(); i++) {
         std::vector<double> spl = offset_doubles(curve_mono_splits(p[i]), i);
@@ -502,7 +518,7 @@ std::vector<double> path_mono_splits(Path const &p) {
 }
 
 /**
- * Applies path_mono_splits to multiple paths, and returns the results such that
+ * Applies path_mono_splits to multiple paths, and returns the results such that 
  * time-set i corresponds to Path i.
  */
 std::vector<std::vector<double> > paths_mono_splits(std::vector<Path> const &ps) {
@@ -541,14 +557,14 @@ CrossingSet MonoCrosser::crossings(std::vector<Path> const &a, std::vector<Path>
     if(b.empty()) return CrossingSet(a.size(), Crossings());
     CrossingSet results(a.size() + b.size(), Crossings());
     if(a.empty()) return results;
-
+    
     std::vector<std::vector<double> > splits_a = paths_mono_splits(a), splits_b = paths_mono_splits(b);
     std::vector<std::vector<Rect> > bounds_a = split_bounds(a, splits_a), bounds_b = split_bounds(b, splits_b);
-
-    std::vector<Rect> bounds_a_union, bounds_b_union;
+    
+    std::vector<Rect> bounds_a_union, bounds_b_union; 
     for(unsigned i = 0; i < bounds_a.size(); i++) bounds_a_union.push_back(union_list(bounds_a[i]));
     for(unsigned i = 0; i < bounds_b.size(); i++) bounds_b_union.push_back(union_list(bounds_b[i]));
-
+    
     std::vector<std::vector<unsigned> > cull = sweep_bounds(bounds_a_union, bounds_b_union);
     Crossings n;
     for(unsigned i = 0; i < cull.size(); i++) {
@@ -556,7 +572,7 @@ CrossingSet MonoCrosser::crossings(std::vector<Path> const &a, std::vector<Path>
             unsigned j = cull[i][jx];
             unsigned jc = j + a.size();
             Crossings res;
-
+            
             //Sweep of the monotonic portions
             std::vector<std::vector<unsigned> > cull2 = sweep_bounds(bounds_a[i], bounds_b[j]);
             for(unsigned k = 0; k < cull2.size(); k++) {
@@ -567,9 +583,9 @@ CrossingSet MonoCrosser::crossings(std::vector<Path> const &a, std::vector<Path>
                               res, .1);
                 }
             }
-
+            
             for(unsigned k = 0; k < res.size(); k++) { res[k].a = i; res[k].b = jc; }
-
+            
             merge_crossings(results[i], res, i);
             merge_crossings(results[i], res, jc);
         }
@@ -583,22 +599,22 @@ CrossingSet MonoCrosser::crossings(std::vector<Path> const &a, std::vector<Path>
 CrossingSet crossings_among(std::vector<Path> const &p) {
     CrossingSet results(p.size(), Crossings());
     if(p.empty()) return results;
-
+    
     std::vector<std::vector<double> > splits = paths_mono_splits(p);
     std::vector<std::vector<Rect> > prs = split_bounds(p, splits);
     std::vector<Rect> rs;
     for(unsigned i = 0; i < prs.size(); i++) rs.push_back(union_list(prs[i]));
-
+    
     std::vector<std::vector<unsigned> > cull = sweep_bounds(rs);
-
+    
     //we actually want to do the self-intersections, so add em in:
     for(unsigned i = 0; i < cull.size(); i++) cull[i].push_back(i);
-
+    
     for(unsigned i = 0; i < cull.size(); i++) {
         for(unsigned jx = 0; jx < cull[i].size(); jx++) {
             unsigned j = cull[i][jx];
             Crossings res;
-
+            
             //Sweep of the monotonic portions
             std::vector<std::vector<unsigned> > cull2 = sweep_bounds(prs[i], prs[j]);
             for(unsigned k = 0; k < cull2.size(); k++) {
@@ -609,14 +625,14 @@ CrossingSet crossings_among(std::vector<Path> const &p) {
                               res, .1);
                 }
             }
-
+            
             for(unsigned k = 0; k < res.size(); k++) { res[k].a = i; res[k].b = j; }
-
+            
             merge_crossings(results[i], res, i);
             merge_crossings(results[j], res, j);
         }
     }
-
+    
     return results;
 }
 */
@@ -635,7 +651,7 @@ Crossings curve_self_crossings(Curve const &a) {
 }
 
 /*
-void mono_curve_intersect(Curve const & A, double Al, double Ah,
+void mono_curve_intersect(Curve const & A, double Al, double Ah, 
                           Curve const & B, double Bl, double Bh,
                           Crossings &ret,  unsigned depth=0) {
    // std::cout << depth << "(" << Al << ", " << Ah << ")\n";
@@ -643,9 +659,9 @@ void mono_curve_intersect(Curve const & A, double Al, double Ah,
           B0 = B.pointAt(Bl), B1 = B.pointAt(Bh);
     //inline code that this implies? (without rect/interval construction)
     if(!Rect(A0, A1).intersects(Rect(B0, B1)) || A0 == A1 || B0 == B1) return;
-
+     
     //Checks the general linearity of the function
-    if((depth > 12) || (A.boundsLocal(Interval(Al, Ah), 1).maxExtent() < 0.1
+    if((depth > 12) || (A.boundsLocal(Interval(Al, Ah), 1).maxExtent() < 0.1 
                     &&  B.boundsLocal(Interval(Bl, Bh), 1).maxExtent() < 0.1)) {
         double tA, tB, c;
         if(linear_intersect(A0, A1, B0, B1, tA, tB, c)) {
@@ -705,7 +721,7 @@ Crossings path_self_crossings(Path const &p) {
         for(unsigned jx = 0; jx < cull[i].size(); jx++) {
             unsigned j = cull[i][jx];
             res.clear();
-
+            
             std::vector<std::vector<unsigned> > cull2 = sweep_bounds(bnds[i], bnds[j]);
             for(unsigned k = 0; k < cull2.size(); k++) {
                 for(unsigned lx = 0; lx < cull2[k].size(); lx++) {
@@ -713,7 +729,7 @@ Crossings path_self_crossings(Path const &p) {
                     mono_curve_intersect(p[i], spl[i][k-1], spl[i][k], p[j], spl[j][l-1], spl[j][l], res);
                 }
             }
-
+            
             //if(fabs(int(i)-j) == 1 || fabs(int(i)-j) == p.size()-1) {
                 Crossings res2;
                 for(unsigned k = 0; k < res.size(); k++) {
@@ -742,7 +758,7 @@ Crossings self_crossings(Path const &p) {
             unsigned j = cull[i][jx];
             res.clear();
             pair_intersect(p[i], 0, 1, p[j], 0, 1, res);
-
+            
             //if(fabs(int(i)-j) == 1 || fabs(int(i)-j) == p.size()-1) {
                 Crossings res2;
                 for(unsigned k = 0; k < res.size(); k++) {
@@ -767,9 +783,9 @@ void flip_crossings(Crossings &crs) {
 CrossingSet crossings_among(std::vector<Path> const &p) {
     CrossingSet results(p.size(), Crossings());
     if(p.empty()) return results;
-
+    
     SimpleCrosser cc;
-
+    
     std::vector<std::vector<unsigned> > cull = sweep_bounds(bounds(p));
     for(unsigned i = 0; i < cull.size(); i++) {
         Crossings res = self_crossings(p[i]);
@@ -779,7 +795,7 @@ CrossingSet crossings_among(std::vector<Path> const &p) {
         merge_crossings(results[i], res, i);
         for(unsigned jx = 0; jx < cull[i].size(); jx++) {
             unsigned j = cull[i][jx];
-
+            
             Crossings res = cc.crossings(p[i], p[j]);
             for(unsigned k = 0; k < res.size(); k++) { res[k].a = i; res[k].b = j; }
             merge_crossings(results[i], res, i);
@@ -800,4 +816,4 @@ CrossingSet crossings_among(std::vector<Path> const &p) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

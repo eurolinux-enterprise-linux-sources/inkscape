@@ -1,5 +1,5 @@
-#ifndef __SP_CANVAS_ACETATE_H__
-#define __SP_CANVAS_ACETATE_H__
+#ifndef SEEN_SP_CANVAS_ACETATE_H
+#define SEEN_SP_CANVAS_ACETATE_H
 
 /*
  * Infinite invisible canvas item
@@ -16,14 +16,14 @@
  */
 
 #include <glib.h>
-#include "display/sp-canvas.h"
+#include "display/sp-canvas-item.h"
 
 
 #define GNOME_TYPE_CANVAS_ACETATE (sp_canvas_acetate_get_type ())
-#define SP_CANVAS_ACETATE(obj) (GTK_CHECK_CAST ((obj), GNOME_TYPE_CANVAS_ACETATE, SPCanvasAcetate))
-#define SP_CANVAS_ACETATE_CLASS(klass) (GTK_CHECK_CLASS_CAST ((klass), GNOME_TYPE_CANVAS_ACETATE, SPCanvasAcetateClass))
-#define GNOME_IS_CANVAS_ACETATE(obj) (GTK_CHECK_TYPE ((obj), GNOME_TYPE_CANVAS_ACETATE))
-#define GNOME_IS_CANVAS_ACETATE_CLASS(klass) (GTK_CHECK_CLASS_TYPE ((klass), GNOME_TYPE_CANVAS_ACETATE))
+#define SP_CANVAS_ACETATE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), GNOME_TYPE_CANVAS_ACETATE, SPCanvasAcetate))
+#define SP_CANVAS_ACETATE_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), GNOME_TYPE_CANVAS_ACETATE, SPCanvasAcetateClass))
+#define GNOME_IS_CANVAS_ACETATE(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GNOME_TYPE_CANVAS_ACETATE))
+#define GNOME_IS_CANVAS_ACETATE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GNOME_TYPE_CANVAS_ACETATE))
 
 
 struct SPCanvasAcetate {
@@ -34,8 +34,19 @@ struct SPCanvasAcetateClass {
 	SPCanvasItemClass parent_class;
 };
 
-GtkType sp_canvas_acetate_get_type (void);
+GType sp_canvas_acetate_get_type (void);
 
 
 
-#endif
+#endif // SEEN_SP_CANVAS_ACETATE_H
+
+/*
+  Local Variables:
+  mode:c++
+  c-file-style:"stroustrup"
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
+  indent-tabs-mode:nil
+  fill-column:99
+  End:
+*/
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :

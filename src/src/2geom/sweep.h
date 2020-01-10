@@ -1,7 +1,7 @@
 /**
  * \file
- * \brief  \todo brief description
- *
+ * \brief Sweepline intersection of groups of rectangles
+ *//*
  * Authors:
  *      ? <?@?.?>
  * 
@@ -51,6 +51,9 @@ struct Event {
         if(x > other.x) return false;
         return closing < other.closing;
     }
+    bool operator==(Event const &other) const {
+        return other.x == x && other.ix == ix && other.closing == closing;
+    }
 };
 std::vector<std::vector<unsigned> >
 sweep_bounds(std::vector<Rect>, Dim2 dim = X);
@@ -73,4 +76,4 @@ std::vector<std::vector<unsigned> > fake_cull(unsigned a, unsigned b);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

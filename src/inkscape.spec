@@ -7,7 +7,7 @@
 
 Name:		inkscape
 Summary:	A Vector Drawing Application
-Version:	0.48.4
+Version:	0.91
 # Use release "0" so that distro-released versions will override ours.
 Release:	0
 License:	GPL
@@ -105,7 +105,7 @@ rm -rf %{buildroot}
 - Added SMP flags so I can build faster
 - Added static build capability
 
-* Sat Jul 17 2004 Bryce W. Harrington <bryce@bryceharrington.com>
+* Sat Jul 17 2004 Bryce W. Harrington <bryce@bryceharrington.org>
 - Removing _libdir and TODO, updating description
 
 * Thu May 01 2003 Christian Schaller <uraeus@gnome.org>

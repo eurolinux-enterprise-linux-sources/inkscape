@@ -13,8 +13,6 @@
  */
 #include <glib.h>
 
-#include "forward.h"
-#include "libnr/nr-point.h"
 #include <stddef.h>
 #include <sigc++/connection.h>
 #include <sigc++/functors/slot.h>
@@ -23,6 +21,12 @@
 
 
 class SPConnEnd;
+class SPCurve;
+class SPPath;
+class SPItem;
+class SPObject;
+
+namespace Geom { class Point; }
 namespace Inkscape {
 namespace XML {
 class Node;

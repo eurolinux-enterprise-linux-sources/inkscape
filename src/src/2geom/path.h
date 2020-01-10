@@ -1,12 +1,12 @@
 /**
  * \file
  * \brief  Path - Series of continuous curves
- *
+ *//*
  * Authors:
- * 		MenTaLguY <mental@rydia.net>
- * 		Marco Cecchetti <mrcekets at gmail.com>
+ *   MenTaLguY <mental@rydia.net>
+ *   Marco Cecchetti <mrcekets at gmail.com>
  * 
- * Copyright 2007-2008  authors
+ * Copyright 2007-2008 Authors
  *
  * This library is free software; you can redistribute it and/or
  * modify it either under the terms of the GNU Lesser General Public
@@ -32,23 +32,17 @@
  * the specific language governing rights and limitations.
  */
 
-
-
-
-#ifndef SEEN_GEOM_PATH_H
-#define SEEN_GEOM_PATH_H
-
-
-#include <boost/shared_ptr.hpp>
-#include <2geom/curve.h>
-#include <2geom/bezier-curve.h>
+#ifndef LIB2GEOM_SEEN_PATH_H
+#define LIB2GEOM_SEEN_PATH_H
 
 #include <iterator>
 #include <algorithm>
+#include <boost/shared_ptr.hpp>
+#include <2geom/curve.h>
+#include <2geom/bezier-curve.h>
+#include <2geom/transforms.h>
 
-
-namespace Geom
-{
+namespace Geom {
 
 class Path;
 
@@ -212,11 +206,14 @@ public:
   
   // Path &operator=(Path const &other) - use default assignment operator
 
+  /// \todo Add noexcept specifiers for C++11
   void swap(Path &other) {
-    std::swap(other.curves_, curves_);
-    std::swap(other.final_, final_);
-    std::swap(other.closed_, closed_);
+    using std::swap;
+    swap(other.curves_, curves_);
+    swap(other.final_, final_);
+    swap(other.closed_, closed_);
   }
+  friend inline void swap(Path &a, Path &b) { a.swap(b); }
 
   Curve const &operator[](unsigned i) const { return *get_curves()[i]; }
   Curve const &at_index(unsigned i) const { return *get_curves()[i]; }
@@ -291,13 +288,19 @@ public:
     return !( *this == other );
   }
 
-  Path operator*(Matrix const &m) const {
+  Path operator*(Affine const &m) const {
+    Path ret(*this);
+    ret *= m;
+    return ret;
+  }
+  Path operator*(Translate const &m) const { // specialization over Affine, for faster computation
     Path ret(*this);
     ret *= m;
     return ret;
   }
 
-  Path &operator*=(Matrix const &m);
+  Path &operator*=(Affine const &m);
+  Path &operator*=(Translate const &m); // specialization over Affine, for faster computation
   
   Point pointAt(double t) const 
   {
@@ -693,20 +696,8 @@ Coord nearest_point(Point const& p, Path const& c)
 
 }  // end namespace Geom
 
-namespace std {
 
-template <>
-inline void swap<Geom::Path>(Geom::Path &a, Geom::Path &b)
-{
-  a.swap(b);
-}
-
-}  // end namespace std
-
-#endif // SEEN_GEOM_PATH_H
-
-
-
+#endif // LIB2GEOM_SEEN_PATH_H
 
 /*
   Local Variables:
@@ -717,4 +708,4 @@ inline void swap<Geom::Path>(Geom::Path &a, Geom::Path &b)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

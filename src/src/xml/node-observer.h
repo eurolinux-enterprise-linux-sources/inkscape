@@ -20,7 +20,6 @@
 
 #include <glib.h>
 #include "util/share.h"
-#include "xml/xml-forward.h"
 
 #ifndef INK_UNUSED
 #define INK_UNUSED(x) ((void)(x))
@@ -28,6 +27,8 @@
 
 namespace Inkscape {
 namespace XML {
+
+class Node;
 
 /**
  * @brief Interface for XML node observers
@@ -160,4 +161,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

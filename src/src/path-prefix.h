@@ -22,6 +22,7 @@ extern "C" {
 
 #ifdef ENABLE_BINRELOC
 #  define INKSCAPE_APPICONDIR     BR_DATADIR( "/pixmaps" )
+#  define INKSCAPE_ATTRRELDIR     BR_DATADIR( "/inkscape/attributes" )
 #  define INKSCAPE_BINDDIR        BR_DATADIR( "/inkscape/bind" )
 #  define INKSCAPE_EXAMPLESDIR    BR_DATADIR( "/inkscape/examples" )
 #  define INKSCAPE_EXTENSIONDIR   BR_DATADIR( "/inkscape/extensions" )
@@ -33,6 +34,7 @@ extern "C" {
 #  define INKSCAPE_PALETTESDIR    BR_DATADIR( "/inkscape/palettes" )
 #  define INKSCAPE_PATTERNSDIR    BR_DATADIR( "/inkscape/patterns" )
 #  define INKSCAPE_SCREENSDIR     BR_DATADIR( "/inkscape/screens" )
+#  define INKSCAPE_SYMBOLSDIR     BR_DATADIR( "/inkscape/symbols" )
 #  define INKSCAPE_TUTORIALSDIR   BR_DATADIR( "/inkscape/tutorials" )
 #  define INKSCAPE_TEMPLATESDIR   BR_DATADIR( "/inkscape/templates" )
 #  define INKSCAPE_UIDIR          BR_DATADIR( "/inkscape/ui" )
@@ -43,6 +45,7 @@ extern "C" {
 #else
 #  ifdef WIN32
 #    define INKSCAPE_APPICONDIR   WIN32_DATADIR("pixmaps")
+#    define INKSCAPE_ATTRRELDIR   WIN32_DATADIR("share\\attributes")
 #    define INKSCAPE_BINDDIR      WIN32_DATADIR("share\\bind")
 #    define INKSCAPE_EXAMPLESDIR  WIN32_DATADIR("share\\examples")
 #    define INKSCAPE_EXTENSIONDIR WIN32_DATADIR("share\\extensions")
@@ -54,6 +57,7 @@ extern "C" {
 #    define INKSCAPE_PALETTESDIR  WIN32_DATADIR("share\\palettes")
 #    define INKSCAPE_PATTERNSDIR  WIN32_DATADIR("share\\patterns")
 #    define INKSCAPE_SCREENSDIR   WIN32_DATADIR("share\\screens")
+#    define INKSCAPE_SYMBOLSDIR   WIN32_DATADIR("share\\symbols")
 #    define INKSCAPE_TUTORIALSDIR WIN32_DATADIR("share\\tutorials")
 #    define INKSCAPE_TEMPLATESDIR WIN32_DATADIR("share\\templates")
 #    define INKSCAPE_UIDIR        WIN32_DATADIR("share\\ui")
@@ -62,27 +66,30 @@ extern "C" {
 #    define CREATE_PALETTESDIR    WIN32_DATADIR("create\\swatches")
 #    define CREATE_PATTERNSDIR    WIN32_DATADIR("create\\patterns\\vector")
 #  elif defined ENABLE_OSX_APP_LOCATIONS
-#    define INKSCAPE_APPICONDIR   "Contents/Resources/pixmaps"
-#    define INKSCAPE_BINDDIR      "Contents/Resources/bind"
-#    define INKSCAPE_EXAMPLESDIR  "Contents/Resources/examples"
-#    define INKSCAPE_EXTENSIONDIR "Contents/Resources/extensions"
-#    define INKSCAPE_FILTERDIR    "Contents/Resources/filters"
-#    define INKSCAPE_GRADIENTSDIR "Contents/Resources/gradients"
-#    define INKSCAPE_KEYSDIR      "Contents/Resources/keys"
-#    define INKSCAPE_PIXMAPDIR    "Contents/Resources/icons"
-#    define INKSCAPE_MARKERSDIR   "Contents/Resources/markers"
-#    define INKSCAPE_PALETTESDIR  "Contents/Resources/palettes"
-#    define INKSCAPE_PATTERNSDIR  "Contents/Resources/patterns"
-#    define INKSCAPE_SCREENSDIR   "Contents/Resources/screens"
-#    define INKSCAPE_TUTORIALSDIR "Contents/Resources/tutorials"
-#    define INKSCAPE_TEMPLATESDIR "Contents/Resources/templates"
-#    define INKSCAPE_UIDIR        "Contents/Resources/ui"
+#    define INKSCAPE_APPICONDIR   "Contents/Resources/share/pixmaps"
+#    define INKSCAPE_ATTRRELDIR   "Contents/Resources/share/inkscape/attributes"
+#    define INKSCAPE_BINDDIR      "Contents/Resources/share/inkscape/bind"
+#    define INKSCAPE_EXAMPLESDIR  "Contents/Resources/share/inkscape/examples"
+#    define INKSCAPE_EXTENSIONDIR "Contents/Resources/share/inkscape/extensions"
+#    define INKSCAPE_FILTERDIR    "Contents/Resources/share/inkscape/filters"
+#    define INKSCAPE_GRADIENTSDIR "Contents/Resources/share/inkscape/gradients"
+#    define INKSCAPE_KEYSDIR      "Contents/Resources/share/inkscape/keys"
+#    define INKSCAPE_PIXMAPDIR    "Contents/Resources/share/inkscape/icons"
+#    define INKSCAPE_MARKERSDIR   "Contents/Resources/share/inkscape/markers"
+#    define INKSCAPE_PALETTESDIR  "Contents/Resources/share/inkscape/palettes"
+#    define INKSCAPE_PATTERNSDIR  "Contents/Resources/share/inkscape/patterns"
+#    define INKSCAPE_SCREENSDIR   "Contents/Resources/share/inkscape/screens"
+#    define INKSCAPE_SYMBOLSDIR   "Contents/Resources/share/inkscape/symbols"
+#    define INKSCAPE_TUTORIALSDIR "Contents/Resources/share/inkscape/tutorials"
+#    define INKSCAPE_TEMPLATESDIR "Contents/Resources/share/inkscape/templates"
+#    define INKSCAPE_UIDIR        "Contents/Resources/share/inkscape/ui"
 //CREATE V0.1 support
 #    define CREATE_GRADIENTSDIR  "/Library/Application Support/create/gradients/gimp"
 #    define CREATE_PALETTESDIR   "/Library/Application Support/create/swatches"
 #    define CREATE_PATTERNSDIR   "/Library/Application Support/create/patterns/vector"
 #  else
 #    define INKSCAPE_APPICONDIR   INKSCAPE_DATADIR "/pixmaps"
+#    define INKSCAPE_ATTRRELDIR   INKSCAPE_DATADIR "/inkscape/attributes"
 #    define INKSCAPE_BINDDIR      INKSCAPE_DATADIR "/inkscape/bind"
 #    define INKSCAPE_EXAMPLESDIR  INKSCAPE_DATADIR "/inkscape/examples"
 #    define INKSCAPE_EXTENSIONDIR INKSCAPE_DATADIR "/inkscape/extensions"
@@ -94,6 +101,7 @@ extern "C" {
 #    define INKSCAPE_PALETTESDIR  INKSCAPE_DATADIR "/inkscape/palettes"
 #    define INKSCAPE_PATTERNSDIR  INKSCAPE_DATADIR "/inkscape/patterns"
 #    define INKSCAPE_SCREENSDIR   INKSCAPE_DATADIR "/inkscape/screens"
+#    define INKSCAPE_SYMBOLSDIR   INKSCAPE_DATADIR "/inkscape/symbols"
 #    define INKSCAPE_TUTORIALSDIR INKSCAPE_DATADIR "/inkscape/tutorials"
 #    define INKSCAPE_TEMPLATESDIR INKSCAPE_DATADIR "/inkscape/templates"
 #    define INKSCAPE_UIDIR        INKSCAPE_DATADIR "/inkscape/ui"

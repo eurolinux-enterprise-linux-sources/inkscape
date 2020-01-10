@@ -1,4 +1,4 @@
-/** \file
+/*
  * Per-desktop selection container
  *
  * Authors:
@@ -6,6 +6,7 @@
  *   MenTaLguY <mental@rydia.net>
  *   bulia byak <buliabyak@users.sf.net>
  *   Andrius R. <knutux@gmail.com>
+ *   Abhishek Sharma
  *
  * Copyright (C)      2006 Andrius R.
  * Copyright (C) 2004-2005 MenTaLguY
@@ -20,12 +21,12 @@
 #endif
 #include "macros.h"
 #include "inkscape-private.h"
-#include "desktop.h"
-#include "desktop-handles.h"
 #include "document.h"
+#include "layer-model.h"
 #include "selection.h"
-#include "helper/recthull.h"
+#include <2geom/rect.h>
 #include "xml/repr.h"
+#include "preferences.h"
 
 #include "sp-shape.h"
 #include "sp-path.h"
@@ -40,10 +41,11 @@
 
 namespace Inkscape {
 
-Selection::Selection(SPDesktop *desktop) :
+Selection::Selection(LayerModel *layers, SPDesktop *desktop) :
     _objs(NULL),
     _reprs(NULL),
     _items(NULL),
+    _layers(layers),
     _desktop(desktop),
     _selection_context(NULL),
     _flags(0),
@@ -53,7 +55,7 @@ Selection::Selection(SPDesktop *desktop) :
 
 Selection::~Selection() {
     _clear();
-    _desktop = NULL;
+    _layers = NULL;
     if (_idle) {
         g_source_remove(_idle);
         _idle = 0;
@@ -94,7 +96,7 @@ void Selection::_emitModified(guint flags) {
 void Selection::_emitChanged(bool persist_selection_context/* = false */) {
     if (persist_selection_context) {
         if (NULL == _selection_context) {
-            _selection_context = desktop()->currentLayer();
+            _selection_context = _layers->currentLayer();
             sp_object_ref(_selection_context, NULL);
             _context_release_connection = _selection_context->connectRelease(sigc::mem_fun(*this, &Selection::_releaseContext));
         }
@@ -137,7 +139,7 @@ void Selection::_clear() {
 SPObject *Selection::activeContext() {
     if (NULL != _selection_context)
         return _selection_context;
-    return desktop()->currentLayer();
+    return _layers->currentLayer();
     }
 
 bool Selection::includes(SPObject *obj) const {
@@ -152,6 +154,7 @@ bool Selection::includes(SPObject *obj) const {
 void Selection::add(SPObject *obj, bool persist_selection_context/* = false */) {
     g_return_if_fail(obj != NULL);
     g_return_if_fail(SP_IS_OBJECT(obj));
+    g_return_if_fail(obj->document != NULL);
 
     if (includes(obj)) {
         return;
@@ -235,15 +238,11 @@ void Selection::_remove(SPObject *obj) {
 }
 
 void Selection::setList(GSList const *list) {
-    _clear();
-
-    if ( list != NULL ) {
-        for ( GSList const *iter = list ; iter != NULL ; iter = iter->next ) {
-            _add(reinterpret_cast<SPObject *>(iter->data));
-        }
-    }
-
-    _emitChanged();
+    // Clear and add, or just clear with emit.
+    if (list != NULL) {
+        _clear();
+        addList(list);
+    } else clear();
 }
 
 void Selection::addList(GSList const *list) {
@@ -255,9 +254,7 @@ void Selection::addList(GSList const *list) {
 
     for ( GSList const *iter = list ; iter != NULL ; iter = iter->next ) {
         SPObject *obj = reinterpret_cast<SPObject *>(iter->data);
-        if (includes(obj)) {
-            continue;
-        }
+        if (includes(obj)) continue;
         _add (obj);
     }
 
@@ -307,7 +304,7 @@ GSList const *Selection::reprList() {
 
     for ( GSList const *iter=itemList() ; iter != NULL ; iter = iter->next ) {
         SPObject *obj=reinterpret_cast<SPObject *>(iter->data);
-        _reprs = g_slist_prepend(_reprs, SP_OBJECT_REPR(obj));
+        _reprs = g_slist_prepend(_reprs, obj->getRepr());
     }
     _reprs = g_slist_reverse(_reprs);
 
@@ -327,11 +324,11 @@ std::list<Persp3D *> const Selection::perspList() {
 std::list<SPBox3D *> const Selection::box3DList(Persp3D *persp) {
     std::list<SPBox3D *> boxes;
     if (persp) {
-        SPBox3D *box;
         for (std::list<SPBox3D *>::iterator i = _3dboxes.begin(); i != _3dboxes.end(); ++i) {
-            box = *i;
-            if (persp == box3d_get_perspective(box))
+            SPBox3D *box = *i;
+            if (persp == box3d_get_perspective(box)) {
                 boxes.push_back(box);
+            }
         }
     } else {
         boxes = _3dboxes;
@@ -356,89 +353,122 @@ SPItem *Selection::singleItem() {
     }
 }
 
-Inkscape::XML::Node *Selection::singleRepr() {
-    SPObject *obj=single();
-    return obj ? SP_OBJECT_REPR(obj) : NULL;
+SPItem *Selection::smallestItem(Selection::CompareSize compare) {
+    return _sizeistItem(true, compare);
 }
 
-NRRect *Selection::bounds(NRRect *bbox, SPItem::BBoxType type) const
-{
-    g_return_val_if_fail (bbox != NULL, NULL);
-    *bbox = NRRect(bounds(type));
-    return bbox;
+SPItem *Selection::largestItem(Selection::CompareSize compare) {
+    return _sizeistItem(false, compare);
+}
+
+SPItem *Selection::_sizeistItem(bool sml, Selection::CompareSize compare) {
+    GSList const *items = const_cast<Selection *>(this)->itemList();
+    gdouble max = sml ? 1e18 : 0;
+    SPItem *ist = NULL;
+
+    for ( GSList const *i = items; i != NULL ; i = i->next ) {
+        Geom::OptRect obox = SP_ITEM(i->data)->desktopPreferredBounds();
+        if (!obox || obox.isEmpty()) continue;
+        Geom::Rect bbox = *obox;
+
+        gdouble size = compare == 2 ? bbox.area() :
+            (compare == 1 ? bbox.width() : bbox.height());
+        size = sml ? size : size * -1;
+        if (size < max) {
+            max = size;
+            ist = SP_ITEM(i->data);
+        }
+    }
+    return ist;
+}
+
+Inkscape::XML::Node *Selection::singleRepr() {
+    SPObject *obj=single();
+    return obj ? obj->getRepr() : NULL;
 }
 
 Geom::OptRect Selection::bounds(SPItem::BBoxType type) const
+{
+    return (type == SPItem::GEOMETRIC_BBOX) ?
+        geometricBounds() : visualBounds();
+}
+
+Geom::OptRect Selection::geometricBounds() const
 {
     GSList const *items = const_cast<Selection *>(this)->itemList();
 
     Geom::OptRect bbox;
     for ( GSList const *i = items ; i != NULL ; i = i->next ) {
-        bbox = unify(bbox, sp_item_bbox_desktop(SP_ITEM(i->data), type));
+        bbox.unionWith(SP_ITEM(i->data)->desktopGeometricBounds());
     }
     return bbox;
 }
 
-NRRect *Selection::boundsInDocument(NRRect *bbox, SPItem::BBoxType type) const {
-    g_return_val_if_fail (bbox != NULL, NULL);
+Geom::OptRect Selection::visualBounds() const
+{
+    GSList const *items = const_cast<Selection *>(this)->itemList();
 
-    GSList const *items=const_cast<Selection *>(this)->itemList();
-    if (!items) {
-        bbox->x0 = bbox->y0 = bbox->x1 = bbox->y1 = 0.0;
-        return bbox;
+    Geom::OptRect bbox;
+    for ( GSList const *i = items ; i != NULL ; i = i->next ) {
+        bbox.unionWith(SP_ITEM(i->data)->desktopVisualBounds());
     }
+    return bbox;
+}
 
-    bbox->x0 = bbox->y0 = 1e18;
-    bbox->x1 = bbox->y1 = -1e18;
+Geom::OptRect Selection::preferredBounds() const
+{
+    if (Inkscape::Preferences::get()->getInt("/tools/bounding_box") == 0) {
+        return bounds(SPItem::VISUAL_BBOX);
+    } else {
+        return bounds(SPItem::GEOMETRIC_BBOX);
+    }
+}
+
+Geom::OptRect Selection::documentBounds(SPItem::BBoxType type) const
+{
+    Geom::OptRect bbox;
+    GSList const *items = const_cast<Selection *>(this)->itemList();
+    if (!items) return bbox;
 
     for ( GSList const *iter=items ; iter != NULL ; iter = iter->next ) {
-        SPItem *item=SP_ITEM(iter->data);
-        Geom::Matrix i2doc(sp_item_i2doc_affine(item));
-        sp_item_invoke_bbox(item, bbox, i2doc, FALSE, type);
+        SPItem *item = SP_ITEM(iter->data);
+        bbox |= item->documentBounds(type);
     }
 
     return bbox;
 }
 
-Geom::OptRect Selection::boundsInDocument(SPItem::BBoxType type) const {
-    NRRect r;
-    return to_2geom(boundsInDocument(&r, type)->upgrade());
-}
-
-/** Extract the position of the center from the first selected object */
+// If we have a selection of multiple items, then the center of the first item
+// will be returned; this is also the case in SelTrans::centerRequest()
 boost::optional<Geom::Point> Selection::center() const {
     GSList *items = (GSList *) const_cast<Selection *>(this)->itemList();
-    Geom::Point center;
     if (items) {
         SPItem *first = reinterpret_cast<SPItem*>(g_slist_last(items)->data); // from the first item in selection
         if (first->isCenterSet()) { // only if set explicitly
             return first->getCenter();
         }
     }
-    Geom::OptRect bbox = bounds();
+    Geom::OptRect bbox = preferredBounds();
     if (bbox) {
-        return bounds()->midpoint();
+        return bbox->midpoint();
     } else {
         return boost::optional<Geom::Point>();
     }
 }
 
-/**
- * Compute the list of points in the selection that are to be considered for snapping from.
- */
 std::vector<Inkscape::SnapCandidatePoint> Selection::getSnapPoints(SnapPreferences const *snapprefs) const {
     GSList const *items = const_cast<Selection *>(this)->itemList();
 
     SnapPreferences snapprefs_dummy = *snapprefs; // create a local copy of the snapping prefs
-    snapprefs_dummy.setIncludeItemCenter(false); // locally disable snapping to the item center
+    snapprefs_dummy.setTargetSnappable(Inkscape::SNAPTARGET_ROTATION_CENTER, false); // locally disable snapping to the item center
     std::vector<Inkscape::SnapCandidatePoint> p;
     for (GSList const *iter = items; iter != NULL; iter = iter->next) {
         SPItem *this_item = SP_ITEM(iter->data);
-        sp_item_snappoints(this_item, p, &snapprefs_dummy);
+        this_item->getSnappoints(p, &snapprefs_dummy);
 
         //Include the transformation origin for snapping
         //For a selection or group only the overall center is considered, not for each item individually
-        if (snapprefs != NULL && snapprefs->getIncludeItemCenter()) {
+        if (snapprefs != NULL && snapprefs->isTargetSnappable(Inkscape::SNAPTARGET_ROTATION_CENTER)) {
             p.push_back(Inkscape::SnapCandidatePoint(this_item->getCenter(), SNAPSOURCE_ROTATION_CENTER));
         }
     }
@@ -451,24 +481,24 @@ void Selection::_removeObjectDescendants(SPObject *obj) {
     for ( iter = _objs ; iter ; iter = next ) {
         next = iter->next;
         SPObject *sel_obj=reinterpret_cast<SPObject *>(iter->data);
-        SPObject *parent=SP_OBJECT_PARENT(sel_obj);
+        SPObject *parent = sel_obj->parent;
         while (parent) {
             if ( parent == obj ) {
                 _remove(sel_obj);
                 break;
             }
-            parent = SP_OBJECT_PARENT(parent);
+            parent = parent->parent;
         }
     }
 }
 
 void Selection::_removeObjectAncestors(SPObject *obj) {
-        SPObject *parent=SP_OBJECT_PARENT(obj);
+        SPObject *parent = obj->parent;
         while (parent) {
             if (includes(parent)) {
                 _remove(parent);
             }
-            parent = SP_OBJECT_PARENT(parent);
+            parent = parent->parent;
         }
 }
 
@@ -476,7 +506,7 @@ SPObject *Selection::_objectForXMLNode(Inkscape::XML::Node *repr) const {
     g_return_val_if_fail(repr != NULL, NULL);
     gchar const *id = repr->attribute("id");
     g_return_val_if_fail(id != NULL, NULL);
-    SPObject *object=sp_desktop_document(_desktop)->getObjectById(id);
+    SPObject *object=_layers->getDocument()->getObjectById(id);
     g_return_val_if_fail(object != NULL, NULL);
     return object;
 }
@@ -485,7 +515,7 @@ guint Selection::numberOfLayers() {
     GSList const *items = const_cast<Selection *>(this)->itemList();
     GSList *layers = NULL;
     for (GSList const *iter = items; iter != NULL; iter = iter->next) {
-        SPObject *layer = desktop()->layerForObject(SP_OBJECT(iter->data));
+        SPObject *layer = _layers->layerForObject(SP_OBJECT(iter->data));
         if (g_slist_find (layers, layer) == NULL) {
             layers = g_slist_prepend (layers, layer);
         }
@@ -499,7 +529,7 @@ guint Selection::numberOfParents() {
     GSList const *items = const_cast<Selection *>(this)->itemList();
     GSList *parents = NULL;
     for (GSList const *iter = items; iter != NULL; iter = iter->next) {
-        SPObject *parent = SP_OBJECT_PARENT(iter->data);
+        SPObject *parent = SP_OBJECT(iter->data)->parent;
         if (g_slist_find (parents, parent) == NULL) {
             parents = g_slist_prepend (parents, parent);
         }
@@ -520,4 +550,4 @@ guint Selection::numberOfParents() {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

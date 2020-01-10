@@ -5,7 +5,7 @@
  * Inkscape Widget Utilities
  *
  * Author:
- *   Bryce W. Harrington <brycehar@bryceharrington.com>
+ *   Bryce W. Harrington <brycehar@bryceharrington.org>
  * 
  * Copyright (C) 2003 Bryce Harrington
  *
@@ -18,22 +18,28 @@
    SPObject, that reacts to modification.
 */
 
-#include <glib.h>
-#include <gtk/gtk.h>
-
 namespace Gtk {
   class Label;
+
+#if GTK_CHECK_VERSION(3,0,0)
+  class Grid;
+#else
   class Table;
+#endif
+
   class HBox;
+  class Widget;
 }
 
-Gtk::Label *
-spw_label(Gtk::Table *table, gchar const *label_text, int col, int row);
-GtkWidget *
-spw_label_old(GtkWidget *table, gchar const *label_text, int col, int row);
+#if GTK_CHECK_VERSION(3,0,0)
+Gtk::Label * spw_label(Gtk::Grid *table, gchar const *label_text, int col, int row, Gtk::Widget *target);
+Gtk::HBox * spw_hbox(Gtk::Grid *table, int width, int col, int row);
+#else
+Gtk::Label * spw_label(Gtk::Table *table, gchar const *label_text, int col, int row, Gtk::Widget *target);
+Gtk::HBox * spw_hbox(Gtk::Table *table, int width, int col, int row);
+#endif
 
-Gtk::HBox *
-spw_hbox(Gtk::Table *table, int width, int col, int row);
+GtkWidget * spw_label_old(GtkWidget *table, gchar const *label_text, int col, int row);
 
 GtkWidget *
 spw_vbox_checkbutton(GtkWidget *dialog, GtkWidget *table,
@@ -49,11 +55,6 @@ spw_dropdown(GtkWidget *dialog, GtkWidget *table,
 	     gchar const *label, gchar *key, int row,
 	     GtkWidget *selector
 	     );
-
-GtkWidget *
-spw_unit_selector(GtkWidget *dialog, GtkWidget *table,
-		  gchar const *label, gchar *key, int row,
-		GtkWidget *us, GCallback cb, bool can_be_negative = false);
 
 void sp_set_font_size (GtkWidget *w, guint font);
 void sp_set_font_size_smaller (GtkWidget *w);
@@ -72,4 +73,4 @@ GtkWidget *sp_search_by_value_recursive(GtkWidget *w, gchar *key, gchar *value);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

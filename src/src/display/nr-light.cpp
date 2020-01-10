@@ -1,5 +1,3 @@
-#define __NR_LIGHT_CPP__
-
 /*
  * Light rendering helpers
  *
@@ -13,12 +11,12 @@
 
 #include <cmath>
 
-#include "libnr/nr-pixops.h"
 #include "display/nr-light.h"
 #include "display/nr-3dutils.h"
 #include "filters/distantlight.h"
 #include "filters/pointlight.h"
 #include "filters/spotlight.h"
+#include "color.h"
 
 namespace Inkscape {
 namespace Filters {
@@ -38,12 +36,12 @@ void DistantLight::light_vector(NR::Fvector &v) {
 } 
 
 void DistantLight::light_components(NR::Fvector &lc) {
-    lc[LIGHT_RED] = NR_RGBA32_R(color);
-    lc[LIGHT_GREEN] = NR_RGBA32_G(color);
-    lc[LIGHT_BLUE] = NR_RGBA32_B(color);
+    lc[LIGHT_RED] = SP_RGBA32_R_U(color);
+    lc[LIGHT_GREEN] = SP_RGBA32_G_U(color);
+    lc[LIGHT_BLUE] = SP_RGBA32_B_U(color);
 }
 
-PointLight::PointLight(SPFePointLight *light, guint32 lighting_color, const Geom::Matrix &trans) {
+PointLight::PointLight(SPFePointLight *light, guint32 lighting_color, const Geom::Affine &trans) {
     color = lighting_color;
     l_x = light->x;
     l_y = light->y;
@@ -61,12 +59,12 @@ void PointLight::light_vector(NR::Fvector &v, gdouble x, gdouble y, gdouble z) {
 } 
 
 void PointLight::light_components(NR::Fvector &lc) {
-    lc[LIGHT_RED] = NR_RGBA32_R(color);
-    lc[LIGHT_GREEN] = NR_RGBA32_G(color);
-    lc[LIGHT_BLUE] = NR_RGBA32_B(color);
+    lc[LIGHT_RED] = SP_RGBA32_R_U(color);
+    lc[LIGHT_GREEN] = SP_RGBA32_G_U(color);
+    lc[LIGHT_BLUE] = SP_RGBA32_B_U(color);
 }
 
-SpotLight::SpotLight(SPFeSpotLight *light, guint32 lighting_color, const Geom::Matrix &trans) {
+SpotLight::SpotLight(SPFeSpotLight *light, guint32 lighting_color, const Geom::Affine &trans) {
     gdouble p_x, p_y, p_z;
     color = lighting_color;
     l_x = light->x;
@@ -101,9 +99,9 @@ void SpotLight::light_components(NR::Fvector &lc, const NR::Fvector &L) {
         spmod = 0;
     else
         spmod = std::pow(spmod, speExp);
-    lc[LIGHT_RED] = spmod * NR_RGBA32_R(color);
-    lc[LIGHT_GREEN] = spmod * NR_RGBA32_G(color);
-    lc[LIGHT_BLUE] = spmod * NR_RGBA32_B(color);
+    lc[LIGHT_RED] = spmod * SP_RGBA32_R_U(color);
+    lc[LIGHT_GREEN] = spmod * SP_RGBA32_G_U(color);
+    lc[LIGHT_BLUE] = spmod * SP_RGBA32_B_U(color);
 }
 
 } /* namespace Filters */
@@ -118,4 +116,4 @@ void SpotLight::light_components(NR::Fvector &lc, const NR::Fvector &L) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

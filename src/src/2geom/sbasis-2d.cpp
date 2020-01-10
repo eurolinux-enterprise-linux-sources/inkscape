@@ -168,7 +168,7 @@ sb2d_cubic_solve(SBasis2d const &f, Geom::Point const &A, Geom::Point const &B){
                     f_vv.apply(B[X],B[Y])*V1[Y]*V1[Y];
 
     std::vector<D2<SBasis> > candidates = cubics_fitting_curvature(A,B,V0,V1,D2fVV0,D2fVV1);
-    if (candidates.size()==0) {
+    if (candidates.empty()) {
         return D2<SBasis>(Linear(A[X],B[X]),Linear(A[Y],B[Y]));
     }
     //TODO: I'm sure std algorithm could do that for me...
@@ -199,4 +199,4 @@ sb2d_cubic_solve(SBasis2d const &f, Geom::Point const &A, Geom::Point const &B){
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

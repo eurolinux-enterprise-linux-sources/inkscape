@@ -88,13 +88,40 @@ void Circle::set(std::vector<Point> const& points)
     model.instance(*this, fitter.result(z));
 }
 
-
-SVGEllipticalArc
+/**
+ @param inner a point whose angle with the circle center is inside the angle that the arc spans
+ */
+EllipticalArc *
 Circle::arc(Point const& initial, Point const& inner, Point const& final,
              bool _svg_compliant)
 {
+    // TODO native implementation!
     Ellipse e(center(X), center(Y), ray(), ray(), 0);
     return e.arc(initial, inner, final, _svg_compliant);
+}
+
+D2<SBasis> Circle::toSBasis()
+{
+    D2<SBasis> B;
+    Linear bo = Linear(0, 2 * M_PI);
+
+    B[0] = cos(bo,4);
+    B[1] = sin(bo,4);
+
+    B = B * m_ray + m_centre;
+
+    return B;
+}
+
+void
+Circle::getPath(std::vector<Path> &path_out) {
+    Path pb;
+
+    D2<SBasis> B = toSBasis();
+
+    pb.append(SBasisCurve(B));
+
+    path_out.push_back(pb);
 }
 
 
@@ -112,4 +139,4 @@ Circle::arc(Point const& initial, Point const& inner, Point const& final,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

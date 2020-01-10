@@ -1,9 +1,10 @@
-#ifndef __INKSCAPE_IO_XSLTSTREAM_H__
-#define __INKSCAPE_IO_XSLTSTREAM_H__
+#ifndef SEEN_INKSCAPE_IO_XSLTSTREAM_H
+#define SEEN_INKSCAPE_IO_XSLTSTREAM_H
 /**
- * Xslt-enabled input and output streams
- *
- *
+ * @file
+ * Xslt-enabled input and output streams.
+ */
+/*
  * Authors:
  *   Bob Jamison <ishmalius@gmail.com>
  *
@@ -38,7 +39,7 @@ public:
     /**
      * Constructor with loading
      */
-    XsltStyleSheet(InputStream &source)  throw (StreamException);
+    XsltStyleSheet(InputStream &source);
 
     /**
      * Simple constructor, no loading
@@ -73,16 +74,15 @@ class XsltInputStream : public BasicInputStream
 
 public:
 
-    XsltInputStream(InputStream &xmlSource, XsltStyleSheet &stylesheet)
-                        throw (StreamException);
+    XsltInputStream(InputStream &xmlSource, XsltStyleSheet &stylesheet);
     
-    virtual ~XsltInputStream() throw (StreamException);
+    virtual ~XsltInputStream();
     
-    virtual int available() throw (StreamException);
+    virtual int available();
     
-    virtual void close() throw (StreamException);
+    virtual void close();
     
-    virtual int get() throw (StreamException);
+    virtual int get();
     
 
 private:
@@ -110,16 +110,15 @@ class XsltOutputStream : public BasicOutputStream
 
 public:
 
-    XsltOutputStream(OutputStream &destination, XsltStyleSheet &stylesheet)
-                             throw (StreamException);
+    XsltOutputStream(OutputStream &destination, XsltStyleSheet &stylesheet);
     
-    virtual ~XsltOutputStream() throw (StreamException);
+    virtual ~XsltOutputStream();
     
-    virtual void close() throw (StreamException);
+    virtual void close();
     
-    virtual void flush() throw (StreamException);
+    virtual void flush();
     
-    virtual void put(int ch) throw (StreamException);
+    virtual int put(gunichar ch);
 
 private:
 

@@ -1,8 +1,9 @@
 
 #include "satisfied-guide-cns.h"
 #include "sp-guide-constraint.h"
-#include <sp-guide.h>
-#include <sp-item.h>
+#include "sp-item-update-cns.h"
+#include "sp-guide.h"
+#include "sp-item.h"
 #include <algorithm>
 using std::find;
 using std::vector;
@@ -10,7 +11,7 @@ using std::vector;
 void sp_item_update_cns(SPItem &item, SPDesktop const &desktop)
 {
     std::vector<Inkscape::SnapCandidatePoint> snappoints;
-    sp_item_snappoints(&item, snappoints, NULL);
+    item.getSnappoints(snappoints, NULL);
     /* TODO: Implement the ordering. */
     vector<SPGuideConstraint> found_cns;
     satisfied_guide_cns(desktop, snappoints, found_cns);
@@ -43,4 +44,4 @@ void sp_item_update_cns(SPItem &item, SPDesktop const &desktop)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

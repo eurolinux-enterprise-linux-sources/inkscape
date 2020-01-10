@@ -1,4 +1,4 @@
-/**
+/*
  * Our base String stream classes.  We implement these to
  * be based on Glib::ustring
  *
@@ -112,10 +112,10 @@ void StringOutputStream::flush()
 /**
  * Writes the specified byte to this output stream.
  */ 
-void StringOutputStream::put(int ch)
+int StringOutputStream::put(gunichar ch)
 {
-    gunichar uch = (gunichar)ch;
-    buffer.push_back(uch);
+    buffer.push_back(ch);
+	return 1;
 }
 
 

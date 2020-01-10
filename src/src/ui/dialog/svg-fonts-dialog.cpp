@@ -1,8 +1,11 @@
-/** @file
- * @brief SVG Fonts dialog - implementation
+/**
+ * @file
+ * SVG Fonts dialog - implementation.
  */
 /* Authors:
  *   Felipe C. da S. Sanches <juca@members.fsf.org>
+ *   Jon A. Cruz <jon@joncruz.org>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2008 Authors
  * Released under GNU GPLv2 (or later).  Read the file 'COPYING' for more information.
@@ -12,38 +15,52 @@
 # include <config.h>
 #endif
 
-#ifdef ENABLE_SVG_FONTS
-
-#include <2geom/pathvector.h>
+#include "svg-fonts-dialog.h"
 #include "document-private.h"
+#include "document-undo.h"
 #include <gtkmm/notebook.h>
-#include <glibmm/i18n.h>
+#include <gtkmm/imagemenuitem.h>
+#include <gtkmm/scale.h>
+#include <gtkmm/stock.h>
 #include <message-stack.h>
 #include "selection.h"
 #include <string.h>
 #include "svg/svg.h"
-#include "svg-fonts-dialog.h"
 #include "xml/node.h"
 #include "xml/repr.h"
+#include "sp-font-face.h"
+#include "desktop-handles.h"
+#include "display/nr-svgfonts.h"
+#include "verbs.h"
+#include "sp-glyph.h"
+#include "sp-missing-glyph.h"
+#include "sp-font.h"
+#include "sp-glyph-kerning.h"
 
-SvgFontDrawingArea::SvgFontDrawingArea(){
-    this->text = "";
-    this->svgfont = NULL;
+#include <glibmm/i18n.h>
+#include <glibmm/stringutils.h>
+
+SvgFontDrawingArea::SvgFontDrawingArea():
+    _x(0),
+    _y(0),
+    _svgfont(0),
+    _text()
+{
 }
 
 void SvgFontDrawingArea::set_svgfont(SvgFont* svgfont){
-    this->svgfont = svgfont;
+    _svgfont = svgfont;
 }
 
 void SvgFontDrawingArea::set_text(Glib::ustring text){
-    this->text = text;
+    _text = text;
     redraw();
 }
 
 void SvgFontDrawingArea::set_size(int x, int y){
-    this->x = x;
-    this->y = y;
-    ((Gtk::Widget*) this)->set_size_request(x, y);
+    _x = x;
+    _y = y;
+    ((Gtk::Widget*) this)->set_size_request(_x, _y);
 }
 
 void SvgFontDrawingArea::redraw(){
@@ -51,13 +68,13 @@ void SvgFontDrawingArea::redraw(){
 }
 
 bool SvgFontDrawingArea::on_expose_event (GdkEventExpose */*event*/){
-  if (this->svgfont){
+  if (_svgfont){
     Glib::RefPtr<Gdk::Window> window = get_window();
     Cairo::RefPtr<Cairo::Context> cr = window->create_cairo_context();
-    cr->set_font_face( Cairo::RefPtr<Cairo::FontFace>(new Cairo::FontFace(this->svgfont->get_font_face(), false /* does not have reference */)) );
-    cr->set_font_size (this->y-20);
+    cr->set_font_face( Cairo::RefPtr<Cairo::FontFace>(new Cairo::FontFace(_svgfont->get_font_face(), false /* does not have reference */)) );
+    cr->set_font_size (_y-20);
     cr->move_to (10, 10);
-    cr->show_text (this->text.c_str());
+    cr->show_text (_text.c_str());
   }
   return TRUE;
 }
@@ -112,13 +129,13 @@ void SvgFontsDialog::AttrEntry::on_attr_changed(){
 
     const gchar* name = (const gchar*)sp_attribute_name(this->attr);
     if(name && o) {
-        SP_OBJECT_REPR(o)->setAttribute((const gchar*) name, this->entry.get_text().c_str());
+        o->getRepr()->setAttribute((const gchar*) name, this->entry.get_text().c_str());
         o->parent->requestModified(SP_OBJECT_MODIFIED_FLAG);
 
         Glib::ustring undokey = "svgfonts:";
         undokey += name;
-        sp_document_maybe_done(o->document, undokey.c_str(), SP_VERB_DIALOG_SVG_FONTS,
-                               _("Set SVG Font attribute"));
+        DocumentUndo::maybeDone(o->document, undokey.c_str(), SP_VERB_DIALOG_SVG_FONTS,
+                                _("Set SVG Font attribute"));
     }
 
 }
@@ -135,7 +152,7 @@ Gtk::HBox* SvgFontsDialog::AttrCombo(gchar* lbl, const SPAttributeEnum /*attr*/)
 Gtk::HBox* SvgFontsDialog::AttrSpin(gchar* lbl){
     Gtk::HBox* hbox = Gtk::manage(new Gtk::HBox());
     hbox->add(* Gtk::manage(new Gtk::Label(lbl)) );
-    hbox->add(* Gtk::manage(new Gtk::SpinBox()) );
+    hbox->add(* Gtk::manage(new Inkscape::UI::Widget::SpinBox()) );
     hbox->show_all();
     return hbox;
 }*/
@@ -147,14 +164,14 @@ GlyphComboBox::GlyphComboBox(){
 
 void GlyphComboBox::update(SPFont* spfont){
     if (!spfont) return
-//TODO: figure out why do we need to append_text("") before clearing items properly...
+//TODO: figure out why do we need to append("") before clearing items properly...
 
-    this->append_text(""); //Gtk is refusing to clear the combobox when I comment out this line
-    this->clear_items();
+    this->append(""); //Gtk is refusing to clear the combobox when I comment out this line
+    this->remove_all();
 
     for(SPObject* node = spfont->children; node; node=node->next){
         if (SP_IS_GLYPH(node)){
-            this->append_text(((SPGlyph*)node)->unicode);
+            this->append((static_cast<SPGlyph*>(node))->unicode);
         }
     }
 }
@@ -166,15 +183,17 @@ void SvgFontsDialog::on_kerning_value_changed(){
 
     SPDocument* document = sp_desktop_document(this->getDesktop());
 
-    //TODO: I am unsure whether this is the correct way of calling sp_document_maybe_done
+    //TODO: I am unsure whether this is the correct way of calling SPDocumentUndo::maybe_done
     Glib::ustring undokey = "svgfonts:hkern:k:";
     undokey += this->kerning_pair->u1->attribute_string();
     undokey += ":";
     undokey += this->kerning_pair->u2->attribute_string();
 
     //slider values increase from right to left so that they match the kerning pair preview
-    this->kerning_pair->repr->setAttribute("k", Glib::Ascii::dtostr(get_selected_spfont()->horiz_adv_x - kerning_slider.get_value()).c_str());
-    sp_document_maybe_done(document, undokey.c_str(), SP_VERB_DIALOG_SVG_FONTS, _("Adjust kerning value"));
+
+    //XML Tree being directly used here while it shouldn't be.
+    this->kerning_pair->getRepr()->setAttribute("k", Glib::Ascii::dtostr(get_selected_spfont()->horiz_adv_x - kerning_slider->get_value()).c_str());
+    DocumentUndo::maybeDone(document, undokey.c_str(), SP_VERB_DIALOG_SVG_FONTS, _("Adjust kerning value"));
 
     //populate_kerning_pairs_box();
     kerning_preview.redraw();
@@ -246,12 +265,12 @@ void SvgFontsDialog::update_fonts()
 {
     SPDesktop* desktop = this->getDesktop();
     SPDocument* document = sp_desktop_document(desktop);
-    const GSList* fonts = sp_document_get_resource_list(document, "font");
+    const GSList* fonts = document->getResourceList("font");
 
     _model->clear();
     for(const GSList *l = fonts; l; l = l->next) {
         Gtk::TreeModel::Row row = *_model->append();
-        SPFont* f = (SPFont*)l->data;
+        SPFont* f = SP_FONT(l->data);
         row[_columns.spfont] = f;
         row[_columns.svgfont] = new SvgFont(f);
         const gchar* lbl = f->label();
@@ -281,7 +300,7 @@ void SvgFontsDialog::on_kerning_pair_selection_changed(){
     this->kerning_pair = kern;
 
     //slider values increase from right to left so that they match the kerning pair preview
-    kerning_slider.set_value(get_selected_spfont()->horiz_adv_x - kern->k);
+    kerning_slider->set_value(get_selected_spfont()->horiz_adv_x - kern->k);
 }
 
 void SvgFontsDialog::update_global_settings_tab(){
@@ -291,7 +310,7 @@ void SvgFontsDialog::update_global_settings_tab(){
     SPObject* obj;
     for (obj=font->children; obj; obj=obj->next){
         if (SP_IS_FONTFACE(obj)){
-            _familyname_entry->set_text(((SPFontFace*) obj)->font_family);
+            _familyname_entry->set_text((SP_FONTFACE(obj))->font_family);
         }
     }
 }
@@ -310,9 +329,9 @@ void SvgFontsDialog::on_font_selection_changed(){
     double set_width = spfont->horiz_adv_x;
     setwidth_spin.set_value(set_width);
 
-    kerning_slider.set_range(0, set_width);
-    kerning_slider.set_draw_value(false);
-    kerning_slider.set_value(0);
+    kerning_slider->set_range(0, set_width);
+    kerning_slider->set_draw_value(false);
+    kerning_slider->set_value(0);
 
     update_global_settings_tab();
     populate_glyphs_box();
@@ -397,9 +416,9 @@ SvgFontsDialog::populate_glyphs_box()
     for(SPObject* node = spfont->children; node; node=node->next){
         if (SP_IS_GLYPH(node)){
             Gtk::TreeModel::Row row = *(_GlyphsListStore->append());
-            row[_GlyphsListColumns.glyph_node] = (SPGlyph*) node;
-            row[_GlyphsListColumns.glyph_name] = ((SPGlyph*) node)->glyph_name;
-            row[_GlyphsListColumns.unicode] = ((SPGlyph*) node)->unicode;
+            row[_GlyphsListColumns.glyph_node] = static_cast<SPGlyph*>(node);
+            row[_GlyphsListColumns.glyph_name] = (static_cast<SPGlyph*>(node))->glyph_name;
+            row[_GlyphsListColumns.unicode] = (static_cast<SPGlyph*>(node))->unicode;
         }
     }
 }
@@ -415,10 +434,10 @@ SvgFontsDialog::populate_kerning_pairs_box()
     for(SPObject* node = spfont->children; node; node=node->next){
         if (SP_IS_HKERN(node)){
             Gtk::TreeModel::Row row = *(_KerningPairsListStore->append());
-            row[_KerningPairsListColumns.first_glyph] = ((SPGlyphKerning*) node)->u1->attribute_string().c_str();
-            row[_KerningPairsListColumns.second_glyph] = ((SPGlyphKerning*) node)->u2->attribute_string().c_str();
-            row[_KerningPairsListColumns.kerning_value] = ((SPGlyphKerning*) node)->k;
-            row[_KerningPairsListColumns.spnode] = (SPGlyphKerning*) node;
+            row[_KerningPairsListColumns.first_glyph] = (static_cast<SPGlyphKerning*>(node))->u1->attribute_string().c_str();
+            row[_KerningPairsListColumns.second_glyph] = (static_cast<SPGlyphKerning*>(node))->u2->attribute_string().c_str();
+            row[_KerningPairsListColumns.kerning_value] = (static_cast<SPGlyphKerning*>(node))->k;
+            row[_KerningPairsListColumns.spnode] = static_cast<SPGlyphKerning*>(node);
         }
     }
 }
@@ -426,7 +445,7 @@ SvgFontsDialog::populate_kerning_pairs_box()
 SPGlyph *new_glyph(SPDocument* document, SPFont *font, const int count)
 {
     g_return_val_if_fail(font != NULL, NULL);
-    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(document);
+    Inkscape::XML::Document *xml_doc = document->getReprDoc();
 
     // create a new glyph
     Inkscape::XML::Node *repr;
@@ -437,7 +456,7 @@ SPGlyph *new_glyph(SPDocument* document, SPFont *font, const int count)
     repr->setAttribute("glyph-name", os.str().c_str());
 
     // Append the new glyph node to the current font
-    SP_OBJECT_REPR(font)->appendChild(repr);
+    font->getRepr()->appendChild(repr);
     Inkscape::GC::release(repr);
 
     // get corresponding object
@@ -465,9 +484,27 @@ void SvgFontsDialog::add_glyph(){
     SPDocument* doc = sp_desktop_document(this->getDesktop());
     /* SPGlyph* glyph =*/ new_glyph(doc, get_selected_spfont(), count+1);
 
-    sp_document_done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Add glyph"));
+    DocumentUndo::done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Add glyph"));
 
     update_glyphs();
+}
+
+Geom::PathVector
+SvgFontsDialog::flip_coordinate_system(Geom::PathVector pathv){
+    double units_per_em = 1000;
+    SPObject* obj;
+    for (obj = get_selected_spfont()->children; obj; obj=obj->next){
+        if (SP_IS_FONTFACE(obj)){
+            //XML Tree being directly used here while it shouldn't be.
+            sp_repr_get_double(obj->getRepr(), "units_per_em", &units_per_em);
+        }
+    }
+
+    double baseline_offset = units_per_em - get_selected_spfont()->horiz_origin_y;
+
+    //This matrix flips y-axis and places the origin at baseline
+    Geom::Affine m(Geom::Coord(1),Geom::Coord(0),Geom::Coord(0),Geom::Coord(-1),Geom::Coord(0),Geom::Coord(baseline_offset));
+    return pathv*m;
 }
 
 void SvgFontsDialog::set_glyph_description_from_selected_path(){
@@ -494,22 +531,20 @@ void SvgFontsDialog::set_glyph_description_from_selected_path(){
         return;
     } //TODO: //Is there a better way to tell it to to the user?
 
-    Geom::PathVector pathv = sp_svg_read_pathv(node->attribute("d"));
-
-    //This matrix flips the glyph vertically
-    Geom::Matrix m(Geom::Coord(1),Geom::Coord(0),Geom::Coord(0),Geom::Coord(-1),Geom::Coord(0),Geom::Coord(0));
-    pathv*=m;
-    //then we offset it
-    pathv+=Geom::Point(Geom::Coord(0),Geom::Coord(get_selected_spfont()->horiz_adv_x));
-
     SPGlyph* glyph = get_selected_glyph();
     if (!glyph){
         char *msg = _("No glyph selected in the SVGFonts dialog.");
         msgStack->flash(Inkscape::ERROR_MESSAGE, msg);
         return;
     }
-    glyph->repr->setAttribute("d", (char*) sp_svg_write_path (pathv));
-    sp_document_done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Set glyph curves"));
+
+    Geom::PathVector pathv = sp_svg_read_pathv(node->attribute("d"));
+
+	//XML Tree being directly used here while it shouldn't be.
+    gchar *str = sp_svg_write_path (flip_coordinate_system(pathv));
+    glyph->getRepr()->setAttribute("d", str);
+    g_free(str);
+    DocumentUndo::done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Set glyph curves"));
 
     update_glyphs();
 }
@@ -540,18 +575,15 @@ void SvgFontsDialog::missing_glyph_description_from_selected_path(){
 
     Geom::PathVector pathv = sp_svg_read_pathv(node->attribute("d"));
 
-    //This matrix flips the glyph vertically
-    Geom::Matrix m(Geom::Coord(1),Geom::Coord(0),Geom::Coord(0),Geom::Coord(-1),Geom::Coord(0),Geom::Coord(0));
-    pathv*=m;
-    //then we offset it
-//  pathv+=Geom::Point(Geom::Coord(0),Geom::Coord(get_selected_spfont()->horiz_adv_x));
-    pathv+=Geom::Point(Geom::Coord(0),Geom::Coord(1000));//TODO: use here the units-per-em attribute?
-
     SPObject* obj;
     for (obj = get_selected_spfont()->children; obj; obj=obj->next){
         if (SP_IS_MISSING_GLYPH(obj)){
-            obj->repr->setAttribute("d", (char*) sp_svg_write_path (pathv));
-            sp_document_done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Set glyph curves"));
+
+            //XML Tree being directly used here while it shouldn't be.
+            gchar *str = sp_svg_write_path (flip_coordinate_system(pathv));
+            obj->getRepr()->setAttribute("d", str);
+            g_free(str);
+            DocumentUndo::done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Set glyph curves"));
         }
     }
 
@@ -569,8 +601,9 @@ void SvgFontsDialog::reset_missing_glyph_description(){
     SPObject* obj;
     for (obj = get_selected_spfont()->children; obj; obj=obj->next){
         if (SP_IS_MISSING_GLYPH(obj)){
-            obj->repr->setAttribute("d", (char*) "M0,0h1000v1024h-1000z");
-            sp_document_done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Reset missing-glyph"));
+            //XML Tree being directly used here while it shouldn't be.
+            obj->getRepr()->setAttribute("d", (char*) "M0,0h1000v1024h-1000z");
+            DocumentUndo::done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Reset missing-glyph"));
         }
     }
 
@@ -582,10 +615,11 @@ void SvgFontsDialog::glyph_name_edit(const Glib::ustring&, const Glib::ustring& 
     if (!i) return;
 
     SPGlyph* glyph = (*i)[_GlyphsListColumns.glyph_node];
-    glyph->repr->setAttribute("glyph-name", str.c_str());
+    //XML Tree being directly used here while it shouldn't be.
+    glyph->getRepr()->setAttribute("glyph-name", str.c_str());
 
     SPDocument* doc = sp_desktop_document(this->getDesktop());
-    sp_document_done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Edit glyph name"));
+    DocumentUndo::done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Edit glyph name"));
 
     update_glyphs();
 }
@@ -595,10 +629,11 @@ void SvgFontsDialog::glyph_unicode_edit(const Glib::ustring&, const Glib::ustrin
     if (!i) return;
 
     SPGlyph* glyph = (*i)[_GlyphsListColumns.glyph_node];
-    glyph->repr->setAttribute("unicode", str.c_str());
+    //XML Tree being directly used here while it shouldn't be.
+    glyph->getRepr()->setAttribute("unicode", str.c_str());
 
     SPDocument* doc = sp_desktop_document(this->getDesktop());
-    sp_document_done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Set glyph unicode"));
+    DocumentUndo::done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Set glyph unicode"));
 
     update_glyphs();
 }
@@ -607,9 +642,10 @@ void SvgFontsDialog::remove_selected_font(){
     SPFont* font = get_selected_spfont();
     if (!font) return;
 
-    sp_repr_unparent(font->repr);
+    //XML Tree being directly used here while it shouldn't be.
+    sp_repr_unparent(font->getRepr());
     SPDocument* doc = sp_desktop_document(this->getDesktop());
-    sp_document_done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Remove font"));
+    DocumentUndo::done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Remove font"));
 
     update_fonts();
 }
@@ -621,10 +657,12 @@ void SvgFontsDialog::remove_selected_glyph(){
     if(!i) return;
 
     SPGlyph* glyph = (*i)[_GlyphsListColumns.glyph_node];
-    sp_repr_unparent(glyph->repr);
+
+	//XML Tree being directly used here while it shouldn't be.
+    sp_repr_unparent(glyph->getRepr());
 
     SPDocument* doc = sp_desktop_document(this->getDesktop());
-    sp_document_done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Remove glyph"));
+    DocumentUndo::done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Remove glyph"));
 
     update_glyphs();
 }
@@ -636,10 +674,12 @@ void SvgFontsDialog::remove_selected_kerning_pair(){
     if(!i) return;
 
     SPGlyphKerning* pair = (*i)[_KerningPairsListColumns.spnode];
-    sp_repr_unparent(pair->repr);
+
+	//XML Tree being directly used here while it shouldn't be.
+    sp_repr_unparent(pair->getRepr());
 
     SPDocument* doc = sp_desktop_document(this->getDesktop());
-    sp_document_done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Remove kerning pair"));
+    DocumentUndo::done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Remove kerning pair"));
 
     update_glyphs();
 }
@@ -700,9 +740,9 @@ void SvgFontsDialog::add_kerning_pair(){
     for(SPObject* node = this->get_selected_spfont()->children; node; node=node->next){
         //TODO: It is not really correct to get only the first byte of each string.
         //TODO: We should also support vertical kerning
-        if (SP_IS_HKERN(node) && ((SPGlyphKerning*)node)->u1->contains((gchar) first_glyph.get_active_text().c_str()[0])
-            && ((SPGlyphKerning*)node)->u2->contains((gchar) second_glyph.get_active_text().c_str()[0]) ){
-            this->kerning_pair = (SPGlyphKerning*)node;
+        if (SP_IS_HKERN(node) && (static_cast<SPGlyphKerning*>(node))->u1->contains((gchar) first_glyph.get_active_text().c_str()[0])
+            && (static_cast<SPGlyphKerning*>(node))->u2->contains((gchar) second_glyph.get_active_text().c_str()[0]) ){
+            this->kerning_pair = static_cast<SPGlyphKerning*>(node);
             continue;
         }
     }
@@ -710,24 +750,23 @@ void SvgFontsDialog::add_kerning_pair(){
     if (this->kerning_pair) return; //We already have this kerning pair
 
     SPDocument* document = sp_desktop_document(this->getDesktop());
-    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(document);
+    Inkscape::XML::Document *xml_doc = document->getReprDoc();
 
     // create a new hkern node
-    Inkscape::XML::Node *repr;
-    repr = xml_doc->createElement("svg:hkern");
+    Inkscape::XML::Node *repr = xml_doc->createElement("svg:hkern");
 
     repr->setAttribute("u1", first_glyph.get_active_text().c_str());
     repr->setAttribute("u2", second_glyph.get_active_text().c_str());
     repr->setAttribute("k", "0");
 
     // Append the new hkern node to the current font
-    SP_OBJECT_REPR(get_selected_spfont())->appendChild(repr);
+    get_selected_spfont()->getRepr()->appendChild(repr);
     Inkscape::GC::release(repr);
 
     // get corresponding object
     this->kerning_pair = SP_HKERN( document->getObjectByRepr(repr) );
 
-    sp_document_done(document, SP_VERB_DIALOG_SVG_FONTS, _("Add kerning pair"));
+    DocumentUndo::done(document, SP_VERB_DIALOG_SVG_FONTS, _("Add kerning pair"));
 }
 
 Gtk::VBox* SvgFontsDialog::kerning_tab(){
@@ -735,7 +774,7 @@ Gtk::VBox* SvgFontsDialog::kerning_tab(){
     create_kerning_pairs_popup_menu(_KerningPairsList, sigc::mem_fun(*this, &SvgFontsDialog::remove_selected_kerning_pair));
 
 //Kerning Setup:
-    kerning_vbox.add(*Gtk::manage(new Gtk::Label(_("Kerning Setup:"))));
+    kerning_vbox.add(*Gtk::manage(new Gtk::Label(_("Kerning Setup"))));
     Gtk::HBox* kerning_selector = Gtk::manage(new Gtk::HBox());
     kerning_selector->add(*Gtk::manage(new Gtk::Label(_("1st Glyph:"))));
     kerning_selector->add(first_glyph);
@@ -745,7 +784,7 @@ Gtk::VBox* SvgFontsDialog::kerning_tab(){
     add_kernpair_button.set_label(_("Add pair"));
     add_kernpair_button.signal_clicked().connect(sigc::mem_fun(*this, &SvgFontsDialog::add_kerning_pair));
     _KerningPairsList.get_selection()->signal_changed().connect(sigc::mem_fun(*this, &SvgFontsDialog::on_kerning_pair_selection_changed));
-    kerning_slider.signal_value_changed().connect(sigc::mem_fun(*this, &SvgFontsDialog::on_kerning_value_changed));
+    kerning_slider->signal_value_changed().connect(sigc::mem_fun(*this, &SvgFontsDialog::on_kerning_value_changed));
 
     kerning_vbox.pack_start(*kerning_selector, false,false);
 
@@ -763,7 +802,7 @@ Gtk::VBox* SvgFontsDialog::kerning_tab(){
     Gtk::HBox* kerning_amount_hbox = Gtk::manage(new Gtk::HBox());
     kerning_vbox.pack_start(*kerning_amount_hbox, false,false);
     kerning_amount_hbox->add(*Gtk::manage(new Gtk::Label(_("Kerning value:"))));
-    kerning_amount_hbox->add(kerning_slider);
+    kerning_amount_hbox->add(*kerning_slider);
 
     kerning_preview.set_size(300 + 20, 150 + 20);
     _font_da.set_size(150 + 20, 50 + 20);
@@ -775,19 +814,18 @@ SPFont *new_font(SPDocument *document)
 {
     g_return_val_if_fail(document != NULL, NULL);
 
-    SPDefs *defs = (SPDefs *) SP_DOCUMENT_DEFS(document);
+    SPDefs *defs = document->getDefs();
 
-    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(document);
+    Inkscape::XML::Document *xml_doc = document->getReprDoc();
 
     // create a new font
-    Inkscape::XML::Node *repr;
-    repr = xml_doc->createElement("svg:font");
+    Inkscape::XML::Node *repr = xml_doc->createElement("svg:font");
 
     //By default, set the horizontal advance to 1024 units
     repr->setAttribute("horiz-adv-x", "1024");
 
     // Append the new font node to defs
-    SP_OBJECT_REPR(defs)->appendChild(repr);
+    defs->getRepr()->appendChild(repr);
 
     //create a missing glyph
     Inkscape::XML::Node *fontface;
@@ -816,11 +854,12 @@ void set_font_family(SPFont* font, char* str){
     SPObject* obj;
     for (obj=font->children; obj; obj=obj->next){
         if (SP_IS_FONTFACE(obj)){
-            obj->repr->setAttribute("font-family", str);
+            //XML Tree being directly used here while it shouldn't be.
+            obj->getRepr()->setAttribute("font-family", str);
         }
     }
 
-    sp_document_done(font->document, SP_VERB_DIALOG_SVG_FONTS, _("Set font family"));
+    DocumentUndo::done(font->document, SP_VERB_DIALOG_SVG_FONTS, _("Set font family"));
 }
 
 void SvgFontsDialog::add_font(){
@@ -836,19 +875,26 @@ void SvgFontsDialog::add_font(){
     SPObject* obj;
     for (obj=font->children; obj; obj=obj->next){
         if (SP_IS_FONTFACE(obj)){
-            obj->repr->setAttribute("font-family", os2.str().c_str());
+            //XML Tree being directly used here while it shouldn't be.
+            obj->getRepr()->setAttribute("font-family", os2.str().c_str());
         }
     }
 
     update_fonts();
 //    select_font(font);
 
-    sp_document_done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Add font"));
+    DocumentUndo::done(doc, SP_VERB_DIALOG_SVG_FONTS, _("Add font"));
 }
 
 SvgFontsDialog::SvgFontsDialog()
  : UI::Widget::Panel("", "/dialogs/svgfonts", SP_VERB_DIALOG_SVG_FONTS), _add(Gtk::Stock::NEW)
 {
+#if WITH_GTKMM_3_0
+    kerning_slider = Gtk::manage(new Gtk::Scale(Gtk::ORIENTATION_HORIZONTAL));
+#else
+    kerning_slider = Gtk::manage(new Gtk::HScale);
+#endif
+
     _add.signal_clicked().connect(sigc::mem_fun(*this, &SvgFontsDialog::add_font));
 
     Gtk::HBox* hbox = Gtk::manage(new Gtk::HBox());
@@ -891,7 +937,7 @@ SvgFontsDialog::SvgFontsDialog()
     _FontsList.signal_button_release_event().connect_notify(sigc::mem_fun(*this, &SvgFontsDialog::fonts_list_button_release));
     create_fonts_popup_menu(_FontsList, sigc::mem_fun(*this, &SvgFontsDialog::remove_selected_font));
 
-    _defs_observer.set(SP_DOCUMENT_DEFS(sp_desktop_document(this->getDesktop())));
+    _defs_observer.set(sp_desktop_document(this->getDesktop())->getDefs());
     _defs_observer.signal_changed().connect(sigc::mem_fun(*this, &SvgFontsDialog::update_fonts));
 
     _getContents()->show_all();
@@ -903,8 +949,6 @@ SvgFontsDialog::~SvgFontsDialog(){}
 } // namespace UI
 } // namespace Inkscape
 
-#endif //#ifdef ENABLE_SVG_FONTS
-
 /*
   Local Variables:
   mode:c++
@@ -914,4 +958,4 @@ SvgFontsDialog::~SvgFontsDialog(){}
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

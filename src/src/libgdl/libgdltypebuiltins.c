@@ -1,5 +1,5 @@
 
-/* Generated data (by glib-mkenums) */
+
 
 #include <glib-object.h>
 #include "libgdltypebuiltins.h"
@@ -65,23 +65,24 @@ gdl_dock_placement_get_type (void)
 }
 
 
-
-static const GEnumValue _gdl_dock_expansion_direction_values[] = {
-  { GDL_DOCK_EXPANSION_DIRECTION_NONE, "GDL_DOCK_EXPANSION_DIRECTION_NONE", "none" },
-  { GDL_DOCK_EXPANSION_DIRECTION_UP, "GDL_DOCK_EXPANSION_DIRECTION_UP", "up" },
-  { GDL_DOCK_EXPANSION_DIRECTION_DOWN, "GDL_DOCK_EXPANSION_DIRECTION_DOWN", "down" },
-  { GDL_DOCK_EXPANSION_DIRECTION_LEFT, "GDL_DOCK_EXPANSION_DIRECTION_LEFT", "left" },
-  { GDL_DOCK_EXPANSION_DIRECTION_RIGHT, "GDL_DOCK_EXPANSION_DIRECTION_RIGHT", "right" },
+/* enumerations from "gdl-dock-master.h" */
+static const GEnumValue _gdl_switcher_style_values[] = {
+  { GDL_SWITCHER_STYLE_TEXT, "GDL_SWITCHER_STYLE_TEXT", "text" },
+  { GDL_SWITCHER_STYLE_ICON, "GDL_SWITCHER_STYLE_ICON", "icon" },
+  { GDL_SWITCHER_STYLE_BOTH, "GDL_SWITCHER_STYLE_BOTH", "both" },
+  { GDL_SWITCHER_STYLE_TOOLBAR, "GDL_SWITCHER_STYLE_TOOLBAR", "toolbar" },
+  { GDL_SWITCHER_STYLE_TABS, "GDL_SWITCHER_STYLE_TABS", "tabs" },
+  { GDL_SWITCHER_STYLE_NONE, "GDL_SWITCHER_STYLE_NONE", "none" },
   { 0, NULL, NULL }
 };
 
 GType
-gdl_dock_expansion_direction_get_type (void)
+gdl_switcher_style_get_type (void)
 {
   static GType type = 0;
 
   if (!type)
-    type = g_enum_register_static ("GdlDockExpansionDirection", _gdl_dock_expansion_direction_values);
+    type = g_enum_register_static ("GdlSwitcherStyle", _gdl_switcher_style_values);
 
   return type;
 }
@@ -157,27 +158,5 @@ gdl_dock_bar_style_get_type (void)
 }
 
 
-/* enumerations from "gdl-switcher.h" */
-static const GEnumValue _gdl_switcher_style_values[] = {
-  { GDL_SWITCHER_STYLE_TEXT, "GDL_SWITCHER_STYLE_TEXT", "text" },
-  { GDL_SWITCHER_STYLE_ICON, "GDL_SWITCHER_STYLE_ICON", "icon" },
-  { GDL_SWITCHER_STYLE_BOTH, "GDL_SWITCHER_STYLE_BOTH", "both" },
-  { GDL_SWITCHER_STYLE_TOOLBAR, "GDL_SWITCHER_STYLE_TOOLBAR", "toolbar" },
-  { GDL_SWITCHER_STYLE_TABS, "GDL_SWITCHER_STYLE_TABS", "tabs" },
-  { 0, NULL, NULL }
-};
 
-GType
-gdl_switcher_style_get_type (void)
-{
-  static GType type = 0;
-
-  if (!type)
-    type = g_enum_register_static ("GdlSwitcherStyle", _gdl_switcher_style_values);
-
-  return type;
-}
-
-
-/* Generated data ends here */
 

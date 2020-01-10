@@ -15,12 +15,11 @@
 
 class KnotHolder;
 class SPLPEItem;
-struct SPDesktop;
-struct SPItem;
+class SPDesktop;
+class SPItem;
 
 namespace Gtk {
     class Widget;
-    class Tooltips;
 }
 
 namespace Inkscape {
@@ -50,24 +49,24 @@ public:
 
     virtual bool param_readSVGValue(const gchar * strvalue) = 0;   // returns true if new value is valid / accepted.
     virtual gchar * param_getSVGValue() const = 0;
-    void write_to_SVG() { param_write_to_repr(param_getSVGValue()); }
+    void write_to_SVG();
  
     virtual void param_set_default() = 0;
 
     // This creates a new widget (newed with Gtk::manage(new ...);)
-    virtual Gtk::Widget * param_newWidget(Gtk::Tooltips * tooltips) = 0;
+    virtual Gtk::Widget * param_newWidget() = 0;
 
     virtual Glib::ustring * param_getTooltip() { return &param_tooltip; };
 
     // overload these for your particular parameter to make it provide knotholder handles or canvas helperpaths
-    virtual bool providesKnotHolderEntities() { return false; }
+    virtual bool providesKnotHolderEntities() const { return false; }
     virtual void addKnotHolderEntities(KnotHolder */*knotholder*/, SPDesktop */*desktop*/, SPItem */*item*/) {};
-    virtual void addCanvasIndicators(SPLPEItem */*lpeitem*/, std::vector<Geom::PathVector> &/*hp_vec*/) {};
+    virtual void addCanvasIndicators(SPLPEItem const*/*lpeitem*/, std::vector<Geom::PathVector> &/*hp_vec*/) {};
 
     virtual void param_editOncanvas(SPItem * /*item*/, SPDesktop * /*dt*/) {};
     virtual void param_setup_nodepath(Inkscape::NodePath::Path */*np*/) {};
 
-    virtual void param_transform_multiply(Geom::Matrix const& /*postmul*/, bool /*set*/) {};
+    virtual void param_transform_multiply(Geom::Affine const& /*postmul*/, bool /*set*/) {};
 
     Glib::ustring param_key;
     Inkscape::UI::Widget::Registry * param_wr;
@@ -109,10 +108,11 @@ public:
     void param_set_digits(unsigned digits);
     void param_set_increments(double step, double page);
 
-    virtual Gtk::Widget * param_newWidget(Gtk::Tooltips * tooltips);
+    void addSlider(bool add_slider_widget) { add_slider = add_slider_widget; };
 
-    inline operator gdouble()
-        { return value; };
+    virtual Gtk::Widget * param_newWidget();
+
+    inline operator gdouble() const { return value; };
 
 protected:
     gdouble value;
@@ -123,6 +123,7 @@ protected:
     unsigned digits;
     double inc_step;
     double inc_page;
+    bool add_slider;
 
 private:
     ScalarParam(const ScalarParam&);
@@ -144,4 +145,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -1,5 +1,5 @@
-#ifndef __INKSCAPE_CTRLPOINT_H__
-#define __INKSCAPE_CTRLPOINT_H__
+#ifndef SEEN_INKSCAPE_CTRLPOINT_H
+#define SEEN_INKSCAPE_CTRLPOINT_H
 
 /*
  * A simple point
@@ -12,19 +12,19 @@
  * Released under GNU GPL
  */
 
-#include "sp-canvas.h"
+#include "sp-canvas-item.h"
 
-struct SPItem;
+class SPItem;
 
 #define SP_TYPE_CTRLPOINT (sp_ctrlpoint_get_type ())
-#define SP_CTRLPOINT(obj) (GTK_CHECK_CAST ((obj), SP_TYPE_CTRLPOINT, SPCtrlPoint))
-#define SP_IS_CTRLPOINT(obj) (GTK_CHECK_TYPE ((obj), SP_TYPE_CTRLPOINT))
+#define SP_CTRLPOINT(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_CTRLPOINT, SPCtrlPoint))
+#define SP_IS_CTRLPOINT(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_CTRLPOINT))
 
-struct SPCtrlPoint : public SPCanvasItem{
+struct SPCtrlPoint : public SPCanvasItem {
     SPItem *item;  // the item to which this line belongs in some sense; may be NULL for some users
     guint32 rgba;
     Geom::Point pt;
-    Geom::Matrix affine;
+    Geom::Affine affine;
     double radius;
 };
 struct SPCtrlPointClass : public SPCanvasItemClass{};
@@ -38,7 +38,7 @@ void sp_ctrlpoint_set_radius (SPCtrlPoint *cp, const double r);
 
 
 
-#endif
+#endif // SEEN_INKSCAPE_CTRLPOINT_H
 
 /*
   Local Variables:
@@ -49,4 +49,4 @@ void sp_ctrlpoint_set_radius (SPCtrlPoint *cp, const double r);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

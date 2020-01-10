@@ -1,9 +1,7 @@
-#ifndef __EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H__
-#define __EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H__
+#ifndef SEEN_EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H
+#define SEEN_EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H
 
- /** \file
- * SVG representation creator using libpoppler.
- *
+/*
  * Authors:
  *   miklos erdelyi
  *
@@ -21,22 +19,22 @@
 class SPDocument;
 namespace Inkscape {
     namespace XML {
-        class Document;
+        struct Document;
         class Node;
     }
 }
 
 #include <2geom/point.h>
-#include <2geom/matrix.h>
+#include <2geom/affine.h>
 #include <glibmm/ustring.h>
 
 #include "CharTypes.h"
 class GooString;
 class Function;
-struct GfxState;
-class GfxColor;
+class GfxState;
+struct GfxColor;
 class GfxColorSpace;
-class GfxRGB;
+struct GfxRGB;
 class GfxPath;
 class GfxPattern;
 class GfxTilingPattern;
@@ -58,8 +56,7 @@ namespace Internal {
 struct SvgTransparencyGroup;
 
 /**
- * \struct SvgGraphicsState
- * Holds information about the current softmask and group depth.
+ * Holds information about the current softmask and group depth for use of libpoppler.
  * Could be later used to store other graphics state parameters so that we could
  * emit only the differences in style settings from the parent state.
  */
@@ -69,7 +66,6 @@ struct SvgGraphicsState {
 };
 
 /**
- * \struct SvgGlyph
  * Holds information about glyphs added by PdfParser which haven't been added
  * to the document yet.
  */
@@ -89,10 +85,7 @@ struct SvgGlyph {
 };
 
 /**
- * \class SvgBuilder
- *
- * Builds the inner SVG representation from the calls of PdfParser
- *
+ * Builds the inner SVG representation using libpoppler from the calls of PdfParser.
  */
 class SvgBuilder {
 public:
@@ -212,7 +205,7 @@ private:
     char *_font_specification;
     double _font_scaling;
     bool _need_font_update;
-    Geom::Matrix _text_matrix;
+    Geom::Affine _text_matrix;
     Geom::Point _text_position;
     std::vector<SvgGlyph> _glyphs;   // Added characters
     bool _in_text_object;   // Whether we are inside a text object
@@ -228,15 +221,20 @@ private:
     Inkscape::XML::Node *_root;  // Root node from the point of view of this SvgBuilder
     Inkscape::XML::Node *_container; // Current container (group/pattern/mask)
     Inkscape::XML::Node *_preferences;  // Preferences container node
-    double _width, _height;       // Document size in px
+    double _width;       // Document size in px
+    double _height;       // Document size in px
+    double _ttm[6]; ///< temporary transform matrix
+    bool _ttm_is_set;
 };
 
 
-} } } /* namespace Inkscape, Extension, Internal */
+} // namespace Internal
+} // namespace Extension
+} // namespace Inkscape
 
-#endif /* HAVE_POPPLER */
+#endif // HAVE_POPPLER
 
-#endif /* __EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H__ */
+#endif // SEEN_EXTENSION_INTERNAL_PDFINPUT_SVGBUILDER_H
 
 /*
   Local Variables:

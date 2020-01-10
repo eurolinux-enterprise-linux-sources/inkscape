@@ -16,15 +16,15 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
-
-from webslicer_effect import *
-import inkex
-import gettext
+# standard library
 import os
 import sys
 import tempfile
+# local library
+from webslicer_effect import *
+import inkex
 
-_ = gettext.gettext
+inkex.localize()
 
 
 class WebSlicer_Export(WebSlicer_Effect):
@@ -54,8 +54,8 @@ class WebSlicer_Export(WebSlicer_Effect):
     def validate_inputs(self):
         # The user must supply a directory to export:
         if is_empty( self.options.dir ):
-            inkex.errormsg(_('You must to give a directory to export the slices.'))
-            return {'error':'You must to give a directory to export the slices.'}
+            inkex.errormsg(_('You must give a directory to export the slices.'))
+            return {'error':'You must give a directory to export the slices.'}
         # No directory separator at the path end:
         if self.options.dir[-1] == '/' or self.options.dir[-1] == '\\':
             self.options.dir = self.options.dir[0:-1]
@@ -303,8 +303,8 @@ class WebSlicer_Export(WebSlicer_Effect):
                 if len(el) == 5:
                     self.el_geo[el[0]] = { 'x':float(el[1]), 'y':float(el[2]),
                                            'w':float(el[3]), 'h':float(el[4]) }
-        doc_w = inkex.unittouu( self.document.getroot().get('width') )
-        doc_h = inkex.unittouu( self.document.getroot().get('height') )
+        doc_w = self.unittouu( self.document.getroot().get('width') )
+        doc_h = self.unittouu( self.document.getroot().get('height') )
         self.el_geo['webslicer-layer'] = { 'x':0, 'y':0, 'w':doc_w, 'h':doc_h }
 
 

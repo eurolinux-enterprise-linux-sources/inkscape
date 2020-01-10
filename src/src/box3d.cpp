@@ -1,5 +1,3 @@
-#define __SP_BOX3D_C__
-
 /*
  * SVG <box3d> implementation
  *
@@ -7,6 +5,8 @@
  *   Maximilian Albert <Anhalter42@gmx.de>
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   bulia byak <buliabyak@users.sf.net>
+ *   Abhishek Sharma
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2007      Authors
  * Copyright (C) 1999-2002 Lauris Kaplinski
@@ -22,7 +22,7 @@
 
 #include "box3d.h"
 #include "box3d-side.h"
-#include "box3d-context.h"
+#include "ui/tools/box3d-tool.h"
 #include "proj_pt.h"
 #include "transf_mat_3x4.h"
 #include "perspective-line.h"
@@ -40,81 +40,35 @@
 #include "desktop-handles.h"
 #include "macros.h"
 
-static void box3d_class_init(SPBox3DClass *klass);
-static void box3d_init(SPBox3D *box3d);
-
-static void box3d_build(SPObject *object, SPDocument *document, Inkscape::XML::Node *repr);
-static void box3d_release(SPObject *object);
-static void box3d_set(SPObject *object, unsigned int key, const gchar *value);
-static void box3d_update(SPObject *object, SPCtx *ctx, guint flags);
-static Inkscape::XML::Node *box3d_write(SPObject *object, Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags);
-
-static gchar *box3d_description(SPItem *item);
-static Geom::Matrix box3d_set_transform(SPItem *item, Geom::Matrix const &xform);
-static void box3d_convert_to_guides(SPItem *item);
-
 static void box3d_ref_changed(SPObject *old_ref, SPObject *ref, SPBox3D *box);
-
-static SPGroupClass *parent_class;
 
 static gint counter = 0;
 
-GType
-box3d_get_type(void)
-{
-    static GType type = 0;
+#include "sp-factory.h"
 
-    if (!type) {
-        GTypeInfo info = {
-            sizeof(SPBox3DClass),
-            NULL,   /* base_init */
-            NULL,   /* base_finalize */
-            (GClassInitFunc) box3d_class_init,
-            NULL,   /* class_finalize */
-            NULL,   /* class_data */
-            sizeof(SPBox3D),
-            16,     /* n_preallocs */
-            (GInstanceInitFunc) box3d_init,
-            NULL,   /* value_table */
-        };
-        type = g_type_register_static(SP_TYPE_GROUP, "SPBox3D", &info, (GTypeFlags) 0);
-    }
+namespace {
+	SPObject* createBox3D() {
+		return new SPBox3D();
+	}
 
-    return type;
+	bool box3DRegistered = SPFactory::instance().registerObject("inkscape:box3d", createBox3D);
 }
 
-static void
-box3d_class_init(SPBox3DClass *klass)
-{
-    SPObjectClass *sp_object_class = (SPObjectClass *) klass;
-    SPItemClass *item_class = (SPItemClass *) klass;
+SPBox3D::SPBox3D() : SPGroup() {
+	this->my_counter = 0;
+	this->swapped = Box3D::NONE;
 
-    parent_class = (SPGroupClass *) g_type_class_ref(SP_TYPE_GROUP);
-
-    sp_object_class->build = box3d_build;
-    sp_object_class->release = box3d_release;
-    sp_object_class->set = box3d_set;
-    sp_object_class->write = box3d_write;
-    sp_object_class->update = box3d_update;
-
-    item_class->description = box3d_description;
-    item_class->set_transform = box3d_set_transform;
-    item_class->convert_to_guides = box3d_convert_to_guides;
+    this->persp_href = NULL;
+    this->persp_ref = new Persp3DReference(this);
 }
 
-static void
-box3d_init(SPBox3D *box)
-{
-    box->persp_href = NULL;
-    box->persp_ref = new Persp3DReference(SP_OBJECT(box));
+SPBox3D::~SPBox3D() {
 }
 
-static void
-box3d_build(SPObject *object, SPDocument *document, Inkscape::XML::Node *repr)
-{
-    if (((SPObjectClass *) (parent_class))->build) {
-        ((SPObjectClass *) (parent_class))->build(object, document, repr);
-    }
+void SPBox3D::build(SPDocument *document, Inkscape::XML::Node *repr) {
+	SPBox3D* object = this;
+
+    SPGroup::build(document, repr);
 
     SPBox3D *box = SP_BOX3D (object);
     box->my_counter = counter++;
@@ -126,24 +80,19 @@ box3d_build(SPObject *object, SPDocument *document, Inkscape::XML::Node *repr)
 
     // TODO: Create/link to the correct perspective
 
-    SPDocument *doc = SP_OBJECT_DOCUMENT(box);
-    if (!doc)
-        return;
+    SPDocument *doc = box->document;
+    if ( doc ) {
+        box->persp_ref->changedSignal().connect(sigc::bind(sigc::ptr_fun(box3d_ref_changed), box));
 
-    box->persp_ref->changedSignal().connect(sigc::bind(sigc::ptr_fun(box3d_ref_changed), box));
-
-    sp_object_read_attr(object, "inkscape:perspectiveID");
-    sp_object_read_attr(object, "inkscape:corner0");
-    sp_object_read_attr(object, "inkscape:corner7");
+        object->readAttr( "inkscape:perspectiveID" );
+        object->readAttr( "inkscape:corner0" );
+        object->readAttr( "inkscape:corner7" );
+    }
 }
 
-/**
- * Virtual release of SPBox3D members before destruction.
- */
-static void
-box3d_release(SPObject *object)
-{
-    SPBox3D *box = (SPBox3D *) object;
+void SPBox3D::release() {
+	SPBox3D* object = this;
+    SPBox3D *box = object;
 
     if (box->persp_href) {
         g_free(box->persp_href);
@@ -169,21 +118,19 @@ box3d_release(SPObject *object)
         // by the following code and then again by the redo mechanism! Perhaps we should perform
         // deletion of the perspective from another location "outside" the undo/redo mechanism?
         if (persp->perspective_impl->boxes.empty()) {
-            SPDocument *doc = SP_OBJECT_DOCUMENT(box);
+            SPDocument *doc = box->document;
             persp->deleteObject();
             doc->setCurrentPersp3D(persp3d_document_first_persp(doc));
         }
         */
     }
 
-    if (((SPObjectClass *) parent_class)->release)
-        ((SPObjectClass *) parent_class)->release(object);
+    SPGroup::release();
 }
 
-static void
-box3d_set(SPObject *object, unsigned int key, const gchar *value)
-{
-    SPBox3D *box = SP_BOX3D(object);
+void SPBox3D::set(unsigned int key, const gchar* value) {
+	SPBox3D* object = this;
+    SPBox3D *box = object;
 
     switch (key) {
         case SP_ATTR_INKSCAPE_BOX3D_PERSPECTIVE_ID:
@@ -227,10 +174,8 @@ box3d_set(SPObject *object, unsigned int key, const gchar *value)
                 box3d_position_set(box);
             }
             break;
-	default:
-            if (((SPObjectClass *) (parent_class))->set) {
-                ((SPObjectClass *) (parent_class))->set(object, key, value);
-            }
+        default:
+            SPGroup::set(key, value);
             break;
     }
 }
@@ -251,9 +196,7 @@ box3d_ref_changed(SPObject *old_ref, SPObject *ref, SPBox3D *box)
     }
 }
 
-static void
-box3d_update(SPObject *object, SPCtx *ctx, guint flags)
-{
+void SPBox3D::update(SPCtx *ctx, guint flags) {
     if (flags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_STYLE_MODIFIED_FLAG | SP_OBJECT_VIEWPORT_MODIFIED_FLAG)) {
 
         /* FIXME?: Perhaps the display updates of box sides should be instantiated from here, but this
@@ -263,14 +206,12 @@ box3d_update(SPObject *object, SPCtx *ctx, guint flags)
     }
 
     // Invoke parent method
-    if (((SPObjectClass *) (parent_class))->update)
-        ((SPObjectClass *) (parent_class))->update(object, ctx, flags);
+    SPGroup::update(ctx, flags);
 }
 
-
-static Inkscape::XML::Node *box3d_write(SPObject *object, Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags)
-{
-    SPBox3D *box = SP_BOX3D(object);
+Inkscape::XML::Node* SPBox3D::write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags) {
+	SPBox3D* object = this;
+    SPBox3D *box = object;
 
     if ((flags & SP_OBJECT_WRITE_BUILD) && !repr) {
         // this is where we end up when saving as plain SVG (also in other circumstances?)
@@ -284,17 +225,15 @@ static Inkscape::XML::Node *box3d_write(SPObject *object, Inkscape::XML::Documen
             repr->setAttribute("inkscape:perspectiveID", box->persp_href);
         } else {
             /* box is not yet linked to a perspective; use the document's current perspective */
-            SPDocument *doc = SP_OBJECT_DOCUMENT(object);
+            SPDocument *doc = object->document;
             if (box->persp_ref->getURI()) {
                 gchar *uri_string = box->persp_ref->getURI()->toString();
                 repr->setAttribute("inkscape:perspectiveID", uri_string);
                 g_free(uri_string);
             } else {
-                Inkscape::XML::Node *persp_repr = SP_OBJECT_REPR(doc->getCurrentPersp3D());
-                const gchar *persp_id = persp_repr->attribute("id");
-                gchar *href = g_strdup_printf("#%s", persp_id);
-                repr->setAttribute("inkscape:perspectiveID", href);
-                g_free(href);
+                Glib::ustring href = "#";
+                href += doc->getCurrentPersp3D()->getId();
+                repr->setAttribute("inkscape:perspectiveID", href.c_str());
             }
         }
 
@@ -312,66 +251,60 @@ static Inkscape::XML::Node *box3d_write(SPObject *object, Inkscape::XML::Documen
         box->save_corner7 = box->orig_corner7;
     }
 
-    if (((SPObjectClass *) (parent_class))->write) {
-        ((SPObjectClass *) (parent_class))->write(object, xml_doc, repr, flags);
-    }
+    SPGroup::write(xml_doc, repr, flags);
 
     return repr;
 }
 
-static gchar *
-box3d_description(SPItem *item)
-{
-    g_return_val_if_fail(SP_IS_BOX3D(item), NULL);
-
-    return g_strdup(_("<b>3D Box</b>"));
+const char* SPBox3D::display_name() {
+    return _("3D Box");
 }
 
-void
-box3d_position_set (SPBox3D *box)
+void box3d_position_set(SPBox3D *box)
 {
     /* This draws the curve and calls requestDisplayUpdate() for each side (the latter is done in
        box3d_side_position_set() to avoid update conflicts with the parent box) */
-    for (SPObject *child = sp_object_first_child(SP_OBJECT (box)); child != NULL; child = SP_OBJECT_NEXT(child) ) {
-        if (SP_IS_BOX3D_SIDE(child))
-            box3d_side_position_set(SP_BOX3D_SIDE(child));
+    for ( SPObject *obj = box->firstChild(); obj; obj = obj->getNext() ) {
+        Box3DSide *side = dynamic_cast<Box3DSide *>(obj);
+        if (side) {
+            box3d_side_position_set(side);
+        }
     }
 }
 
-static Geom::Matrix
-box3d_set_transform(SPItem *item, Geom::Matrix const &xform)
-{
-    SPBox3D *box = SP_BOX3D(item);
+Geom::Affine SPBox3D::set_transform(Geom::Affine const &xform) {
+	SPBox3D* item = this;
+    SPBox3D *box = item;
 
     // We don't apply the transform to the box directly but instead to its perspective (which is
     // done in sp_selection_apply_affine). Here we only adjust strokes, patterns, etc.
 
-    Geom::Matrix ret(Geom::Matrix(xform).without_translation());
+    Geom::Affine ret(Geom::Affine(xform).withoutTranslation());
     gdouble const sw = hypot(ret[0], ret[1]);
     gdouble const sh = hypot(ret[2], ret[3]);
 
-    for (SPObject *child = sp_object_first_child(box); child != NULL; child = SP_OBJECT_NEXT(child)) {
+    for ( SPObject *child = box->firstChild(); child; child = child->getNext() ) {
         if (SP_IS_ITEM(child)) {
             SPItem *childitem = SP_ITEM(child);
 
             // Adjust stroke width
-            sp_item_adjust_stroke(childitem, sqrt(fabs(sw * sh)));
+            childitem->adjust_stroke(sqrt(fabs(sw * sh)));
 
             // Adjust pattern fill
-            sp_item_adjust_pattern(childitem, xform);
+            childitem->adjust_pattern(xform);
 
             // Adjust gradient fill
-            sp_item_adjust_gradient(childitem, xform);
+            childitem->adjust_gradient(xform);
 
             // Adjust LPE
-            sp_item_adjust_livepatheffect(childitem, xform);
+            childitem->adjust_livepatheffect(xform);
         }
     }
 
     return Geom::identity();
 }
 
-Proj::Pt3
+static Proj::Pt3
 box3d_get_proj_corner (guint id, Proj::Pt3 const &c0, Proj::Pt3 const &c7) {
     return Proj::Pt3 ((id & Box3D::X) ? c7[Proj::X] : c0[Proj::X],
                       (id & Box3D::Y) ? c7[Proj::Y] : c0[Proj::Y],
@@ -391,9 +324,9 @@ Geom::Point
 box3d_get_corner_screen (SPBox3D const *box, guint id, bool item_coords) {
     Proj::Pt3 proj_corner (box3d_get_proj_corner (box, id));
     if (!box3d_get_perspective(box)) {
-        return Geom::Point (NR_HUGE, NR_HUGE);
+        return Geom::Point (Geom::infinity(), Geom::infinity());
     }
-    Geom::Matrix const i2d (sp_item_i2d_affine (SP_ITEM(box)));
+    Geom::Affine const i2d(box->i2dt_affine ());
     if (item_coords) {
         return box3d_get_perspective(box)->perspective_impl->tmat.image(proj_corner).affine() * i2d.inverse();
     } else {
@@ -415,9 +348,9 @@ Geom::Point
 box3d_get_center_screen (SPBox3D *box) {
     Proj::Pt3 proj_center (box3d_get_proj_center (box));
     if (!box3d_get_perspective(box)) {
-        return Geom::Point (NR_HUGE, NR_HUGE);
+        return Geom::Point (Geom::infinity(), Geom::infinity());
     }
-    Geom::Matrix const i2d (sp_item_i2d_affine (SP_ITEM(box)));
+    Geom::Affine const i2d( box->i2dt_affine() );
     return box3d_get_perspective(box)->perspective_impl->tmat.image(proj_center).affine() * i2d.inverse();
 }
 
@@ -492,7 +425,7 @@ box3d_snap (SPBox3D *box, int id, Proj::Pt3 const &pt_proj, Proj::Pt3 const &sta
 
     // find the closest snapping point
     int snap_index = -1;
-    double snap_dist = NR_HUGE;
+    double snap_dist = Geom::infinity();
     for (int i = 0; i < num_snap_lines; ++i) {
         if (snap_dists[i] < snap_dist) {
             snap_index = i;
@@ -510,6 +443,16 @@ box3d_snap (SPBox3D *box, int id, Proj::Pt3 const &pt_proj, Proj::Pt3 const &sta
         result = snap_pts[snap_index];
     }
     return box3d_get_perspective(box)->perspective_impl->tmat.preimage (result, z_coord, Proj::Z);
+}
+
+SPBox3D * SPBox3D::createBox3D(SPItem * parent)
+{
+    SPBox3D *box3d = 0;
+    Inkscape::XML::Document *xml_doc = parent->document->rdoc;
+    Inkscape::XML::Node *repr = xml_doc->createElement("svg:g");
+    repr->setAttribute("sodipodi:type", "inkscape:box3d");
+    box3d = reinterpret_cast<SPBox3D *>(parent->appendChildRepr(repr));
+    return box3d;
 }
 
 void
@@ -675,15 +618,15 @@ box3d_half_line_crosses_joining_line (Geom::Point const &A, Geom::Point const &B
     Geom::Line lineCD(C,D);
 
     Geom::OptCrossing inters = Geom::OptCrossing(); // empty by default
-	try
-	{
-		inters = Geom::intersection(lineAB, lineCD);
-	}
-	catch (Geom::InfiniteSolutions e)
-	{
-		// We're probably dealing with parallel lines, so they don't really cross
-		return false;
-	}
+    try
+    {
+        inters = Geom::intersection(lineAB, lineCD);
+    }
+    catch (Geom::InfiniteSolutions& e)
+    {
+        // We're probably dealing with parallel lines, so they don't really cross
+        return false;
+    }
 
     if (!inters) {
         return false;
@@ -731,15 +674,6 @@ box3d_aux_set_z_orders (int z_orders[6], int a, int b, int c, int d, int e, int 
     z_orders[5] = f;
 }
 
-static inline void
-box3d_swap_z_orders (int z_orders[6]) {
-    int tmp;
-    for (int i = 0; i < 3; ++i) {
-        tmp = z_orders[i];
-        z_orders[i] = z_orders[5-i];
-        z_orders[5-i] = tmp;
-    }
-}
 
 /*
  * In standard perspective we have:
@@ -754,11 +688,6 @@ box3d_swap_z_orders (int z_orders[6]) {
 /* All VPs infinite */
 static void
 box3d_set_new_z_orders_case0 (SPBox3D *box, int z_orders[6], Box3D::Axis central_axis) {
-    Persp3D *persp = box3d_get_perspective(box);
-    Geom::Point xdir(persp3d_get_infinite_dir(persp, Proj::X));
-    Geom::Point ydir(persp3d_get_infinite_dir(persp, Proj::Y));
-    Geom::Point zdir(persp3d_get_infinite_dir(persp, Proj::Z));
-
     bool swapped = box3d_XY_axes_are_swapped(box);
 
     switch(central_axis) {
@@ -870,12 +799,7 @@ box3d_set_new_z_orders_case1 (SPBox3D *box, int z_orders[6], Box3D::Axis central
 /* Precisely 2 finite VPs */
 static void
 box3d_set_new_z_orders_case2 (SPBox3D *box, int z_orders[6], Box3D::Axis central_axis, Box3D::Axis /*infinite_axis*/) {
-    Persp3D *persp = box3d_get_perspective(box);
-
     Geom::Point c3(box3d_get_corner_screen(box, 3, false));
-    Geom::Point xdir(persp3d_get_PL_dir_from_pt(persp, c3, Proj::X));
-    Geom::Point ydir(persp3d_get_PL_dir_from_pt(persp, c3, Proj::Y));
-    Geom::Point zdir(persp3d_get_PL_dir_from_pt(persp, c3, Proj::Z));
 
     bool swapped = box3d_XY_axes_are_swapped(box);
 
@@ -1073,6 +997,8 @@ box3d_recompute_z_orders (SPBox3D *box) {
             central_axis = Box3D::Z;
         }
 
+        // FIXME: At present, this is not used.  Why is it calculated?
+        /*
         unsigned int central_corner = 3 ^ central_axis;
         if (central_axis == Box3D::Z) {
             central_corner = central_corner ^ Box3D::XYZ;
@@ -1080,6 +1006,7 @@ box3d_recompute_z_orders (SPBox3D *box) {
         if (box3d_XY_axes_are_swapped(box)) {
             central_corner = central_corner ^ Box3D::XYZ;
         }
+        */
 
         Geom::Point c1(box3d_get_corner_screen(box, 1, false));
         Geom::Point c2(box3d_get_corner_screen(box, 2, false));
@@ -1151,13 +1078,14 @@ box3d_recompute_z_orders (SPBox3D *box) {
     return false;
 }
 
-static std::map<int, Box3DSide *>
-box3d_get_sides (SPBox3D *box) {
+static std::map<int, Box3DSide *> box3d_get_sides(SPBox3D *box)
+{
     std::map<int, Box3DSide *> sides;
-    for (SPObject *side = sp_object_first_child(box); side != NULL; side = SP_OBJECT_NEXT(side)) {
-        if (SP_IS_BOX3D_SIDE(side))
-            sides[Box3D::face_to_int(sp_repr_get_int_attribute(SP_OBJECT_REPR(side),
-                                                               "inkscape:box3dsidetype", -1))] = SP_BOX3D_SIDE(side);
+    for ( SPObject *obj = box->firstChild(); obj; obj = obj->getNext() ) {
+        Box3DSide *side = dynamic_cast<Box3DSide *>(obj);
+        if (side) {
+            sides[Box3D::face_to_int(side->getFaceId())] = side;
+        }
     }
     sides.erase(-1);
     return sides;
@@ -1174,7 +1102,7 @@ box3d_set_z_orders (SPBox3D *box) {
         for (unsigned int i = 0; i < 6; ++i) {
             side = sides.find(box->z_orders[i]);
             if (side != sides.end()) {
-                SP_ITEM((*side).second)->lowerToBottom();
+                ((*side).second)->lowerToBottom();
             }
         }
     }
@@ -1291,12 +1219,11 @@ box3d_check_for_swapped_coords(SPBox3D *box) {
     box3d_exchange_coords(box);
 }
 
-static void
-box3d_extract_boxes_rec(SPObject *obj, std::list<SPBox3D *> &boxes) {
+static void box3d_extract_boxes_rec(SPObject *obj, std::list<SPBox3D *> &boxes) {
     if (SP_IS_BOX3D(obj)) {
         boxes.push_back(SP_BOX3D(obj));
     } else if (SP_IS_GROUP(obj)) {
-        for (SPObject *child = sp_object_first_child(obj); child != NULL; child = SP_OBJECT_NEXT(child) ) {
+        for ( SPObject *child = obj->firstChild(); child; child = child->getNext() ) {
             box3d_extract_boxes_rec(child, boxes);
         }
     }
@@ -1331,35 +1258,34 @@ box3d_switch_perspectives(SPBox3D *box, Persp3D *old_persp, Persp3D *new_persp, 
     persp3d_remove_box (old_persp, box);
     persp3d_add_box (new_persp, box);
 
-    gchar *href = g_strdup_printf("#%s", SP_OBJECT_REPR(new_persp)->attribute("id"));
-    SP_OBJECT_REPR(box)->setAttribute("inkscape:perspectiveID", href);
-    g_free(href);
+    Glib::ustring href = "#";
+    href += new_persp->getId();
+    box->setAttribute("inkscape:perspectiveID", href.c_str());
 }
 
 /* Converts the 3D box to an ordinary SPGroup, adds it to the XML tree at the same position as
    the original box and deletes the latter */
-SPGroup *
-box3d_convert_to_group(SPBox3D *box) {
-    SPDocument *doc = SP_OBJECT_DOCUMENT(box);
-    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(doc);
+SPGroup *box3d_convert_to_group(SPBox3D *box)
+{
+    SPDocument *doc = box->document;
+    Inkscape::XML::Document *xml_doc = doc->getReprDoc();
 
     // remember position of the box
-    int pos = SP_OBJECT_REPR(box)->position();
+    int pos = box->getPosition();
 
     // remember important attributes
-    Inkscape::XML::Node *repr_source = SP_OBJECT_REPR(box);
-    gchar const *id = repr_source->attribute("id");
-    gchar const *style = repr_source->attribute("style");
-    gchar const *mask = repr_source->attribute("mask");
-    gchar const *clip_path = repr_source->attribute("clip-path");
+    gchar const *id = box->getAttribute("id");
+    gchar const *style = box->getAttribute("style");
+    gchar const *mask = box->getAttribute("mask");
+    gchar const *clip_path = box->getAttribute("clip-path");
 
     // create a new group and add the sides (converted to ordinary paths) as its children
     Inkscape::XML::Node *grepr = xml_doc->createElement("svg:g");
 
-    Inkscape::XML::Node *repr;
-    for (SPObject *child = sp_object_first_child(SP_OBJECT(box)); child != NULL; child = SP_OBJECT_NEXT(child) ) {
-        if (SP_IS_BOX3D_SIDE(child)) {
-            repr = box3d_side_convert_to_path(SP_BOX3D_SIDE(child));
+    for ( SPObject *obj = box->firstChild(); obj; obj = obj->getNext() ) {
+        Box3DSide *side = dynamic_cast<Box3DSide *>(obj);
+        if (side) {
+            Inkscape::XML::Node *repr = box3d_side_convert_to_path(side);
             grepr->appendChild(repr);
         } else {
             g_warning("Non-side item encountered as child of a 3D box.");
@@ -1367,8 +1293,8 @@ box3d_convert_to_group(SPBox3D *box) {
     }
 
     // add the new group to the box's parent and set remembered position
-    SPObject *parent = SP_OBJECT_PARENT(box);
-    SP_OBJECT_REPR(parent)->appendChild(grepr);
+    SPObject *parent = box->parent;
+    parent->appendChild(grepr);
     grepr->setPosition(pos);
     grepr->setAttribute("style", style);
     if (mask)
@@ -1376,50 +1302,57 @@ box3d_convert_to_group(SPBox3D *box) {
     if (clip_path)
        grepr->setAttribute("clip-path", clip_path);
 
-    SP_OBJECT(box)->deleteObject(true);
+    box->deleteObject(true);
 
     grepr->setAttribute("id", id);
 
     return SP_GROUP(doc->getObjectByRepr(grepr));
 }
 
+const char *SPBox3D::displayName() const {
+    return _("3D Box");
+}
+
+gchar *SPBox3D::description() const {
+    // We could put more details about the 3d box here
+    return g_strdup("");
+}
+
 static inline void
-box3d_push_back_corner_pair(SPBox3D *box, std::list<std::pair<Geom::Point, Geom::Point> > &pts, int c1, int c2) {
+box3d_push_back_corner_pair(SPBox3D const *box, std::list<std::pair<Geom::Point, Geom::Point> > &pts, int c1, int c2) {
     pts.push_back(std::make_pair(box3d_get_corner_screen(box, c1, false),
                                  box3d_get_corner_screen(box, c2, false)));
 }
 
-void
-box3d_convert_to_guides(SPItem *item) {
-    SPBox3D *box = SP_BOX3D(item);
+void SPBox3D::convert_to_guides() const {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
 
     if (!prefs->getBool("/tools/shapes/3dbox/convertguides", true)) {
-        sp_item_convert_to_guides(SP_ITEM(box));
+        this->convert_to_guides();
         return;
     }
 
     std::list<std::pair<Geom::Point, Geom::Point> > pts;
 
     /* perspective lines in X direction */
-    box3d_push_back_corner_pair(box, pts, 0, 1);
-    box3d_push_back_corner_pair(box, pts, 2, 3);
-    box3d_push_back_corner_pair(box, pts, 4, 5);
-    box3d_push_back_corner_pair(box, pts, 6, 7);
+    box3d_push_back_corner_pair(this, pts, 0, 1);
+    box3d_push_back_corner_pair(this, pts, 2, 3);
+    box3d_push_back_corner_pair(this, pts, 4, 5);
+    box3d_push_back_corner_pair(this, pts, 6, 7);
 
     /* perspective lines in Y direction */
-    box3d_push_back_corner_pair(box, pts, 0, 2);
-    box3d_push_back_corner_pair(box, pts, 1, 3);
-    box3d_push_back_corner_pair(box, pts, 4, 6);
-    box3d_push_back_corner_pair(box, pts, 5, 7);
+    box3d_push_back_corner_pair(this, pts, 0, 2);
+    box3d_push_back_corner_pair(this, pts, 1, 3);
+    box3d_push_back_corner_pair(this, pts, 4, 6);
+    box3d_push_back_corner_pair(this, pts, 5, 7);
 
     /* perspective lines in Z direction */
-    box3d_push_back_corner_pair(box, pts, 0, 4);
-    box3d_push_back_corner_pair(box, pts, 1, 5);
-    box3d_push_back_corner_pair(box, pts, 2, 6);
-    box3d_push_back_corner_pair(box, pts, 3, 7);
+    box3d_push_back_corner_pair(this, pts, 0, 4);
+    box3d_push_back_corner_pair(this, pts, 1, 5);
+    box3d_push_back_corner_pair(this, pts, 2, 6);
+    box3d_push_back_corner_pair(this, pts, 3, 7);
 
-    sp_guide_pt_pairs_to_guides(inkscape_active_desktop(), pts);
+    sp_guide_pt_pairs_to_guides(this->document, pts);
 }
 
 /*

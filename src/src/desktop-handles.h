@@ -1,5 +1,5 @@
-#ifndef __SP_DESKTOP_HANDLES_H__
-#define __SP_DESKTOP_HANDLES_H__
+#ifndef SEEN_SP_DESKTOP_HANDLES_H
+#define SEEN_SP_DESKTOP_HANDLES_H
 
 /*
  * Frontends
@@ -13,8 +13,24 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "display/display-forward.h"
-#include "forward.h"
+
+class SPDesktop;
+class SPDocument;
+
+namespace Inkscape {
+namespace UI {
+namespace Tools {
+
+class ToolBase;
+
+}
+}
+}
+
+class SPNamedView;
+struct SPCanvas;
+struct SPCanvasGroup;
+struct SPCanvasItem;
 
 namespace Inkscape { 
     class MessageStack;
@@ -28,7 +44,7 @@ namespace Inkscape {
 #define SP_COORDINATES_UNDERLINE_X (1 << Geom::X)
 #define SP_COORDINATES_UNDERLINE_Y (1 << Geom::Y)
 
-SPEventContext * sp_desktop_event_context (SPDesktop const * desktop);
+//ToolBase * sp_desktop_event_context (SPDesktop const * desktop);
 Inkscape::Selection * sp_desktop_selection (SPDesktop const * desktop);
 SPDocument * sp_desktop_document (SPDesktop const * desktop);
 SPCanvas * sp_desktop_canvas (SPDesktop const * desktop);
@@ -43,7 +59,7 @@ SPCanvasGroup * sp_desktop_tempgroup (SPDesktop const * desktop);
 Inkscape::MessageStack * sp_desktop_message_stack (SPDesktop const * desktop);
 SPNamedView * sp_desktop_namedview (SPDesktop const * desktop);
 
-#endif
+#endif // SEEN_SP_DESKTOP_HANDLES_H
 
 /*
   Local Variables:
@@ -54,4 +70,4 @@ SPNamedView * sp_desktop_namedview (SPDesktop const * desktop);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

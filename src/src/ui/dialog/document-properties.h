@@ -14,26 +14,35 @@
 #ifndef INKSCAPE_UI_DIALOG_DOCUMENT_PREFERENCES_H
 #define INKSCAPE_UI_DIALOG_DOCUMENT_PREFERENCES_H
 
-#include <list>
 #include <stddef.h>
-#include <sigc++/sigc++.h>//
+#include <sigc++/sigc++.h>
 #include <gtkmm/comboboxtext.h>
 #include <gtkmm/liststore.h>
 #include <gtkmm/notebook.h>
-#include <glibmm/i18n.h>
+#include <gtkmm/buttonbox.h>
+#include <gtkmm/textview.h>
 
-#include "ui/widget/notebook-page.h"
 #include "ui/widget/page-sizer.h"
 #include "ui/widget/registered-widget.h"
 #include "ui/widget/registry.h"
 #include "ui/widget/tolerance-slider.h"
 #include "ui/widget/panel.h"
+#include "ui/widget/licensor.h"
 
 #include "xml/helper-observer.h"
 
 namespace Inkscape {
+    namespace XML {
+        class Node;
+    }
     namespace UI {
+        namespace Widget {
+            class EntityEntry;
+            class NotebookPage;
+        }
         namespace Dialog {
+
+typedef std::list<UI::Widget::EntityEntry*> RDElist;
 
 class DocumentProperties : public UI::Widget::Panel {
 public:
@@ -53,6 +62,7 @@ protected:
     void  build_cms();
 #endif // defined(HAVE_LIBLCMS1) || defined(HAVE_LIBLCMS2)
     void  build_scripting();
+    void  build_metadata();
     void  init();
 
     virtual void  on_response (int);
@@ -61,33 +71,53 @@ protected:
     void  populate_linked_profiles_box();
     void  linkSelectedProfile();
     void  removeSelectedProfile();
+    void  onColorProfileSelectRow();
     void  linked_profiles_list_button_release(GdkEventButton* event);
     void  cms_create_popup_menu(Gtk::Widget& parent, sigc::slot<void> rem);
 #endif // defined(HAVE_LIBLCMS1) || defined(HAVE_LIBLCMS2)
 
     void  external_scripts_list_button_release(GdkEventButton* event);
-    void  populate_external_scripts_box();
+    void  embedded_scripts_list_button_release(GdkEventButton* event);
+    void  populate_script_lists();
     void  addExternalScript();
+    void  browseExternalScript();
+    void  addEmbeddedScript();
     void  removeExternalScript();
-    void  scripting_create_popup_menu(Gtk::Widget& parent, sigc::slot<void> rem);
+    void  removeEmbeddedScript();
+    void  changeEmbeddedScript();
+    void  onExternalScriptSelectRow();
+    void  onEmbeddedScriptSelectRow();
+    void  editEmbeddedScript();
+    void  external_create_popup_menu(Gtk::Widget& parent, sigc::slot<void> rem);
+    void  embedded_create_popup_menu(Gtk::Widget& parent, sigc::slot<void> rem);
+    void  load_default_metadata();
+    void  save_default_metadata();
 
     void _handleDocumentReplaced(SPDesktop* desktop, SPDocument *document);
     void _handleActivateDesktop(Inkscape::Application *application, SPDesktop *desktop);
     void _handleDeactivateDesktop(Inkscape::Application *application, SPDesktop *desktop);
 
-    Inkscape::XML::SignalObserver _emb_profiles_observer, _ext_scripts_observer;
-    Gtk::Tooltips _tt;
+    Inkscape::XML::SignalObserver _emb_profiles_observer, _scripts_observer;
     Gtk::Notebook  _notebook;
 
-    UI::Widget::NotebookPage   _page_page;
-    UI::Widget::NotebookPage   _page_guides;
-    UI::Widget::NotebookPage   _page_snap;
-    UI::Widget::NotebookPage   _page_cms;
-    UI::Widget::NotebookPage   _page_scripting;
+    UI::Widget::NotebookPage   *_page_page;
+    UI::Widget::NotebookPage   *_page_guides;
+    UI::Widget::NotebookPage   *_page_snap;
+    UI::Widget::NotebookPage   *_page_cms;
+    UI::Widget::NotebookPage   *_page_scripting;
+
+    Gtk::Notebook _scripting_notebook;
+    UI::Widget::NotebookPage *_page_external_scripts;
+    UI::Widget::NotebookPage *_page_embedded_scripts;
+
+    UI::Widget::NotebookPage  *_page_metadata1;
+    UI::Widget::NotebookPage  *_page_metadata2;
+
     Gtk::VBox      _grids_vbox;
 
     UI::Widget::Registry _wr;
     //---------------------------------------------------------------
+    UI::Widget::RegisteredCheckButton _rcb_antialias;
     UI::Widget::RegisteredCheckButton _rcb_canb;
     UI::Widget::RegisteredCheckButton _rcb_bord;
     UI::Widget::RegisteredCheckButton _rcb_shad;
@@ -97,16 +127,20 @@ protected:
     UI::Widget::PageSizer             _page_sizer;
     //---------------------------------------------------------------
     UI::Widget::RegisteredCheckButton _rcb_sgui;
-    UI::Widget::RegisteredCheckButton _rcbsng;
     UI::Widget::RegisteredColorPicker _rcp_gui;
     UI::Widget::RegisteredColorPicker _rcp_hgui;
     //---------------------------------------------------------------
     UI::Widget::ToleranceSlider       _rsu_sno;
     UI::Widget::ToleranceSlider       _rsu_sn;
     UI::Widget::ToleranceSlider       _rsu_gusn;
+    UI::Widget::RegisteredCheckButton _rcb_snclp;
+    UI::Widget::RegisteredCheckButton _rcb_snmsk;
+    UI::Widget::RegisteredCheckButton _rcb_perp;
+    UI::Widget::RegisteredCheckButton _rcb_tang;
     //---------------------------------------------------------------
     Gtk::ComboBoxText _combo_avail;
     Gtk::Button         _link_btn;
+    Gtk::Button         _unlink_btn;
     class LinkedProfilesColumns : public Gtk::TreeModel::ColumnRecord
         {
         public:
@@ -122,7 +156,16 @@ protected:
     Gtk::Menu _EmbProfContextMenu;
 
     //---------------------------------------------------------------
-    Gtk::Button         _add_btn;
+    Gtk::Button         _external_add_btn;
+    Gtk::Button         _external_remove_btn;
+    Gtk::Button         _embed_new_btn;
+    Gtk::Button         _embed_remove_btn;
+#if WITH_GTKMM_3_0
+    Gtk::ButtonBox _embed_button_box;
+#else
+    Gtk::HButtonBox _embed_button_box;
+#endif
+
     class ExternalScriptsColumns : public Gtk::TreeModel::ColumnRecord
         {
         public:
@@ -131,11 +174,25 @@ protected:
             Gtk::TreeModelColumn<Glib::ustring> filenameColumn;
         };
     ExternalScriptsColumns _ExternalScriptsListColumns;
+    class EmbeddedScriptsColumns : public Gtk::TreeModel::ColumnRecord
+        {
+        public:
+            EmbeddedScriptsColumns()
+               { add(idColumn); }
+            Gtk::TreeModelColumn<Glib::ustring> idColumn;
+        };
+    EmbeddedScriptsColumns _EmbeddedScriptsListColumns;
     Glib::RefPtr<Gtk::ListStore> _ExternalScriptsListStore;
+    Glib::RefPtr<Gtk::ListStore> _EmbeddedScriptsListStore;
     Gtk::TreeView _ExternalScriptsList;
+    Gtk::TreeView _EmbeddedScriptsList;
     Gtk::ScrolledWindow _ExternalScriptsListScroller;
+    Gtk::ScrolledWindow _EmbeddedScriptsListScroller;
     Gtk::Menu _ExternalScriptsContextMenu;
+    Gtk::Menu _EmbeddedScriptsContextMenu;
     Gtk::Entry _script_entry;
+    Gtk::TextView _EmbeddedContent;
+    Gtk::ScrolledWindow _EmbeddedContentScroller;
     //---------------------------------------------------------------
 
     Gtk::Notebook   _grids_notebook;
@@ -148,6 +205,9 @@ protected:
     Gtk::HBox       _grids_space;
     //---------------------------------------------------------------
 
+    RDElist _rdflist;
+    UI::Widget::Licensor _licensor;
+
     Gtk::HBox& _createPageTabLabel(const Glib::ustring& label, const char *label_image);
 
 private:
@@ -157,6 +217,9 @@ private:
     // callback methods for buttons on grids page.
     void onNewGrid();
     void onRemoveGrid();
+    
+    // callback for document unit change
+    void onDocUnitChange();
 };
 
 } // namespace Dialog
@@ -174,4 +237,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -36,6 +36,8 @@ int file_open_tmp( std::string& name_used, const std::string& prefix );
 
 bool file_test( char const *utf8name, GFileTest test );
 
+bool file_directory_exists( char const *utf8name );
+
 bool file_is_writable( char const *utf8name);
 
 GDir *dir_open(gchar const *utf8name, guint flags, GError **error);
@@ -58,6 +60,8 @@ void spawn_async_with_pipes (const std::string& working_directory,
                              int* standard_input,
                              int* standard_output,
                              int* standard_error);
+
+Glib::ustring get_file_extension(Glib::ustring path);
 
 }
 }

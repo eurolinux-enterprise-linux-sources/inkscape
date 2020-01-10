@@ -1,4 +1,3 @@
-#define __SP_MODULE_C__
 /** \file
  *
  * Inkscape::Extension::Extension: 
@@ -20,16 +19,24 @@
 # include "config.h"
 #endif
 
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
 
-#include <glibmm/i18n.h>
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
 #include <gtkmm/frame.h>
-#include <gtkmm/table.h>
-#include <gtkmm/tooltips.h>
 
+#if WITH_GTKMM_3_0
+# include <gtkmm/grid.h>
+#else
+# include <gtkmm/table.h>
+#endif
+
+#include <glibmm/i18n.h>
 #include "inkscape.h"
 #include "extension/implementation/implementation.h"
+#include "extension.h"
 
 #include "db.h"
 #include "dependency.h"
@@ -44,8 +51,6 @@ namespace Extension {
 std::vector<const gchar *> Extension::search_path;
 std::ofstream Extension::error_file;
 
-Parameter * param_shared (const gchar * name, GSList * list);
-
 /**
     \return  none
     \brief   Constructs an Extension from a Inkscape::XML::Node
@@ -59,6 +64,7 @@ Parameter * param_shared (const gchar * name, GSList * list);
 */
 Extension::Extension (Inkscape::XML::Node * in_repr, Implementation::Implementation * in_imp)
     : _help(NULL)
+    , silent(false)
     , _gui(true)
 {
     repr = in_repr;
@@ -77,7 +83,7 @@ Extension::Extension (Inkscape::XML::Node * in_repr, Implementation::Implementat
 
     // printf("Extension Constructor: ");
     if (repr != NULL) {
-        Inkscape::XML::Node *child_repr = sp_repr_children(repr);
+        Inkscape::XML::Node *child_repr = repr->firstChild();
         /* TODO: Handle what happens if we don't have these two */
         while (child_repr != NULL) {
             char const * chname = child_repr->name();
@@ -87,14 +93,14 @@ Extension::Extension (Inkscape::XML::Node * in_repr, Implementation::Implementat
             if (chname[0] == '_') /* Allow _ for translation of tags */
                 chname++;
             if (!strcmp(chname, "id")) {
-                gchar const *val = sp_repr_children(child_repr)->content();
+                gchar const *val = child_repr->firstChild()->content();
                 id = g_strdup (val);
             } /* id */
             if (!strcmp(chname, "name")) {
-                name = g_strdup (sp_repr_children(child_repr)->content());
+                name = g_strdup (child_repr->firstChild()->content());
             } /* name */
             if (!strcmp(chname, "help")) {
-                _help = g_strdup (sp_repr_children(child_repr)->content());
+                _help = g_strdup (child_repr->firstChild()->content());
             } /* name */
             if (!strcmp(chname, "param") || !strcmp(chname, "_param")) {
                 Parameter * param;
@@ -105,7 +111,18 @@ Extension::Extension (Inkscape::XML::Node * in_repr, Implementation::Implementat
             if (!strcmp(chname, "dependency")) {
                 _deps.push_back(new Dependency(child_repr));
             } /* dependency */
-            child_repr = sp_repr_next(child_repr);
+            if (!strcmp(chname, "script")) {
+                for (Inkscape::XML::Node *child = child_repr->firstChild(); child != NULL ; child = child->next()) {
+                    if (child->type() == Inkscape::XML::ELEMENT_NODE) {
+                        _deps.push_back(new Dependency(child));
+                        break;
+                    } /* skip non-element nodes (see LP #1372200) */
+                }
+            } /* check command as a dependency (see LP #505920) */
+            if (!strcmp(chname, "options")) {
+                silent = !strcmp( child_repr->attribute("silent"), "true" );
+            }
+            child_repr = child_repr->next();
         }
 
         db.register_ext (this);
@@ -253,6 +270,18 @@ Extension::check (void)
 
     const char * inx_failure = _("  This is caused by an improper .inx file for this extension."
                                  "  An improper .inx file could have been caused by a faulty installation of Inkscape.");
+
+    // No need to include Windows only extensions
+    // See LP bug #1307554 for details - https://bugs.launchpad.net/inkscape/+bug/1307554
+#ifndef WIN32
+    const char* win_ext[] = {"com.vaxxine.print.win32"};
+    std::vector<std::string> v (win_ext, win_ext + sizeof(win_ext)/sizeof(win_ext[0]));
+    std::string ext_id(id);
+    if (std::find(v.begin(), v.end(), ext_id) != v.end()) {
+        printFailure(Glib::ustring(_("the extension is designed for Windows only.")) + inx_failure);
+        retval = false;
+    }
+#endif
     if (id == NULL) {
         printFailure(Glib::ustring(_("an ID was not defined for it.")) + inx_failure);
         retval = false;
@@ -307,6 +336,16 @@ Inkscape::XML::Node *
 Extension::get_repr (void)
 {
     return repr;
+}
+
+/**
+    \return  bool 
+    \brief   Whether this extension should hide the "working, please wait" dialog
+*/
+bool
+Extension::is_silent (void)
+{
+    return silent;
 }
 
 /**
@@ -367,83 +406,70 @@ Extension::deactivated (void)
     return get_state() == STATE_DEACTIVATED;
 }
 
-/**
-    \return    Parameter structure with a name of 'name'
-    \brief     This function looks through the linked list for a parameter
-               structure with the name of the passed in name
-    \param     name   The name to search for
-    \param     list   The list to look for
-
-    This is an inline function that is used by all the get_param and
-    set_param functions to find a param_t in the linked list with
-    the passed in name.  It is done as an inline so that it will be
-    optimized into a 'jump' by the compiler.
-
-    This function can throw a 'param_not_exist' exception if the
-    name is not found.
-
-    The first thing that this function checks is if the list is NULL.
-    It could be NULL because there are no parameters for this extension
-    or because all of them have been checked (I'll spoil the ending and
-    tell you that this function is called recursively).  If the list
-    is NULL then the 'param_not_exist' exception is thrown.
-
-    Otherwise, the function looks at the current param_t that the element
-    list points to.  If the name of that param_t matches the passed in
-    name then that param_t is returned.  Otherwise, this function is
-    called again with g_slist_next as a parameter.
-*/
-Parameter *
-param_shared (const gchar * name, GSList * list)
+Parameter *Extension::get_param(gchar const *name)
 {
-    Parameter * output;
-
     if (name == NULL) {
         throw Extension::param_not_exist();
     }
-    if (list == NULL) {
+    if (this->parameters == NULL) {
+        // the list of parameters is empty
         throw Extension::param_not_exist();
     }
 
-    output = static_cast<Parameter *>(list->data);
-    if (!strcmp(output->name(), name)) {
-        return output;
+    for (GSList * list = this->parameters; list != NULL; list =
+g_slist_next(list)) {
+        Parameter * param = static_cast<Parameter*>(list->data);
+        if (!strcmp(param->name(), name)) {
+            return param;
+        } else {
+            Parameter * subparam = param->get_param(name);
+            if (subparam) {
+                return subparam;
+            }
+        }
     }
 
-    return param_shared(name, g_slist_next(list));
+    // if execution reaches here, no parameter matching 'name' was found
+    throw Extension::param_not_exist();
 }
 
-/**
-    \return   A constant pointer to the string held by the parameters.
-    \brief    Gets a parameter identified by name with the string placed
-              in value.  It isn't duplicated into the value string.
-    \param    name    The name of the parameter to get
-    \param    doc    The document to look in for document specific parameters
-    \param    node   The node to look in for a specific parameter
-
-    Look up in the parameters list, then execute the function on that
-    found parameter.
-*/
-const gchar *
-Extension::get_param_string (const gchar * name, const SPDocument * doc, const Inkscape::XML::Node * node)
+Parameter const *Extension::get_param(const gchar * name) const
 {
-    Parameter * param;
+    return const_cast<Extension *>(this)->get_param(name);
+}
 
-    param = param_shared(name, parameters);
+gchar const *Extension::get_param_string(gchar const *name, SPDocument const *doc, Inkscape::XML::Node const *node) const
+{
+    Parameter const *param = get_param(name);
     return param->get_string(doc, node);
 }
 
 const gchar *
-Extension::get_param_enum (const gchar * name, const SPDocument * doc, const Inkscape::XML::Node * node)
+Extension::get_param_enum (const gchar * name, const SPDocument * doc, const Inkscape::XML::Node * node) const
 {
-    Parameter* param = param_shared(name, parameters);
+    Parameter const *param = get_param(name);
     return param->get_enum(doc, node);
 }
 
-
-gchar const *Extension::get_param_optiongroup( gchar const * name, SPDocument const * doc, Inkscape::XML::Node const * node)
+/**
+ * This is useful to find out, if a given string \c value is selectable in a ComboBox named \cname.
+ * 
+ * @param name The name of the enum parameter to get.
+ * @param doc The document to look in for document specific parameters.
+ * @param node The node to look in for a specific parameter.
+ * @return true if value exists, false if not
+ */
+bool
+Extension::get_param_enum_contains(gchar const * name, gchar const * value, SPDocument * doc, Inkscape::XML::Node * node) const
 {
-    Parameter* param = param_shared(name, parameters);
+    Parameter const *param = get_param(name);
+    return param->get_enum_contains(value, doc, node);
+}
+
+gchar const *
+Extension::get_param_optiongroup( gchar const * name, SPDocument const * doc, Inkscape::XML::Node const * node) const
+{
+    Parameter const*param = get_param(name);
     return param->get_optiongroup(doc, node);
 }
 
@@ -463,8 +489,7 @@ bool
 Extension::get_param_bool (const gchar * name, const SPDocument * doc, const Inkscape::XML::Node * node)
 {
     Parameter * param;
-
-    param = param_shared(name, parameters);
+    param = get_param(name);
     return param->get_bool(doc, node);
 }
 
@@ -483,8 +508,7 @@ int
 Extension::get_param_int (const gchar * name, const SPDocument * doc, const Inkscape::XML::Node * node)
 {
     Parameter * param;
-
-    param = param_shared(name, parameters);
+    param = get_param(name);
     return param->get_int(doc, node);
 }
 
@@ -503,7 +527,7 @@ float
 Extension::get_param_float (const gchar * name, const SPDocument * doc, const Inkscape::XML::Node * node)
 {
     Parameter * param;
-    param = param_shared(name, parameters);
+    param = get_param(name);
     return param->get_float(doc, node);
 }
 
@@ -519,9 +543,9 @@ Extension::get_param_float (const gchar * name, const SPDocument * doc, const In
     found parameter.
 */
 guint32
-Extension::get_param_color (const gchar * name, const SPDocument * doc, const Inkscape::XML::Node * node)
+Extension::get_param_color (const gchar * name, const SPDocument * doc, const Inkscape::XML::Node * node) const
 {
-    Parameter* param = param_shared(name, parameters);
+    Parameter const *param = get_param(name);
     return param->get_color(doc, node);
 }
 
@@ -541,7 +565,7 @@ bool
 Extension::set_param_bool (const gchar * name, bool value, SPDocument * doc, Inkscape::XML::Node * node)
 {
     Parameter * param;
-    param = param_shared(name, parameters);
+    param = get_param(name);
     return param->set_bool(value, doc, node);
 }
 
@@ -561,7 +585,7 @@ int
 Extension::set_param_int (const gchar * name, int value, SPDocument * doc, Inkscape::XML::Node * node)
 {
     Parameter * param;
-    param = param_shared(name, parameters);
+    param = get_param(name);
     return param->set_int(value, doc, node);
 }
 
@@ -581,7 +605,7 @@ float
 Extension::set_param_float (const gchar * name, float value, SPDocument * doc, Inkscape::XML::Node * node)
 {
     Parameter * param;
-    param = param_shared(name, parameters);
+    param = get_param(name);
     return param->set_float(value, doc, node);
 }
 
@@ -601,14 +625,22 @@ const gchar *
 Extension::set_param_string (const gchar * name, const gchar * value, SPDocument * doc, Inkscape::XML::Node * node)
 {
     Parameter * param;
-    param = param_shared(name, parameters);
+    param = get_param(name);
     return param->set_string(value, doc, node);
 }
 
-gchar const * Extension::set_param_optiongroup(gchar const * name, gchar const * value, SPDocument * doc, Inkscape::XML::Node * node)
+gchar const *
+Extension::set_param_optiongroup(gchar const * name, gchar const * value, SPDocument * doc, Inkscape::XML::Node * node)
 {
-    Parameter * param = param_shared(name, parameters);
+    Parameter * param = get_param(name);
     return param->set_optiongroup(value, doc, node);
+}
+
+gchar const *
+Extension::set_param_enum(gchar const * name, gchar const * value, SPDocument * doc, Inkscape::XML::Node * node)
+{
+    Parameter * param = get_param(name);
+    return param->set_enum(value, doc, node);
 }
 
 
@@ -627,7 +659,7 @@ gchar const * Extension::set_param_optiongroup(gchar const * name, gchar const *
 guint32
 Extension::set_param_color (const gchar * name, guint32 color, SPDocument * doc, Inkscape::XML::Node * node)
 {
-    Parameter* param = param_shared(name, parameters);
+    Parameter* param = get_param(name);
     return param->set_color(color, doc, node);
 }
 
@@ -655,25 +687,30 @@ Extension::error_file_close (void)
 
 /** \brief  A widget to represent the inside of an AutoGUI widget */
 class AutoGUI : public Gtk::VBox {
-    Gtk::Tooltips _tooltips;
 public:
     /** \brief  Create an AutoGUI object */
     AutoGUI (void) : Gtk::VBox() {};
-    /** \brief  Adds a widget with a tool tip into the autogui
-        \param  widg  Widget to add
-        \param  tooltip   Tooltip for the widget
-        
-        If there is no widget, nothing happens.  Otherwise it is just
-        added into the VBox.  If there is a tooltip (non-NULL) then it
-        is placed on the widget.
-    */
-    void addWidget (Gtk::Widget * widg, gchar const * tooltip) {
-        if (widg == NULL) return;
-        this->pack_start(*widg, true, true, 2);
-        if (tooltip != NULL) {
-            _tooltips.set_tip(*widg, Glib::ustring(tooltip));
+
+    /**
+     * Adds a widget with a tool tip into the autogui.
+     *
+     * If there is no widget, nothing happens.  Otherwise it is just
+     * added into the VBox.  If there is a tooltip (non-NULL) then it
+     * is placed on the widget.
+     *
+     * @param widg Widget to add.
+     * @param tooltip Tooltip for the widget.
+     */
+    void addWidget(Gtk::Widget *widg, gchar const *tooltip) {
+        if (widg) {
+            this->pack_start(*widg, false, false, 2);
+            if (tooltip) {
+                widg->set_tooltip_text(_(tooltip));
+            } else {
+                widg->set_tooltip_text("");
+                widg->set_has_tooltip(false);
+            }
         }
-        return;
     };
 };
 
@@ -733,7 +770,12 @@ Extension::get_info_widget(void)
     Gtk::Frame * info = Gtk::manage(new Gtk::Frame("General Extension Information"));
     retval->pack_start(*info, true, true, 5);
 
+#if WITH_GTKMM_3_0
+    Gtk::Grid * table = Gtk::manage(new Gtk::Grid());
+#else
     Gtk::Table * table = Gtk::manage(new Gtk::Table());
+#endif
+
     info->add(*table);
 
     int row = 0;
@@ -746,8 +788,11 @@ Extension::get_info_widget(void)
     return retval;
 }
 
-void
-Extension::add_val(Glib::ustring labelstr, Glib::ustring valuestr, Gtk::Table * table, int * row)
+#if WITH_GTKMM_3_0
+void Extension::add_val(Glib::ustring labelstr, Glib::ustring valuestr, Gtk::Grid * table, int * row)
+#else
+void Extension::add_val(Glib::ustring labelstr, Glib::ustring valuestr, Gtk::Table * table, int * row)
+#endif
 {
     Gtk::Label * label;
     Gtk::Label * value;
@@ -755,8 +800,14 @@ Extension::add_val(Glib::ustring labelstr, Glib::ustring valuestr, Gtk::Table * 
     (*row)++; 
     label = Gtk::manage(new Gtk::Label(labelstr));
     value = Gtk::manage(new Gtk::Label(valuestr));
+
+#if WITH_GTKMM_3_0
+    table->attach(*label, 0, (*row) - 1, 1, 1);
+    table->attach(*value, 1, (*row) - 1, 1, 1);
+#else
     table->attach(*label, 0, 1, (*row) - 1, *row);
     table->attach(*value, 1, 2, (*row) - 1, *row);
+#endif
 
     label->show();
     value->show();

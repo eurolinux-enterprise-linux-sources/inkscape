@@ -1,8 +1,4 @@
-/**
- * Undo stack observer interface
- *
- * Observes undo, redo, and undo log commit events.
- *
+/*
  * Authors:
  * David Yip <yipdw@rose-hulman.edu>
  *
@@ -11,14 +7,14 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifndef __UNDO_COMMIT_OBSERVER_H__
-#define __UNDO_COMMIT_OBSERVER_H__
+#ifndef SEEN_UNDO_COMMIT_OBSERVER_H
+#define SEEN_UNDO_COMMIT_OBSERVER_H
 
 #include "gc-managed.h"
 
 namespace Inkscape {
 
-class Event;
+struct Event;
 
 /**
  * Observes changes made to the undo and redo stacks.
@@ -74,4 +70,4 @@ public:
 
 }
 
-#endif
+#endif // SEEN_UNDO_COMMIT_OBSERVER_H

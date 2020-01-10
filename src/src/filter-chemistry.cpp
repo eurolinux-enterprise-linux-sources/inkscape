@@ -1,5 +1,3 @@
-#define __SP_FILTER_CHEMISTRY_C__
-
 /*
  * Various utility methods for filters
  *
@@ -7,6 +5,8 @@
  *   Hugo Rodrigues
  *   bulia byak
  *   Niko Kiirala
+ *   Jon A. Cruz <jon@joncruz.org>
+ *   Abhishek Sharma
  *
  * Copyright (C) 2006-2008 authors
  *
@@ -14,6 +14,7 @@
  */
 
 
+#include <cstring>
 #include "style.h"
 #include "document-private.h"
 #include "desktop-style.h"
@@ -22,11 +23,10 @@
 #include "filter-enums.h"
 
 #include "filters/blend.h"
+#include "filters/gaussian-blur.h"
 #include "sp-filter.h"
 #include "sp-filter-reference.h"
-#include "sp-gaussian-blur.h"
 #include "svg/css-ostringstream.h"
-#include "libnr/nr-matrix-fns.h"
 
 #include "xml/repr.h"
 
@@ -34,15 +34,14 @@
  * Count how many times the filter is used by the styles of o and its
  * descendants
  */
-static guint
-count_filter_hrefs(SPObject *o, SPFilter *filter)
+static guint count_filter_hrefs(SPObject *o, SPFilter *filter)
 {
     if (!o)
         return 1;
 
     guint i = 0;
 
-    SPStyle *style = SP_OBJECT_STYLE(o);
+    SPStyle *style = o->style;
     if (style
         && style->filter.set
         && style->getFilter() == filter)
@@ -50,8 +49,7 @@ count_filter_hrefs(SPObject *o, SPFilter *filter)
         i ++;
     }
 
-    for (SPObject *child = sp_object_first_child(o);
-         child != NULL; child = SP_OBJECT_NEXT(child)) {
+    for ( SPObject *child = o->firstChild(); child; child = child->getNext() ) {
         i += count_filter_hrefs(child, filter);
     }
 
@@ -72,7 +70,7 @@ static void set_filter_area(Inkscape::XML::Node *repr, gdouble radius,
     double rx = radius * (expansionY != 0 ? (expansion / expansionY) : 1);
     double ry = radius * (expansionX != 0 ? (expansion / expansionX) : 1);
 
-    if (width != 0 && height != 0 && (2.4 * rx > width * 0.1 || 2.4 * ry > height * 0.1)) {
+    if (width != 0 && height != 0) {
         // If not within the default 10% margin (see
         // http://www.w3.org/TR/SVG11/filters.html#FilterEffectsRegion), specify margins
         // The 2.4 is an empirical coefficient: at that distance the cutoff is practically invisible 
@@ -92,16 +90,25 @@ SPFilter *new_filter(SPDocument *document)
 {
     g_return_val_if_fail(document != NULL, NULL);
 
-    SPDefs *defs = (SPDefs *) SP_DOCUMENT_DEFS(document);
+    SPDefs *defs = document->getDefs();
 
-    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(document);
+    Inkscape::XML::Document *xml_doc = document->getReprDoc();
 
     // create a new filter
     Inkscape::XML::Node *repr;
     repr = xml_doc->createElement("svg:filter");
 
+    // Inkscape now supports both sRGB and linear color-interpolation-filters.
+    // But, for the moment, keep sRGB as default value for new filters
+    // (historically set to sRGB and doesn't require conversion between
+    // filter cairo surfaces and other types of cairo surfaces).
+    SPCSSAttr *css = sp_repr_css_attr_new();
+    sp_repr_css_set_property(css, "color-interpolation-filters", "sRGB");
+    sp_repr_css_change(repr, css, "style");
+    sp_repr_css_attr_unref(css);
+
     // Append the new filter node to defs
-    SP_OBJECT_REPR(defs)->appendChild(repr);
+    defs->appendChild(repr);
     Inkscape::GC::release(repr);
 
     // get corresponding object
@@ -117,7 +124,7 @@ SPFilter *new_filter(SPDocument *document)
 SPFilterPrimitive *
 filter_add_primitive(SPFilter *filter, const Inkscape::Filters::FilterPrimitiveType type)
 {
-    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(filter->document);
+    Inkscape::XML::Document *xml_doc = filter->document->getReprDoc();
 
     //create filter primitive node
     Inkscape::XML::Node *repr;
@@ -126,7 +133,7 @@ filter_add_primitive(SPFilter *filter, const Inkscape::Filters::FilterPrimitiveT
     // set default values
     switch(type) {
         case Inkscape::Filters::NR_FILTER_BLEND:
-            repr->setAttribute("blend", "normal");
+            repr->setAttribute("mode", "normal");
             break;
         case Inkscape::Filters::NR_FILTER_COLORMATRIX:
             break;
@@ -168,7 +175,8 @@ filter_add_primitive(SPFilter *filter, const Inkscape::Filters::FilterPrimitiveT
     }
 
     //set primitive as child of filter node
-    filter->repr->appendChild(repr);
+    // XML tree being used directly while/where it shouldn't be...
+    filter->appendChild(repr);
     Inkscape::GC::release(repr);
     
     // get corresponding object
@@ -188,9 +196,9 @@ new_filter_gaussian_blur (SPDocument *document, gdouble radius, double expansion
 {
     g_return_val_if_fail(document != NULL, NULL);
 
-    SPDefs *defs = (SPDefs *) SP_DOCUMENT_DEFS(document);
+    SPDefs *defs = document->getDefs();
 
-    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(document);
+    Inkscape::XML::Document *xml_doc = document->getReprDoc();
 
     // create a new filter
     Inkscape::XML::Node *repr;
@@ -199,6 +207,15 @@ new_filter_gaussian_blur (SPDocument *document, gdouble radius, double expansion
 
     set_filter_area(repr, radius, expansion, expansionX, expansionY,
                     width, height);
+
+    /* Inkscape now supports both sRGB and linear color-interpolation-filters.  
+     * But, for the moment, keep sRGB as default value for new filters.
+     * historically set to sRGB and doesn't require conversion between
+     * filter cairo surfaces and other types of cairo surfaces. lp:1127103 */
+    SPCSSAttr *css = sp_repr_css_attr_new();                                    
+    sp_repr_css_set_property(css, "color-interpolation-filters", "sRGB");       
+    sp_repr_css_change(repr, css, "style");                                     
+    sp_repr_css_attr_unref(css);
 
     //create feGaussianBlur node
     Inkscape::XML::Node *b_repr;
@@ -217,7 +234,7 @@ new_filter_gaussian_blur (SPDocument *document, gdouble radius, double expansion
     Inkscape::GC::release(b_repr);
     
     // Append the new filter node to defs
-    SP_OBJECT_REPR(defs)->appendChild(repr);
+    defs->appendChild(repr);
     Inkscape::GC::release(repr);
 
     // get corresponding object
@@ -237,23 +254,32 @@ new_filter_gaussian_blur (SPDocument *document, gdouble radius, double expansion
  * Creates a simple filter with a blend primitive and a blur primitive of specified radius for
  * an item with the given matrix expansion, width and height
  */
-SPFilter *
+static SPFilter *
 new_filter_blend_gaussian_blur (SPDocument *document, const char *blendmode, gdouble radius, double expansion,
                                 double expansionX, double expansionY, double width, double height)
 {
     g_return_val_if_fail(document != NULL, NULL);
 
-    SPDefs *defs = (SPDefs *) SP_DOCUMENT_DEFS(document);
+    SPDefs *defs = document->getDefs();
 
-    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(document);
+    Inkscape::XML::Document *xml_doc = document->getReprDoc();
 
     // create a new filter
     Inkscape::XML::Node *repr;
     repr = xml_doc->createElement("svg:filter");
     repr->setAttribute("inkscape:collect", "always");
 
+    /* Inkscape now supports both sRGB and linear color-interpolation-filters.  
+     * But, for the moment, keep sRGB as default value for new filters. 
+     * historically set to sRGB and doesn't require conversion between
+     * filter cairo surfaces and other types of cairo surfaces. lp:1127103 */
+    SPCSSAttr *css = sp_repr_css_attr_new();                                    
+    sp_repr_css_set_property(css, "color-interpolation-filters", "sRGB");       
+    sp_repr_css_change(repr, css, "style");                                     
+    sp_repr_css_attr_unref(css);
+
     // Append the new filter node to defs
-    SP_OBJECT_REPR(defs)->appendChild(repr);
+    defs->appendChild(repr);
     Inkscape::GC::release(repr);
  
     // get corresponding object
@@ -319,7 +345,7 @@ new_filter_blend_gaussian_blur (SPDocument *document, const char *blendmode, gdo
 SPFilter *
 new_filter_simple_from_item (SPDocument *document, SPItem *item, const char *mode, gdouble radius)
 {
-    Geom::OptRect const r = sp_item_bbox_desktop(item, SPItem::GEOMETRIC_BBOX);
+    Geom::OptRect const r = item->desktopGeometricBounds();
 
     double width;
     double height;
@@ -330,9 +356,9 @@ new_filter_simple_from_item (SPDocument *document, SPItem *item, const char *mod
         width = height = 0;
     }
 
-    Geom::Matrix i2d (sp_item_i2d_affine (item) );
+    Geom::Affine i2dt (item->i2dt_affine () );
 
-    return (new_filter_blend_gaussian_blur (document, mode, radius, i2d.descrim(), i2d.expansionX(), i2d.expansionY(), width, height));
+    return (new_filter_blend_gaussian_blur (document, mode, radius, i2dt.descrim(), i2dt.expansionX(), i2dt.expansionY(), width, height));
 }
 
 /**
@@ -344,37 +370,40 @@ new_filter_simple_from_item (SPDocument *document, SPItem *item, const char *mod
  * duplicated, so that other elements referring that filter are not modified.
  */
 /* TODO: this should be made more generic, not just for blurs */
-SPFilter *
-modify_filter_gaussian_blur_from_item(SPDocument *document, SPItem *item,
-                                      gdouble radius)
+SPFilter *modify_filter_gaussian_blur_from_item(SPDocument *document, SPItem *item,
+                                                gdouble radius)
 {
     if (!item->style || !item->style->filter.set) {
         return new_filter_simple_from_item(document, item, "normal", radius);
     }
 
     SPFilter *filter = SP_FILTER(item->style->getFilter());
-    Inkscape::XML::Document *xml_doc = sp_document_repr_doc(document);
+    if (!filter) {
+        // We reach here when filter.set is true, but the href is not found in the document
+        return new_filter_simple_from_item(document, item, "normal", radius);
+    }
+
+    Inkscape::XML::Document *xml_doc = document->getReprDoc();
 
     // If there are more users for this filter, duplicate it
-    if (SP_OBJECT_HREFCOUNT(filter) > count_filter_hrefs(item, filter)) {
-        Inkscape::XML::Node *repr;
-        repr = SP_OBJECT_REPR(item->style->getFilter())->duplicate(xml_doc);
-        SPDefs *defs = (SPDefs *) SP_DOCUMENT_DEFS(document);
-        SP_OBJECT_REPR(defs)->appendChild(repr);
+    if (filter->hrefcount > count_filter_hrefs(item, filter)) {
+        Inkscape::XML::Node *repr = item->style->getFilter()->getRepr()->duplicate(xml_doc);
+        SPDefs *defs = document->getDefs();
+        defs->appendChild(repr);
 
         filter = SP_FILTER( document->getObjectByRepr(repr) );
         Inkscape::GC::release(repr);
     }
 
     // Determine the required standard deviation value
-    Geom::Matrix i2d (sp_item_i2d_affine (item));
+    Geom::Affine i2d (item->i2dt_affine ());
     double expansion = i2d.descrim();
     double stdDeviation = radius;
     if (expansion != 0)
         stdDeviation /= expansion;
 
     // Get the object size
-    Geom::OptRect const r = sp_item_bbox_desktop(item, SPItem::GEOMETRIC_BBOX);
+    Geom::OptRect const r = item->desktopGeometricBounds();
     double width;
     double height;
     if (r) {
@@ -385,7 +414,7 @@ modify_filter_gaussian_blur_from_item(SPDocument *document, SPItem *item,
     }
 
     // Set the filter effects area
-    Inkscape::XML::Node *repr = SP_OBJECT_REPR(item->style->getFilter());
+    Inkscape::XML::Node *repr = item->style->getFilter()->getRepr();
     set_filter_area(repr, radius, expansion, i2d.expansionX(),
                     i2d.expansionY(), width, height);
 
@@ -412,7 +441,7 @@ modify_filter_gaussian_blur_from_item(SPDocument *document, SPItem *item,
     sp_repr_set_svg_double(b_repr, "stdDeviation", stdDeviation);
     
     //set feGaussianBlur as child of filter node
-    SP_OBJECT_REPR(filter)->appendChild(b_repr);
+    filter->getRepr()->appendChild(b_repr);
     Inkscape::GC::release(b_repr);
 
     return filter;
@@ -420,13 +449,14 @@ modify_filter_gaussian_blur_from_item(SPDocument *document, SPItem *item,
 
 void remove_filter (SPObject *item, bool recursive)
 {
-	SPCSSAttr *css = sp_repr_css_attr_new ();
-	sp_repr_css_unset_property (css, "filter");
-	if (recursive)
-		sp_repr_css_change_recursive(SP_OBJECT_REPR(item), css, "style");
-	else
-		sp_repr_css_change (SP_OBJECT_REPR(item), css, "style");
-      sp_repr_css_attr_unref (css);
+    SPCSSAttr *css = sp_repr_css_attr_new();
+    sp_repr_css_unset_property(css, "filter");
+    if (recursive) {
+        sp_repr_css_change_recursive(item->getRepr(), css, "style");
+    } else {
+        sp_repr_css_change(item->getRepr(), css, "style");
+    }
+    sp_repr_css_attr_unref(css);
 }
 
 /**
@@ -440,7 +470,7 @@ void remove_filter_gaussian_blur (SPObject *item)
 {
     if (item->style && item->style->filter.set && item->style->getFilter()) {
         // Search for the first blur primitive and remove it. (if found)
-        Inkscape::XML::Node *repr = SP_OBJECT_REPR(item->style->getFilter());
+        Inkscape::XML::Node *repr = item->style->getFilter()->getRepr();
         Inkscape::XML::Node *primitive = repr->firstChild();
         while (primitive) {
             if (strcmp("svg:feGaussianBlur", primitive->name()) == 0) {
@@ -459,18 +489,18 @@ void remove_filter_gaussian_blur (SPObject *item)
 
 bool filter_is_single_gaussian_blur(SPFilter *filter)
 {
-    return (SP_OBJECT(filter)->firstChild() && 
-            SP_OBJECT(filter)->firstChild() == SP_OBJECT(filter)->lastChild() &&
-            SP_IS_GAUSSIANBLUR(SP_OBJECT(filter)->firstChild()));
+    return (filter->firstChild() && 
+            (filter->firstChild() == filter->lastChild()) &&
+            SP_IS_GAUSSIANBLUR(filter->firstChild()));
 }
 
 double get_single_gaussian_blur_radius(SPFilter *filter)
 {
-    if (SP_OBJECT(filter)->firstChild() && 
-        SP_OBJECT(filter)->firstChild() == SP_OBJECT(filter)->lastChild() &&
-        SP_IS_GAUSSIANBLUR(SP_OBJECT(filter)->firstChild())) {
+    if (filter->firstChild() && 
+        (filter->firstChild() == filter->lastChild()) &&
+        SP_IS_GAUSSIANBLUR(filter->firstChild())) {
 
-        SPGaussianBlur *gb = SP_GAUSSIANBLUR(SP_OBJECT(filter)->firstChild());
+        SPGaussianBlur *gb = SP_GAUSSIANBLUR(filter->firstChild());
         double x = gb->stdDeviation.getNumber();
         double y = gb->stdDeviation.getOptNumber();
         if (x > 0 && y > 0) {
@@ -492,4 +522,4 @@ double get_single_gaussian_blur_radius(SPFilter *filter)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

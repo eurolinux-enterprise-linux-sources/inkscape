@@ -1,5 +1,6 @@
-/** @file
- * @brief LPE effect that draws a circle based on two points and a radius
+/**
+ * @file
+ * LPE effect that draws a circle based on two points and a radius.
  * - implementation
  */
 /* Authors:
@@ -18,6 +19,7 @@
 #include <2geom/sbasis.h>
 #include <2geom/bezier-to-sbasis.h>
 #include <2geom/d2.h>
+#include <2geom/circle.h>
 
 using namespace Geom;
 
@@ -38,22 +40,6 @@ LPECircleWithRadius::~LPECircleWithRadius()
 
 }
 
-void _circle(Geom::Point center, double radius, std::vector<Geom::Path> &path_out) {
-    Geom::Path pb;
-
-    D2<SBasis> B;
-    Linear bo = Linear(0, 2 * M_PI);
-
-    B[0] = cos(bo,4);
-    B[1] = sin(bo,4);
-
-    B = B * radius + center;
-
-    pb.append(SBasisCurve(B));
-
-    path_out.push_back(pb);
-}
-
 std::vector<Geom::Path>
 LPECircleWithRadius::doEffect_path (std::vector<Geom::Path> const & path_in)
 {
@@ -64,7 +50,8 @@ LPECircleWithRadius::doEffect_path (std::vector<Geom::Path> const & path_in)
 
     double radius = Geom::L2(pt - center);
 
-    _circle(center, radius, path_out);
+    Geom::Circle c(center, radius);
+    c.getPath(path_out);
 
     return path_out;
 }
@@ -97,4 +84,4 @@ LPECircleWithRadius::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > & p
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

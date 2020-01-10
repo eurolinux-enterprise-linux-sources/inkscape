@@ -12,15 +12,27 @@
 #ifndef INKSCAPE_UI_WIDGET_DOCK_H
 #define INKSCAPE_UI_WIDGET_DOCK_H
 
-#include <gtkmm/scrolledwindow.h>
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
 #include <gtkmm/box.h>
-#include <gtkmm/paned.h>
-
 #include <list>
-
 #include "ui/widget/dock-item.h"
 
-#include "libgdl/libgdl.h"
+struct _GdlDock;
+typedef _GdlDock GdlDock;
+struct _GdlDockBar;
+typedef _GdlDockBar GdlDockBar;
+
+namespace Gtk {
+class Paned;
+class ScrolledWindow;
+}
 
 namespace Inkscape {
 namespace UI {
@@ -62,11 +74,11 @@ protected:
     /** Interface widgets, will be packed like 
      * _scrolled_window -> (_dock_box -> (_paned -> (_dock -> _filler) | _dock_bar))
      */
-    Gtk::Box *_dock_box;
-    Gtk::Paned* _paned;
-    GdlDock *_gdl_dock;
-    GdlDockBar *_gdl_dock_bar;
-    Gtk::VBox _filler;
+    Gtk::Box            *_dock_box;
+    Gtk::Paned          *_paned;
+    GtkWidget           *_gdl_dock;
+    GdlDockBar          *_gdl_dock_bar;
+    Gtk::VBox            _filler;
     Gtk::ScrolledWindow *_scrolled_window;
 
     /** Internal signal handlers */
@@ -99,5 +111,5 @@ protected:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
 

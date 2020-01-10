@@ -9,11 +9,9 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifndef __DIALOG_EVENTS_H__
-#define __DIALOG_EVENTS_H__
+#ifndef SEEN_DIALOG_EVENTS_H
+#define SEEN_DIALOG_EVENTS_H
 
-#include <gtk/gtk.h>
-#include <forward.h>
  
 /*
  * event callback can only accept one argument, but we need two,
@@ -28,6 +26,12 @@ namespace Gtk {
 class Window;
 class Entry;
 }
+
+class SPDesktop;
+
+namespace Inkscape {
+struct Application;
+} // namespace Inkscape
  
 typedef struct { 
     GtkWidget *win;
@@ -57,8 +61,8 @@ void sp_transientize_callback    ( Inkscape::Application *inkscape,
 
 void on_dialog_hide (GtkWidget *w);
 void on_dialog_unhide (GtkWidget *w);
-gboolean sp_dialog_hide (GtkObject *object, gpointer data);
-gboolean sp_dialog_unhide (GtkObject *object, gpointer data);
+gboolean sp_dialog_hide (GObject *object, gpointer data);
+gboolean sp_dialog_unhide (GObject *object, gpointer data);
 
 #endif
 
@@ -71,4 +75,4 @@ gboolean sp_dialog_unhide (GtkObject *object, gpointer data);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -119,7 +119,16 @@ class Grid_Polar(inkex.Effect):
                         help="The radial outset of the circumferential labels")
 
     def effect(self):
-    
+
+        self.options.dr = self.unittouu(str(self.options.dr) + 'px')
+        self.options.r_divs_th = self.unittouu(str(self.options.r_divs_th) + 'px')
+        self.options.r_subdivs_th = self.unittouu(str(self.options.r_subdivs_th) + 'px')
+        self.options.a_divs_th = self.unittouu(str(self.options.a_divs_th) + 'px')
+        self.options.a_subdivs_th = self.unittouu(str(self.options.a_subdivs_th) + 'px')
+        self.options.c_dot_dia = self.unittouu(str(self.options.c_dot_dia) + 'px')
+        self.options.a_label_size = self.unittouu(str(self.options.a_label_size) + 'px')
+        self.options.a_label_outset = self.unittouu(str(self.options.a_label_outset) + 'px')
+
         # Embed grid in group
         #Put in in the centre of the current view
         t = 'translate(' + str( self.view_center[0] ) + ',' + str( self.view_center[1] ) + ')'
@@ -195,4 +204,4 @@ if __name__ == '__main__':
     e.affect()
 
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99

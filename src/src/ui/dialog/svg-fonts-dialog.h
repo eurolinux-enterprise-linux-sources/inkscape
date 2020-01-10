@@ -12,22 +12,31 @@
 #define INKSCAPE_UI_DIALOG_SVG_FONTS_H
 
 #include "ui/widget/panel.h"
-#include "sp-font.h"
-#include "sp-font-face.h"
-#include "verbs.h"
-#include "document.h"
-#include "desktop.h"
-#include "desktop-handles.h"
+#include <2geom/pathvector.h>
+#include "ui/widget/spinbutton.h"
 
-#include <gtkmm.h>
-#include <gtkmm/liststore.h>
-#include <gtkmm/treeview.h>
-#include <gtkmm/entry.h>
 #include <gtkmm/box.h>
+#include <gtkmm/comboboxtext.h>
+#include <gtkmm/drawingarea.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/liststore.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/treeview.h>
 
-#include "display/nr-svgfonts.h"
 #include "attributes.h"
 #include "xml/helper-observer.h"
+
+namespace Gtk {
+#if WITH_GTKMM_3_0
+class Scale;
+#else
+class HScale;
+#endif
+}
+
+class SPGlyph;
+class SPGlyphKerning;
+class SvgFont;
 
 class SvgFontDrawingArea : Gtk::DrawingArea{
 public:
@@ -37,13 +46,13 @@ public:
     void set_size(int x, int y);
     void redraw();
 private:
-    int x,y;
-    SvgFont* svgfont;
-    Glib::ustring text;
+    int _x,_y;
+    SvgFont* _svgfont;
+    Glib::ustring _text;
     bool on_expose_event (GdkEventExpose *event);
 };
 
-struct SPFont;
+class SPFont;
 
 namespace Inkscape {
 namespace UI {
@@ -77,6 +86,7 @@ public:
     void on_kerning_value_changed();
     void on_setwidth_changed();
 	void add_font();
+	Geom::PathVector flip_coordinate_system(Geom::PathVector pathv);
 
 	//TODO: AttrEntry is currently unused. Should we remove it?
     class AttrEntry : public Gtk::HBox
@@ -206,8 +216,13 @@ private:
     SvgFontDrawingArea _font_da, kerning_preview;
     GlyphComboBox first_glyph, second_glyph;
     SPGlyphKerning* kerning_pair;
-    Gtk::SpinButton setwidth_spin;
-    Gtk::HScale kerning_slider;
+    Inkscape::UI::Widget::SpinButton setwidth_spin;
+
+#if WITH_GTKMM_3_0
+    Gtk::Scale* kerning_slider;
+#else
+    Gtk::HScale* kerning_slider;
+#endif
 
     class EntryWidget : public Gtk::HBox
         {

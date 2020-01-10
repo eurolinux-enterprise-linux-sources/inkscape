@@ -1,6 +1,8 @@
 /*
-ppedit - A pattern plate editor for Spiro splines.
-Copyright (C) 2007 Raph Levien
+Copyright (C) 2007-2012 Authors
+
+Authors: Raph Levien
+         Johan Engelen
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -20,12 +22,39 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 */
 /* C implementation of third-order polynomial spirals. */
 
+#include "spiro.h"
+
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "bezctx_intf.h"
-#include "spiro.h"
+#include "display/curve.h"
+#include <2geom/math-utils.h>
+
+#define SPIRO_SHOW_INFINITE_COORDINATE_CALLS
+
+namespace Spiro {
+
+void spiro_run(const spiro_cp *src, int src_len, SPCurve &curve)
+{
+    spiro_seg *s = Spiro::run_spiro(src, src_len);
+    Spiro::ConverterSPCurve bc(curve);
+    Spiro::spiro_to_otherpath(s, src_len, bc);
+    free(s);
+}
+
+void spiro_run(const spiro_cp *src, int src_len, Geom::Path &path)
+{
+    spiro_seg *s = Spiro::run_spiro(src, src_len);
+    Spiro::ConverterPath bc(path);
+    Spiro::spiro_to_otherpath(s, src_len, bc);
+    free(s);
+}
+
+
+/************************************
+ * Spiro math
+ */
 
 struct spiro_seg_s {
     double x;
@@ -54,7 +83,7 @@ int n = 4;
 #endif
 
 /* Integrate polynomial spiral curve over range -.5 .. .5. */
-void
+static void
 integrate_spiro(const double ks[4], double xy[2])
 {
 #if 0
@@ -602,7 +631,7 @@ banbks11(const bandmat *m, const int *perm, double *v, int n)
     }
 }
 
-int compute_jinc(char ty0, char ty1)
+static int compute_jinc(char ty0, char ty1)
 {
     if (ty0 == 'o' || ty1 == 'o' ||
 	ty0 == ']' || ty1 == '[')
@@ -616,7 +645,7 @@ int compute_jinc(char ty0, char ty1)
 	return 0;
 }
 
-int count_vec(const spiro_seg *s, int nseg)
+static int count_vec(const spiro_seg *s, int nseg)
 {
     int i;
     int n = 0;
@@ -631,8 +660,6 @@ add_mat_line(bandmat *m, double *v,
 	     double derivs[4], double x, double y, int j, int jj, int jinc,
 	     int nmat)
 {
-    int k;
-
     if (jj >= 0) {
 	int joff =  (j + 5 - jj + nmat) % nmat;
 	if (nmat < 6) {
@@ -644,169 +671,171 @@ add_mat_line(bandmat *m, double *v,
 	printf("add_mat_line j=%d jj=%d jinc=%d nmat=%d joff=%d\n", j, jj, jinc, nmat, joff);
 #endif
 	v[jj] += x;
-	for (k = 0; k < jinc; k++)
+	for (int k = 0; k < jinc; k++)
 	    m[jj].a[joff + k] += y * derivs[k];
     }
 }
 
 static double
-spiro_iter(spiro_seg *s, bandmat *m, int *perm, double *v, int n)
+spiro_iter(spiro_seg *s, bandmat *m, int *perm, double *v, const int n)
 {
     int cyclic = s[0].ty != '{' && s[0].ty != 'v';
-    int i, j, jj;
     int nmat = count_vec(s, n);
-    double norm;
     int n_invert;
 
-    for (i = 0; i < nmat; i++) {
-	v[i] = 0.;
-	for (j = 0; j < 11; j++)
-	    m[i].a[j] = 0.;
-	for (j = 0; j < 5; j++)
-	    m[i].al[j] = 0.;
+    for (int i = 0; i < nmat; i++) {
+        v[i] = 0.;
+        for (int j = 0; j < 11; j++) {
+            m[i].a[j] = 0.;
+        }
+        for (int j = 0; j < 5; j++) {
+            m[i].al[j] = 0.;
+        }
     }
 
-    j = 0;
-    if (s[0].ty == 'o')
-	jj = nmat - 2;
-    else if (s[0].ty == 'c')
-	jj = nmat - 1;
-    else
-	jj = 0;
-    for (i = 0; i < n; i++) {
-	char ty0 = s[i].ty;
-	char ty1 = s[i + 1].ty;
-	int jinc = compute_jinc(ty0, ty1);
-	double th = s[i].bend_th;
-	double ends[2][4];
-	double derivs[4][2][4];
-	int jthl = -1, jk0l = -1, jk1l = -1, jk2l = -1;
-	int jthr = -1, jk0r = -1, jk1r = -1, jk2r = -1;
+    int j = 0;
+    int jj;
+    if (s[0].ty == 'o') {
+        jj = nmat - 2;
+    } else if (s[0].ty == 'c') {
+        jj = nmat - 1;
+    } else {
+        jj = 0;
+    }
+    for (int i = 0; i < n; i++) {
+        char ty0 = s[i].ty;
+        char ty1 = s[i + 1].ty;
+        int jinc = compute_jinc(ty0, ty1);
+        double th = s[i].bend_th;
+        double ends[2][4];
+        double derivs[4][2][4];
+        int jthl = -1, jk0l = -1, jk1l = -1, jk2l = -1;
+        int jthr = -1, jk0r = -1, jk1r = -1, jk2r = -1;
 
-	compute_pderivs(&s[i], ends, derivs, jinc);
+        compute_pderivs(&s[i], ends, derivs, jinc);
 
-	/* constraints crossing left */
-	if (ty0 == 'o' || ty0 == 'c' || ty0 == '[' || ty0 == ']') {
-	    jthl = jj++;
-	    jj %= nmat;
-	    jk0l = jj++;
-	}
-	if (ty0 == 'o') {
-	    jj %= nmat;
-	    jk1l = jj++;
-	    jk2l = jj++;
-	}
+        /* constraints crossing left */
+        if (ty0 == 'o' || ty0 == 'c' || ty0 == '[' || ty0 == ']') {
+            jthl = jj++;
+            jj %= nmat;
+            jk0l = jj++;
+        }
+        if (ty0 == 'o') {
+            jj %= nmat;
+            jk1l = jj++;
+            jk2l = jj++;
+        }
 
-	/* constraints on left */
-	if ((ty0 == '[' || ty0 == 'v' || ty0 == '{' || ty0 == 'c') &&
-	    jinc == 4) {
-	    if (ty0 != 'c')
-		jk1l = jj++;
-	    jk2l = jj++;
-	}
+        /* constraints on left */
+        if ((ty0 == '[' || ty0 == 'v' || ty0 == '{' || ty0 == 'c') &&
+            jinc == 4) {
+            if (ty0 != 'c')
+            jk1l = jj++;
+            jk2l = jj++;
+        }
 
-	/* constraints on right */
-	if ((ty1 == ']' || ty1 == 'v' || ty1 == '}' || ty1 == 'c') &&
-	    jinc == 4) {
-	    if (ty1 != 'c')
-		jk1r = jj++;
-	    jk2r = jj++;
-	}
+        /* constraints on right */
+        if ((ty1 == ']' || ty1 == 'v' || ty1 == '}' || ty1 == 'c') &&
+            jinc == 4) {
+            if (ty1 != 'c')
+            jk1r = jj++;
+            jk2r = jj++;
+        }
 
-	/* constraints crossing right */
-	if (ty1 == 'o' || ty1 == 'c' || ty1 == '[' || ty1 == ']') {
-	    jthr = jj;
-	    jk0r = (jj + 1) % nmat;
-	}
-	if (ty1 == 'o') {
-	    jk1r = (jj + 2) % nmat;
-	    jk2r = (jj + 3) % nmat;
-	}
+        /* constraints crossing right */
+        if (ty1 == 'o' || ty1 == 'c' || ty1 == '[' || ty1 == ']') {
+            jthr = jj;
+            jk0r = (jj + 1) % nmat;
+        }
+        if (ty1 == 'o') {
+            jk1r = (jj + 2) % nmat;
+            jk2r = (jj + 3) % nmat;
+        }
 
-	add_mat_line(m, v, derivs[0][0], th - ends[0][0], 1, j, jthl, jinc, nmat);
-	add_mat_line(m, v, derivs[1][0], ends[0][1], -1, j, jk0l, jinc, nmat);
-	add_mat_line(m, v, derivs[2][0], ends[0][2], -1, j, jk1l, jinc, nmat);
-	add_mat_line(m, v, derivs[3][0], ends[0][3], -1, j, jk2l, jinc, nmat);
-	add_mat_line(m, v, derivs[0][1], -ends[1][0], 1, j, jthr, jinc, nmat);
-	add_mat_line(m, v, derivs[1][1], -ends[1][1], 1, j, jk0r, jinc, nmat);
-	add_mat_line(m, v, derivs[2][1], -ends[1][2], 1, j, jk1r, jinc, nmat);
-	add_mat_line(m, v, derivs[3][1], -ends[1][3], 1, j, jk2r, jinc, nmat);
-	if (jthl >= 0)
-		v[jthl] = mod_2pi(v[jthl]);
-	if (jthr >= 0)
-		v[jthr] = mod_2pi(v[jthr]);
-	j += jinc;
+        add_mat_line(m, v, derivs[0][0], th - ends[0][0], 1, j, jthl, jinc, nmat);
+        add_mat_line(m, v, derivs[1][0], ends[0][1], -1, j, jk0l, jinc, nmat);
+        add_mat_line(m, v, derivs[2][0], ends[0][2], -1, j, jk1l, jinc, nmat);
+        add_mat_line(m, v, derivs[3][0], ends[0][3], -1, j, jk2l, jinc, nmat);
+        add_mat_line(m, v, derivs[0][1], -ends[1][0], 1, j, jthr, jinc, nmat);
+        add_mat_line(m, v, derivs[1][1], -ends[1][1], 1, j, jk0r, jinc, nmat);
+        add_mat_line(m, v, derivs[2][1], -ends[1][2], 1, j, jk1r, jinc, nmat);
+        add_mat_line(m, v, derivs[3][1], -ends[1][3], 1, j, jk2r, jinc, nmat);
+        if (jthl >= 0)
+            v[jthl] = mod_2pi(v[jthl]);
+        if (jthr >= 0)
+            v[jthr] = mod_2pi(v[jthr]);
+        j += jinc;
     }
     if (cyclic) {
-	memcpy(m + nmat, m, sizeof(bandmat) * nmat);
-	memcpy(m + 2 * nmat, m, sizeof(bandmat) * nmat);
-	memcpy(v + nmat, v, sizeof(double) * nmat);
-	memcpy(v + 2 * nmat, v, sizeof(double) * nmat);
-	n_invert = 3 * nmat;
-	j = nmat;
+        memcpy(m + nmat, m, sizeof(bandmat) * nmat);
+        memcpy(m + 2 * nmat, m, sizeof(bandmat) * nmat);
+        memcpy(v + nmat, v, sizeof(double) * nmat);
+        memcpy(v + 2 * nmat, v, sizeof(double) * nmat);
+        n_invert = 3 * nmat;
+        j = nmat;
     } else {
-	n_invert = nmat;
-	j = 0;
+        n_invert = nmat;
+        j = 0;
     }
 #ifdef VERBOSE
-    for (i = 0; i < n; i++) {
-	int k;
-	for (k = 0; k < 11; k++)
-	    printf(" %2.4f", m[i].a[k]);
-	printf(": %2.4f\n", v[i]);
+    for (int i = 0; i < n; i++) {
+        for (int k = 0; k < 11; k++) {
+            printf(" %2.4f", m[i].a[k]);
+        }
+        printf(": %2.4f\n", v[i]);
     }
     printf("---\n");
 #endif
     bandec11(m, perm, n_invert);
     banbks11(m, perm, v, n_invert);
-    norm = 0.;
-    for (i = 0; i < n; i++) {
-	char ty0 = s[i].ty;
-	char ty1 = s[i + 1].ty;
-	int jinc = compute_jinc(ty0, ty1);
-	int k;
+    
+    double norm = 0.;
+    for (int i = 0; i < n; i++) {
+        char ty0 = s[i].ty;
+        char ty1 = s[i + 1].ty;
+        int jinc = compute_jinc(ty0, ty1);
+        int k;
 
-	for (k = 0; k < jinc; k++) {
-	    double dk = v[j++];
+        for (k = 0; k < jinc; k++) {
+            double dk = v[j++];
 
 #ifdef VERBOSE
-	    printf("s[%d].ks[%d] += %f\n", i, k, dk);
+            printf("s[%d].ks[%d] += %f\n", i, k, dk);
 #endif
-	    s[i].ks[k] += dk;
-	    norm += dk * dk;
-	}
+            s[i].ks[k] += dk;
+            norm += dk * dk;
+        }
         s[i].ks[0] = 2.0*mod_2pi(s[i].ks[0]/2.0);
     }
     return norm;
 }
 
-int
-solve_spiro(spiro_seg *s, int nseg)
+static int
+solve_spiro(spiro_seg *s, const int nseg)
 {
-    bandmat *m;
-    double *v;
-    int *perm;
     int nmat = count_vec(s, nseg);
     int n_alloc = nmat;
-    double norm;
-    int i;
 
-    if (nmat == 0)
-	return 0;
-    if (s[0].ty != '{' && s[0].ty != 'v')
-	n_alloc *= 3;
-    if (n_alloc < 5)
-	n_alloc = 5;
-    m = (bandmat *)malloc(sizeof(bandmat) * n_alloc);
-    v = (double *)malloc(sizeof(double) * n_alloc);
-    perm = (int *)malloc(sizeof(int) * n_alloc);
+    if (nmat == 0) {
+        return 0;
+    }
+    if (s[0].ty != '{' && s[0].ty != 'v') {
+        n_alloc *= 3;
+    }
+    if (n_alloc < 5) {
+        n_alloc = 5;
+    }
 
-    for (i = 0; i < 10; i++) {
-	norm = spiro_iter(s, m, perm, v, nseg);
+    bandmat *m = (bandmat *)malloc(sizeof(bandmat) * n_alloc);
+    double *v = (double *)malloc(sizeof(double) * n_alloc);
+    int *perm = (int *)malloc(sizeof(int) * n_alloc);
+
+    for (unsigned i = 0; i < 10; i++) {
+        double norm = spiro_iter(s, m, perm, v, nseg);
 #ifdef VERBOSE
-	printf("%% norm = %g\n", norm);
+        printf("%% norm = %g\n", norm);
 #endif
-	if (norm < 1e-12) break;
+        if (norm < 1e-12) break;
     }
 
     free(m);
@@ -816,24 +845,21 @@ solve_spiro(spiro_seg *s, int nseg)
 }
 
 static void
-spiro_seg_to_bpath(const double ks[4],
+spiro_seg_to_otherpath(const double ks[4],
 		   double x0, double y0, double x1, double y1,
-		   bezctx *bc, int depth)
+		   ConverterBase &bc, int depth)
 {
     double bend = fabs(ks[0]) + fabs(.5 * ks[1]) + fabs(.125 * ks[2]) +
 	fabs((1./48) * ks[3]);
 
-    if (!bend > 1e-8) {
-	bezctx_lineto(bc, x1, y1);
+    if (!(bend > 1e-8)) {
+        bc.lineto(x1, y1);
     } else {
 	double seg_ch = hypot(x1 - x0, y1 - y0);
 	double seg_th = atan2(y1 - y0, x1 - x0);
 	double xy[2];
 	double ch, th;
 	double scale, rot;
-	double th_even, th_odd;
-	double ul, vl;
-	double ur, vr;
 
 	integrate_spiro(ks, xy);
 	ch = hypot(xy[0], xy[1]);
@@ -841,13 +867,16 @@ spiro_seg_to_bpath(const double ks[4],
 	scale = seg_ch / ch;
 	rot = seg_th - th;
 	if (depth > 5 || bend < 1.) {
+        double ul, vl;
+        double ur, vr;
+        double th_even, th_odd;
 	    th_even = (1./384) * ks[3] + (1./8) * ks[1] + rot;
 	    th_odd = (1./48) * ks[2] + .5 * ks[0];
 	    ul = (scale * (1./3)) * cos(th_even - th_odd);
 	    vl = (scale * (1./3)) * sin(th_even - th_odd);
 	    ur = (scale * (1./3)) * cos(th_even + th_odd);
 	    vr = (scale * (1./3)) * sin(th_even + th_odd);
-	    bezctx_curveto(bc, x0 + ul, y0 + vl, x1 - ur, y1 - vr, x1, y1);
+        bc.curveto(x0 + ul, y0 + vl, x1 - ur, y1 - vr, x1, y1);
 	} else {
 	    /* subdivide */
 	    double ksub[4];
@@ -866,11 +895,11 @@ spiro_seg_to_bpath(const double ks[4],
 	    integrate_spiro(ksub, xysub);
 	    xmid = x0 + cth * xysub[0] - sth * xysub[1];
 	    ymid = y0 + cth * xysub[1] + sth * xysub[0];
-	    spiro_seg_to_bpath(ksub, x0, y0, xmid, ymid, bc, depth + 1);
+	    spiro_seg_to_otherpath(ksub, x0, y0, xmid, ymid, bc, depth + 1);
 	    ksub[0] += .25 * ks[1] + (1./384) * ks[3];
 	    ksub[1] += .125 * ks[2];
 	    ksub[2] += (1./16) * ks[3];
-	    spiro_seg_to_bpath(ksub, xmid, ymid, x1, y1, bc, depth + 1);
+	    spiro_seg_to_otherpath(ksub, xmid, ymid, x1, y1, bc, depth + 1);
 	}
     }
 }
@@ -892,7 +921,7 @@ free_spiro(spiro_seg *s)
 }
 
 void
-spiro_to_bpath(const spiro_seg *s, int n, bezctx *bc)
+spiro_to_otherpath(const spiro_seg *s, int n, ConverterBase &bc)
 {
     int i;
     int nsegs = s[n - 1].ty == '}' ? n - 1 : n;
@@ -903,10 +932,10 @@ spiro_to_bpath(const spiro_seg *s, int n, bezctx *bc)
 	double x1 = s[i + 1].x;
 	double y1 = s[i + 1].y;
 
-	if (i == 0)
-	    bezctx_moveto(bc, x0, y0, s[0].ty == '{');
-	bezctx_mark_knot(bc, i);
-	spiro_seg_to_bpath(s[i].ks, x0, y0, x1, y1, bc, 0);
+        if (i == 0) {
+            bc.moveto(x0, y0, s[0].ty == '{');
+        }
+        spiro_seg_to_otherpath(s[i].ks, x0, y0, x1, y1, bc, 0);
     }
 }
 
@@ -924,9 +953,19 @@ get_knot_th(const spiro_seg *s, int i)
     }
 }
 
+
+} // namespace Spiro
+
+/************************************
+ * Unit_test code
+ */
+
+
 #ifdef UNIT_TEST
 #include <stdio.h>
 #include <sys/time.h> /* for gettimeofday */
+
+using namespace Spiro;
 
 static double
 get_time (void)
@@ -944,7 +983,6 @@ test_integ(void) {
     double ks[] = {1, 2, 3, 4};
     double xy[2];
     double xynom[2];
-    double ch, th;
     int i, j;
     int nsubdiv;
 
@@ -963,9 +1001,10 @@ test_integ(void) {
 	en = get_time();
 	err = hypot(xy[0] - xynom[0], xy[1] - xynom[1]);
 	printf("%d %d %g %g\n", ORDER, n, (en - st) / n_iter, err);
+#if 0
+    double ch, th;
 	ch = hypot(xy[0], xy[1]);
 	th = atan2(xy[1], xy[0]);
-#if 0
 	printf("n = %d: integ(%g %g %g %g) = %g %g, ch = %g, th = %g\n", n,
 	       ks[0], ks[1], ks[2], ks[3], xy[0], xy[1], ch, th);
 	printf("%d: %g %g\n", n, xy[0] - xynom[0], xy[1] - xynom[1]);
@@ -988,9 +1027,6 @@ print_seg(const double ks[4], double x0, double y0, double x1, double y1)
 	double xy[2];
 	double ch, th;
 	double scale, rot;
-	double th_even, th_odd;
-	double ul, vl;
-	double ur, vr;
 
 	integrate_spiro(ks, xy);
 	ch = hypot(xy[0], xy[1]);
@@ -998,6 +1034,9 @@ print_seg(const double ks[4], double x0, double y0, double x1, double y1)
 	scale = seg_ch / ch;
 	rot = seg_th - th;
 	if (bend < 1.) {
+        double th_even, th_odd;
+        double ul, vl;
+        double ur, vr;
 	    th_even = (1./384) * ks[3] + (1./8) * ks[1] + rot;
 	    th_odd = (1./48) * ks[2] + .5 * ks[0];
 	    ul = (scale * (1./3)) * cos(th_even - th_odd);

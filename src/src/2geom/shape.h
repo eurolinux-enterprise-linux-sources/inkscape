@@ -89,7 +89,7 @@ class Shape {
     const Region &operator[](unsigned ix) const { return content[ix]; }
     
     Shape inverse() const;
-    Shape operator*(Matrix const &m) const;
+    Shape operator*(Affine const &m) const;
     
     bool contains(Point const &p) const;
     
@@ -145,4 +145,4 @@ inline std::vector<Path> desanitize(Shape const & s) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

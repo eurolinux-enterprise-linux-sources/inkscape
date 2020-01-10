@@ -1,13 +1,15 @@
-#ifndef __SP_CANVAS_BPATH_H__
-#define __SP_CANVAS_BPATH_H__
+#ifndef SEEN_SP_CANVAS_BPATH_H
+#define SEEN_SP_CANVAS_BPATH_H
 
 /*
  * Simple bezier bpath CanvasItem for inkscape
  *
  * Authors:
  *   Lauris Kaplinski <lauris@ximian.com>
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2001 Lauris Kaplinski and Ximian, Inc.
+ * Copyright (C) 2010 authors
  *
  * Released under GNU GPL
  *
@@ -15,17 +17,18 @@
 
 #include <glib.h>
 
-#include <display/sp-canvas.h>
+#include "sp-canvas-item.h"
 
 struct SPCanvasBPath;
 struct SPCanvasBPathClass;
-struct SPCurve;
+struct SPCanvasGroup;
+class SPCurve;
 
 #define SP_TYPE_CANVAS_BPATH (sp_canvas_bpath_get_type ())
-#define SP_CANVAS_BPATH(obj) (GTK_CHECK_CAST ((obj), SP_TYPE_CANVAS_BPATH, SPCanvasBPath))
-#define SP_CANVAS_BPATH_CLASS(klass) (GTK_CHECK_CLASS_CAST ((klass), SP_TYPE_CANVAS_BPATH, SPCanvasBPathClass))
-#define SP_IS_CANVAS_BPATH(obj) (GTK_CHECK_TYPE ((obj), SP_TYPE_CANVAS_BPATH))
-#define SP_IS_CANVAS_BPATH_CLASS(klass) (GTK_CHECK_CLASS_TYPE ((klass), SP_TYPE_CANVAS_BPATH))
+#define SP_CANVAS_BPATH(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_CANVAS_BPATH, SPCanvasBPath))
+#define SP_CANVAS_BPATH_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_CANVAS_BPATH, SPCanvasBPathClass))
+#define SP_IS_CANVAS_BPATH(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_CANVAS_BPATH))
+#define SP_IS_CANVAS_BPATH_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_CANVAS_BPATH))
 
 #define bpath_liv
 
@@ -64,7 +67,7 @@ struct SPCanvasBPath {
 
     /* Line def */
     SPCurve *curve;
-    Geom::Matrix affine;
+    Geom::Affine affine;
 
     /* Fill attributes */
     guint32 fill_rgba;
@@ -87,7 +90,7 @@ struct SPCanvasBPathClass {
     SPCanvasItemClass parent_class;
 };
 
-GtkType sp_canvas_bpath_get_type (void);
+GType sp_canvas_bpath_get_type (void);
 
 SPCanvasItem *sp_canvas_bpath_new (SPCanvasGroup *parent, SPCurve *curve);
 
@@ -106,4 +109,4 @@ void sp_canvas_bpath_set_stroke (SPCanvasBPath *cbp, guint32 rgba, gdouble width
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

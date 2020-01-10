@@ -1,5 +1,5 @@
 /** @file
- * @brief  Singleton class to access the preferences file - implementation
+ * Singleton class to access the preferences file - implementation.
  */
 /* Authors:
  *   Krzysztof Kosiński <tweenk.pl@gmail.com>
@@ -13,6 +13,7 @@
 #include <cstring>
 #include <sstream>
 #include <glibmm/fileutils.h>
+#include <glibmm/convert.h>
 #include <glibmm/i18n.h>
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -23,8 +24,11 @@
 #include "xml/node-observer.h"
 #include "xml/node-iterators.h"
 #include "xml/attribute-record.h"
+#include "util/units.h"
 
 #define PREFERENCES_FILE_NAME "preferences.xml"
+
+using Inkscape::Util::unit_table;
 
 namespace Inkscape {
 
@@ -59,7 +63,7 @@ static void file_add_recent(gchar const *uri)
 // private inner class definition
 
 /**
- * @brief XML - prefs observer bridge
+ * XML - prefs observer bridge.
  *
  * This is an XML node observer that watches for changes in the XML document storing the preferences.
  * It is used to implement preference observers.
@@ -110,7 +114,7 @@ Preferences::~Preferences()
 }
 
 /**
- * @brief Load internal defaults
+ * Load internal defaults.
  *
  * In the future this will try to load the system-wide file before falling
  * back to the internal defaults.
@@ -121,7 +125,7 @@ void Preferences::_loadDefaults()
 }
 
 /**
- * @brief Load the user's customized preferences
+ * Load the user's customized preferences.
  *
  * Tries to load the user's preferences.xml file. If there is none, creates it.
  */
@@ -255,7 +259,7 @@ static void migrateDetails( Inkscape::XML::Document *from, Inkscape::XML::Docume
 }
 
 /**
- * @brief Flush all pref changes to the XML file
+ * Flush all pref changes to the XML file.
  */
 void Preferences::save()
 {
@@ -364,9 +368,10 @@ void Preferences::migrate( std::string const& legacyDir, std::string const& pref
 // Now for the meat.
 
 /**
- * @brief Get names of all entries in the specified path
- * @param path Preference path to query
- * @return A vector containing all entries in the given directory
+ * Get names of all entries in the specified path.
+ *
+ * @param path Preference path to query.
+ * @return A vector containing all entries in the given directory.
  */
 std::vector<Preferences::Entry> Preferences::getAllEntries(Glib::ustring const &path)
 {
@@ -383,9 +388,10 @@ std::vector<Preferences::Entry> Preferences::getAllEntries(Glib::ustring const &
 }
 
 /**
- * @brief Get the paths to all subdirectories of the specified path
- * @param path Preference path to query
- * @return A vector containing absolute paths to all subdirectories in the given path
+ * Get the paths to all subdirectories of the specified path.
+ *
+ * @param path Preference path to query.
+ * @return A vector containing absolute paths to all subdirectories in the given path.
  */
 std::vector<Glib::ustring> Preferences::getAllDirs(Glib::ustring const &path)
 {
@@ -411,9 +417,10 @@ Preferences::Entry const Preferences::getEntry(Glib::ustring const &pref_path)
 // setter methods
 
 /**
- * @brief Set a boolean attribute of a preference
- * @param pref_path Path of the preference to modify
- * @param value The new value of the pref attribute
+ * Set a boolean attribute of a preference.
+ *
+ * @param pref_path Path of the preference to modify.
+ * @param value The new value of the pref attribute.
  */
 void Preferences::setBool(Glib::ustring const &pref_path, bool value)
 {
@@ -424,27 +431,38 @@ void Preferences::setBool(Glib::ustring const &pref_path, bool value)
 }
 
 /**
- * @brief Set an integer attribute of a preference
- * @param pref_path Path of the preference to modify
- * @param value The new value of the pref attribute
+ * Set an integer attribute of a preference.
+ *
+ * @param pref_path Path of the preference to modify.
+ * @param value The new value of the pref attribute.
  */
 void Preferences::setInt(Glib::ustring const &pref_path, int value)
 {
-    gchar intstr[32];
-    g_snprintf(intstr, 32, "%d", value);
-    _setRawValue(pref_path, intstr);
+    _setRawValue(pref_path, Glib::ustring::compose("%1",value));
 }
 
 /**
- * @brief Set a floating point attribute of a preference
- * @param pref_path Path of the preference to modify
- * @param value The new value of the pref attribute
+ * Set a floating point attribute of a preference.
+ *
+ * @param pref_path Path of the preference to modify.
+ * @param value The new value of the pref attribute.
  */
 void Preferences::setDouble(Glib::ustring const &pref_path, double value)
 {
-    gchar buf[G_ASCII_DTOSTR_BUF_SIZE];
-    g_ascii_dtostr(buf, G_ASCII_DTOSTR_BUF_SIZE, value);
-    _setRawValue(pref_path, buf);
+    _setRawValue(pref_path, Glib::ustring::compose("%1",value));
+}
+
+/**
+ * Set a floating point attribute of a preference.
+ *
+ * @param pref_path Path of the preference to modify.
+ * @param value The new value of the pref attribute.
+ * @param unit_abbr The string of the unit (abbreviated).
+ */
+void Preferences::setDoubleUnit(Glib::ustring const &pref_path, double value, Glib::ustring const &unit_abbr)
+{
+    Glib::ustring str = Glib::ustring::compose("%1%2",value,unit_abbr);
+    _setRawValue(pref_path, str);
 }
 
 void Preferences::setColor(Glib::ustring const &pref_path, guint32 value)
@@ -455,48 +473,60 @@ void Preferences::setColor(Glib::ustring const &pref_path, guint32 value)
 }
 
 /**
- * @brief Set a string attribute of a preference
- * @param pref_path Path of the preference to modify
- * @param value The new value of the pref attribute
+ * Set a string attribute of a preference.
+ *
+ * @param pref_path Path of the preference to modify.
+ * @param value The new value of the pref attribute.
  */
 void Preferences::setString(Glib::ustring const &pref_path, Glib::ustring const &value)
 {
-    _setRawValue(pref_path, value.c_str());
+    _setRawValue(pref_path, value);
 }
 
 void Preferences::setStyle(Glib::ustring const &pref_path, SPCSSAttr *style)
 {
-    gchar *css_str = sp_repr_css_write_string(style);
+    Glib::ustring css_str;
+    sp_repr_css_write_string(style, css_str);
     _setRawValue(pref_path, css_str);
-    g_free(css_str);
 }
 
 void Preferences::mergeStyle(Glib::ustring const &pref_path, SPCSSAttr *style)
 {
     SPCSSAttr *current = getStyle(pref_path);
     sp_repr_css_merge(current, style);
-    gchar *css_str = sp_repr_css_write_string(current);
+    Glib::ustring css_str;
+    sp_repr_css_write_string(current, css_str);
     _setRawValue(pref_path, css_str);
-    g_free(css_str);
     sp_repr_css_attr_unref(current);
 }
 
-
-// Observer stuff
-namespace {
+/**
+ *  Remove an entry
+ *  Make sure observers have been removed before calling
+ */
+void Preferences::remove(Glib::ustring const &pref_path)
+{
+    Inkscape::XML::Node *node = _getNode(pref_path, false);
+    if (node && node->parent()) {
+        node->parent()->removeChild(node);
+    }
+}
 
 /**
- * @brief Structure that holds additional information for registered Observers
+ * Class that holds additional information for registered Observers.
  */
-struct _ObserverData {
+class Preferences::_ObserverData
+{
+public:
+    _ObserverData(Inkscape::XML::Node *node, bool isAttr) : _node(node), _is_attr(isAttr) {}
+
     Inkscape::XML::Node *_node; ///< Node at which the wrapping PrefNodeObserver is registered
     bool _is_attr; ///< Whether this Observer watches a single attribute
 };
 
-} // anonymous namespace
-
 Preferences::Observer::Observer(Glib::ustring const &path) :
-    observed_path(path)
+    observed_path(path),
+    _data(0)
 {
 }
 
@@ -512,7 +542,7 @@ void Preferences::PrefNodeObserver::notifyAttributeChanged(XML::Node &node, GQua
     // filter out attributes we don't watch
     gchar const *attr_name = g_quark_to_string(name);
     if ( _filter.empty() || (_filter == attr_name) ) {
-        _ObserverData *d = static_cast<_ObserverData*>(Preferences::_get_pref_observer_data(_observer));
+        _ObserverData *d = Preferences::_get_pref_observer_data(_observer);
         Glib::ustring notify_path = _observer.observed_path;
 
         if (!d->_is_attr) {
@@ -542,7 +572,7 @@ void Preferences::PrefNodeObserver::notifyAttributeChanged(XML::Node &node, GQua
 }
 
 /**
- * @brief Find the XML node to observe
+ * Find the XML node to observe.
  */
 XML::Node *Preferences::_findObserverNode(Glib::ustring const &pref_path, Glib::ustring &node_key, Glib::ustring &attr_key, bool create)
 {
@@ -551,6 +581,8 @@ XML::Node *Preferences::_findObserverNode(Glib::ustring const &pref_path, Glib::
 
     // find the node corresponding to the "directory".
     Inkscape::XML::Node *node = _getNode(node_key, create), *child;
+    if (!node) return node;
+
     for (child = node->firstChild(); child; child = child->next()) {
         // If there is a node with id corresponding to the attr key,
         // this means that the last part of the path is actually a key (folder).
@@ -571,18 +603,18 @@ void Preferences::addObserver(Observer &o)
     if ( _observer_map.find(&o) == _observer_map.end() ) {
         Glib::ustring node_key, attr_key;
         Inkscape::XML::Node *node;
-        node = _findObserverNode(o.observed_path, node_key, attr_key, false);
+        node = _findObserverNode(o.observed_path, node_key, attr_key, true);
         if (node) {
             // set additional data
-            _ObserverData *priv_data = new _ObserverData;
-            priv_data->_node = node;
-            priv_data->_is_attr = !attr_key.empty();
-            o._data = static_cast<void*>(priv_data);
+            if (o._data) {
+                delete o._data;
+            }
+            o._data = new _ObserverData(node, !attr_key.empty());
 
             _observer_map[&o] = new PrefNodeObserver(o, attr_key);
 
             // if we watch a single pref, we want to receive notifications only for a single node
-            if (priv_data->_is_attr) {
+            if (o._data->_is_attr) {
                 node->addObserver( *(_observer_map[&o]) );
             } else {
                 node->addSubtreeObserver( *(_observer_map[&o]) );
@@ -595,9 +627,9 @@ void Preferences::removeObserver(Observer &o)
 {
     // prevent removing an observer which was not added
     if ( _observer_map.find(&o) != _observer_map.end() ) {
-        Inkscape::XML::Node *node = static_cast<_ObserverData*>(o._data)->_node;
-        _ObserverData *priv_data = static_cast<_ObserverData*>(o._data);
-        o._data = NULL;
+        Inkscape::XML::Node *node = o._data->_node;
+        _ObserverData *priv_data = o._data;
+        o._data = 0;
 
         if (priv_data->_is_attr) {
             node->removeObserver( *(_observer_map[&o]) );
@@ -606,6 +638,7 @@ void Preferences::removeObserver(Observer &o)
         }
 
         delete priv_data;
+        priv_data = 0;
         delete _observer_map[&o];
         _observer_map.erase(&o);
     }
@@ -613,11 +646,12 @@ void Preferences::removeObserver(Observer &o)
 
 
 /**
- * @brief Get the XML node corresponding to the given pref key
- * @param pref_key Preference key (path) to get
- * @param create Whether to create the corresponding node if it doesn't exist
- * @param separator The character used to separate parts of the pref key
- * @return XML node corresponding to the specified key
+ * Get the XML node corresponding to the given pref key.
+ *
+ * @param pref_key Preference key (path) to get.
+ * @param create Whether to create the corresponding node if it doesn't exist.
+ * @param separator The character used to separate parts of the pref key.
+ * @return XML node corresponding to the specified key.
  *
  * Derived from former inkscape_get_repr(). Private because it assumes that the backend is
  * a flat XML file, which may not be the case e.g. if we are using GConf (in future).
@@ -629,6 +663,9 @@ Inkscape::XML::Node *Preferences::_getNode(Glib::ustring const &pref_key, bool c
     // No longer necessary, can cause problems with input devices which have a dot in the name
     // g_assert( pref_key.find('.') == Glib::ustring::npos );
 
+    if (_prefs_doc == NULL){
+        return NULL;
+    }
     Inkscape::XML::Node *node = _prefs_doc->root();
     Inkscape::XML::Node *child = NULL;
     gchar **splits = g_strsplit(pref_key.c_str(), "/", 0);
@@ -660,8 +697,11 @@ Inkscape::XML::Node *Preferences::_getNode(Glib::ustring const &pref_key, bool c
                         node = child;
                     }
                     g_strfreev(splits);
+                    splits = 0;
                     return node;
                 } else {
+                    g_strfreev(splits);
+                    splits = 0;
                     return NULL;
                 }
             }
@@ -693,7 +733,7 @@ void Preferences::_getRawValue(Glib::ustring const &path, gchar const *&result)
     }
 }
 
-void Preferences::_setRawValue(Glib::ustring const &path, gchar const *value)
+void Preferences::_setRawValue(Glib::ustring const &path, Glib::ustring const &value)
 {
     // create node and attribute keys
     Glib::ustring node_key, attr_key;
@@ -701,7 +741,7 @@ void Preferences::_setRawValue(Glib::ustring const &path, gchar const *value)
 
     // set the attribute
     Inkscape::XML::Node *node = _getNode(node_key, true);
-    node->setAttribute(attr_key.c_str(), value);
+    node->setAttribute(attr_key.c_str(), value.c_str());
 }
 
 // The _extract* methods are where the actual wrok is done - they define how preferences are stored
@@ -735,9 +775,38 @@ double Preferences::_extractDouble(Entry const &v)
     return g_ascii_strtod(s, NULL);
 }
 
+double Preferences::_extractDouble(Entry const &v, Glib::ustring const &requested_unit)
+{
+    double val = _extractDouble(v);
+    Glib::ustring unit = _extractUnit(v);
+
+    if (unit.length() == 0) {
+        // no unit specified, don't do conversion
+        return val;
+    }
+    return val * (unit_table.getUnit(unit)->factor / unit_table.getUnit(requested_unit)->factor); /// \todo rewrite using Quantity class, so the standard code handles unit conversion
+}
+
 Glib::ustring Preferences::_extractString(Entry const &v)
 {
     return Glib::ustring(static_cast<gchar const *>(v._value));
+}
+
+Glib::ustring Preferences::_extractUnit(Entry const &v)
+{
+    gchar const *str = static_cast<gchar const *>(v._value);
+    gchar const *e;
+    g_ascii_strtod(str, (char **) &e);
+    if (e == str) {
+        return "";
+    }
+
+    if (e[0] == 0) {
+        /* Unitless */
+        return "";
+    } else {
+        return Glib::ustring(e);
+    }
 }
 
 guint32 Preferences::_extractColor(Entry const &v)
@@ -828,4 +897,4 @@ Preferences *Preferences::_instance = NULL;
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

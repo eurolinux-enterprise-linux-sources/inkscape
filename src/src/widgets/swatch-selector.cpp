@@ -1,10 +1,8 @@
-
-
+#include "swatch-selector.h"
 #include <glibmm/i18n.h>
 
-#include "swatch-selector.h"
-
 #include "document.h"
+#include "document-undo.h"
 #include "gradient-chemistry.h"
 #include "gradient-selector.h"
 #include "sp-color-notebook.h"
@@ -133,10 +131,10 @@ void SwatchSelector::_changedCb(SPColorSelector */*csel*/, void *data)
                 gchar c[64];
                 sp_svg_write_color(c, sizeof(c), rgb);
                 os << "stop-color:" << c << ";stop-opacity:" << static_cast<gdouble>(alpha) <<";";
-                SP_OBJECT_REPR(stop)->setAttribute("style", os.str().c_str());
+                stop->getRepr()->setAttribute("style", os.str().c_str());
 
-                sp_document_done(SP_OBJECT_DOCUMENT(ngr), SP_VERB_CONTEXT_GRADIENT,
-                                 _("Change swatch color"));
+                DocumentUndo::done(ngr->document, SP_VERB_CONTEXT_GRADIENT,
+                                   _("Change swatch color"));
             }
         }
     }
@@ -169,19 +167,19 @@ void SwatchSelector::connectchangedHandler( GCallback handler, void *data )
 void SwatchSelector::setVector(SPDocument */*doc*/, SPGradient *vector)
 {
     //GtkVBox * box = gobj();
-    _gsel->setVector((vector) ? SP_OBJECT_DOCUMENT(vector) : 0, vector);
+    _gsel->setVector((vector) ? vector->document : 0, vector);
 
     if ( vector && vector->isSolid() ) {
         SPStop* stop = vector->getFirstStop();
 
-        guint32 const colorVal = sp_stop_get_rgba32(stop);
+        guint32 const colorVal = stop->get_rgba32();
         _csel->base->setAlpha(SP_RGBA32_A_F(colorVal));
         SPColor color( SP_RGBA32_R_F(colorVal), SP_RGBA32_G_F(colorVal), SP_RGBA32_B_F(colorVal) );
         // set its color, from the stored array
         _csel->base->setColor( color );
         gtk_widget_show_all( GTK_WIDGET(_csel) );
     } else {
-        gtk_widget_hide( GTK_WIDGET(_csel) );
+        //gtk_widget_hide( GTK_WIDGET(_csel) );
     }
 
 /*
@@ -202,4 +200,4 @@ void SwatchSelector::setVector(SPDocument */*doc*/, SPGradient *vector)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -9,11 +9,8 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glib.h>
-
 #include "ui/widget/registered-enums.h"
-#include <gtkmm/tooltips.h>
-
+#include <glibmm/ustring.h>
 #include "live_effects/effect.h"
 #include "live_effects/parameter/parameter.h"
 #include "verbs.h"
@@ -40,7 +37,7 @@ public:
 
     virtual ~EnumParam() { };
 
-    virtual Gtk::Widget * param_newWidget(Gtk::Tooltips * /*tooltips*/) {
+    virtual Gtk::Widget * param_newWidget() {
         Inkscape::UI::Widget::RegisteredEnum<E> *regenum = Gtk::manage ( 
             new Inkscape::UI::Widget::RegisteredEnum<E>( param_label, param_tooltip,
                        param_key, *enumdataconv, *param_wr, param_effect->getRepr(), param_effect->getSPDoc() ) );
@@ -71,8 +68,9 @@ public:
         return value;
     }
 
-    inline operator E()
-        { return value; };
+    inline operator E() const {
+        return value;
+    };
 
     void param_set_default() {
         param_set_value(defvalue);

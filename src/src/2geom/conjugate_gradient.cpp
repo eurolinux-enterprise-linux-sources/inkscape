@@ -36,6 +36,9 @@
 
 /* lifted wholely from wikipedia. */
 
+namespace Geom
+{
+
 using std::valarray;
 
 static void 
@@ -126,6 +129,8 @@ conjugate_gradient(valarray<double> const &A,
     // x is solution
 }
 
+} // namespace Geom
+
 /*
   Local Variables:
   mode:c++
@@ -135,4 +140,4 @@ conjugate_gradient(valarray<double> const &A,
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

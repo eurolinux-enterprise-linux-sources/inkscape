@@ -4,6 +4,7 @@
  * Authors:
  *   Peter Moulder <pmoulder@mail.csse.monash.edu.au>
  *   Michael Wybrow <mjwybrow@users.sourceforge.net>
+ *   Abhishek Sharma
  *
  *    * Copyright (C) 2004-2005 Monash University
  *
@@ -79,17 +80,15 @@ SPConnEndPair::release()
 void
 sp_conn_end_pair_build(SPObject *object)
 {
-    sp_object_read_attr(object, "inkscape:connector-type");
-    sp_object_read_attr(object, "inkscape:connection-start");
-    sp_object_read_attr(object, "inkscape:connection-start-point");
-    sp_object_read_attr(object, "inkscape:connection-end");
-    sp_object_read_attr(object, "inkscape:connection-end-point");
-    sp_object_read_attr(object, "inkscape:connector-curvature");
+    object->readAttr( "inkscape:connector-type" );
+    object->readAttr( "inkscape:connection-start" );
+    object->readAttr( "inkscape:connection-end" );
+    object->readAttr( "inkscape:connector-curvature" );
 }
 
 
 static void
-avoid_conn_transformed(Geom::Matrix const */*mp*/, SPItem *moved_item)
+avoid_conn_transformed(Geom::Affine const */*mp*/, SPItem *moved_item)
 {
     SPPath *path = SP_PATH(moved_item);
     if (path->connEndPair.isAutoRoutingConn()) {
@@ -163,10 +162,6 @@ SPConnEndPair::setAttr(unsigned const key, gchar const *const value)
         case SP_ATTR_CONNECTION_END:
             this->_connEnd[(key == SP_ATTR_CONNECTION_START ? 0 : 1)]->setAttacherHref(value, _path);
             break;
-        case SP_ATTR_CONNECTION_START_POINT:
-        case SP_ATTR_CONNECTION_END_POINT:
-            this->_connEnd[(key == SP_ATTR_CONNECTION_START_POINT ? 0 : 1)]->setAttacherEndpoint(value, _path);
-            break;
     }
 
 }
@@ -174,15 +169,13 @@ SPConnEndPair::setAttr(unsigned const key, gchar const *const value)
 void
 SPConnEndPair::writeRepr(Inkscape::XML::Node *const repr) const
 {
-    char const * const attr_strs[] = {"inkscape:connection-start", "inkscape:connection-start-point",
-                                      "inkscape:connection-end", "inkscape:connection-end-point"};
+    char const * const attr_strs[] = {"inkscape:connection-start", "inkscape:connection-end"};
     for (unsigned handle_ix = 0; handle_ix < 2; ++handle_ix) {
-        if (this->_connEnd[handle_ix]->ref.getURI()) {
-            repr->setAttribute(attr_strs[2*handle_ix], this->_connEnd[handle_ix]->ref.getURI()->toString());
-            std::ostringstream ostr;
-            ostr<<(this->_connEnd[handle_ix]->type == ConnPointDefault ? "d":"u") <<
-                  this->_connEnd[handle_ix]->id;
-            repr->setAttribute(attr_strs[2*handle_ix+1], ostr.str().c_str());
+        const Inkscape::URI* U = this->_connEnd[handle_ix]->ref.getURI();
+        if (U) {
+            gchar *str = U->toString();
+            repr->setAttribute(attr_strs[handle_ix], str);
+            g_free(str);
         }
     }
     repr->setAttribute("inkscape:connector-curvature", Glib::Ascii::dtostr(_connCurvature).c_str());
@@ -202,7 +195,7 @@ SPConnEndPair::getAttachedItems(SPItem *h2attItem[2]) const {
         // selected through the XML editor, it makes sense just to detach
         // connectors from them.
         if (SP_IS_GROUP(h2attItem[h])) {
-            if (SP_GROUP(h2attItem[h])->group->getItemCount() == 0) {
+            if (SP_GROUP(h2attItem[h])->getItemCount() == 0) {
                 // This group is empty, so detach.
                 sp_conn_end_detach(_path, h);
                 h2attItem[h] = NULL;
@@ -211,17 +204,17 @@ SPConnEndPair::getAttachedItems(SPItem *h2attItem[2]) const {
     }
 }
 
-void
-SPConnEndPair::getEndpoints(Geom::Point endPts[]) const {
-    SPCurve *curve = _path->original_curve ? _path->original_curve : _path->curve;
-    SPItem *h2attItem[2];
+void SPConnEndPair::getEndpoints(Geom::Point endPts[]) const
+{
+    SPCurve const *curve = _path->get_curve_reference();
+    SPItem *h2attItem[2] = {0};
     getAttachedItems(h2attItem);
-    Geom::Matrix i2d = sp_item_i2doc_affine(SP_ITEM(_path));
+    Geom::Affine i2d = _path->i2doc_affine();
 
     for (unsigned h = 0; h < 2; ++h) {
         if ( h2attItem[h] ) {
             g_assert(h2attItem[h]->avoidRef);
-            endPts[h] = h2attItem[h]->avoidRef->getConnectionPointPos(_connEnd[h]->type, _connEnd[h]->id);
+            endPts[h] = h2attItem[h]->avoidRef->getConnectionPointPos();
         }
         else if (!curve->is_empty())
         {
@@ -402,11 +395,11 @@ SPConnEndPair::reroutePathFromLibavoid(void)
         return false;
     }
 
-    SPCurve *curve = _path->original_curve ?_path->original_curve : _path->curve;
+    SPCurve *curve = _path->get_curve();
 
     recreateCurve( curve, _connRef, _connCurvature );
 
-    Geom::Matrix doc2item = sp_item_i2doc_affine(SP_ITEM(_path)).inverse();
+    Geom::Affine doc2item = _path->i2doc_affine().inverse();
     curve->transform(doc2item);
 
     return true;

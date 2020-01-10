@@ -1,5 +1,6 @@
-/** @file
- * Node selection - implementation
+/**
+ * @file
+ * Node selection - implementation.
  */
 /* Authors:
  *   Krzysztof Kosiński <tweenk.pl@gmail.com>
@@ -9,20 +10,23 @@
  */
 
 #include <boost/none.hpp>
+#include "ui/tool/selectable-control-point.h"
 #include <2geom/transforms.h>
 #include "desktop.h"
 #include "preferences.h"
 #include "ui/tool/control-point-selection.h"
 #include "ui/tool/event-utils.h"
-#include "ui/tool/selectable-control-point.h"
 #include "ui/tool/transform-handle-set.h"
+#include "ui/tool/node.h"
+
+#include <gdk/gdkkeysyms.h>
 
 namespace Inkscape {
 namespace UI {
 
 /**
  * @class ControlPointSelection
- * @brief Group of selected control points.
+ * Group of selected control points.
  *
  * Some operations can be performed on all selected points regardless of their type, therefore
  * this class is also a Manipulator. It handles the transformations of points using
@@ -166,7 +170,7 @@ void ControlPointSelection::spatialGrow(SelectableControlPoint *origin, int dir)
 }
 
 /** Transform all selected control points by the given affine transformation. */
-void ControlPointSelection::transform(Geom::Matrix const &m)
+void ControlPointSelection::transform(Geom::Affine const &m)
 {
     for (iterator i = _points.begin(); i != _points.end(); ++i) {
         SelectableControlPoint *cur = *i;
@@ -189,6 +193,8 @@ void ControlPointSelection::align(Geom::Dim2 axis)
     for (iterator i = _points.begin(); i != _points.end(); ++i) {
         bound.unionWith(Geom::OptInterval((*i)->position()[d]));
     }
+
+    if (!bound) { return; }
 
     double new_coord = bound->middle();
     for (iterator i = _points.begin(); i != _points.end(); ++i) {
@@ -215,6 +221,8 @@ void ControlPointSelection::distribute(Geom::Dim2 d)
         sm.insert(std::make_pair(pos[d], (*i)));
         bound.unionWith(Geom::OptInterval(pos[d]));
     }
+
+    if (!bound) { return; }
 
     // now we iterate over the multimap and set aligned positions.
     double step = size() == 1 ? 0 : bound->extent() / (size() - 1);
@@ -260,7 +268,9 @@ void ControlPointSelection::toggleTransformHandlesMode()
 {
     if (_handles->mode() == TransformHandleSet::MODE_SCALE) {
         _handles->setMode(TransformHandleSet::MODE_ROTATE_SKEW);
-        if (size() == 1) _handles->rotationCenter().setVisible(false);
+        if (size() == 1) {
+            _handles->rotationCenter().setVisible(false);
+        }
     } else {
         _handles->setMode(TransformHandleSet::MODE_SCALE);
     }
@@ -273,7 +283,7 @@ void ControlPointSelection::_pointGrabbed(SelectableControlPoint *point)
     _grabbed_point = point;
     _farthest_point = point;
     double maxdist = 0;
-    Geom::Matrix m;
+    Geom::Affine m;
     m.setIdentity();
     for (iterator i = _points.begin(); i != _points.end(); ++i) {
         _original_positions.insert(std::make_pair(*i, (*i)->position()));
@@ -294,7 +304,7 @@ void ControlPointSelection::_pointDragged(Geom::Point &new_pos, GdkEventMotion *
         // Sculpting
         for (iterator i = _points.begin(); i != _points.end(); ++i) {
             SelectableControlPoint *cur = (*i);
-            Geom::Matrix trans;
+            Geom::Affine trans;
             trans.setIdentity();
             double dist = Geom::distance(_original_positions[cur], _original_positions[_grabbed_point]);
             double deltafrac = 0.5 + 0.5 * cos(M_PI * dist/fdist);
@@ -323,7 +333,7 @@ void ControlPointSelection::_pointDragged(Geom::Point &new_pos, GdkEventMotion *
                 Geom::Point newdx = (newpx - newp) / Geom::EPSILON;
                 Geom::Point newdy = (newpy - newp) / Geom::EPSILON;
 
-                Geom::Matrix itrans(newdx[Geom::X], newdx[Geom::Y], newdy[Geom::X], newdy[Geom::Y], 0, 0);
+                Geom::Affine itrans(newdx[Geom::X], newdx[Geom::Y], newdy[Geom::X], newdy[Geom::Y], 0, 0);
                 if (itrans.isSingular())
                     itrans.setIdentity();
 
@@ -375,8 +385,9 @@ void ControlPointSelection::_pointChanged(SelectableControlPoint *p, bool select
 {
     _updateBounds();
     _updateTransformHandles(false);
-    if (_bounds)
+    if (_bounds) {
         _handles->rotationCenter().move(_bounds->midpoint());
+    }
 
     signal_point_changed.emit(p, selected);
 }
@@ -432,7 +443,7 @@ bool ControlPointSelection::_keyboardMove(GdkEventKey const &event, Geom::Point 
         delta /= _desktop->current_zoom();
     } else {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-        double nudge = prefs->getDoubleLimited("/options/nudgedistance/value", 2, 0, 1000);
+        double nudge = prefs->getDoubleLimited("/options/nudgedistance/value", 2, 0, 1000, "px");
         delta *= nudge;
     }
 
@@ -445,8 +456,10 @@ bool ControlPointSelection::_keyboardMove(GdkEventKey const &event, Geom::Point 
     return true;
 }
 
-/** @brief Computes the distance to the farthest corner of the bounding box.
- * Used to determine what it means to "rotate by one pixel". */
+/**
+ * Computes the distance to the farthest corner of the bounding box.
+ * Used to determine what it means to "rotate by one pixel".
+ */
 double ControlPointSelection::_rotationRadius(Geom::Point const &rc)
 {
     if (empty()) return 1.0; // some safe value
@@ -459,7 +472,8 @@ double ControlPointSelection::_rotationRadius(Geom::Point const &rc)
     return maxlen;
 }
 
-/** Rotates the selected points in the given direction according to the modifier state
+/**
+ * Rotates the selected points in the given direction according to the modifier state
  * from the supplied event.
  * @param event Key event to take modifier state from
  * @param dir   Direction of rotation (math convention: 1 = counterclockwise, -1 = clockwise)
@@ -502,7 +516,7 @@ bool ControlPointSelection::_keyboardRotate(GdkEventKey const &event, int dir)
     }
 
     // translate to origin, rotate, translate back to original position
-    Geom::Matrix m = Geom::Translate(-rc)
+    Geom::Affine m = Geom::Translate(-rc)
         * Geom::Rotate(angle) * Geom::Translate(rc);
     transform(m);
     signal_commit.emit(COMMIT_KEYBOARD_ROTATE);
@@ -533,12 +547,12 @@ bool ControlPointSelection::_keyboardScale(GdkEventKey const &event, int dir)
         length_change = 1.0 / _desktop->current_zoom() * dir;
     } else {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-        length_change = prefs->getDoubleLimited("/options/defaultscale/value", 2, 1, 1000);
+        length_change = prefs->getDoubleLimited("/options/defaultscale/value", 2, 1, 1000, "px");
         length_change *= dir;
     }
     double scale = (maxext + length_change) / maxext;
     
-    Geom::Matrix m = Geom::Translate(-center) * Geom::Scale(scale) * Geom::Translate(center);
+    Geom::Affine m = Geom::Translate(-center) * Geom::Scale(scale) * Geom::Translate(center);
     transform(m);
     signal_commit.emit(COMMIT_KEYBOARD_SCALE_UNIFORM);
     return true;
@@ -559,7 +573,7 @@ bool ControlPointSelection::_keyboardFlip(Geom::Dim2 d)
         dynamic_cast<SelectableControlPoint*>(ControlPoint::mouseovered_point);
     Geom::Point center = scp ? scp->position() : _handles->rotationCenter().position();
 
-    Geom::Matrix m = Geom::Translate(-center) * scale_transform * Geom::Translate(center);
+    Geom::Affine m = Geom::Translate(-center) * scale_transform * Geom::Translate(center);
     transform(m);
     signal_commit.emit(d == Geom::X ? COMMIT_FLIP_X : COMMIT_FLIP_Y);
     return true;
@@ -572,7 +586,7 @@ void ControlPointSelection::_commitHandlesTransform(CommitEvent ce)
     signal_commit.emit(ce);
 }
 
-bool ControlPointSelection::event(SPEventContext *event_context, GdkEvent *event)
+bool ControlPointSelection::event(Inkscape::UI::Tools::ToolBase * /*event_context*/, GdkEvent *event)
 {
     // implement generic event handling that should apply for all control point selections here;
     // for example, keyboard moves and transformations. This way this functionality doesn't need
@@ -586,43 +600,43 @@ bool ControlPointSelection::event(SPEventContext *event_context, GdkEvent *event
 
         switch(shortcut_key(event->key)) {
         // moves
-        case GDK_Up:
-        case GDK_KP_Up:
-        case GDK_KP_8:
+        case GDK_KEY_Up:
+        case GDK_KEY_KP_Up:
+        case GDK_KEY_KP_8:
             return _keyboardMove(event->key, Geom::Point(0, 1));
-        case GDK_Down:
-        case GDK_KP_Down:
-        case GDK_KP_2:
+        case GDK_KEY_Down:
+        case GDK_KEY_KP_Down:
+        case GDK_KEY_KP_2:
             return _keyboardMove(event->key, Geom::Point(0, -1));
-        case GDK_Right:
-        case GDK_KP_Right:
-        case GDK_KP_6:
+        case GDK_KEY_Right:
+        case GDK_KEY_KP_Right:
+        case GDK_KEY_KP_6:
             return _keyboardMove(event->key, Geom::Point(1, 0));
-        case GDK_Left:
-        case GDK_KP_Left:
-        case GDK_KP_4:
+        case GDK_KEY_Left:
+        case GDK_KEY_KP_Left:
+        case GDK_KEY_KP_4:
             return _keyboardMove(event->key, Geom::Point(-1, 0));
 
         // rotates
-        case GDK_bracketleft:
+        case GDK_KEY_bracketleft:
             return _keyboardRotate(event->key, 1);
-        case GDK_bracketright:
+        case GDK_KEY_bracketright:
             return _keyboardRotate(event->key, -1);
 
         // scaling
-        case GDK_less:
-        case GDK_comma:
+        case GDK_KEY_less:
+        case GDK_KEY_comma:
             return _keyboardScale(event->key, -1);
-        case GDK_greater:
-        case GDK_period:
+        case GDK_KEY_greater:
+        case GDK_KEY_period:
             return _keyboardScale(event->key, 1);
 
         // TODO: skewing
 
         // flipping
         // NOTE: H is horizontal flip, while Shift+H switches transform handle mode!
-        case GDK_h:
-        case GDK_H:
+        case GDK_KEY_h:
+        case GDK_KEY_H:
             if (held_shift(event->key)) {
                 toggleTransformHandlesMode();
                 return true;
@@ -630,8 +644,8 @@ bool ControlPointSelection::event(SPEventContext *event_context, GdkEvent *event
             // any modifiers except shift should cause no action
             if (held_any_modifiers(event->key)) break;
             return _keyboardFlip(Geom::X);
-        case GDK_v:
-        case GDK_V:
+        case GDK_KEY_v:
+        case GDK_KEY_V:
             if (held_any_modifiers(event->key)) break;
             return _keyboardFlip(Geom::Y);
         default: break;
@@ -640,6 +654,34 @@ bool ControlPointSelection::event(SPEventContext *event_context, GdkEvent *event
     default: break;
     }
     return false;
+}
+
+void ControlPointSelection::getOriginalPoints(std::vector<Inkscape::SnapCandidatePoint> &pts)
+{
+    pts.clear();
+    for (iterator i = _points.begin(); i != _points.end(); ++i) {
+        pts.push_back(Inkscape::SnapCandidatePoint(_original_positions[*i], SNAPSOURCE_NODE_HANDLE));
+    }
+}
+
+void ControlPointSelection::getUnselectedPoints(std::vector<Inkscape::SnapCandidatePoint> &pts)
+{
+    pts.clear();
+    ControlPointSelection::Set &nodes = this->allPoints();
+    for (ControlPointSelection::Set::iterator i = nodes.begin(); i != nodes.end(); ++i) {
+        if (!(*i)->selected()) {
+            Node *n = static_cast<Node*>(*i);
+            pts.push_back(n->snapCandidatePoint());
+        }
+    }
+}
+
+void ControlPointSelection::setOriginalPoints()
+{
+    _original_positions.clear();
+    for (iterator i = _points.begin(); i != _points.end(); ++i) {
+        _original_positions.insert(std::make_pair(*i, (*i)->position()));
+    }
 }
 
 } // namespace UI
@@ -654,4 +696,4 @@ bool ControlPointSelection::event(SPEventContext *event_context, GdkEvent *event
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

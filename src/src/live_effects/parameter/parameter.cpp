@@ -1,18 +1,16 @@
-#define INKSCAPE_LIVEPATHEFFECT_PARAMETER_CPP
-
 /*
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include "ui/widget/registered-widget.h"
+#include <glibmm/i18n.h>
+
 #include "live_effects/parameter/parameter.h"
 #include "live_effects/effect.h"
 #include "svg/svg.h"
-#include "libnr/nr-values.h"
 #include "xml/repr.h"
-#include <gtkmm.h>
-#include "ui/widget/registered-widget.h"
 
 #include "svg/stringstream.h"
 
@@ -38,11 +36,17 @@ Parameter::Parameter( const Glib::ustring& label, const Glib::ustring& tip,
 {
 }
 
-
 void
 Parameter::param_write_to_repr(const char * svgd)
 {
     param_effect->getRepr()->setAttribute(param_key.c_str(), svgd);
+}
+
+void Parameter::write_to_SVG(void)
+{
+    gchar * str = param_getSVGValue();
+    param_write_to_repr(str);
+    g_free(str);
 }
 
 /*###########################################
@@ -53,13 +57,14 @@ ScalarParam::ScalarParam( const Glib::ustring& label, const Glib::ustring& tip,
                       Effect* effect, gdouble default_value)
     : Parameter(label, tip, key, wr, effect),
       value(default_value),
-      min(-NR_HUGE),
-      max(NR_HUGE),
+      min(-G_MAXDOUBLE),
+      max(G_MAXDOUBLE),
       integer(false),
       defvalue(default_value),
       digits(2),
       inc_step(0.1),
-      inc_page(1)
+      inc_page(1),
+      add_slider(false)
 {
 }
 
@@ -125,7 +130,7 @@ ScalarParam::param_make_integer(bool yes)
 }
 
 Gtk::Widget *
-ScalarParam::param_newWidget(Gtk::Tooltips * /*tooltips*/)
+ScalarParam::param_newWidget()
 {
     Inkscape::UI::Widget::RegisteredScalar *rsu = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalar(
         param_label, param_tooltip, param_key, *param_wr, param_effect->getRepr(), param_effect->getSPDoc() ) );
@@ -135,6 +140,9 @@ ScalarParam::param_newWidget(Gtk::Tooltips * /*tooltips*/)
     rsu->setIncrements(inc_step, inc_page);
     rsu->setRange(min, max);
     rsu->setProgrammatically = false;
+    if (add_slider) {
+        rsu->addSlider();
+    }
 
     rsu->set_undo_parameters(SP_VERB_DIALOG_LIVE_PATH_EFFECT, _("Change scalar parameter"));
 

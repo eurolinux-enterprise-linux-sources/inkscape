@@ -144,6 +144,7 @@
       <menuitem action='ObjectToPath'/>
       <menuitem action='StrokeToPath'/>
       <menuitem action='Trace'/>
+      <menuitem action='PixelArt' />
       <separator/>
       <menuitem action='Union'/>
       <menuitem action='Difference'/>
@@ -172,13 +173,6 @@
       <separator/>
       <menuitem action='RemoveManualKerns'/>
     </menu>
-	<menu action='MenuWhiteboard'>
-	  <menuitem action='DialogWhiteboardConnect'/>
-	  <separator/>
-	  <menuitem action='DialogWhiteboardShareWithUser'/>
-	  <menuitem action='DialogWhiteboardShareWithChat'/>
-	  <separator/>
-	</menu>
     <menu action='MenuHelp'>
       <menuitem action='KeysAndMouse'/>
       <menu action='Tutorials'>
@@ -226,6 +220,7 @@
     <toolitem action='ToolSelect'/>
     <toolitem action='ToolNode'/>
     <toolitem action='ToolZoom'/>
+    <toolitem action='ToolMeasure'/>
     <toolitem action='ToolRect'/>
     <toolitem action='ToolArc'/>
     <toolitem action='ToolStar'/>

@@ -16,36 +16,41 @@ bin_PROGRAMS = inkscape inkview
 # Libraries which should be compiled by "make" but not installed.
 # Use this only for libraries that are really standalone, rather than for
 # source tree subdirectories.
-#if WITH_INKBOARD
-#libpedro = pedro/libpedro.a
-#endif
+
+if !WITH_EXT_GDL
+internal_GDL = libgdl/libgdl.a
+endif
+
+
 noinst_LIBRARIES =	\
-	libinkscape.a		\
-	dom/libdom.a		\
-	libcroco/libcroco.a	\
-	libavoid/libavoid.a	\
-	libgdl/libgdl.a		\
-	libcola/libcola.a	\
-	libvpsc/libvpsc.a	\
-	livarot/libvarot.a	\
-	2geom/lib2geom.a	\
-	$(libpedro)		\
+	libcroco/libcroco.a		\
+	libavoid/libavoid.a		\
+	$(internal_GDL)			\
+	libuemf/libuemf.a   		\
+	libcola/libcola.a		\
+	libvpsc/libvpsc.a		\
+	livarot/libvarot.a		\
+	2geom/lib2geom.a		\
+	libdepixelize/libdepixelize.a	\
 	libinkversion.a
 
 all_libs =			\
 	$(noinst_LIBRARIES)	\
 	$(INKSCAPE_LIBS)	\
+	$(EXIF_LIBS)            \
 	$(GNOME_VFS_LIBS)	\
 	$(XFT_LIBS)		\
 	$(FREETYPE_LIBS)	\
 	$(kdeldadd)		\
 	$(win32ldflags)		\
 	$(CARBON_LDFLAGS)	\
-	$(PERL_LIBS)		\
-	$(PYTHON_LIBS)		\
-	$(INKBOARD_LIBS)	\
 	$(LIBWPG_LIBS)		\
-	$(IMAGEMAGICK_LIBS)
+	$(LIBVISIO_LIBS)		\
+	$(LIBCDR_LIBS)		\
+	$(DBUS_LIBS)		\
+	$(GDL_LIBS)             \
+	$(IMAGEMAGICK_LIBS)     \
+	$(X11_LIBS)
 
 # Add sources common for Inkscape and Inkview to this variable.
 ink_common_sources =
@@ -53,26 +58,32 @@ ink_common_sources =
 inkscape_SOURCES =
 # Add Inkview-only sources here.
 inkview_SOURCES =
+# Add sources that are built from meta files
+BUILT_SOURCES =
+# Extra files to distribute
+EXTRA_DIST =
 
-INCLUDES =	\
-	$(PERL_CFLAGS) $(PYTHON_CFLAGS)	\
+AM_CPPFLAGS =	\
+	-I$(top_srcdir)/cxxtest \
+	-I$(builddir)/extension/dbus   \
+	$(EXIF_CFLAGS) \
 	$(FREETYPE_CFLAGS)	\
 	$(GNOME_PRINT_CFLAGS)	\
 	$(GNOME_VFS_CFLAGS)	\
 	$(IMAGEMAGICK_CFLAGS) \
-	$(INKBOARD_CFLAGS) \
 	$(LIBWPG_CFLAGS) \
+	$(LIBVISIO_CFLAGS) \
+	$(LIBCDR_CFLAGS) \
+	$(DBUS_CFLAGS) \
+	$(GDL_CFLAGS)  \
 	$(XFT_CFLAGS)	\
 	$(LCMS_CFLAGS)	\
 	$(POPPLER_CFLAGS)	\
 	$(POPPLER_GLIB_CFLAGS)	\
 	-DPOTRACE=\"potrace\"	\
 	$(INKSCAPE_CFLAGS) \
-	-I$(top_srcdir)/cxxtest \
 	$(WIN32_CFLAGS) \
-	-I$(srcdir)/bind/javainc \
-	-I$(srcdir)/bind/javainc/linux \
-	$(AM_CPPFLAGS)
+	$(X11_CFLAGS)
 
 CXXTEST_TEMPLATE = $(srcdir)/cxxtest-template.tpl
 CXXTESTGENFLAGS = --root --have-eh --template=$(CXXTEST_TEMPLATE)
@@ -92,30 +103,19 @@ win32ldflags = -lcomdlg32 -lmscms
 mwindows = -mwindows
 endif 
 
-if INKJAR
-inkjar_dir = inkjar
-inkjar_libs = inkjar/libinkjar.a
-endif
-
 # Include all partial makefiles from subdirectories
 include Makefile_insert
-include application/Makefile_insert
-include bind/Makefile_insert
 include dialogs/Makefile_insert
 include display/Makefile_insert
-include dom/Makefile_insert
 include extension/Makefile_insert
+include extension/dbus/Makefile_insert
 include extension/implementation/Makefile_insert
 include extension/internal/Makefile_insert
-include extension/script/Makefile_insert
 include filters/Makefile_insert
 include helper/Makefile_insert
 include io/Makefile_insert
-#include pedro/Makefile_insert
-#include jabber_whiteboard/Makefile_insert
 include libcroco/Makefile_insert
 include libgdl/Makefile_insert
-include libnr/Makefile_insert
 include libnrtype/Makefile_insert
 include libavoid/Makefile_insert
 include livarot/Makefile_insert
@@ -123,6 +123,7 @@ include live_effects/Makefile_insert
 include live_effects/parameter/Makefile_insert
 include libvpsc/Makefile_insert
 include libcola/Makefile_insert
+include libuemf/Makefile_insert
 include svg/Makefile_insert
 include widgets/Makefile_insert
 include debug/Makefile_insert
@@ -131,63 +132,57 @@ include ui/Makefile_insert
 include ui/cache/Makefile_insert
 include ui/dialog/Makefile_insert
 include ui/tool/Makefile_insert
+include ui/tools/Makefile_insert
 include ui/view/Makefile_insert
 include ui/widget/Makefile_insert
 include util/Makefile_insert
 include trace/Makefile_insert
 include 2geom/Makefile_insert
+include libdepixelize/Makefile_insert
 
 # Extra files not mentioned as sources to include in the source tarball
-EXTRA_DIST =	\
-	$(top_srcdir)/Doxyfile	\
-	sp-skeleton.cpp sp-skeleton.h	\
-	util/makefile.in	\
-	application/makefile.in	\
-	bind/makefile.in	\
+EXTRA_DIST +=	\
+	2geom/makefile.in	\
 	debug/makefile.in	\
 	dialogs/makefile.in	\
 	display/makefile.in	\
-	dom/makefile.in		\
 	extension/implementation/makefile.in	\
 	extension/internal/makefile.in	\
 	extension/makefile.in	\
-	extension/script/makefile.in	\
 	filters/makefile.in \
 	helper/makefile.in	\
 	io/makefile.in	\
-	io/crystalegg.xml	\
-	io/doc2html.xsl 	\
-	pedro/makefile.in	\
-	jabber_whiteboard/makefile.in	\
-	libgdl/makefile.in	\
-	libcroco/makefile.in	\
-	libnr/makefile.in	\
-	libnrtype/makefile.in	\
 	libavoid/makefile.in	\
+	libcroco/makefile.in	\
+	libgdl/makefile.in	\
+	libnrtype/makefile.in	\
+	libuemf/makefile.in \
 	livarot/makefile.in	\
 	live_effects/makefile.in	\
 	live_effects/parameter/makefile.in	\
 	svg/makefile.in		\
 	trace/makefile.in	\
-	ui/makefile.in		\
 	ui/cache/makefile.in	\
 	ui/dialog/makefile.in	\
+	ui/makefile.in		\
 	ui/view/makefile.in	\
 	ui/widget/makefile.in	\
 	util/makefile.in	\
+	util/makefile.in	\
 	widgets/makefile.in	\
 	xml/makefile.in		\
-	2geom/makefile.in	\
-	extension/internal/win32.cpp	\
-	extension/internal/win32.h	\
-	extension/internal/emf-win32-inout.cpp	\
-	extension/internal/emf-win32-inout.h	\
-	extension/internal/emf-win32-print.cpp	\
-	extension/internal/emf-win32-print.h	\
+	\
+	$(top_srcdir)/Doxyfile \
+	extension/internal/emf-inout.cpp  \
+	extension/internal/emf-inout.h    \
+	extension/internal/emf-print.cpp  \
+	extension/internal/emf-print.h    \
 	helper/sp-marshal.list	\
+	io/crystalegg.xml	\
+	io/doc2html.xsl 	\
 	show-preview.bmp \
 	winconsole.cpp \
-	$(jabber_whiteboard_SOURCES) \
+	libdepixelize/makefile.in	\
 	$(CXXTEST_TEMPLATE)
 
 # Extra files to remove when doing "make distclean"
@@ -201,17 +196,13 @@ DISTCLEANFILES =	\
 # ################################################
 
 # this should speed up the build
-libinkscape_a_SOURCES = $(ink_common_sources)
+#libinkscape_a_SOURCES = $(ink_common_sources)
 
-inkscape_SOURCES += main.cpp $(win32_sources)
+inkscape_SOURCES += main.cpp $(ink_common_sources) $(win32_sources)
 inkscape_LDADD = $(all_libs)
-if PLATFORM_OSX
-inkscape_LDFLAGS = --export-dynamic $(kdeldflags) $(mwindows)
-else
-inkscape_LDFLAGS = -Wl,--export-dynamic $(kdeldflags) $(mwindows)
-endif
+inkscape_LDFLAGS = $(kdeldflags) $(mwindows)
 
-inkview_SOURCES += inkview.cpp $(win32_sources)
+inkview_SOURCES += inkview.cpp $(ink_common_sources) $(win32_sources)
 inkview_LDADD = $(all_libs)
 inkview_LDFLAGS = $(mwindows) 
 
@@ -229,7 +220,7 @@ endif
 # someone updates the BZR working directory.
 inkscape-version.cpp: $(inkscape_version_deps)
 	VER_PREFIX="$(VERSION)";\
-	VER_BZRREV=" r`bzr revno`"; \
+	VER_BZRREV=" r`bzr revno --tree`"; \
 	if test ! -z "`bzr status -S -V $(srcdir)`"; then \
 	    VER_CUSTOM=" custom"; \
 	fi; \
@@ -259,11 +250,24 @@ check_PROGRAMS = cxxtests
 # "make distcheck".
 
 # List of all tests to be run.
-TESTS = $(check_PROGRAMS) ../share/extensions/test/run-all-extension-tests
-XFAIL_TESTS = $(check_PROGRAMS) ../share/extensions/test/run-all-extension-tests
+TESTS = $(check_PROGRAMS)
+check-local:
+	$(top_srcdir)/share/extensions/test/run-all-extension-tests
 
-# including the the testsuites here ensures that they get distributed
-cxxtests_SOURCES = cxxtests.cpp libnr/nr-compose-reference.cpp $(CXXTEST_TESTSUITES)
+# FIXME: Currently, a number of cxxtest tests fail.  These should be fixed and
+#        the XFAIL_TESTS build target should be removed.
+#        See the following Launchpad bugs:
+#
+#          LP #1202271 <cxxtest: preferences-test.h fails>
+#          LP #1208013 <cxxtest: curve-test.h fails>
+#          LP #1208002 <cxxtest: svg-length-test.h fails>
+#          LP #1208005 <cxxtest: svg-path-geom-test.h fails>
+#          LP #1207502 <cxxtest: svg-affine-test.h fails>
+
+XFAIL_TESTS = $(check_PROGRAMS)
+
+# including the testsuites here ensures that they get distributed
+cxxtests_SOURCES = cxxtests.cpp $(CXXTEST_TESTSUITES) $(ink_common_sources) $(win32_sources)
 cxxtests_LDADD = $(all_libs)
 
 cxxtests.cpp: $(CXXTEST_TESTSUITES) $(CXXTEST_TEMPLATE)

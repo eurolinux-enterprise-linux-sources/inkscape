@@ -11,28 +11,38 @@
  * This code is in public domain
  */
 
-#include <gtkmm.h>
-//#include <libnr/nr-path.h>
 #include <2geom/forward.h>
-#include "forward.h"
-#include "extension/extension-forward.h"
+
+namespace Gtk {
+class Window;
+}
+
+class SPDocument;
+class SPStyle;
+
+namespace Inkscape {
+namespace Extension {
+
+class Print;
+
+} // namespace Extension
+} // namespace Inkscape
 
 struct SPPrintContext {
     Inkscape::Extension::Print *module;
 };
 
-unsigned int sp_print_bind(SPPrintContext *ctx, Geom::Matrix const &transform, float opacity);
-unsigned int sp_print_bind(SPPrintContext *ctx, Geom::Matrix const *transform, float opacity);
+unsigned int sp_print_bind(SPPrintContext *ctx, Geom::Affine const &transform, float opacity);
 unsigned int sp_print_release(SPPrintContext *ctx);
 unsigned int sp_print_comment(SPPrintContext *ctx, char const *comment);
-unsigned int sp_print_fill(SPPrintContext *ctx, Geom::PathVector const &pathv, Geom::Matrix const *ctm, SPStyle const *style,
-                           NRRect const *pbox, NRRect const *dbox, NRRect const *bbox);
-unsigned int sp_print_stroke(SPPrintContext *ctx, Geom::PathVector const &pathv, Geom::Matrix const *transform, SPStyle const *style,
-                             NRRect const *pbox, NRRect const *dbox, NRRect const *bbox);
+unsigned int sp_print_fill(SPPrintContext *ctx, Geom::PathVector const &pathv, Geom::Affine const &ctm, SPStyle const *style,
+                           Geom::OptRect const &pbox, Geom::OptRect const &dbox, Geom::OptRect const &bbox);
+unsigned int sp_print_stroke(SPPrintContext *ctx, Geom::PathVector const &pathv, Geom::Affine const &ctm, SPStyle const *style,
+                             Geom::OptRect const &pbox, Geom::OptRect const &dbox, Geom::OptRect const &bbox);
 
 unsigned int sp_print_image_R8G8B8A8_N(SPPrintContext *ctx,
                                        guchar *px, unsigned int w, unsigned int h, unsigned int rs,
-                                       Geom::Matrix const *transform, SPStyle const *style);
+                                       Geom::Affine const &transform, SPStyle const *style);
 
 unsigned int sp_print_text(SPPrintContext *ctx, char const *text, Geom::Point p,
                            SPStyle const *style);
@@ -41,7 +51,6 @@ void sp_print_get_param(SPPrintContext *ctx, gchar *name, bool *value);
 
 
 /* UI */
-void sp_print_preview_document(SPDocument *doc);
 void sp_print_document(Gtk::Window& parentWindow, SPDocument *doc);
 void sp_print_document_to_file(SPDocument *doc, gchar const *filename);
 
@@ -57,4 +66,4 @@ void sp_print_document_to_file(SPDocument *doc, gchar const *filename);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

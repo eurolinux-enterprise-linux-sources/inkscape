@@ -30,12 +30,15 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
-
-import inkex
-import simplestyle, sys, simplepath
+# standard library
+import sys
 from math import *
-import gettext
-_ = gettext.gettext
+# local library
+import inkex
+import simplestyle
+import simplepath
+
+inkex.localize()
 
 #DRAWING ROUTINES
 
@@ -145,6 +148,8 @@ def get_n_points_from_path( node, n):#returns a list of first n points (x,y) in 
     if len(xi) == n and len(yi) == n:
         points = [] # returned pairs of points
         for i in range(n):
+            xi[i] = Draw_From_Triangle.unittouu(e, str(xi[i]) + 'px')
+            yi[i] = Draw_From_Triangle.unittouu(e, str(yi[i]) + 'px')
             points.append( [ xi[i], yi[i] ] )
     else:
         #inkex.errormsg(_('Error: Not enough nodes to gather coordinates.')) #fail silently and exit, rather than invoke an error console
@@ -172,14 +177,14 @@ def cot(x):#cotangent(x)
         return 1/tan(x)
         
 def report_properties( params ):#report to the Inkscape console using errormsg
-    inkex.errormsg(_("Side Length 'a'/px: " + str( params[0][0] ) ))
-    inkex.errormsg(_("Side Length 'b'/px: " + str( params[0][1] ) ))
-    inkex.errormsg(_("Side Length 'c'/px: " + str( params[0][2] ) ))
-    inkex.errormsg(_("Angle 'A'/radians: " + str( params[1][0] ) ))
-    inkex.errormsg(_("Angle 'B'/radians: " + str( params[1][1] ) ))
-    inkex.errormsg(_("Angle 'C'/radians: " + str( params[1][2] ) ))
-    inkex.errormsg(_("Semiperimeter/px: " + str( params[4][1] ) ))
-    inkex.errormsg(_("Area /px^2: " + str( params[4][0] ) ))
+    inkex.errormsg(_("Side Length 'a' (px): " + str( params[0][0] ) ))
+    inkex.errormsg(_("Side Length 'b' (px): " + str( params[0][1] ) ))
+    inkex.errormsg(_("Side Length 'c' (px): " + str( params[0][2] ) ))
+    inkex.errormsg(_("Angle 'A' (radians): " + str( params[1][0] ) ))
+    inkex.errormsg(_("Angle 'B' (radians): " + str( params[1][1] ) ))
+    inkex.errormsg(_("Angle 'C' (radians): " + str( params[1][2] ) ))
+    inkex.errormsg(_("Semiperimeter (px): " + str( params[4][1] ) ))
+    inkex.errormsg(_("Area (px^2): " + str( params[4][0] ) ))
     return
     
 
@@ -187,17 +192,17 @@ class Style(object): #container for style information
     def __init__(self, options):
         #dot markers
         self.d_rad = 4 #dot marker radius
-        self.d_th  = 2 #stroke width
+        self.d_th  = Draw_From_Triangle.unittouu(e, '2px') #stroke width
         self.d_fill= '#aaaaaa' #fill colour
         self.d_col = '#000000' #stroke colour
 
         #lines
-        self.l_th  = 2
+        self.l_th  = Draw_From_Triangle.unittouu(e, '2px')
         self.l_fill= 'none'
         self.l_col = '#000000'
         
         #circles
-        self.c_th  = 2
+        self.c_th  = Draw_From_Triangle.unittouu(e, '2px')
         self.c_fill= 'none'
         self.c_col = '#000000'
 
@@ -311,7 +316,7 @@ class Draw_From_Triangle(inkex.Effect):
 
         if len(pts) == 3: #if we have right number of nodes, else skip and end program
             st = Style(so)#style for dots, lines and circles
-            
+
             #CREATE A GROUP TO HOLD ALL GENERATED ELEMENTS IN
             #Hold relative to point A (pt[0])
             group_translation = 'translate(' + str( pts[0][0] ) + ','+ str( pts[0][1] ) + ')'

@@ -1,17 +1,29 @@
-/** @file
- * @brief Inkscape color swatch UI item.
+/**
+ * @file
+ * Inkscape color swatch UI item.
  */
 /* Authors:
  *   Jon A. Cruz
+ *   Abhishek Sharma
  *
  * Copyright (C) 2010 Jon A. Cruz
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#ifdef HAVE_CONFIG_H
+# include "config.h"
+#endif
+
 #include <errno.h>
-#include <glibmm/i18n.h>
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
 #include <gtkmm/label.h>
+#include <glibmm/i18n.h>
+#include <cairo.h>
 #include <gtk/gtk.h>
 
 #include "color-item.h"
@@ -19,8 +31,9 @@
 #include "desktop.h"
 #include "desktop-handles.h"
 #include "desktop-style.h"
-#include "display/nr-plain-stuff.h"
+#include "display/cairo-utils.h"
 #include "document.h"
+#include "document-undo.h"
 #include "inkscape.h" // for SP_ACTIVE_DESKTOP
 #include "io/resource.h"
 #include "io/sys.h"
@@ -30,6 +43,8 @@
 #include "svg/svg-color.h"
 #include "xml/node.h"
 #include "xml/repr.h"
+#include "verbs.h"
+#include "widgets/gradient-vector.h"
 
 #include "color.h" // for SP_RGBA32_U_COMPOSE
 
@@ -133,12 +148,12 @@ static gboolean handleLeaveNotify( GtkWidget* /*widget*/, GdkEventCrossing* /*ev
     return FALSE;
 }
 
-static void dieDieDie( GtkObject *obj, gpointer user_data )
+static void dieDieDie( GObject *obj, gpointer user_data )
 {
     g_message("die die die %p  %p", obj, user_data );
 }
 
-static bool getBlock( std::string& dst, guchar ch, std::string const str )
+static bool getBlock( std::string& dst, guchar ch, std::string const & str )
 {
     bool good = false;
     std::string::size_type pos = str.find(ch);
@@ -211,17 +226,16 @@ static void colorItemDragBegin( GtkWidget */*widget*/, GdkDragContext* dc, gpoin
         } else {
             GdkPixbuf* pixbuf = 0;
             if ( item->getGradient() ){
-                guchar* px = g_new( guchar, 3 * height * width );
-                nr_render_checkerboard_rgb( px, width, height, 3 * width, 0, 0 );
+                cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+                cairo_pattern_t *gradient = sp_gradient_create_preview_pattern(item->getGradient(), width);
+                cairo_t *ct = cairo_create(s);
+                cairo_set_source(ct, gradient);
+                cairo_paint(ct);
+                cairo_destroy(ct);
+                cairo_pattern_destroy(gradient);
+                cairo_surface_flush(s);
 
-                sp_gradient_render_vector_block_rgb( item->getGradient(),
-                                                     px, width, height, 3 * width,
-                                                     0, width, TRUE );
-
-                pixbuf = gdk_pixbuf_new_from_data( px, GDK_COLORSPACE_RGB, FALSE, 8,
-                                                   width, height, width * 3,
-                                                   0, // add delete function
-                                                   0 );
+                pixbuf = ink_pixbuf_create_from_cairo_surface(s);
             } else {
                 Glib::RefPtr<Gdk::Pixbuf> thumb = Gdk::Pixbuf::create( Gdk::COLORSPACE_RGB, false, 8, width, height );
                 guint32 fillWith = (0xff000000 & (item->def.getR() << 24))
@@ -251,10 +265,8 @@ static void colorItemDragBegin( GtkWidget */*widget*/, GdkDragContext* dc, gpoin
 // }
 
 
-SwatchPage::SwatchPage() :
-    _name(),
-    _prefWidth(0),
-    _colors()
+SwatchPage::SwatchPage()
+    : _prefWidth(0)
 {
 }
 
@@ -264,10 +276,7 @@ SwatchPage::~SwatchPage()
 
 
 ColorItem::ColorItem(ege::PaintDef::ColorType type) :
-    Previewable(),
     def(type),
-    tips(),
-    _previews(),
     _isFill(false),
     _isStroke(false),
     _isLive(false),
@@ -276,18 +285,12 @@ ColorItem::ColorItem(ege::PaintDef::ColorType type) :
     _linkGray(0),
     _linkSrc(0),
     _grad(0),
-    _pixData(0),
-    _pixWidth(0),
-    _pixHeight(0),
-    _listeners()
+    _pattern(0)
 {
 }
 
 ColorItem::ColorItem( unsigned int r, unsigned int g, unsigned int b, Glib::ustring& name ) :
-    Previewable(),
     def( r, g, b, name ),
-    tips(),
-    _previews(),
     _isFill(false),
     _isStroke(false),
     _isLive(false),
@@ -296,15 +299,15 @@ ColorItem::ColorItem( unsigned int r, unsigned int g, unsigned int b, Glib::ustr
     _linkGray(0),
     _linkSrc(0),
     _grad(0),
-    _pixData(0),
-    _pixWidth(0),
-    _pixHeight(0),
-    _listeners()
+    _pattern(0)
 {
 }
 
 ColorItem::~ColorItem()
 {
+    if (_pattern != NULL) {
+        cairo_pattern_destroy(_pattern);
+    }
 }
 
 ColorItem::ColorItem(ColorItem const &other) :
@@ -358,20 +361,36 @@ void ColorItem::setGradient(SPGradient *grad)
         _grad = grad;
         // TODO regen and push to listeners
     }
+
+    setName( gr_prepare_label(_grad) );
 }
 
-void ColorItem::setPixData(guchar* px, int width, int height)
+void ColorItem::setName(const Glib::ustring name)
 {
-    if (px != _pixData) {
-        if (_pixData) {
-            g_free(_pixData);
-        }
-        _pixData = px;
-        _pixWidth = width;
-        _pixHeight = height;
+    //def.descr = name;
 
-        _updatePreviews();
+    for ( std::vector<Gtk::Widget*>::iterator it = _previews.begin(); it != _previews.end(); ++it ) {
+        Gtk::Widget* widget = *it;
+        if ( IS_EEK_PREVIEW(widget->gobj()) ) {
+            gtk_widget_set_tooltip_text(GTK_WIDGET(widget->gobj()), name.c_str());
+        }
+        else if ( GTK_IS_LABEL(widget->gobj()) ) {
+            gtk_label_set_text(GTK_LABEL(widget->gobj()), name.c_str());
+        }
     }
+}
+
+void ColorItem::setPattern(cairo_pattern_t *pattern)
+{
+    if (pattern) {
+        cairo_pattern_reference(pattern);
+    }
+    if (_pattern) {
+        cairo_pattern_destroy(_pattern);
+    }
+    _pattern = pattern;
+
+    _updatePreviews();
 }
 
 void ColorItem::_dragGetColorData( GtkWidget */*widget*/,
@@ -458,7 +477,7 @@ void ColorItem::_updatePreviews()
         SPDesktop *desktop = SP_ACTIVE_DESKTOP;
         if ( desktop ) {
             SPDocument* document = sp_desktop_document( desktop );
-            Inkscape::XML::Node *rroot =  sp_document_repr_root( document );
+            Inkscape::XML::Node *rroot =  document->getReprRoot();
             if ( rroot ) {
 
                 // Find where this thing came from
@@ -468,8 +487,8 @@ void ColorItem::_updatePreviews()
                 for ( std::vector<SwatchPage*>::iterator it2 = possible.begin(); it2 != possible.end() && !found; ++it2 ) {
                     SwatchPage* curr = *it2;
                     index = 0;
-                    for ( std::vector<ColorItem*>::iterator zz = curr->_colors.begin(); zz != curr->_colors.end(); ++zz ) {
-                        if ( this == *zz ) {
+                    for ( boost::ptr_vector<ColorItem>::iterator zz = curr->_colors.begin(); zz != curr->_colors.end(); ++zz ) {
+                        if ( this == &*zz ) {
                             found = true;
                             paletteName = curr->_name;
                             break;
@@ -486,7 +505,7 @@ void ColorItem::_updatePreviews()
                     str = 0;
 
                     if ( bruteForce( document, rroot, paletteName, def.getR(), def.getG(), def.getB() ) ) {
-                        sp_document_done( document , SP_VERB_DIALOG_SWATCHES,
+                        SPDocumentUndo::done( document , SP_VERB_DIALOG_SWATCHES,
                                           _("Change color definition"));
                     }
                 }
@@ -519,16 +538,26 @@ void ColorItem::_regenPreview(EekPreview * preview)
 
         eek_preview_set_pixbuf( preview, pixbuf );
     }
-    else if ( !_pixData ){
+    else if ( !_pattern ){
         eek_preview_set_color( preview,
                                (def.getR() << 8) | def.getR(),
                                (def.getG() << 8) | def.getG(),
                                (def.getB() << 8) | def.getB() );
     } else {
-        GdkPixbuf* pixbuf = gdk_pixbuf_new_from_data( _pixData, GDK_COLORSPACE_RGB, FALSE, 8,
-                                                      _pixWidth, _pixHeight, _pixWidth * 3,
-                                                      0, // add delete function
-                                                      0 );
+        // These correspond to PREVIEW_PIXBUF_WIDTH and VBLOCK from swatches.cpp
+        // TODO: the pattern to draw should be in the widget that draws the preview,
+        //       so the preview can be scalable
+        int w = 128;
+        int h = 16;
+
+        cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+        cairo_t *ct = cairo_create(s);
+        cairo_set_source(ct, _pattern);
+        cairo_paint(ct);
+        cairo_destroy(ct);
+        cairo_surface_flush(s);
+
+        GdkPixbuf* pixbuf = ink_pixbuf_create_from_cairo_surface(s);
         eek_preview_set_pixbuf( preview, pixbuf );
     }
 
@@ -537,53 +566,28 @@ void ColorItem::_regenPreview(EekPreview * preview)
                                                 | (_isLive ? PREVIEW_LINK_OTHER:0)) );
 }
 
-Gtk::Widget* ColorItem::getPreview(PreviewStyle style, ViewType view, ::PreviewSize size, guint ratio)
+Gtk::Widget* ColorItem::getPreview(PreviewStyle style, ViewType view, ::PreviewSize size, guint ratio, guint border)
 {
     Gtk::Widget* widget = 0;
     if ( style == PREVIEW_STYLE_BLURB) {
         Gtk::Label *lbl = new Gtk::Label(def.descr);
-        lbl->set_alignment(Gtk::ALIGN_LEFT, Gtk::ALIGN_CENTER);
+        lbl->set_alignment(Gtk::ALIGN_START, Gtk::ALIGN_CENTER);
         widget = lbl;
     } else {
-//         Glib::ustring blank("          ");
-//         if ( size == Inkscape::ICON_SIZE_MENU || size == Inkscape::ICON_SIZE_DECORATION ) {
-//             blank = " ";
-//         }
-
         GtkWidget* eekWidget = eek_preview_new();
         EekPreview * preview = EEK_PREVIEW(eekWidget);
         Gtk::Widget* newBlot = Glib::wrap(eekWidget);
-
         _regenPreview(preview);
 
-        eek_preview_set_details( preview, (::PreviewStyle)style, (::ViewType)view, (::PreviewSize)size, ratio );
+        eek_preview_set_details( preview, 
+                                 (::ViewType)view,
+                                 (::PreviewSize)size,
+                                 ratio,
+                                 border );
 
         def.addCallback( _colorDefChanged, this );
-
-        GValue val = {0, {{0}, {0}}};
-        g_value_init( &val, G_TYPE_BOOLEAN );
-        g_value_set_boolean( &val, FALSE );
-        g_object_set_property( G_OBJECT(preview), "focus-on-click", &val );
-
-/*
-        Gtk::Button *btn = new Gtk::Button(blank);
-        Gdk::Color color;
-        color.set_rgb((_r << 8)|_r, (_g << 8)|_g, (_b << 8)|_b);
-        btn->modify_bg(Gtk::STATE_NORMAL, color);
-        btn->modify_bg(Gtk::STATE_ACTIVE, color);
-        btn->modify_bg(Gtk::STATE_PRELIGHT, color);
-        btn->modify_bg(Gtk::STATE_SELECTED, color);
-
-        Gtk::Widget* newBlot = btn;
-*/
-
-        tips.set_tip((*newBlot), def.descr);
-
-/*
-        newBlot->signal_clicked().connect( sigc::mem_fun(*this, &ColorItem::buttonClicked) );
-
-        sigc::signal<void> type_signal_something;
-*/
+        eek_preview_set_focus_on_click(preview, FALSE);
+        newBlot->set_tooltip_text(def.descr);
 
         g_signal_connect( G_OBJECT(newBlot->gobj()),
                           "clicked",
@@ -646,26 +650,6 @@ Gtk::Widget* ColorItem::getPreview(PreviewStyle style, ViewType view, ::PreviewS
                           G_CALLBACK(handleLeaveNotify),
                           this);
 
-//         g_signal_connect( G_OBJECT(newBlot->gobj()),
-//                           "drag-drop",
-//                           G_CALLBACK(dragDropColorData),
-//                           this);
-
-        if ( def.isEditable() )
-        {
-//             gtk_drag_dest_set( GTK_WIDGET(newBlot->gobj()),
-//                                GTK_DEST_DEFAULT_ALL,
-//                                destColorTargets,
-//                                G_N_ELEMENTS(destColorTargets),
-//                                GdkDragAction(GDK_ACTION_COPY | GDK_ACTION_MOVE) );
-
-
-//             g_signal_connect( G_OBJECT(newBlot->gobj()),
-//                               "drag-data-received",
-//                               G_CALLBACK(_dropDataIn),
-//                               this );
-        }
-
         g_signal_connect( G_OBJECT(newBlot->gobj()),
                           "destroy",
                           G_CALLBACK(dieDieDie),
@@ -720,7 +704,7 @@ void ColorItem::buttonClicked(bool secondary)
         sp_desktop_set_style(desktop, css);
         sp_repr_css_attr_unref(css);
 
-        sp_document_done( sp_desktop_document(desktop), SP_VERB_DIALOG_SWATCHES, descr.c_str() );
+        DocumentUndo::done( sp_desktop_document(desktop), SP_VERB_DIALOG_SWATCHES, descr.c_str() );
     }
 }
 
@@ -728,12 +712,12 @@ void ColorItem::_wireMagicColors( SwatchPage *colorSet )
 {
     if ( colorSet )
     {
-        for ( std::vector<ColorItem*>::iterator it = colorSet->_colors.begin(); it != colorSet->_colors.end(); ++it )
+        for ( boost::ptr_vector<ColorItem>::iterator it = colorSet->_colors.begin(); it != colorSet->_colors.end(); ++it )
         {
-            std::string::size_type pos = (*it)->def.descr.find("*{");
+            std::string::size_type pos = it->def.descr.find("*{");
             if ( pos != std::string::npos )
             {
-                std::string subby = (*it)->def.descr.substr( pos + 2 );
+                std::string subby = it->def.descr.substr( pos + 2 );
                 std::string::size_type endPos = subby.find("}*");
                 if ( endPos != std::string::npos )
                 {
@@ -743,12 +727,12 @@ void ColorItem::_wireMagicColors( SwatchPage *colorSet )
 
                     if ( subby.find('E') != std::string::npos )
                     {
-                        (*it)->def.setEditable( true );
+                        it->def.setEditable( true );
                     }
 
                     if ( subby.find('L') != std::string::npos )
                     {
-                        (*it)->_isLive = true;
+                        it->_isLive = true;
                     }
 
                     std::string part;
@@ -758,7 +742,7 @@ void ColorItem::_wireMagicColors( SwatchPage *colorSet )
                         if ( popVal( colorIndex, part ) ) {
                             guint64 percent = 0;
                             if ( popVal( percent, part ) ) {
-                                (*it)->_linkTint( *(colorSet->_colors[colorIndex]), percent );
+                                it->_linkTint( colorSet->_colors[colorIndex], percent );
                             }
                         }
                     }
@@ -773,7 +757,7 @@ void ColorItem::_wireMagicColors( SwatchPage *colorSet )
                                 if ( !popVal( grayLevel, part ) ) {
                                     grayLevel = 0;
                                 }
-                                (*it)->_linkTone( *(colorSet->_colors[colorIndex]), percent, grayLevel );
+                                it->_linkTone( colorSet->_colors[colorIndex], percent, grayLevel );
                             }
                         }
                     }
@@ -834,4 +818,4 @@ void ColorItem::_linkTone( ColorItem& other, int percent, int grayLevel )
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

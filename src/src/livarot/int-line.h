@@ -1,12 +1,14 @@
 #ifndef INKSCAPE_LIVAROT_INT_LINE_H
 #define INKSCAPE_LIVAROT_INT_LINE_H
 
-#include "livarot/livarot-forward.h"
 #include "livarot/LivarotDefs.h"
 
 /** \file
  * Coverage with integer boundaries.
  */
+
+class BitLigne;
+class FloatLigne;
 
 /// A run with integer boundaries.
 struct int_ligne_run {
@@ -104,4 +106,4 @@ public:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

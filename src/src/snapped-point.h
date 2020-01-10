@@ -14,7 +14,6 @@
 
 #include <vector>
 #include <list>
-#include <libnr/nr-values.h> //Because of NR_HUGE
 #include <2geom/geom.h>
 #include <snap-candidate.h>
 
@@ -48,23 +47,26 @@ public:
      * to, because it only returns a point if snapping has actually occurred
      * (by overwriting p)
      */
-    void getPoint(Geom::Point &p) const;
+    void getPointIfSnapped(Geom::Point &p) const;
 
     /* This method however always returns a point, even if no snapping
      * has occurred; A check should be implemented in the calling code
      * to check for snapping. Use this method only when really needed, e.g.
      * when the calling code is trying to snap multiple points and must
-     * determine itself which point is most appropriate
+     * determine itself which point is most appropriate, or when doing a
+     * constrainedSnap that also enforces projection onto the constraint (in
+     * which case you need the new point anyway, even if we didn't snap)
      */
     Geom::Point getPoint() const {return _point;}
     void setPoint(Geom::Point const &p) {_point = p;}
+    Geom::Point getTangent() const {return _tangent;}
 
     bool getAtIntersection() const {return _at_intersection;}
     bool getFullyConstrained() const {return _fully_constrained;}
     bool getConstrainedSnap() const {return _constrained_snap;}
-    bool getSnapped() const {return _distance < NR_HUGE;}
+    bool getSnapped() const {return _distance < Geom::infinity();}
     Geom::Point getTransformation() const {return _transformation;}
-    void setTransformation(Geom::Point const t) {_transformation = t;}
+    void setTransformation(Geom::Point const &t) {_transformation = t;}
     void setTarget(SnapTargetType const target) {_target = target;}
     SnapTargetType getTarget() const {return _target;}
     void setTargetBBox(Geom::OptRect const target) {_target_bbox = target;}
@@ -94,8 +96,9 @@ public:
 
 protected:
     Geom::Point _point; // Location of the snapped point
+    Geom::Point _tangent; // Tangent of the curve we snapped to, at the snapped point
     SnapSourceType _source; // Describes what snapped
-    long _source_num; // Sequence number of the source point that snapped, if that point is part of a set of points. (starting at zero)
+    long _source_num; // Sequence number of the source point that snapped, if that point is part of a set of points. (starting at zero if we might have a set of points; -1 if we only have a single point)
     SnapTargetType _target; // Describes to what we've snapped to
     bool _at_intersection; // If true, the snapped point is at an intersection
     bool _constrained_snap; // If true, then the snapped point was found when looking for a constrained snap

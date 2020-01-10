@@ -1,5 +1,5 @@
-#ifndef __SP_DESKTOP_STYLE_H__
-#define __SP_DESKTOP_STYLE_H__
+#ifndef SEEN_SP_DESKTOP_STYLE_H
+#define SEEN_SP_DESKTOP_STYLE_H
 
 /*
  * Desktop style management
@@ -16,13 +16,13 @@
 #include <glib.h>
 
 class ColorRGBA;
-struct SPCSSAttr;
-struct SPDesktop;
-struct SPObject;
-struct SPStyle;
+class SPCSSAttr;
+class SPDesktop;
+class SPObject;
+class SPStyle;
 namespace Inkscape {
 namespace XML {
-struct Node;
+class Node;
 }
 }
 namespace Glib { class ustring; }
@@ -83,7 +83,7 @@ int sp_desktop_query_style_from_list (GSList *list, SPStyle *style, int property
 int sp_desktop_query_style(SPDesktop *desktop, SPStyle *style, int property);
 bool sp_desktop_query_style_all (SPDesktop *desktop, SPStyle *query);
 
-#endif
+#endif // SEEN_SP_DESKTOP_STYLE_H
 
 
 /*
@@ -95,4 +95,4 @@ bool sp_desktop_query_style_all (SPDesktop *desktop, SPStyle *query);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

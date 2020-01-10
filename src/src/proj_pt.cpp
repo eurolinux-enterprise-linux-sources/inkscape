@@ -34,6 +34,7 @@ Pt2::Pt2(const gchar *coord_str) {
     pt[0] = g_ascii_strtod(coords[0], NULL);
     pt[1] = g_ascii_strtod(coords[1], NULL);
     pt[2] = g_ascii_strtod(coords[2], NULL);
+    g_strfreev (coords);
 }
 
 void
@@ -48,7 +49,7 @@ Pt2::normalize() {
 Geom::Point
 Pt2::affine() {
   if (fabs(pt[2]) < epsilon) {
-    return Geom::Point (NR_HUGE, NR_HUGE);
+    return Geom::Point (Geom::infinity(), Geom::infinity());
   }
   return Geom::Point (pt[0]/pt[2], pt[1]/pt[2]);
 }
@@ -116,4 +117,4 @@ Pt3::coord_string() {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

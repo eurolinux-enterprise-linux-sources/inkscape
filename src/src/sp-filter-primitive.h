@@ -15,29 +15,40 @@
  */
 
 #include "sp-object.h"
-#include "display/nr-filter.h"
-#include "display/nr-filter-primitive.h"
-#include "display/nr-filter-types.h"
+#include "svg/svg-length.h"
 
-#define SP_TYPE_FILTER_PRIMITIVE (sp_filter_primitive_get_type ())
-#define SP_FILTER_PRIMITIVE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_FILTER_PRIMITIVE, SPFilterPrimitive))
-#define SP_FILTER_PRIMITIVE_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), SP_TYPE_FILTER_PRIMITIVE, SPFilterPrimitiveClass))
-#define SP_IS_FILTER_PRIMITIVE(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_FILTER_PRIMITIVE))
-#define SP_IS_FILTER_PRIMITIVE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), SP_TYPE_FILTER_PRIMITIVE))
+#define SP_FILTER_PRIMITIVE(obj) (dynamic_cast<SPFilterPrimitive*>((SPObject*)obj))
+#define SP_IS_FILTER_PRIMITIVE(obj) (dynamic_cast<const SPFilterPrimitive*>((SPObject*)obj) != NULL)
 
-class SPFilterPrimitive;
-class SPFilterPrimitiveClass;
+namespace Inkscape {
+namespace Filters {
+class Filter;
+class FilterPrimitive;
+} }
 
-struct SPFilterPrimitive : public SPObject {
+class SPFilterPrimitive : public SPObject {
+public:
+	SPFilterPrimitive();
+	virtual ~SPFilterPrimitive();
+
     int image_in, image_out;
-};
 
-struct SPFilterPrimitiveClass {
-    SPObjectClass sp_object_class;
-    void (* build_renderer)(SPFilterPrimitive*, Inkscape::Filters::Filter*);
-};
+    /* filter primitive subregion */
+    SVGLength x, y, height, width;
 
-GType sp_filter_primitive_get_type (void);
+protected:
+	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
+	virtual void release();
+
+	virtual void set(unsigned int key, const gchar* value);
+
+	virtual void update(SPCtx* ctx, unsigned int flags);
+
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
+
+public:
+	virtual void build_renderer(Inkscape::Filters::Filter* filter) = 0;
+};
 
 /* Common initialization for filter primitives */
 void sp_filter_primitive_renderer_common(SPFilterPrimitive *sp_prim, Inkscape::Filters::FilterPrimitive *nr_prim);
@@ -56,4 +67,4 @@ int sp_filter_primitive_read_result(SPFilterPrimitive *prim, gchar const *name);
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -14,7 +14,6 @@
 #include <memory>
 #include <gdk/gdk.h>
 #include <2geom/rect.h>
-#include "display/display-forward.h"
 #include "ui/tool/manipulator.h"
 
 class SPDesktop;
@@ -29,7 +28,7 @@ class Selector : public Manipulator {
 public:
     Selector(SPDesktop *d);
     virtual ~Selector();
-    virtual bool event(SPEventContext *, GdkEvent *);
+    virtual bool event(Inkscape::UI::Tools::ToolBase *, GdkEvent *);
     
     sigc::signal<void, Geom::Rect const &, GdkEventButton*> signal_area;
     sigc::signal<void, Geom::Point const &, GdkEventButton*> signal_point;
@@ -56,4 +55,4 @@ private:
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

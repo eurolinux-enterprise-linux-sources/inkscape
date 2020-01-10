@@ -1,6 +1,3 @@
-/** @file
- * @brief EGE paint definition
- */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -47,9 +44,9 @@
 #include <string>
 #include <iostream>
 #include <sstream>
-#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <glibmm/i18n.h>
 #include <glibmm/stringutils.h>
 
 #if !defined(_)
@@ -71,7 +68,8 @@ PaintDef::PaintDef() :
     r(0),
     g(0),
     b(0),
-    editable(false)
+    editable(false),
+    _listeners()
 {
 }
 
@@ -81,7 +79,8 @@ PaintDef::PaintDef( ColorType type ) :
     r(0),
     g(0),
     b(0),
-    editable(false)
+    editable(false),
+    _listeners()
 {
     switch (type) {
         case CLEAR:
@@ -102,7 +101,8 @@ PaintDef::PaintDef( unsigned int r, unsigned int g, unsigned int b, const std::s
     r(r),
     g(g),
     b(b),
-    editable(false)
+    editable(false),
+    _listeners()
 {
 }
 
@@ -127,6 +127,7 @@ PaintDef& PaintDef::operator=( PaintDef const &other )
         b = other.b;
         descr = other.descr;
         editable = other.editable;
+        //TODO: _listeners should be assigned a value
     }
     return *this;
 }
@@ -315,4 +316,4 @@ void PaintDef::removeCallback( ColorCallback /*cb*/, void* /*data*/ )
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

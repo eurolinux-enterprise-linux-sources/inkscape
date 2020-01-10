@@ -42,6 +42,8 @@ class PovOutput : public Inkscape::Extension::Implementation::Implementation
 
 public:
 
+    PovOutput();
+    
     /**
      * Our internal String definition
      */
@@ -139,7 +141,7 @@ private:
             {}
         PovShapeInfo(const PovShapeInfo &other)
             { assign(other); }
-        PovShapeInfo operator=(const PovShapeInfo &other)
+        PovShapeInfo& operator=(const PovShapeInfo &other)
             { assign(other); return *this; }
         virtual ~PovShapeInfo()
             {}

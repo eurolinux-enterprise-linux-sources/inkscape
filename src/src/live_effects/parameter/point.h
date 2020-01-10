@@ -12,8 +12,6 @@
 #include <glib.h>
 #include <2geom/point.h>
 
-#include <gtkmm/tooltips.h>
-
 #include "live_effects/parameter/parameter.h"
 
 #include "knot-holder-entity.h"
@@ -34,7 +32,7 @@ public:
 		Geom::Point default_value = Geom::Point(0,0) ); // tip for automatically associated on-canvas handle
     virtual ~PointParam();
 
-    virtual Gtk::Widget * param_newWidget(Gtk::Tooltips * tooltips);
+    virtual Gtk::Widget * param_newWidget();
 
     bool param_readSVGValue(const gchar * strvalue);
     gchar * param_getSVGValue() const;
@@ -45,11 +43,11 @@ public:
 
     void param_set_and_write_new_value(Geom::Point newpoint);
 
-    virtual void param_transform_multiply(Geom::Matrix const& /*postmul*/, bool /*set*/);
+    virtual void param_transform_multiply(Geom::Affine const& /*postmul*/, bool /*set*/);
 
     void set_oncanvas_looks(SPKnotShapeType shape, SPKnotModeType mode, guint32 color);
 
-    virtual bool providesKnotHolderEntities() { return true; }
+    virtual bool providesKnotHolderEntities() const { return true; }
     virtual void addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desktop, SPItem *item);
 
 private:

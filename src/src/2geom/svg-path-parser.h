@@ -38,11 +38,11 @@
 #include <stdexcept>
 #include <2geom/exception.h>
 #include <2geom/point.h>
-#include <2geom/svg-path.h>
+#include <2geom/path-sink.h>
 
 namespace Geom {
 
-void parse_svg_path(char const *str, SVGPathSink &sink) throw(SVGPathParseError);
+void parse_svg_path(char const *str, PathSink &sink) throw(SVGPathParseError);
 
 inline std::vector<Path> parse_svg_path(char const *str) throw(SVGPathParseError) {
     typedef std::vector<Path> Subpaths;
@@ -50,19 +50,25 @@ inline std::vector<Path> parse_svg_path(char const *str) throw(SVGPathParseError
     
     Subpaths subpaths;
     Inserter iter(subpaths);
-    SVGPathGenerator<Inserter> generator(iter);
+    PathIteratorSink<Inserter> generator(iter);
 
     parse_svg_path(str, generator);
     return subpaths;
 }
 
+inline std::vector<Path> read_svgd_f(FILE * fi) throw(SVGPathParseError) {
+    /// @bug The 10kB length limit should be removed
+    char input[1024 * 10];
+    fgets(input, 1024 * 10, fi);
+    return parse_svg_path(input);
+}
+
 inline std::vector<Path> read_svgd(char const * name) throw(SVGPathParseError) {
     FILE* fi = fopen(name, "r");
     if(fi == NULL) throw(std::runtime_error("Error opening file"));
-    char input[1024 * 10];
-    fgets(input, 1024 * 10, fi);
+    std::vector<Path> out = read_svgd_f(fi);
     fclose(fi);
-    return parse_svg_path(input);
+    return out;
 }
 
 }
@@ -77,4 +83,4 @@ inline std::vector<Path> read_svgd(char const * name) throw(SVGPathParseError) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

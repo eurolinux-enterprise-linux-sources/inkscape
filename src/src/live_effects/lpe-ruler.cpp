@@ -1,5 +1,3 @@
-#define INKSCAPE_LPE_RULER_CPP
-
 /** \file
  * LPE <ruler> implementation, see lpe-ruler.cpp.
  */
@@ -31,7 +29,7 @@ static const Util::EnumData<MarkDirType> MarkDirData[] = {
 static const Util::EnumDataConverter<MarkDirType> MarkDirTypeConverter(MarkDirData, sizeof(MarkDirData)/sizeof(*MarkDirData));
 
 static const Util::EnumData<BorderMarkType> BorderMarkData[] = {
-    {BORDERMARK_NONE    , N_("None"),  "none"},
+    {BORDERMARK_NONE    , NC_("Border mark", "None"),  "none"},
     {BORDERMARK_START   , N_("Start"), "start"},
     {BORDERMARK_END     , N_("End"),   "end"},
     {BORDERMARK_BOTH    , N_("Both"),  "both"},
@@ -40,15 +38,15 @@ static const Util::EnumDataConverter<BorderMarkType> BorderMarkTypeConverter(Bor
 
 LPERuler::LPERuler(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
-    mark_distance(_("Mark distance"), _("Distance between successive ruler marks"), "mark_distance", &wr, this, 20.0),
-    unit(_("Unit"), _("Unit"), "unit", &wr, this),
-    mark_length(_("Major length"), _("Length of major ruler marks"), "mark_length", &wr, this, 14.0),
-    minor_mark_length(_("Minor length"), _("Length of minor ruler marks"), "minor_mark_length", &wr, this, 7.0),
-    major_mark_steps(_("Major steps"), _("Draw a major mark every ... steps"), "major_mark_steps", &wr, this, 5),
-    shift(_("Shift marks by"), _("Shift marks by this many steps"), "shift", &wr, this, 0),
-    mark_dir(_("Mark direction"), _("Direction of marks (when viewing along the path from start to end)"), "mark_dir", MarkDirTypeConverter, &wr, this, MARKDIR_LEFT),
-    offset(_("Offset"), _("Offset of first mark"), "offset", &wr, this, 0.0),
-    border_marks(_("Border marks"), _("Choose whether to draw marks at the beginning and end of the path"), "border_marks", BorderMarkTypeConverter, &wr, this, BORDERMARK_BOTH)
+    mark_distance(_("_Mark distance:"), _("Distance between successive ruler marks"), "mark_distance", &wr, this, 20.0),
+    unit(_("Unit:"), _("Unit"), "unit", &wr, this),
+    mark_length(_("Ma_jor length:"), _("Length of major ruler marks"), "mark_length", &wr, this, 14.0),
+    minor_mark_length(_("Mino_r length:"), _("Length of minor ruler marks"), "minor_mark_length", &wr, this, 7.0),
+    major_mark_steps(_("Major steps_:"), _("Draw a major mark every ... steps"), "major_mark_steps", &wr, this, 5),
+    shift(_("Shift marks _by:"), _("Shift marks by this many steps"), "shift", &wr, this, 0),
+    mark_dir(_("Mark direction:"), _("Direction of marks (when viewing along the path from start to end)"), "mark_dir", MarkDirTypeConverter, &wr, this, MARKDIR_LEFT),
+    offset(_("_Offset:"), _("Offset of first mark"), "offset", &wr, this, 0.0),
+    border_marks(_("Border marks:"), _("Choose whether to draw marks at the beginning and end of the path"), "border_marks", BorderMarkTypeConverter, &wr, this, BORDERMARK_BOTH)
 {
     registerParameter(dynamic_cast<Parameter *>(&unit));
     registerParameter(dynamic_cast<Parameter *>(&mark_distance));
@@ -82,11 +80,10 @@ LPERuler::ruler_mark(Geom::Point const &A, Geom::Point const &n, MarkType const 
 {
     using namespace Geom;
 
-    gboolean success;
     double real_mark_length = mark_length;
-    success = sp_convert_distance(&real_mark_length, unit, &sp_unit_get_by_id(SP_UNIT_PX));
+    real_mark_length = Inkscape::Util::Quantity::convert(real_mark_length, unit.get_abbreviation(), "px");
     double real_minor_mark_length = minor_mark_length;
-    success = sp_convert_distance(&real_minor_mark_length, unit, &sp_unit_get_by_id(SP_UNIT_PX));
+    real_minor_mark_length = Inkscape::Util::Quantity::convert(real_minor_mark_length, unit.get_abbreviation(), "px");
 
     n_major = real_mark_length * n;
     n_minor = real_minor_mark_length * n;
@@ -136,10 +133,10 @@ LPERuler::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_i
     std::vector<double> s_cuts;
 
     double real_mark_distance = mark_distance;
-    gboolean success = sp_convert_distance(&real_mark_distance, unit, &sp_unit_get_by_id(SP_UNIT_PX));
+    real_mark_distance = Inkscape::Util::Quantity::convert(real_mark_distance, unit.get_abbreviation(), "px");
 
     double real_offset = offset;
-    success = sp_convert_distance(&real_offset, unit, &sp_unit_get_by_id(SP_UNIT_PX));
+    real_offset = Inkscape::Util::Quantity::convert(real_offset, unit.get_abbreviation(), "px");
     for (double s = real_offset; s<totlength; s+=real_mark_distance){
         s_cuts.push_back(s);
     }
@@ -152,10 +149,10 @@ LPERuler::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_i
             t_cuts.push_back(roots[v][0]);
     }
     //draw the marks
-    for (unsigned i=0; i<t_cuts.size(); i++){
+    for (size_t i = 0; i < t_cuts.size(); i++) {
         Point A = pwd2_in(t_cuts[i]);
         Point n = rot90(unit_vector(speed(t_cuts[i])))*sign;
-        if ((i % mminterval) == i_shift) {
+        if (static_cast<int>(i % mminterval) == i_shift) {
             output.concat (ruler_mark(A, n, MARK_MAJOR));
         } else {
             output.concat (ruler_mark(A, n, MARK_MINOR));

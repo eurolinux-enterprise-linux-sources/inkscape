@@ -1,7 +1,4 @@
-/**
- * \brief Labelled Widget - Adds a label with optional icon or suffix to
- *        another widget.
- *
+/*
  * Authors:
  *   Carl Hetherington <inkscape@carlh.net>
  *   Derek P. Moore <derekm@hackunix.org>
@@ -15,27 +12,16 @@
 # include <config.h>
 #endif
 
+#include "labelled.h"
+
 /* For getting the Gtkmmified Icon manager */
 #include "widgets/icon.h"
-
-#include "labelled.h"
+#include <gtkmm/label.h>
 
 namespace Inkscape {
 namespace UI {
 namespace Widget {
 
-/**
- * Construct a Labelled Widget.
- *
- * \param label     Label.
- * \param widget    Widget to label; should be allocated with new, as it will
- *                  be passed to Gtk::manage().
- * \param suffix    Suffix, placed after the widget (defaults to "").
- * \param icon      Icon filename, placed before the label (defaults to "").
- * \param mnemonic  Mnemonic toggle; if true, an underscore (_) in the text
- *                  indicates the next character should be used for the
- *                  mnemonic accelerator key (defaults to true).
- */
 Labelled::Labelled(Glib::ustring const &label, Glib::ustring const &tooltip,
                    Gtk::Widget *widget,
                    Glib::ustring const &suffix,
@@ -43,8 +29,7 @@ Labelled::Labelled(Glib::ustring const &label, Glib::ustring const &tooltip,
                    bool mnemonic)
     : _widget(widget),
       _label(new Gtk::Label(label, 1.0, 0.5, mnemonic)),
-      _suffix(new Gtk::Label(suffix, 0.0, 0.5)),
-      _tooltips()
+      _suffix(new Gtk::Label(suffix, 0.0, 0.5))
 {
     g_assert(g_utf8_validate(icon.c_str(), -1, NULL));
     if (icon != "") {
@@ -56,13 +41,10 @@ Labelled::Labelled(Glib::ustring const &label, Glib::ustring const &tooltip,
     if (mnemonic) {
         _label->set_mnemonic_widget(*_widget);
     }
-    _tooltips.set_tip(*_widget, tooltip);
+    widget->set_tooltip_text(tooltip);
 }
 
 
-/**
- * Allow the setting of the width of the labelled widget
- */
 void Labelled::setWidgetSizeRequest(int width, int height)
 {
     if (_widget)
@@ -83,8 +65,23 @@ Labelled::getLabel() const
     return _label;
 }
 
+void
+Labelled::setLabelText(const Glib::ustring &str)
+{
+    _label->set_text(str);
+}
 
+void
+Labelled::setTooltipText(const Glib::ustring &tooltip)
+{
+    _label->set_tooltip_text(tooltip);
+    _widget->set_tooltip_text(tooltip);
+}
 
+bool Labelled::on_mnemonic_activate ( bool group_cycling )
+{
+    return _widget->mnemonic_activate ( group_cycling );
+}
 
 } // namespace Widget
 } // namespace UI
@@ -99,4 +96,4 @@ Labelled::getLabel() const
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

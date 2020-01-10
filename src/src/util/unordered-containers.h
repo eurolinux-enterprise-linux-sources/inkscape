@@ -16,14 +16,43 @@
 # include "config.h"
 #endif
 
-#ifndef DOXYGEN_SHOULD_SKIP_THIS
-#if defined(HAVE_TR1_UNORDERED_SET)
+#include <glibmm/ustring.h>
 
+#ifndef DOXYGEN_SHOULD_SKIP_THIS
+
+#if defined(HAVE_NATIVE_UNORDERED_SET)
+# include <unordered_set>
+# include <unordered_map>
+# define INK_UNORDERED_SET std::unordered_set
+# define INK_UNORDERED_MAP std::unordered_map
+# define INK_HASH std::hash
+
+namespace std {
+template <>
+struct hash<Glib::ustring> : public std::unary_function<Glib::ustring, std::size_t> {
+    std::size_t operator()(Glib::ustring const &s) const {
+        return hash<std::string>()(s.raw());
+    }
+};
+} // namespace std
+
+#elif defined(HAVE_TR1_UNORDERED_SET)
 # include <tr1/unordered_set>
 # include <tr1/unordered_map>
 # define INK_UNORDERED_SET std::tr1::unordered_set
 # define INK_UNORDERED_MAP std::tr1::unordered_map
 # define INK_HASH std::tr1::hash
+
+namespace std {
+namespace tr1 {
+template <>
+struct hash<Glib::ustring> : public std::unary_function<Glib::ustring, std::size_t> {
+    std::size_t operator()(Glib::ustring const &s) const {
+        return hash<std::string>()(s.raw());
+    }
+};
+} // namespace tr1
+} // namespace std
 
 #elif defined(HAVE_BOOST_UNORDERED_SET)
 # include <boost/unordered_set.hpp>
@@ -32,29 +61,14 @@
 # define INK_UNORDERED_MAP boost::unordered_map
 # define INK_HASH boost::hash
 
-#elif defined(HAVE_EXT_HASH_SET)
-
-# include <functional>
-# include <ext/hash_set>
-# include <ext/hash_map>
-# define INK_UNORDERED_SET __gnu_cxx::hash_set
-# define INK_UNORDERED_MAP __gnu_cxx::hash_map
-# define INK_HASH __gnu_cxx::hash
-
-#include <cstddef>
-
-namespace __gnu_cxx {
-// hash function for pointers
-// TR1 and Boost have this defined by default, __gnu_cxx doesn't
-template<typename T>
-struct hash<T *> : public std::unary_function<T *, std::size_t> {
-    std::size_t operator()(T *p) const {
-        // Taken from Boost
-        std::size_t x = static_cast<std::size_t>(reinterpret_cast<std::ptrdiff_t>(p));
-        return x + (x >> 3);
+namespace boost {
+template <>
+struct hash<Glib::ustring> : public std::unary_function<Glib::ustring, std::size_t> {
+    std::size_t operator()(Glib::ustring const &s) const {
+        return hash<std::string>()(s.raw());
     }
 };
-} // namespace __gnu_cxx
+} // namespace boost
 #endif
 
 #else
@@ -77,4 +91,4 @@ struct hash<T *> : public std::unary_function<T *, std::size_t> {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -38,14 +38,15 @@ pixmaps = \
 	feSpecularLighting-icon.png \
     feSpecularLighting-icon.svg \
 	feTurbulence-icon.png \
-    feTurbulence-icon.svg
+    feTurbulence-icon.svg \
+	OCAL.png
 
 icons_DATA = \
 	$(pixmaps) \
-	inkscape.svg \
 	\
 	icons.svg \
 	tango_icons.svg \
+	symbolic_icons.svg \
 	\
 	inkscape.file.svg \
 	inkscape.file.png \

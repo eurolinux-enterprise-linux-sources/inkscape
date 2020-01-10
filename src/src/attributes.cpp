@@ -91,25 +91,30 @@ static SPStyleProp const props[] = {
     {SP_ATTR_INKSCAPE_WINDOW_Y, "inkscape:window-y"},
     {SP_ATTR_INKSCAPE_WINDOW_MAXIMIZED, "inkscape:window-maximized"},
     {SP_ATTR_INKSCAPE_SNAP_GLOBAL, "inkscape:snap-global"},
+    {SP_ATTR_INKSCAPE_SNAP_PERP, "inkscape:snap-perpendicular"},
+    {SP_ATTR_INKSCAPE_SNAP_TANG, "inkscape:snap-tangential"},
     {SP_ATTR_INKSCAPE_SNAP_BBOX, "inkscape:snap-bbox"},
-    {SP_ATTR_INKSCAPE_SNAP_NODES, "inkscape:snap-nodes"},
-    {SP_ATTR_INKSCAPE_SNAP_FROM_GUIDE, "inkscape:snap-from-guide"},
-    {SP_ATTR_INKSCAPE_SNAP_CENTER, "inkscape:snap-center"},
-    {SP_ATTR_INKSCAPE_SNAP_GRIDS, "inkscape:snap-grids"},
-    {SP_ATTR_INKSCAPE_SNAP_TO_GUIDES, "inkscape:snap-to-guides"},
-    {SP_ATTR_INKSCAPE_SNAP_SMOOTH_NODES, "inkscape:snap-smooth-nodes"},
-    {SP_ATTR_INKSCAPE_SNAP_LINE_MIDPOINTS, "inkscape:snap-midpoints"},
-    {SP_ATTR_INKSCAPE_SNAP_OBJECT_MIDPOINTS, "inkscape:snap-object-midpoints"},
-    {SP_ATTR_INKSCAPE_SNAP_BBOX_EDGE_MIDPOINTS, "inkscape:snap-bbox-edge-midpoints"},
-    {SP_ATTR_INKSCAPE_SNAP_BBOX_MIDPOINTS, "inkscape:snap-bbox-midpoints"},
-    {SP_ATTR_INKSCAPE_SNAP_INTERS_PATHS, "inkscape:snap-intersection-paths"},
-    {SP_ATTR_INKSCAPE_OBJECT_PATHS, "inkscape:object-paths"},
-    {SP_ATTR_INKSCAPE_OBJECT_NODES, "inkscape:object-nodes"},
-    {SP_ATTR_INKSCAPE_BBOX_PATHS, "inkscape:bbox-paths"},
-    {SP_ATTR_INKSCAPE_BBOX_NODES, "inkscape:bbox-nodes"},
-    {SP_ATTR_INKSCAPE_SNAP_PAGE, "inkscape:snap-page"},
+    {SP_ATTR_INKSCAPE_SNAP_NODE, "inkscape:snap-nodes"},
+    {SP_ATTR_INKSCAPE_SNAP_OTHERS, "inkscape:snap-others"},
+    {SP_ATTR_INKSCAPE_SNAP_ROTATION_CENTER, "inkscape:snap-center"},
+    {SP_ATTR_INKSCAPE_SNAP_GRID, "inkscape:snap-grids"},
+    {SP_ATTR_INKSCAPE_SNAP_GUIDE, "inkscape:snap-to-guides"},
+    {SP_ATTR_INKSCAPE_SNAP_NODE_SMOOTH, "inkscape:snap-smooth-nodes"},
+    {SP_ATTR_INKSCAPE_SNAP_LINE_MIDPOINT, "inkscape:snap-midpoints"},
+    {SP_ATTR_INKSCAPE_SNAP_OBJECT_MIDPOINT, "inkscape:snap-object-midpoints"},
+    {SP_ATTR_INKSCAPE_SNAP_TEXT_BASELINE, "inkscape:snap-text-baseline"},
+    {SP_ATTR_INKSCAPE_SNAP_BBOX_EDGE_MIDPOINT, "inkscape:snap-bbox-edge-midpoints"},
+    {SP_ATTR_INKSCAPE_SNAP_BBOX_MIDPOINT, "inkscape:snap-bbox-midpoints"},
+    {SP_ATTR_INKSCAPE_SNAP_PATH_INTERSECTION, "inkscape:snap-intersection-paths"},
+    {SP_ATTR_INKSCAPE_SNAP_PATH, "inkscape:object-paths"},
+    {SP_ATTR_INKSCAPE_SNAP_PATH_CLIP, "inkscape:snap-path-clip"},
+    {SP_ATTR_INKSCAPE_SNAP_PATH_MASK, "inkscape:snap-path-mask"},
+    {SP_ATTR_INKSCAPE_SNAP_NODE_CUSP, "inkscape:object-nodes"},
+    {SP_ATTR_INKSCAPE_SNAP_BBOX_EDGE, "inkscape:bbox-paths"},
+    {SP_ATTR_INKSCAPE_SNAP_BBOX_CORNER, "inkscape:bbox-nodes"},
+    {SP_ATTR_INKSCAPE_SNAP_PAGE_BORDER, "inkscape:snap-page"},
     {SP_ATTR_INKSCAPE_CURRENT_LAYER, "inkscape:current-layer"},
-    {SP_ATTR_INKSCAPE_DOCUMENT_UNITS, "inkscape:document-units"},
+    {SP_ATTR_INKSCAPE_DOCUMENT_UNITS, "inkscape:document-units"},  // This setting sets the Display units, *not* the units used in SVG
     {SP_ATTR_UNITS, "units"},
     {SP_ATTR_INKSCAPE_CONNECTOR_SPACING, "inkscape:connector-spacing"},
     /* SPColorProfile */
@@ -253,9 +258,6 @@ static SPStyleProp const props[] = {
     {SP_ATTR_POINTSATY, "pointsAtY"},
     {SP_ATTR_POINTSATZ, "pointsAtZ"},
     {SP_ATTR_LIMITINGCONEANGLE, "limitingConeAngle"},
-    /*feFlood*/
-    {SP_ATTR_FLOODCOLOR, "flood-color"},
-    {SP_ATTR_FLOODOPACITY, "flood-opacity"},
     /* SPGaussianBlur */
     {SP_ATTR_STDDEVIATION, "stdDeviation"},
     /*feImage*/
@@ -284,10 +286,17 @@ static SPStyleProp const props[] = {
     /* SPRadialGradient */
     {SP_ATTR_FX, "fx"},
     {SP_ATTR_FY, "fy"},
+    /* SPMeshPatch */
+    {SP_ATTR_TENSOR, "tensor"},
     /* SPPattern */
     {SP_ATTR_PATTERNUNITS, "patternUnits"},
     {SP_ATTR_PATTERNCONTENTUNITS, "patternContentUnits"},
     {SP_ATTR_PATTERNTRANSFORM, "patternTransform"},
+    /* SPHatch */
+    {SP_ATTR_HATCHUNITS, "hatchUnits"},
+    {SP_ATTR_HATCHCONTENTUNITS, "hatchContentUnits"},
+    {SP_ATTR_HATCHTRANSFORM, "hatchTransform"},
+    {SP_ATTR_PITCH, "pitch"},
     /* SPClipPath */
     {SP_ATTR_CLIPPATHUNITS, "clipPathUnits"},
     /* SPMask */
@@ -409,7 +418,6 @@ static SPStyleProp const props[] = {
     /* Text */
     {SP_PROP_TEXT_INDENT, "text-indent"},
     {SP_PROP_TEXT_ALIGN, "text-align"},
-    {SP_PROP_TEXT_DECORATION, "text-decoration"},
     {SP_PROP_LINE_HEIGHT, "line-height"},
     {SP_PROP_LETTER_SPACING, "letter-spacing"},
     {SP_PROP_WORD_SPACING, "word-spacing"},
@@ -426,6 +434,12 @@ static SPStyleProp const props[] = {
     {SP_PROP_GLYPH_ORIENTATION_VERTICAL, "glyph-orientation-vertical"},
     {SP_PROP_KERNING, "kerning"},
     {SP_PROP_TEXT_ANCHOR, "text-anchor"},
+    {SP_PROP_WHITE_SPACE, "white-space"},
+    /* Text Decoration */
+    {SP_PROP_TEXT_DECORATION, "text-decoration"},
+    {SP_PROP_TEXT_DECORATION_LINE, "text-decoration-line"},
+    {SP_PROP_TEXT_DECORATION_STYLE,"text-decoration-style"},
+    {SP_PROP_TEXT_DECORATION_COLOR,"text-decoration-color"},
     /* Misc */
     {SP_PROP_CLIP, "clip"},
     {SP_PROP_COLOR, "color"},
@@ -433,6 +447,8 @@ static SPStyleProp const props[] = {
     {SP_PROP_DISPLAY, "display"},
     {SP_PROP_OVERFLOW, "overflow"},
     {SP_PROP_VISIBILITY, "visibility"},
+    {SP_PROP_MIX_BLEND_MODE, "mix-blend-mode"}, // CSS Blending and Compositing
+    {SP_PROP_ISOLATION, "isolation"},
     /* SVG */
     /* Clip/Mask */
     {SP_PROP_CLIP_PATH, "clip-path"},
@@ -448,6 +464,7 @@ static SPStyleProp const props[] = {
     /* Gradient */
     {SP_PROP_STOP_COLOR, "stop-color"},
     {SP_PROP_STOP_OPACITY, "stop-opacity"},
+    {SP_PROP_STOP_PATH, "path"},
     /* Interactivity */
     {SP_PROP_POINTER_EVENTS, "pointer-events"},
     /* Paint */
@@ -463,7 +480,10 @@ static SPStyleProp const props[] = {
     {SP_PROP_MARKER_END, "marker-end"},
     {SP_PROP_MARKER_MID, "marker-mid"},
     {SP_PROP_MARKER_START, "marker-start"},
+    {SP_PROP_PAINT_ORDER, "paint-order" },
     {SP_PROP_SHAPE_RENDERING, "shape-rendering"},
+    {SP_PROP_SOLID_COLOR, "solid-color"},
+    {SP_PROP_SOLID_OPACITY, "solid-opacity"},
     {SP_PROP_STROKE, "stroke"},
     {SP_PROP_STROKE_DASHARRAY, "stroke-dasharray"},
     {SP_PROP_STROKE_DASHOFFSET, "stroke-dashoffset"},
@@ -494,6 +514,7 @@ sp_attribute_lookup(gchar const *key)
         propdict = g_hash_table_new(g_str_hash, g_str_equal);
         for (i = 1; i < n_attrs; i++) {
             g_assert(props[i].code == static_cast< gint >(i) );
+            // If this g_assert fails, then the sort order of SPAttributeEnum does not match the order in props[]!
             g_hash_table_insert(propdict,
                                 const_cast<void *>(static_cast<void const *>(props[i].name)),
                                 GINT_TO_POINTER(props[i].code));
@@ -523,4 +544,4 @@ sp_attribute_name(unsigned int id)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

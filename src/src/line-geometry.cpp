@@ -1,5 +1,3 @@
-#define __LINE_GEOMETRY_C__
-
 /*
  * Routines for dealing with lines (intersections, etc.)
  *
@@ -17,7 +15,11 @@
 #include "desktop-style.h"
 #include "desktop-handles.h"
 #include "display/sp-canvas.h"
+#include "display/sp-ctrlline.h"
 #include "display/sodipodi-ctrl.h"
+#include "ui/control-manager.h"
+
+using Inkscape::ControlManager;
 
 namespace Box3D {
 
@@ -26,8 +28,9 @@ namespace Box3D {
  * of the segment. Otherwise interpret it as the direction of the line.
  * FIXME: Think of a better way to distinguish between the two constructors of lines.
  */
-Line::Line(Geom::Point const &start, Geom::Point const &vec, bool is_endpoint) {
-    pt = start;
+Line::Line(Geom::Point const &start, Geom::Point const &vec, bool is_endpoint):
+    pt(start)
+{
     if (is_endpoint)
         v_dir = vec - start;
     else
@@ -36,11 +39,12 @@ Line::Line(Geom::Point const &start, Geom::Point const &vec, bool is_endpoint) {
     d0 = Geom::dot(normal, pt);
 }
 
-Line::Line(Line const &line) {
-    pt = line.pt;
-    v_dir = line.v_dir;
-    normal = line.normal;
-    d0 = line.d0;
+Line::Line(Line const &line):
+    pt(line.pt),
+    v_dir(line.v_dir),
+    normal(line.normal),
+    d0(line.d0)
+{
 }
 
 Line &Line::operator=(Line const &line) {
@@ -114,7 +118,7 @@ bool lies_in_sector (Geom::Point const &v1, Geom::Point const &v2, Geom::Point c
         // FIXME: Can we assume that it's safe to return true if the vectors point in different directions?
         return (Geom::dot (v1, v2) < 0);
     }
-    return (coords.first >= 0 and coords.second >= 0);
+    return (coords.first >= 0 && coords.second >= 0);
 }
 
 bool lies_in_quadrangle (Geom::Point const &A, Geom::Point const &B, Geom::Point const &C, Geom::Point const &D, Geom::Point const &pt)
@@ -211,11 +215,9 @@ void create_canvas_point(Geom::Point const &pos, double size, guint32 rgba)
 void create_canvas_line(Geom::Point const &p1, Geom::Point const &p2, guint32 rgba)
 {
     SPDesktop *desktop = inkscape_active_desktop();
-    SPCanvasItem *line = sp_canvas_item_new(sp_desktop_controls(desktop),
-                                                            SP_TYPE_CTRLLINE, NULL);
-    sp_ctrlline_set_coords(SP_CTRLLINE(line), p1, p2);
-    sp_ctrlline_set_rgba32 (SP_CTRLLINE(line), rgba);
-    sp_canvas_item_show (line);
+    SPCtrlLine *line = ControlManager::getManager().createControlLine(sp_desktop_controls(desktop), p1, p2);
+    line->setRgba32(rgba);
+    sp_canvas_item_show(line);
 }
 
 } // namespace Box3D 
@@ -229,4 +231,4 @@ void create_canvas_line(Geom::Point const &p1, Geom::Point const &p2, guint32 rg
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -3,7 +3,7 @@
 <!--
 Copyright (c) 2005-2007 authors:
 Original version: Toine de Greef (a.degreef@chello.nl)
-Modified (2010-2011) by Nicolas Dufour (nicoduf@yahoo.fr) (blur support, units
+Modified (2010-2014) by Nicolas Dufour (nicoduf@yahoo.fr) (blur support, units
 convertion, comments, and some other fixes)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -39,7 +39,7 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt">
 <xsl:strip-space elements="*" />
 <xsl:output method="xml" encoding="UTF-8" indent="yes"/>
 
-<xsl:param name="silverlight_compatible" select="2" />
+<xsl:param name="silverlight_compatible" select="$silverlight" />
 
 <!-- 
   // Containers //
@@ -53,10 +53,16 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt">
 -->
 <xsl:template match="/">
   <xsl:choose>
-    <xsl:when test="$silverlight_compatible = 1">
+    <xsl:when test="$silverlight_compatible = 'true'">
+      <xsl:comment>
+        <xsl:value-of select="'This file is compatible with Silverlight'" />
+      </xsl:comment>
       <xsl:apply-templates mode="forward" />
     </xsl:when>
     <xsl:otherwise>
+      <xsl:comment>
+        <xsl:value-of select="'This file is NOT compatible with Silverlight'" />
+      </xsl:comment>
       <Viewbox Stretch="Uniform">
         <xsl:apply-templates mode="forward" />
       </Viewbox>
@@ -134,10 +140,10 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt">
           <Canvas.RenderTransform>
             <TranslateTransform>
               <xsl:attribute name="X">
-                <xsl:value-of select="-number(substring-before($viewBox, ' '))" />
+                <xsl:value-of select="format-number(-number(substring-before($viewBox, ' ')), '#.#')" />
               </xsl:attribute>
               <xsl:attribute name="Y">
-                <xsl:value-of select="-number(substring-before(substring-after($viewBox, ' '), ' '))" />
+                <xsl:value-of select="format-number(-number(substring-before(substring-after($viewBox, ' '), ' ')), '#.#')" />
               </xsl:attribute>
             </TranslateTransform>
           </Canvas.RenderTransform>
@@ -476,6 +482,22 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt">
         </xsl:otherwise>
       </xsl:choose>          
     </xsl:if>
+  </BlurEffect>  
+</xsl:template>
+
+<!--
+  // Fake GaussianBlur filter effect //
+  Replaces all the other SVG effects with a zero radius blur effect.
+-->
+<xsl:template mode="forward" match="*[name(.) = 'feBlend' or name(.) = 'feColorMatrix' or name(.) = 'feComponentTransfer' or name(.) = 'feComposite' or name(.) = 'feConvolveMatrix' or name(.) = 'feDiffuseLighting' or name(.) = 'feDisplacementMap' or name(.) = 'feFlood' or name(.) = 'feImage' or name(.) = 'feMerge' or name(.) = 'feMorphology' or name(.) = 'feOffset' or name(.) = 'feSpecularLighting' or name(.) = 'feTile' or name(.) = 'feTurbulence']">
+  <xsl:comment>
+    <xsl:value-of select="concat('Tag ', name(.), ' not supported, replaced with empty blur')" />
+  </xsl:comment>
+  <BlurEffect>
+    <xsl:if test="../@id"><xsl:attribute name="x:Key"><xsl:value-of select="../@id" /></xsl:attribute></xsl:if>
+    <xsl:attribute name="Radius">
+      <xsl:value-of select="0" />
+    </xsl:attribute>
   </BlurEffect>  
 </xsl:template>
 
@@ -821,7 +843,7 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt">
 
 <!-- 
   // Unit to pixel converter //
-  Values with units (except %) are converted to pixels and rounded.
+  Values with units (except %) are converted to pixels.
   Unknown units are kept.
   em, ex and % not implemented
 -->
@@ -829,28 +851,25 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt">
   <xsl:param name="convert_value" />
   <xsl:choose>
     <xsl:when test="contains($convert_value, 'px')">
-      <xsl:value-of select="round(translate($convert_value, 'px', ''))" />
+      <xsl:value-of select="translate($convert_value, 'px', '')" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'pt')">
-      <xsl:value-of select="round(translate($convert_value, 'pt', '') * 1.25)" />
+      <xsl:value-of select="translate($convert_value, 'pt', '') * 1.25" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'pc')">
-      <xsl:value-of select="round(translate($convert_value, 'pc', '') * 15)" />
+      <xsl:value-of select="translate($convert_value, 'pc', '') * 15" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'mm')">
-      <xsl:value-of select="round(translate($convert_value, 'mm', '') * 3.543307)" />
+      <xsl:value-of select="translate($convert_value, 'mm', '') * 3.543307" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'cm')">
-      <xsl:value-of select="round(translate($convert_value, 'cm', '') * 35.43307)" />
+      <xsl:value-of select="translate($convert_value, 'cm', '') * 35.43307" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'in')">
-      <xsl:value-of select="round(translate($convert_value, 'in', '') * 90)" />
+      <xsl:value-of select="translate($convert_value, 'in', '') * 90" />
     </xsl:when>
     <xsl:when test="contains($convert_value, 'ft')">
-      <xsl:value-of select="round(translate($convert_value, 'ft', '') * 1080)" />
-    </xsl:when>
-    <xsl:when test="not(string(number($convert_value))='NaN')">
-      <xsl:value-of select="round($convert_value)" />
+      <xsl:value-of select="translate($convert_value, 'ft', '') * 1080" />
     </xsl:when>
     <xsl:otherwise>
       <xsl:value-of select="$convert_value" />
@@ -2634,7 +2653,7 @@ exclude-result-prefixes="rdf xlink xs exsl libxslt">
     
     <xsl:if test="@d">
       <xsl:choose>
-        <xsl:when test="$silverlight_compatible = 1">
+        <xsl:when test="$silverlight_compatible = 'true'">
           <xsl:attribute name="Data">
             <xsl:value-of select="translate(@d , ',', ' ')" />
           </xsl:attribute>

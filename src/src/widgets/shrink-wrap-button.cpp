@@ -9,35 +9,49 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
+#include <glibmm/threads.h>
+#endif
+
 #include <gtkmm/button.h>
 #include <gtk/gtk.h>
+
+#include "shrink-wrap-button.h"
 
 namespace Inkscape {
 namespace Widgets {
 
-namespace {
-
-void minimum_size(GtkWidget *widget, GtkRequisition *requisition, void *) {
-    GtkWidget *child(gtk_bin_get_child(GTK_BIN(widget)));
-
-    if (child) {
-        gtk_widget_size_request(child, requisition);
-    } else {
-        requisition->width = 0;
-        requisition->height = 0;
-    }
-
-    requisition->width += 2 + 2 * std::max(2, widget->style->xthickness);
-    requisition->height += 2 + 2 * std::max(2, widget->style->ythickness);
-}
-
-}
-
 void shrink_wrap_button(Gtk::Button &button) {
     button.set_border_width(0);
-    button.unset_flags(Gtk::CAN_FOCUS | Gtk::CAN_DEFAULT);
-    g_signal_connect_after(G_OBJECT(button.gobj()), "size_request",
-                           G_CALLBACK(minimum_size), NULL);
+    button.set_can_focus(false);
+    button.set_can_default(false);
+
+    Gtk::Widget* child = button.get_child();
+    Gtk::Requisition req_min;
+
+    if (child) {
+#if WITH_GTKMM_3_0
+	    Gtk::Requisition req_nat;
+	    child->get_preferred_size(req_min, req_nat);
+#else
+	    req_min = child->size_request();
+#endif
+    } else {
+	    req_min.width = 0;
+	    req_min.height = 0;
+    }
+
+    // TODO: Use Gtk::StyleContext instead
+    GtkStyle* style = gtk_widget_get_style(GTK_WIDGET(button.gobj()));
+    
+    req_min.width += 2 + 2 * std::max(2, style->xthickness);
+    req_min.height += 2 + 2 * std::max(2, style->ythickness);
+
+    button.set_size_request(req_min.width, req_min.height);
 }
 
 }
@@ -52,4 +66,4 @@ void shrink_wrap_button(Gtk::Button &button) {
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:encoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

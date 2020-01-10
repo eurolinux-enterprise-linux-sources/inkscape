@@ -1,7 +1,4 @@
-
- /** \file
- * PDF parsing module using libpoppler's facilities
- *
+ /*
  * Derived from Gfx.h
  *
  * Copyright 1996-2003 Glyph & Cog, LLC
@@ -24,6 +21,8 @@ namespace Inkscape {
         }
     }
 }
+
+// TODO clean up and remove using:
 using Inkscape::Extension::Internal::SvgBuilder;
 
 #include "goo/gtypes.h"
@@ -58,6 +57,8 @@ class PDFRectangle;
 class AnnotBorderStyle;
 
 class PdfParser;
+
+class ClipHistoryEntry;
 
 //------------------------------------------------------------------------
 
@@ -102,34 +103,6 @@ struct OpHistoryEntry {
 };
 
 //------------------------------------------------------------------------
-// ClipHistoryEntry
-//------------------------------------------------------------------------
-
-class ClipHistoryEntry {
-public:
-
-    ClipHistoryEntry(GfxPath *clipPath=NULL, GfxClipType clipType=clipNormal);
-    virtual ~ClipHistoryEntry();
-
-    // Manipulate clip path stack
-    ClipHistoryEntry *save();
-    ClipHistoryEntry *restore();
-    GBool hasSaves() { return saved != NULL; }
-    void setClip(GfxPath *newClipPath, GfxClipType newClipType=clipNormal);
-    GfxPath *getClipPath() { return clipPath; }
-    GfxClipType getClipType() { return clipType; }
-
-private:
-
-    ClipHistoryEntry *saved;    // next clip path on stack
-        
-    GfxPath *clipPath;        // used as the path to be filled for an 'sh' operator
-    GfxClipType clipType;
-
-    ClipHistoryEntry(ClipHistoryEntry *other);
-};
-
-//------------------------------------------------------------------------
 // PdfParser
 //------------------------------------------------------------------------
 
@@ -145,6 +118,10 @@ private:
 #define pdfNumShadingTypes 5
 
 
+
+/**
+ * PDF parsing module using libpoppler's facilities.
+ */
 class PdfParser {
 public:
 

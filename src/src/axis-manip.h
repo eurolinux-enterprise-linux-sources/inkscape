@@ -12,8 +12,8 @@
 #ifndef SEEN_AXIS_MANIP_H
 #define SEEN_AXIS_MANIP_H
 
+#include <utility>
 #include <gtk/gtk.h>
-#include "libnr/nr-point.h"
 
 namespace Proj {
 
@@ -238,11 +238,11 @@ inline Box3D::Axis get_perpendicular_axis_direction (Box3D::Axis dirs) {
     return Box3D::NONE;
 }
 
-inline gchar * string_from_axes (Box3D::Axis axes) {
+inline gchar * string_from_axes (Box3D::Axis axis) {
     GString *pstring = g_string_new("");
-    if (axes & Box3D::X) g_string_append_printf (pstring, "X");
-    if (axes & Box3D::Y) g_string_append_printf (pstring, "Y");
-    if (axes & Box3D::Z) g_string_append_printf (pstring, "Z");
+    if (axis & Box3D::X) g_string_append_printf (pstring, "X");
+    if (axis & Box3D::Y) g_string_append_printf (pstring, "Y");
+    if (axis & Box3D::Z) g_string_append_printf (pstring, "Z");
     return pstring->str;
 }
 
