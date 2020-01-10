@@ -42,21 +42,7 @@
 #include "style.h"
 #include "xml/repr.h"
 #include "document.h"
-
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createTSpan() {
-		return new SPTSpan();
-	}
-
-	SPObject* createTextPath() {
-		return new SPTextPath();
-	}
-
-	bool tspanRegistered = SPFactory::instance().registerObject("svg:tspan", createTSpan);
-	bool textPathRegistered = SPFactory::instance().registerObject("svg:textPath", createTextPath);
-}
+#include "2geom/transforms.h"
 
 /*#####################################################
 #  SPTSPAN
@@ -84,7 +70,7 @@ void SPTSpan::release() {
 }
 
 void SPTSpan::set(unsigned int key, const gchar* value) {
-    if (this->attributes.readSingleAttribute(key, value)) {
+    if (this->attributes.readSingleAttribute(key, value, style, &viewport)) {
         this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
     } else {
         switch (key) {
@@ -117,6 +103,20 @@ void SPTSpan::update(SPCtx *ctx, guint flags) {
     }
 
     SPItem::update(ctx, flags);
+
+    if (flags & ( SP_OBJECT_STYLE_MODIFIED_FLAG |
+                  SP_OBJECT_CHILD_MODIFIED_FLAG |
+                  SP_TEXT_LAYOUT_MODIFIED_FLAG   ) )
+    {
+        SPItemCtx const *ictx = reinterpret_cast<SPItemCtx const *>(ctx);
+
+        double const w = ictx->viewport.width();
+        double const h = ictx->viewport.height();
+        double const em = style->font_size.computed;
+        double const ex = 0.5 * em;  // fixme: get x height from pango or libnrtype.
+
+        attributes.update( em, ex, w, h );
+    }
 }
 
 void SPTSpan::modified(unsigned int flags) {
@@ -278,7 +278,7 @@ void SPTextPath::release() {
 }
 
 void SPTextPath::set(unsigned int key, const gchar* value) {
-    if (this->attributes.readSingleAttribute(key, value)) {
+    if (this->attributes.readSingleAttribute(key, value, style, &viewport)) {
         this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
     } else {
         switch (key) {
@@ -317,6 +317,20 @@ void SPTextPath::update(SPCtx *ctx, guint flags) {
         if ( flags || ( ochild->uflags & SP_OBJECT_MODIFIED_FLAG )) {
             ochild->updateDisplay(ctx, flags);
         }
+    }
+
+    if (flags & ( SP_OBJECT_STYLE_MODIFIED_FLAG |
+                  SP_OBJECT_CHILD_MODIFIED_FLAG |
+                  SP_TEXT_LAYOUT_MODIFIED_FLAG   ) )
+    {
+        SPItemCtx const *ictx = reinterpret_cast<SPItemCtx const *>(ctx);
+
+        double const w = ictx->viewport.width();
+        double const h = ictx->viewport.height();
+        double const em = style->font_size.computed;
+        double const ex = 0.5 * em;  // fixme: get x height from pango or libnrtype.
+
+        attributes.update( em, ex, w, h );
     }
 }
 
@@ -447,7 +461,8 @@ void sp_textpath_to_text(SPObject *tp)
     }
 
     Geom::Point xy = bbox->min();
-
+    xy *= tp->document->getDocumentScale().inverse(); // Convert to user-units.
+    
     // make a list of textpath children
     GSList *tp_reprs = NULL;
 
@@ -468,7 +483,7 @@ void sp_textpath_to_text(SPObject *tp)
     tp->deleteObject();
     g_slist_free(tp_reprs);
 
-    // set x/y on text
+    // set x/y on text (to be near where it was when on path)
     /* fixme: Yuck, is this really the right test? */
     if (xy[Geom::X] != 1e18 && xy[Geom::Y] != 1e18) {
         sp_repr_set_svg_double(text->getRepr(), "x", xy[Geom::X]);

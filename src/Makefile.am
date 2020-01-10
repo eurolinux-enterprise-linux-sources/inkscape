@@ -11,6 +11,11 @@ Graphics_in_files = inkscape.desktop.in
 Graphics_DATA = $(Graphics_in_files:.desktop.in=.desktop)
 @INTLTOOL_DESKTOP_RULE@
 
+appdatadir = $(datadir)/appdata
+appdata_in_files = inkscape.appdata.xml.in
+appdata_DATA = $(appdata_in_files:.xml.in=.xml)
+@INTLTOOL_XML_RULE@
+
 ## dist-hook:
 ##	mkdir $(distdir)/samples
 ##	cp $(srcdir)/samples/*svg $(distdir)/samples
@@ -22,6 +27,7 @@ DISTCHECK_CONFIGURE_FLAGS = --enable-localinstall
 
 man_MANS = \
 	inkscape.1 \
+	inkscape.de.1		\
 	inkscape.el.1		\
 	inkscape.fr.1		\
 	inkscape.ja.1		\
@@ -31,20 +37,27 @@ man_MANS = \
 
 EXTRA_DIST = \
 	acinclude.m4 \
+	autogen.sh   \
+	GPL2.txt \
+	GPL3.txt \
+	LGPL2.1.txt \
 	fix-roff-punct	\
 	intltool-extract.in	\
 	intltool-merge.in	\
 	intltool-update.in	\
 	$(Graphics_in_files)	\
+	$(appdata_in_files)	\
 	po/check-markup \
 	utf8-to-roff \
 	inkscape.1		\
+	inkscape.de.1		\
 	inkscape.el.1		\
 	inkscape.fr.1		\
 	inkscape.ja.1		\
 	inkscape.sk.1		\
 	inkscape.zh_TW.1		\
 	inkscape.pod		\
+	inkscape.de.pod		\
 	inkscape.el.pod		\
 	inkscape.fr.pod		\
 	inkscape.sk.pod		\
@@ -438,6 +451,11 @@ EXTRA_DIST = \
 	packaging/macosx/ports/lang/python26/files/version.plist \
 	packaging/macosx/ports/python/py-Pillow/Portfile \
 	packaging/macosx/ports/python/py-Pillow/files/patch-setup.py.diff \
+	packaging/macosx/ports/python/py-gobject/Portfile \
+	packaging/macosx/ports/python/py-gobject/files/00git_class_init.patch \
+	packaging/macosx/ports/python/py-gobject/files/00git_fix_qdata_warning.patch \
+	packaging/macosx/ports/python/py-gobject/files/00git_gio_flag_type.patch \
+	packaging/macosx/ports/python/py-gobject/files/patch-pygi-info.c-p1.diff \
 	packaging/macosx/ports/python/py-numpy/Portfile \
 	packaging/macosx/ports/python/py-numpy/files/patch-f2py_setup.py.diff \
 	packaging/macosx/ports/python/py-numpy/files/patch-fcompiler_g95.diff \
@@ -500,6 +518,7 @@ EXTRA_DIST = \
 	packaging/win32/languages/Breton.nsh	\
 	packaging/win32/languages/Catalan.nsh	\
 	packaging/win32/languages/Czech.nsh	\
+	packaging/win32/languages/Danish.nsh	\
 	packaging/win32/languages/Dutch.nsh	\
 	packaging/win32/languages/English.nsh	\
 	packaging/win32/languages/Finnish.nsh	\
@@ -509,9 +528,11 @@ EXTRA_DIST = \
 	packaging/win32/languages/Greek.nsh	\
 	packaging/win32/languages/Hebrew.nsh	\
 	packaging/win32/languages/Indonesian.nsh \
+	packaging/win32/languages/Icelandic.nsh \
 	packaging/win32/languages/Italian.nsh	\
 	packaging/win32/languages/Japanese.nsh	\
 	packaging/win32/languages/Polish.nsh	\
+	packaging/win32/languages/Portuguese.nsh \
 	packaging/win32/languages/PortugueseBR.nsh \
 	packaging/win32/languages/Romanian.nsh	\
 	packaging/win32/languages/Russian.nsh	\
@@ -562,7 +583,8 @@ EXTRA_DIST = \
 # that .tar.gz users don't need a full perl distribution to get a man
 # page.
 
-DISTCLEANFILES = inkscape.desktop \
+DISTCLEANFILES = inkscape.appdata.xml \
+                 inkscape.desktop \
                  intltool-extract \
                  intltool-merge \
                  intltool-update
@@ -570,7 +592,7 @@ DISTCLEANFILES = inkscape.desktop \
 #ACLOCAL_AMFLAGS = -I m4
 
 SUFFIXES = .pod .1
-inkscape.1 inkscape.el.1 inkscape.fr.1 inkscape.ja.1 inkscape.sk.1 inkscape.zh_TW.1 : fix-roff-punct Makefile.am AUTHORS
+inkscape.1 inkscape.de.1 inkscape.el.1 inkscape.fr.1 inkscape.ja.1 inkscape.sk.1 inkscape.zh_TW.1 : fix-roff-punct Makefile.am AUTHORS
 .pod.1:
 	set -e; \
 	d=`sed -n 's,/,-,g;s,.*\$$[D]ate: \(..........\).*,\1,p' $<`; \
@@ -586,6 +608,9 @@ inkscape.1 inkscape.el.1 inkscape.fr.1 inkscape.ja.1 inkscape.sk.1 inkscape.zh_T
 
 po/inkscape.pot:
 	(cd $(srcdir)/po ; intltool-update --pot --output-file=$(distdir)/po/inkscape.pot)
+
+mande_DATA = inkscape.de.1
+mandedir = $(mandir)/de/man1
 
 manel_DATA = inkscape.el.1
 maneldir = $(mandir)/el/man1

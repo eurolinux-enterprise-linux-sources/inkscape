@@ -12,10 +12,6 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
 #include <cstring>
 #include <string>
 #include <2geom/transforms.h>
@@ -34,18 +30,6 @@
 #include "sp-hatch.h"
 #include "sp-hatch-path.h"
 #include "xml/repr.h"
-
-#include "sp-factory.h"
-
-namespace {
-
-SPObject* createHatch() {
-    return new SPHatch();
-}
-
-bool hatchRegistered = SPFactory::instance().registerObject("svg:hatch", createHatch);
-
-} // namespace
 
 SPHatch::SPHatch()
     : SPPaintServer(),
@@ -129,7 +113,7 @@ void SPHatch::child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref)
     SPHatchPath *path_child = dynamic_cast<SPHatchPath *>(document->getObjectByRepr(child));
 
     if (path_child) {
-        for (ViewIterator iter = _display.begin(); iter != _display.end(); iter++) {
+        for (ViewIterator iter = _display.begin(); iter != _display.end(); ++iter) {
             Geom::OptInterval extents = _calculateStripExtents(iter->bbox);
             Inkscape::DrawingItem *ac = path_child->show(iter->arenaitem->drawing(), iter->key, extents);
 
@@ -238,7 +222,7 @@ void SPHatch::set(unsigned int key, const gchar* value)
 
     default:
         if (SP_ATTRIBUTE_IS_CSS(key)) {
-            sp_style_read_from_object(style, this);
+            style->readFromObject( this );
             requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_STYLE_MODIFIED_FLAG);
         } else {
             SPPaintServer::set(key, value);

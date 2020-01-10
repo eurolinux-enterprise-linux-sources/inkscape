@@ -7,28 +7,39 @@ tutorial_DATA = \
     gpl-2.svg \
     making_markers.svg \
     oldguitar.jpg \
-    potrace-be.png \
-    potrace-ca.png \
-    potrace-de.png \
-    potrace-el.png \
-    potrace-en.png \
-    potrace-es.png \
-    potrace-eu.png \
-    potrace-fr.png \
-    potrace-gl.png \
-    potrace-hu.png \
-    potrace-id.png \
-    potrace-ja.png \
-    potrace-nl.png \
+    pixelart-dialog.de.png \
+    pixelart-dialog.el.png \
+    pixelart-dialog.en.png \
+    pixelart-dialog.fr.png \
+    pixelart-dialog.nl.png \
+    pixelart-dialog.png \
+    pixelart-dialog.pt.png \
+    pixelart-dialog.ru.png \
+    pixelart-dialog.sk.png \
+    pixelart-dialog.zh_TW.png \
+    potrace.be.png \
+    potrace.ca.png \
+    potrace.de.png \
+    potrace.el.png \
+    potrace.en.png \
+    potrace.es.png \
+    potrace.eu.png \
+    potrace.fr.png \
+    potrace.gl.png \
+    potrace.hu.png \
+    potrace.id.png \
+    potrace.ja.png \
+    potrace.nl.png \
     potrace.png \
-    potrace-pl.png \
-    potrace-pt_BR.png \
-    potrace-ru.png \
-    potrace-sk.png \
-    potrace-sl.png \
-    potrace-vi.png \
-    potrace-zh_CN.png \
-    potrace-zh_TW.png \
+    potrace.pl.png \
+    potrace.pt.png \
+    potrace.pt_BR.png \
+    potrace.ru.png \
+    potrace.sk.png \
+    potrace.sl.png \
+    potrace.vi.png \
+    potrace.zh_CN.png \
+    potrace.zh_TW.png \
     tutorial-advanced.svg \
     tutorial-advanced.be.svg \
     tutorial-advanced.ca.svg \
@@ -45,6 +56,7 @@ tutorial_DATA = \
     tutorial-advanced.ja.svg \
     tutorial-advanced.nl.svg \
     tutorial-advanced.pl.svg \
+    tutorial-advanced.pt.svg \
     tutorial-advanced.pt_BR.svg \
     tutorial-advanced.ru.svg \
     tutorial-advanced.sk.svg \
@@ -73,6 +85,7 @@ tutorial_DATA = \
     tutorial-basic.nl.svg \
     tutorial-basic.nn.svg \
     tutorial-basic.pl.svg \
+    tutorial-basic.pt.svg \
     tutorial-basic.pt_BR.svg \
     tutorial-basic.ru.svg \
     tutorial-basic.sk.svg \
@@ -96,6 +109,7 @@ tutorial_DATA = \
     tutorial-calligraphy.ja.svg \
     tutorial-calligraphy.nl.svg \
     tutorial-calligraphy.pl.svg \
+    tutorial-calligraphy.pt.svg \
     tutorial-calligraphy.pt_BR.svg \
     tutorial-calligraphy.ru.svg \
     tutorial-calligraphy.sk.svg \
@@ -113,9 +127,11 @@ tutorial_DATA = \
     tutorial-elements.fr.svg \
     tutorial-elements.hu.svg \
     tutorial-elements.id.svg \
+    tutorial-elements.it.svg \
     tutorial-elements.ja.svg \
     tutorial-elements.nl.svg \
     tutorial-elements.pl.svg \
+    tutorial-elements.pt.svg \
     tutorial-elements.pt_BR.svg \
     tutorial-elements.ru.svg \
     tutorial-elements.sk.svg \
@@ -130,7 +146,9 @@ tutorial_DATA = \
     tutorial-interpolate.ja.svg \
     tutorial-interpolate.nl.svg \
     tutorial-interpolate.pl.svg \
+    tutorial-interpolate.pt.svg \
     tutorial-interpolate.pt_BR.svg \
+    tutorial-interpolate.ru.svg \
     tutorial-interpolate.sk.svg \
     tutorial-interpolate.sl.svg \
     tutorial-interpolate.vi.svg \
@@ -145,13 +163,13 @@ tutorial_DATA = \
     tutorial-shapes.eu.svg \
     tutorial-shapes.fa.svg \
     tutorial-shapes.fr.svg \
-    tutorial-shapes.gl.svg \
     tutorial-shapes.hu.svg \
     tutorial-shapes.id.svg \
     tutorial-shapes.it.svg \
     tutorial-shapes.ja.svg \
     tutorial-shapes.nl.svg \
     tutorial-shapes.pl.svg \
+    tutorial-shapes.pt.svg \
     tutorial-shapes.pt_BR.svg \
     tutorial-shapes.ru.svg \
     tutorial-shapes.sk.svg \
@@ -168,12 +186,14 @@ tutorial_DATA = \
     tutorial-tips.eu.svg \
     tutorial-tips.fa.svg \
     tutorial-tips.fr.svg \
+    tutorial-shapes.gl.svg \
     tutorial-tips.hu.svg \
     tutorial-tips.ja.svg \
     tutorial-tips.id.svg \
     tutorial-tips.it.svg \
     tutorial-tips.nl.svg \
     tutorial-tips.pl.svg \
+    tutorial-tips.pt.svg \
     tutorial-tips.pt_BR.svg \
     tutorial-tips.ru.svg \
     tutorial-tips.sk.svg \
@@ -195,6 +215,7 @@ tutorial_DATA = \
     tutorial-tracing.ja.svg \
     tutorial-tracing.nl.svg \
     tutorial-tracing.pl.svg \
+    tutorial-tracing.pt.svg \
     tutorial-tracing.pt_BR.svg \
     tutorial-tracing.ru.svg \
     tutorial-tracing.sk.svg \
@@ -202,9 +223,12 @@ tutorial_DATA = \
     tutorial-tracing.vi.svg \
     tutorial-tracing.zh_TW.svg \
     tutorial-tracing-pixelart.svg \
-    tutorial-tracing-pixelart.nl.svg \
-    tutorial-tracing-pixelart.fr.svg \
     tutorial-tracing-pixelart.el.svg \
+    tutorial-tracing-pixelart.fr.svg \
+    tutorial-tracing-pixelart.nl.svg \
+    tutorial-tracing-pixelart.pt.svg \
+    tutorial-tracing-pixelart.ru.svg \
+    tutorial-tracing-pixelart.sk.svg \
     tutorial-tracing-pixelart.zh_TW.svg \
     tux.png
 

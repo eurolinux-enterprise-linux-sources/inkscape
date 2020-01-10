@@ -30,11 +30,12 @@
  *
  */
 
-#ifndef SEEN_LIB2GEOM_UTILS_H
-#define SEEN_LIB2GEOM_UTILS_H
+#ifndef LIB2GEOM_SEEN_UTILS_H
+#define LIB2GEOM_SEEN_UTILS_H
 
 #include <cstddef>
 #include <vector>
+#include <boost/operators.hpp>
 
 namespace Geom {
 
@@ -59,9 +60,44 @@ struct MultipliableNoncommutative : B
     }
 };
 
+/** @brief Null output iterator
+ * Use this if you want to discard a result returned through an output iterator. */
+struct NullIterator
+    : public boost::output_iterator_helper<NullIterator>
+{
+    NullIterator() {}
+
+    template <typename T>
+    void operator=(T const &) {}
+};
+
+/** @brief Get the next iterator in the container with wrap-around.
+ * If the iterator would become the end iterator after incrementing,
+ * return the begin iterator instead. */
+template <typename Iter, typename Container>
+Iter cyclic_next(Iter i, Container &c) {
+    ++i;
+    if (i == c.end()) {
+        i = c.begin();
+    }
+    return i;
+}
+
+/** @brief Get the previous iterator in the container with wrap-around.
+ * If the passed iterator is the begin iterator, return the iterator
+ * just before the end iterator instead. */
+template <typename Iter, typename Container>
+Iter cyclic_prior(Iter i, Container &c) {
+    if (i == c.begin()) {
+        i = c.end();
+    }
+    --i;
+    return i;
+}
+
 } // end namespace Geom
 
-#endif // SEEN_LIB2GEOM_UTILS_H
+#endif // LIB2GEOM_SEEN_UTILS_H
 
 /*
   Local Variables:

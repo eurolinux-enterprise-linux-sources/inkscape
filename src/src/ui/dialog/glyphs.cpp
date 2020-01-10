@@ -578,9 +578,10 @@ void GlyphsPanel::setTargetDesktop(SPDesktop *desktop)
 void GlyphsPanel::insertText()
 {
     SPItem *textItem = 0;
-    for (const GSList *item = targetDesktop->selection->itemList(); item; item = item->next ) {
-        if (SP_IS_TEXT(item->data) || SP_IS_FLOWTEXT(item->data)) {
-            textItem = SP_ITEM(item->data);
+    std::vector<SPItem*> itemlist=targetDesktop->selection->itemList();
+        for(std::vector<SPItem*>::const_iterator i=itemlist.begin(); itemlist.end() != i; ++i) {
+            if (SP_IS_TEXT(*i) || SP_IS_FLOWTEXT(*i)) {
+            textItem = *i;
             break;
         }
     }
@@ -687,8 +688,9 @@ void GlyphsPanel::selectionModifiedCB(guint flags)
 void GlyphsPanel::calcCanInsert()
 {
     int items = 0;
-    for (const GSList *item = targetDesktop->selection->itemList(); item; item = item->next ) {
-        if (SP_IS_TEXT(item->data) || SP_IS_FLOWTEXT(item->data)) {
+    std::vector<SPItem*> itemlist=targetDesktop->selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=itemlist.begin(); itemlist.end() != i; ++i) {
+        if (SP_IS_TEXT(*i) || SP_IS_FLOWTEXT(*i)) {
             ++items;
         }
     }
@@ -709,13 +711,12 @@ void GlyphsPanel::readSelection( bool updateStyle, bool /*updateContent*/ )
     calcCanInsert();
 
     if (targetDesktop && updateStyle) {
-        //SPStyle *query = sp_style_new(SP_ACTIVE_DOCUMENT);
+        //SPStyle query(SP_ACTIVE_DOCUMENT);
 
-        //int result_family = sp_desktop_query_style(targetDesktop, query, QUERY_STYLE_PROPERTY_FONTFAMILY);
-        //int result_style = sp_desktop_query_style(targetDesktop, query, QUERY_STYLE_PROPERTY_FONTSTYLE);
-        //int result_numbers = sp_desktop_query_style(targetDesktop, query, QUERY_STYLE_PROPERTY_FONTNUMBERS);
+        //int result_family = sp_desktop_query_style(targetDesktop, &query, QUERY_STYLE_PROPERTY_FONTFAMILY);
+        //int result_style = sp_desktop_query_style(targetDesktop, &query, QUERY_STYLE_PROPERTY_FONTSTYLE);
+        //int result_numbers = sp_desktop_query_style(targetDesktop, &query, QUERY_STYLE_PROPERTY_FONTNUMBERS);
 
-        //sp_style_unref(query);
     }
 }
 

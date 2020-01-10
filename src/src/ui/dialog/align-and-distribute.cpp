@@ -24,7 +24,7 @@
 #include "align-and-distribute.h"
 #include <2geom/transforms.h>
 #include "ui/widget/spinbutton.h"
-#include "desktop-handles.h"
+
 #include "unclump.h"
 #include "document.h"
 #include "enums.h"
@@ -38,11 +38,11 @@
 #include "sp-item-transform.h"
 #include "sp-text.h"
 #include "text-editing.h"
-#include "tools-switch.h"
+#include "ui/tools-switch.h"
 #include "ui/icon-names.h"
 #include "ui/tools/node-tool.h"
 #include "ui/tool/multi-path-manipulator.h"
-#include "util/glib-list-iterators.h"
+#include "ui/tool/control-point-selection.h"
 #include "verbs.h"
 #include "widgets/icon.h"
 #include "sp-root.h"
@@ -89,17 +89,51 @@ Action::Action(const Glib::ustring &id,
 }
 
 
+void ActionAlign::do_node_action(Inkscape::UI::Tools::NodeTool *nt, int verb)
+{
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    int prev_pref = prefs->getInt("/dialogs/align/align-nodes-to");
+    switch(verb){
+        case SP_VERB_ALIGN_HORIZONTAL_LEFT:
+            prefs->setInt("/dialogs/align/align-nodes-to", MIN_NODE );
+            nt->_multipath->alignNodes(Geom::Y);
+            break;
+        case SP_VERB_ALIGN_HORIZONTAL_CENTER:
+            nt->_multipath->alignNodes(Geom::Y);
+            break;
+        case SP_VERB_ALIGN_HORIZONTAL_RIGHT:
+            prefs->setInt("/dialogs/align/align-nodes-to", MAX_NODE );
+            nt->_multipath->alignNodes(Geom::Y);
+            break;
+        case SP_VERB_ALIGN_VERTICAL_TOP:
+            prefs->setInt("/dialogs/align/align-nodes-to", MAX_NODE );
+            nt->_multipath->alignNodes(Geom::X);
+            break;
+        case SP_VERB_ALIGN_VERTICAL_CENTER:
+            nt->_multipath->alignNodes(Geom::X);
+            break;
+        case SP_VERB_ALIGN_VERTICAL_BOTTOM:
+            prefs->setInt("/dialogs/align/align-nodes-to", MIN_NODE );
+            nt->_multipath->alignNodes(Geom::X);
+            break;
+        case SP_VERB_ALIGN_VERTICAL_HORIZONTAL_CENTER:
+            nt->_multipath->alignNodes(Geom::X);
+            nt->_multipath->alignNodes(Geom::Y);
+            break;
+        default:return;
+    }
+    prefs->setInt("/dialogs/align/align-nodes-to", prev_pref );
+}
+
 void ActionAlign::do_action(SPDesktop *desktop, int index)
 {
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
     if (!selection) return;
 
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     bool sel_as_group = prefs->getBool("/dialogs/align/sel-as-groups");
 
-    using Inkscape::Util::GSListConstIterator;
-    std::list<SPItem *> selected;
-    selected.insert<GSListConstIterator<SPItem *> >(selected.end(), selection->itemList(), NULL);
+    std::vector<SPItem*> selected(selection->itemList());
     if (selected.empty()) return;
 
     const Coeffs &a = _allCoeffs[index];
@@ -123,10 +157,10 @@ void ActionAlign::do_action(SPDesktop *desktop, int index)
         focus = selection->smallestItem(horiz);
         break;
     case PAGE:
-        b = sp_desktop_document(desktop)->preferredBounds();
+        b = desktop->getDocument()->preferredBounds();
         break;
     case DRAWING:
-        b = sp_desktop_document(desktop)->getRoot()->desktopPreferredBounds();
+        b = desktop->getDocument()->getRoot()->desktopPreferredBounds();
         break;
     case SELECTION:
         b = selection->preferredBounds();
@@ -149,25 +183,26 @@ void ActionAlign::do_action(SPDesktop *desktop, int index)
         b = selection->preferredBounds();
 
     //Move each item in the selected list separately
-    for (std::list<SPItem *>::iterator it(selected.begin());
+    for (std::vector<SPItem*>::iterator it(selected.begin());
          it != selected.end(); ++it)
     {
-        sp_desktop_document (desktop)->ensureUpToDate();
+    	SPItem* item= *it;
+        desktop->getDocument()->ensureUpToDate();
         if (!sel_as_group)
-            b = (*it)->desktopPreferredBounds();
-        if (b && (!focus || (*it) != focus)) {
+            b = (item)->desktopPreferredBounds();
+        if (b && (!focus || (item) != focus)) {
             Geom::Point const sp(a.sx0 * b->min()[Geom::X] + a.sx1 * b->max()[Geom::X],
                                  a.sy0 * b->min()[Geom::Y] + a.sy1 * b->max()[Geom::Y]);
             Geom::Point const mp_rel( mp - sp );
             if (LInfty(mp_rel) > 1e-9) {
-                sp_item_move_rel(*it, Geom::Translate(mp_rel));
+                sp_item_move_rel(item, Geom::Translate(mp_rel));
                 changed = true;
             }
         }
     }
 
     if (changed) {
-        DocumentUndo::done( sp_desktop_document(desktop) , SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
+        DocumentUndo::done( desktop->getDocument() , SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
                             _("Align"));
     }
 }
@@ -189,6 +224,14 @@ ActionAlign::Coeffs const ActionAlign::_allCoeffs[11] = {
 
 void ActionAlign::do_verb_action(SPDesktop *desktop, int verb)
 {
+    Inkscape::UI::Tools::ToolBase *event_context = desktop->getEventContext();
+    if (INK_IS_NODE_TOOL(event_context)) {
+        Inkscape::UI::Tools::NodeTool *nt = INK_NODE_TOOL(event_context);
+        if(!nt->_selected_nodes->empty()){
+            do_node_action(nt, verb);
+            return;
+        }
+    }
     do_action(desktop, verb_to_coeff(verb));
 }
 
@@ -247,29 +290,27 @@ private :
         SPDesktop *desktop = _dialog.getDesktop();
         if (!desktop) return;
 
-        Inkscape::Selection *selection = sp_desktop_selection(desktop);
+        Inkscape::Selection *selection = desktop->getSelection();
         if (!selection) return;
 
-        using Inkscape::Util::GSListConstIterator;
-        std::list<SPItem *> selected;
-        selected.insert<GSListConstIterator<SPItem *> >(selected.end(), selection->itemList(), NULL);
+        std::vector<SPItem*> selected(selection->itemList());
         if (selected.empty()) return;
 
         //Check 2 or more selected objects
-        std::list<SPItem *>::iterator second(selected.begin());
+        std::vector<SPItem*>::iterator second(selected.begin());
         ++second;
         if (second == selected.end()) return;
 
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         int prefs_bbox = prefs->getBool("/tools/bounding_box");
         std::vector< BBoxSort  > sorted;
-        for (std::list<SPItem *>::iterator it(selected.begin());
+        for (std::vector<SPItem*>::iterator it(selected.begin());
             it != selected.end();
-            ++it)
-        {
-            Geom::OptRect bbox = !prefs_bbox ? (*it)->desktopVisualBounds() : (*it)->desktopGeometricBounds();
+            ++it){
+            SPItem *item = *it;
+            Geom::OptRect bbox = !prefs_bbox ? (item)->desktopVisualBounds() : (item)->desktopGeometricBounds();
             if (bbox) {
-                sorted.push_back(BBoxSort(*it, *bbox, _orientation, _kBegin, _kEnd));
+                sorted.push_back(BBoxSort(item, *bbox, _orientation, _kBegin, _kEnd));
             }
         }
         //sort bbox by anchors
@@ -337,7 +378,7 @@ private :
         prefs->setInt("/options/clonecompensation/value", saved_compensation);
 
         if (changed) {
-            DocumentUndo::done( sp_desktop_document(desktop), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
+            DocumentUndo::done( desktop->getDocument(), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
                                 _("Distribute"));
         }
     }
@@ -458,13 +499,12 @@ private :
         // xGap and yGap are the minimum space required between bounding rectangles.
         double const xGap = removeOverlapXGap.get_value();
         double const yGap = removeOverlapYGap.get_value();
-        removeoverlap(sp_desktop_selection(_dialog.getDesktop())->itemList(),
-                      xGap, yGap);
+        removeoverlap(_dialog.getDesktop()->getSelection()->itemList(), xGap, yGap);
 
         // restore compensation setting
         prefs->setInt("/options/clonecompensation/value", saved_compensation);
 
-        DocumentUndo::done(sp_desktop_document(_dialog.getDesktop()), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
+        DocumentUndo::done(_dialog.getDesktop()->getDocument(), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
                            _("Remove overlaps"));
     }
 };
@@ -490,12 +530,12 @@ private :
         int saved_compensation = prefs->getInt("/options/clonecompensation/value", SP_CLONE_COMPENSATION_UNMOVED);
         prefs->setInt("/options/clonecompensation/value", SP_CLONE_COMPENSATION_UNMOVED);
 
-        graphlayout(sp_desktop_selection(_dialog.getDesktop())->itemList());
+        graphlayout(_dialog.getDesktop()->getSelection()->itemList());
 
         // restore compensation setting
         prefs->setInt("/options/clonecompensation/value", saved_compensation);
 
-        DocumentUndo::done(sp_desktop_document(_dialog.getDesktop()), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
+        DocumentUndo::done(_dialog.getDesktop()->getDocument(), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
                            _("Arrange connector network"));
     }
 };
@@ -539,7 +579,7 @@ private :
             if (length_a != length_b) return (length_a > length_b);
         }
         // Last criteria: Sort according to the z-coordinate
-        return (a->isSiblingOf(b));
+        return sp_item_repr_compare_position(a,b)<0;
     }
 
     virtual void on_button_click()
@@ -547,12 +587,10 @@ private :
         SPDesktop *desktop = _dialog.getDesktop();
         if (!desktop) return;
 
-        Inkscape::Selection *selection = sp_desktop_selection(desktop);
+        Inkscape::Selection *selection = desktop->getSelection();
         if (!selection) return;
 
-        using Inkscape::Util::GSListConstIterator;
-        std::list<SPItem *> selected;
-        selected.insert<GSListConstIterator<SPItem *> >(selected.end(), selection->itemList(), NULL);
+        std::vector<SPItem*> selected(selection->itemList());
         if (selected.empty()) return;
 
         //Check 2 or more selected objects
@@ -570,15 +608,17 @@ private :
 		} else { // sorting by ZOrder is outomatically done by not setting the center
 			center.reset();
 		}
-		selected.sort(ActionExchangePositions::sort_compare);
+		sort(selected.begin(),selected.end(),sort_compare);
 	}
-	std::list<SPItem *>::iterator it(selected.begin());
-	Geom::Point p1 =  (*it)->getCenter();
+	std::vector<SPItem*>::iterator it(selected.begin());
+	SPItem* item = *it;
+	Geom::Point p1 =  item->getCenter();
 	for (++it ;it != selected.end(); ++it)
 	{
-		Geom::Point p2 = (*it)->getCenter();
+		item = *it;
+		Geom::Point p2 = item->getCenter();
 		Geom::Point delta = p1 - p2;
-		sp_item_move_rel((*it),Geom::Translate(delta[Geom::X],delta[Geom::Y] ));
+		sp_item_move_rel(item,Geom::Translate(delta[Geom::X],delta[Geom::Y] ));
 		p1 = p2;
 	}
 	Geom::Point p2 = selected.front()->getCenter();
@@ -588,7 +628,7 @@ private :
         // restore compensation setting
         prefs->setInt("/options/clonecompensation/value", saved_compensation);
 
-        DocumentUndo::done(sp_desktop_document(_dialog.getDesktop()), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
+        DocumentUndo::done(_dialog.getDesktop()->getDocument(), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
                            _("Exchange Positions"));
     }
 };
@@ -616,13 +656,13 @@ private :
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         int saved_compensation = prefs->getInt("/options/clonecompensation/value", SP_CLONE_COMPENSATION_UNMOVED);
         prefs->setInt("/options/clonecompensation/value", SP_CLONE_COMPENSATION_UNMOVED);
-
-        unclump ((GSList *) sp_desktop_selection(_dialog.getDesktop())->itemList());
+        std::vector<SPItem*> x(_dialog.getDesktop()->getSelection()->itemList());
+        unclump (x);
 
         // restore compensation setting
         prefs->setInt("/options/clonecompensation/value", saved_compensation);
 
-        DocumentUndo::done(sp_desktop_document(_dialog.getDesktop()), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
+        DocumentUndo::done(_dialog.getDesktop()->getDocument(), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
                            _("Unclump"));
     }
 };
@@ -644,12 +684,10 @@ private :
         SPDesktop *desktop = _dialog.getDesktop();
         if (!desktop) return;
 
-        Inkscape::Selection *selection = sp_desktop_selection(desktop);
+        Inkscape::Selection *selection = desktop->getSelection();
         if (!selection) return;
 
-        using Inkscape::Util::GSListConstIterator;
-        std::list<SPItem *> selected;
-        selected.insert<GSListConstIterator<SPItem *> >(selected.end(), selection->itemList(), NULL);
+        std::vector<SPItem*> selected(selection->itemList());
         if (selected.empty()) return;
 
         //Check 2 or more selected objects
@@ -673,12 +711,13 @@ private :
         int saved_compensation = prefs->getInt("/options/clonecompensation/value", SP_CLONE_COMPENSATION_UNMOVED);
         prefs->setInt("/options/clonecompensation/value", SP_CLONE_COMPENSATION_UNMOVED);
 
-        for (std::list<SPItem *>::iterator it(selected.begin());
+        for (std::vector<SPItem*>::iterator it(selected.begin());
             it != selected.end();
             ++it)
         {
-            sp_desktop_document (desktop)->ensureUpToDate();
-            Geom::OptRect item_box = !prefs_bbox ? (*it)->desktopVisualBounds() : (*it)->desktopGeometricBounds();
+        	SPItem* item = *it;
+            desktop->getDocument()->ensureUpToDate();
+            Geom::OptRect item_box = !prefs_bbox ? (item)->desktopVisualBounds() : (item)->desktopGeometricBounds();
             if (item_box) {
                 // find new center, staying within bbox
                 double x = _dialog.randomize_bbox->min()[Geom::X] + (*item_box)[Geom::X].extent() /2 +
@@ -687,14 +726,14 @@ private :
                     g_random_double_range (0, (*_dialog.randomize_bbox)[Geom::Y].extent() - (*item_box)[Geom::Y].extent());
                 // displacement is the new center minus old:
                 Geom::Point t = Geom::Point (x, y) - 0.5*(item_box->max() + item_box->min());
-                sp_item_move_rel(*it, Geom::Translate(t));
+                sp_item_move_rel(item, Geom::Translate(t));
             }
         }
 
         // restore compensation setting
         prefs->setInt("/options/clonecompensation/value", saved_compensation);
 
-        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
+        DocumentUndo::done(desktop->getDocument(), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
                            _("Randomize positions"));
     }
 };
@@ -743,13 +782,10 @@ private :
         SPDesktop *desktop = _dialog.getDesktop();
         if (!desktop) return;
 
-        Inkscape::Selection *selection = sp_desktop_selection(desktop);
+        Inkscape::Selection *selection = desktop->getSelection();
         if (!selection) return;
 
-        using Inkscape::Util::GSListConstIterator;
-        std::list<SPItem *> selected;
-        selected.insert<GSListConstIterator<SPItem *> >(selected.end(), selection->itemList(), NULL);
-        if (selected.empty()) return;
+        std::vector<SPItem*> selected(selection->itemList());
 
         //Check 2 or more selected objects
         if (selected.size() < 2) return;
@@ -759,20 +795,21 @@ private :
 
         std::vector<Baselines> sorted;
 
-        for (std::list<SPItem *>::iterator it(selected.begin());
+        for (std::vector<SPItem*>::iterator it(selected.begin());
             it != selected.end();
             ++it)
         {
-            if (SP_IS_TEXT (*it) || SP_IS_FLOWTEXT (*it)) {
-                Inkscape::Text::Layout const *layout = te_get_layout(*it);
+        	SPItem* item = *it;
+            if (SP_IS_TEXT (item) || SP_IS_FLOWTEXT (item)) {
+                Inkscape::Text::Layout const *layout = te_get_layout(item);
                 boost::optional<Geom::Point> pt = layout->baselineAnchorPoint();
                 if (pt) {
-                    Geom::Point base = *pt * (*it)->i2dt_affine();
+                    Geom::Point base = *pt * (item)->i2dt_affine();
                     if (base[Geom::X] < b_min[Geom::X]) b_min[Geom::X] = base[Geom::X];
                     if (base[Geom::Y] < b_min[Geom::Y]) b_min[Geom::Y] = base[Geom::Y];
                     if (base[Geom::X] > b_max[Geom::X]) b_max[Geom::X] = base[Geom::X];
                     if (base[Geom::Y] > b_max[Geom::Y]) b_max[Geom::Y] = base[Geom::Y];
-                    Baselines b (*it, base, _orientation);
+                    Baselines b (item, base, _orientation);
                     sorted.push_back(b);
                 }
             }
@@ -797,30 +834,75 @@ private :
             }
 
             if (changed) {
-                DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
+                DocumentUndo::done(desktop->getDocument(), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
                                     _("Distribute text baselines"));
             }
 
-        } else {
-            for (std::list<SPItem *>::iterator it(selected.begin());
+        } else { //align
+            Geom::Point ref_point;
+            SPItem *focus = NULL;
+            Geom::OptRect b = Geom::OptRect();
+
+            Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+
+            switch (AlignTarget(prefs->getInt("/dialogs/align/align-to", 6)))
+            {
+                case LAST:
+                    focus = SP_ITEM(*selected.begin());
+                    break;
+                case FIRST:
+                    focus = SP_ITEM(*--(selected.end()));
+                    break;
+                case BIGGEST:
+                    focus = selection->largestItem(Selection::AREA);
+                    break;
+                case SMALLEST:
+                    focus = selection->smallestItem(Selection::AREA);
+                    break;
+                case PAGE:
+                    b = desktop->getDocument()->preferredBounds();
+                    break;
+                case DRAWING:
+                    b = desktop->getDocument()->getRoot()->desktopPreferredBounds();
+                    break;
+                case SELECTION:
+                    b = selection->preferredBounds();
+                    break;
+                default:
+                    g_assert_not_reached ();
+                    break;
+            };  
+
+            if(focus) {
+                if (SP_IS_TEXT (focus) || SP_IS_FLOWTEXT (focus)) {
+                    ref_point = *(te_get_layout(focus)->baselineAnchorPoint())*(focus->i2dt_affine());
+                } else {
+                    ref_point = focus->desktopPreferredBounds()->min();
+                }
+            } else {
+                ref_point = b->min();
+            }
+
+            for (std::vector<SPItem*>::iterator it(selected.begin());
                  it != selected.end();
                  ++it)
             {
-                if (SP_IS_TEXT (*it) || SP_IS_FLOWTEXT (*it)) {
-                    Inkscape::Text::Layout const *layout = te_get_layout(*it);
+            	SPItem* item = *it;
+                if (SP_IS_TEXT (item) || SP_IS_FLOWTEXT (item)) {
+                    Inkscape::Text::Layout const *layout = te_get_layout(item);
                     boost::optional<Geom::Point> pt = layout->baselineAnchorPoint();
                     if (pt) {
-                        Geom::Point base = *pt * (*it)->i2dt_affine();
+                        Geom::Point base = *pt * (item)->i2dt_affine();
                         Geom::Point t(0.0, 0.0);
-                        t[_orientation] = b_min[_orientation] - base[_orientation];
-                        sp_item_move_rel(*it, Geom::Translate(t));
+                        t[_orientation] = ref_point[_orientation] - base[_orientation];
+                        sp_item_move_rel(item, Geom::Translate(t));
                         changed = true;
                     }
                 }
             }
 
             if (changed) {
-                DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
+                DocumentUndo::done(desktop->getDocument(), SP_VERB_DIALOG_ALIGN_DISTRIBUTE,
                                    _("Align text baselines"));
             }
         }
@@ -829,14 +911,17 @@ private :
 
 
 
-static void on_tool_changed(Inkscape::Application */*inkscape*/, Inkscape::UI::Tools::ToolBase */*context*/, AlignAndDistribute *daad)
+static void on_tool_changed(AlignAndDistribute *daad)
 {
     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
     if (desktop && desktop->getEventContext())
         daad->setMode(tools_active(desktop) == TOOLS_NODES);
+    else
+        daad->setMode(false);
+
 }
 
-static void on_selection_changed(Inkscape::Application */*inkscape*/, Inkscape::Selection */*selection*/, AlignAndDistribute *daad)
+static void on_selection_changed(AlignAndDistribute *daad)
 {
     daad->randomize_bbox = Geom::OptRect();
 }
@@ -868,6 +953,7 @@ AlignAndDistribute::AlignAndDistribute()
       _nodesTable(1, 4, true),
 #endif
       _anchorLabel(_("Relative to: ")),
+      _anchorLabelNode(_("Relative to: ")),
       _selgrpLabel(_("_Treat selection as group: "), 1)
 {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
@@ -1006,8 +1092,19 @@ AlignAndDistribute::AlignAndDistribute()
     _combo.set_active(prefs->getInt("/dialogs/align/align-to", 6));
     _combo.signal_changed().connect(sigc::mem_fun(*this, &AlignAndDistribute::on_ref_change));
 
+    _comboNode.append(_("Last selected"));
+    _comboNode.append(_("First selected"));
+    _comboNode.append(_("Middle of selection"));
+    _comboNode.append(_("Min value"));
+    _comboNode.append(_("Max value"));
+    _comboNode.set_active(prefs->getInt("/dialogs/align/align-nodes-to", 2));
+    _comboNode.signal_changed().connect(sigc::mem_fun(*this, &AlignAndDistribute::on_node_ref_change));
+
     _anchorBox.pack_end(_combo, false, false);
     _anchorBox.pack_end(_anchorLabel, false, false);
+
+    _anchorBoxNode.pack_end(_comboNode, false, false);
+    _anchorBoxNode.pack_end(_anchorLabelNode, false, false);
 
     _selgrpLabel.set_mnemonic_widget(_selgrp);
     _selgrpBox.pack_end(_selgrp, false, false);
@@ -1026,11 +1123,15 @@ AlignAndDistribute::AlignAndDistribute()
     _alignBox.pack_start(_selgrpBox);
     _alignBox.pack_start(_alignTableBox);
 
+    _alignBoxNode.pack_start(_anchorBoxNode, false, false);
+    _alignBoxNode.pack_start(_nodesTableBox);
+
+
     _alignFrame.add(_alignBox);
     _distributeFrame.add(_distributeTableBox);
     _rearrangeFrame.add(_rearrangeTableBox);
     _removeOverlapFrame.add(_removeOverlapTableBox);
-    _nodesFrame.add(_nodesTableBox);
+    _nodesFrame.add(_alignBoxNode);
 
     Gtk::Box *contents = _getContents();
     contents->set_spacing(4);
@@ -1041,13 +1142,13 @@ AlignAndDistribute::AlignAndDistribute()
     contents->pack_start(_distributeFrame, true, true);
     contents->pack_start(_rearrangeFrame, true, true);
     contents->pack_start(_removeOverlapFrame, true, true);
-    contents->pack_start(_nodesFrame, true, true);
+    contents->pack_start(_nodesFrame, true, false);
 
     //Connect to the global tool change signal
-    g_signal_connect (G_OBJECT (INKSCAPE), "set_eventcontext", G_CALLBACK (on_tool_changed), this);
+    _toolChangeConn = INKSCAPE.signal_eventcontext_set.connect(sigc::hide<0>(sigc::bind(sigc::ptr_fun(&on_tool_changed), this)));
 
     // Connect to the global selection change, to invalidate cached randomize_bbox
-    g_signal_connect (G_OBJECT (INKSCAPE), "change_selection", G_CALLBACK (on_selection_changed), this);
+    _selChangeConn = INKSCAPE.signal_selection_changed.connect(sigc::hide<0>(sigc::bind(sigc::ptr_fun(&on_selection_changed), this)));
     randomize_bbox = Geom::OptRect();
 
     _desktopChangeConn = _deskTrack.connectDesktopChanged( sigc::mem_fun(*this, &AlignAndDistribute::setDesktop) );
@@ -1055,18 +1156,18 @@ AlignAndDistribute::AlignAndDistribute()
 
     show_all_children();
 
-    on_tool_changed (NULL, NULL, this); // set current mode
+    on_tool_changed (this); // set current mode
 }
 
 AlignAndDistribute::~AlignAndDistribute()
 {
-    sp_signal_disconnect_by_data (G_OBJECT (INKSCAPE), this);
-
     for (std::list<Action *>::iterator it = _actionList.begin();
          it != _actionList.end();  ++it) {
         delete *it;
     }
 
+    _toolChangeConn.disconnect();
+    _selChangeConn.disconnect();
     _desktopChangeConn.disconnect();
     _deskTrack.disconnect();
 }
@@ -1075,7 +1176,7 @@ void AlignAndDistribute::setTargetDesktop(SPDesktop *desktop)
 {
     if (_desktop != desktop) {
         _desktop = desktop;
-        on_tool_changed (NULL, NULL, this);
+        on_tool_changed (this);
     }
 }
 
@@ -1083,6 +1184,13 @@ void AlignAndDistribute::setTargetDesktop(SPDesktop *desktop)
 void AlignAndDistribute::on_ref_change(){
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     prefs->setInt("/dialogs/align/align-to", _combo.get_active_row_number());
+
+    //Make blink the master
+}
+
+void AlignAndDistribute::on_node_ref_change(){
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    prefs->setInt("/dialogs/align/align-nodes-to", _comboNode.get_active_row_number());
 
     //Make blink the master
 }
@@ -1112,6 +1220,7 @@ void AlignAndDistribute::setMode(bool nodeEdit)
     ((_rearrangeFrame).*(mSel))();
     ((_removeOverlapFrame).*(mSel))();
     ((_nodesFrame).*(mNode))();
+    _getContents()->queue_resize();
 
 }
 void AlignAndDistribute::addAlignButton(const Glib::ustring &id, const Glib::ustring tiptext,

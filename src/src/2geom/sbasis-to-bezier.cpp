@@ -37,6 +37,7 @@
 #include <2geom/choose.h>
 #include <2geom/path-sink.h>
 #include <2geom/exception.h>
+#include <2geom/convex-hull.h>
 
 #include <iostream>
 
@@ -99,9 +100,7 @@ int sgn(unsigned int j, unsigned int k)
 */
 void sbasis_to_bezier (Bezier & bz, SBasis const& sb, size_t sz)
 {
-    if (sb.size() == 0) {
-        THROW_RANGEERROR("size of sb is too small");
-    }
+    assert(sb.size() > 0);
 
     size_t q, n;
     bool even;
@@ -152,6 +151,15 @@ void sbasis_to_bezier (Bezier & bz, SBasis const& sb, size_t sz)
     bz[n] = sb[0][1];
 }
 
+void sbasis_to_bezier(D2<Bezier> &bz, D2<SBasis> const &sb, size_t sz)
+{
+    if (sz == 0) {
+        sz = std::max(sb[X].size(), sb[Y].size())*2;
+    }
+    sbasis_to_bezier(bz[X], sb[X], sz);
+    sbasis_to_bezier(bz[Y], sb[Y], sz);
+}
+
 /** Changes the basis of p to be Bernstein.
  \param p the D2 Symmetric basis polynomial
  \returns the D2 Bernstein basis polynomial
@@ -160,24 +168,9 @@ void sbasis_to_bezier (Bezier & bz, SBasis const& sb, size_t sz)
 */
 void sbasis_to_bezier (std::vector<Point> & bz, D2<SBasis> const& sb, size_t sz)
 {
-    Bezier bzx, bzy;
-    if(sz == 0) {
-        sz = std::max(sb[X].size(), sb[Y].size())*2;
-    }
-    sbasis_to_bezier(bzx, sb[X], sz);
-    sbasis_to_bezier(bzy, sb[Y], sz);
-    assert(bzx.size() == bzy.size());
-    size_t n = (bzx.size() >= bzy.size()) ? bzx.size() : bzy.size();
-
-    bz.resize(n, Point(0,0));
-    for (size_t i = 0; i < bzx.size(); ++i)
-    {
-        bz[i][X] = bzx[i];
-    }
-    for (size_t i = 0; i < bzy.size(); ++i)
-    {
-        bz[i][Y] = bzy[i];
-    }
+    D2<Bezier> bez;
+    sbasis_to_bezier(bez, sb, sz);
+    bz = bezier_points(bez);
 }
 
 /** Changes the basis of p to be Bernstein.
@@ -203,11 +196,10 @@ void sbasis_to_cubic_bezier (std::vector<Point> & bz, D2<SBasis> const& sb)
         THROW_RANGEERROR("size of sb is too small");
     }
 
-    bz.resize(4, Point(0,0));
-    bz[0][X] = sb[X][0][0];
-    bz[0][Y] = sb[Y][0][0];
-    bz[3][X] = sb[X][0][1];
-    bz[3][Y] = sb[Y][0][1];
+    sbasis_to_bezier(bz, sb, 4);  // zeroth-order estimate
+    if ((sb[X].size() < 3) && (sb[Y].size() < 3))
+        return;  // cubic bezier estimate is exact
+    Geom::ConvexHull bezhull(bz);
 
 //  calculate first derivatives of x and y wrt t
 
@@ -215,11 +207,11 @@ void sbasis_to_cubic_bezier (std::vector<Point> & bz, D2<SBasis> const& sb)
         xprime[i] = sb[X][0][1] - sb[X][0][0];
         yprime[i] = sb[Y][0][1] - sb[Y][0][0];
     }
-    if (sb[X].size() > 0) {
+    if (sb[X].size() > 1) {
         xprime[0] += sb[X][1][0];
         xprime[1] -= sb[X][1][1];
     }
-    if (sb[Y].size() > 0) {
+    if (sb[Y].size() > 1) {
         yprime[0] += sb[Y][1][0];
         yprime[1] -= sb[Y][1][1];
     }
@@ -231,16 +223,22 @@ void sbasis_to_cubic_bezier (std::vector<Point> & bz, D2<SBasis> const& sb)
         midx += (sb[X][i][0] + sb[X][i][1])/div;
         div *= 4;
     }
-    midx = 8*midx - 4*bz[0][X] - 4*bz[3][X];
 
     div = 2;
     for (size_t i = 0; i < sb[Y].size(); ++i) {
         midy += (sb[Y][i][0] + sb[Y][i][1])/div;
         div *= 4;
     }
-    midy = 8*midy - 4*bz[0][Y] - 4*bz[3][Y];
+
+//  is midpoint in hull: if not, the solution will be ill-conditioned, LP Bug 1428683
+
+    if (!bezhull.contains(Geom::Point(midx, midy)))
+        return;
 
 //  calculate Bezier control arms
+
+    midx = 8*midx - 4*bz[0][X] - 4*bz[3][X];  // re-define relative to center
+    midy = 8*midy - 4*bz[0][Y] - 4*bz[3][Y];
 
     if ((std::abs(xprime[0]) < EPSILON) && (std::abs(yprime[0]) < EPSILON)
     && ((std::abs(xprime[1]) > EPSILON) || (std::abs(yprime[1]) > EPSILON)))  { // degenerate handle at 0 : use distance of closest approach
@@ -258,12 +256,17 @@ void sbasis_to_cubic_bezier (std::vector<Point> & bz, D2<SBasis> const& sb)
         dely[0] = yprime[0]*numer/denom;
         delx[1] = 0;
         dely[1] = 0;
-    } else if (std::abs(xprime[1]*yprime[0] - yprime[1]*xprime[0]) > EPSILON) { // general case : fit mid fxn value
-        denom = xprime[1]*yprime[0] - yprime[1]*xprime[0];
+    } else if  (std::abs(xprime[1]*yprime[0] - yprime[1]*xprime[0]) >  // general case : fit mid fxn value
+        0.002 * std::abs(xprime[1]*xprime[0] + yprime[1]*yprime[0])) { // approx. 0.1 degree of angle
+        double test1 = (bz[1][Y] - bz[0][Y])*(bz[3][X] - bz[0][X]) - (bz[1][X] - bz[0][X])*(bz[3][Y] - bz[0][Y]);
+        double test2 = (bz[2][Y] - bz[0][Y])*(bz[3][X] - bz[0][X]) - (bz[2][X] - bz[0][X])*(bz[3][Y] - bz[0][Y]);
+        if (test1*test2 < 0) // reject anti-symmetric case, LP Bug 1428267 & Bug 1428683
+            return;
+        denom = 3.0*(xprime[1]*yprime[0] - yprime[1]*xprime[0]);
         for (int i = 0; i < 2; ++i) {
             numer = xprime[1 - i]*midy - yprime[1 - i]*midx;
-            delx[i] = xprime[i]*numer/denom/3;
-            dely[i] = yprime[i]*numer/denom/3;
+            delx[i] = xprime[i]*numer/denom;
+            dely[i] = yprime[i]*numer/denom;
         }
     } else if ((xprime[0]*xprime[1] < 0) || (yprime[0]*yprime[1] < 0)) { // symmetric case : use distance of closest approach
         numer = midx*xprime[0] + midy*yprime[0];
@@ -509,7 +512,7 @@ path_from_sbasis(D2<SBasis> const &B, double tol, bool only_cubicbeziers) {
   If only_cubicbeziers is true, the resulting path may only contain CubicBezier curves.
  TODO: some of this logic should be lifted into svg-path
 */
-std::vector<Geom::Path>
+PathVector
 path_from_piecewise(Geom::Piecewise<Geom::D2<Geom::SBasis> > const &B, double tol, bool only_cubicbeziers) {
     Geom::PathBuilder pb;
     if(B.size() == 0) return pb.peek();

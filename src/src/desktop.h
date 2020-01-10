@@ -72,8 +72,9 @@ typedef struct _GdkEventAny GdkEventAny;
 struct _GdkEventWindowState;
 typedef struct _GdkEventWindowState GdkEventWindowState;
 
+struct InkscapeApplication;
+
 namespace Inkscape {
-  struct Application;
   class LayerModel;
   class MessageContext;
   class Selection;
@@ -101,6 +102,9 @@ namespace Inkscape {
       class SnapIndicator;
   }
 }
+
+#define SP_DESKTOP_ZOOM_MAX 256.0
+#define SP_DESKTOP_ZOOM_MIN 0.01
 
 /**
  * SPDesktop is a subclass of View, implementing an editable document
@@ -315,7 +319,7 @@ public:
     //void push_event_context (GType type, const gchar *config, unsigned int key);
 
     void set_coordinate_status (Geom::Point p);
-    SPItem *getItemFromListAtPointBottom(const GSList *list, Geom::Point const &p) const;
+    SPItem *getItemFromListAtPointBottom(const std::vector<SPItem*> &list, Geom::Point const &p) const;
     SPItem *getItemAtPoint(Geom::Point const &p, bool into_groups, SPItem *upto = NULL) const;
     SPItem *getGroupAtPoint(Geom::Point const &p) const;
     Geom::Point point() const;
@@ -379,6 +383,8 @@ public:
     void clearWaitingCursor();
     bool isWaitingCursor() const { return waiting_cursor; };
 
+    void toggleGuidesLock();
+
     void toggleColorProfAdjust();
     bool colorProfAdjustEnabled();
 
@@ -423,7 +429,6 @@ public:
 
 private:
     Inkscape::UI::View::EditWidgetInterface       *_widget;
-    Inkscape::Application     *_inkscape;
     Inkscape::MessageContext  *_guides_message_context;
     bool _active;
     Geom::Affine _w2d;

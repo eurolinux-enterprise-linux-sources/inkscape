@@ -43,7 +43,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 ######VERSION HISTORY#####
     Ver.       Date                       Notes
@@ -54,8 +54,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 # local library
 import inkex
 import simplestyle
-
-inkex.localize()
+from simpletransform import computePointInNode
     
 symbols = {
     'sq10': (10, 10),
@@ -680,7 +679,7 @@ class DataMatrix(inkex.Effect):
         
             #INKSCAPE GROUP TO CONTAIN EVERYTHING
             
-            centre = self.view_center   #Put in in the centre of the current view
+            centre = tuple(computePointInNode(list(self.view_center), self.current_layer))   #Put in in the centre of the current view
             grp_transform = 'translate' + str( centre ) + ' scale(%f)' % scale
             grp_name = 'DataMatrix'
             grp_attribs = {inkex.addNS('label','inkscape'):grp_name,

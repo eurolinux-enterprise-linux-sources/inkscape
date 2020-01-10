@@ -72,8 +72,9 @@ LPEParallel::doOnApply (SPLPEItem const* lpeitem)
     A = *(curve->first_point());
     B = *(curve->last_point());
     dir = unit_vector(B - A);
-
-    offset_pt.param_set_and_write_new_value((A + B)/2 + dir.ccw() * 100);
+    Geom::Point offset = (A + B)/2 + dir.ccw() * 100;
+    offset_pt.param_update_default(offset);
+    offset_pt.param_setValue(offset, true);
 }
 
 Geom::Piecewise<Geom::D2<Geom::SBasis> >
@@ -90,7 +91,7 @@ LPEParallel::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd
     C = offset_pt - dir * length_left;
     D = offset_pt + dir * length_right;
 
-    output = Piecewise<D2<SBasis> >(D2<SBasis>(Linear(C[X], D[X]), Linear(C[Y], D[Y])));
+    output = Piecewise<D2<SBasis> >(D2<SBasis>(SBasis(C[X], D[X]), SBasis(C[Y], D[Y])));
     
     return output + dir;
 }

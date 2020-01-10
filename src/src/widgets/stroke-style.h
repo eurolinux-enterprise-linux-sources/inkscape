@@ -12,6 +12,8 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+// WHOA! talk about header bloat!
+
 #ifndef SEEN_DIALOGS_STROKE_STYLE_H
 #define SEEN_DIALOGS_STROKE_STYLE_H
 
@@ -31,9 +33,8 @@
 #include <glibmm/i18n.h>
 
 #include "desktop.h"
-#include "desktop-handles.h"
 #include "desktop-style.h"
-#include "dialogs/dialog-events.h"
+#include "ui/dialog-events.h"
 #include "display/canvas-bpath.h" // for SP_STROKE_LINEJOIN_*
 #include "display/drawing.h"
 #include "document-private.h"
@@ -42,7 +43,7 @@
 #include "helper/stock-items.h"
 #include "inkscape.h"
 #include "io/sys.h"
-#include "marker.h"
+#include "sp-marker.h"
 #include "preferences.h"
 #include "path-prefix.h"
 #include "selection.h"
@@ -126,7 +127,8 @@ private:
     /** List of valid types for the stroke-style radio-button widget */
     enum StrokeStyleButtonType {
         STROKE_STYLE_BUTTON_JOIN, ///< A button to set the line-join style
-        STROKE_STYLE_BUTTON_CAP   ///< A button to set the line-cap style
+        STROKE_STYLE_BUTTON_CAP,  ///< A button to set the line-cap style
+        STROKE_STYLE_BUTTON_ORDER ///< A button to set the paint-order style
     };
     
     /**
@@ -152,13 +154,15 @@ private:
     };
 
     void updateLine();
-    void updateAllMarkers(GSList const *objects);
+    void updateAllMarkers(std::vector<SPItem*> const &objects);
     void updateMarkerHist(SPMarkerLoc const which);
     void setDashSelectorFromStyle(SPDashSelector *dsel, SPStyle *style);
     void setJoinType (unsigned const jointype);
     void setCapType (unsigned const captype);
+    void setPaintOrder (gchar const *paint_order);
     void setJoinButtons(Gtk::ToggleButton *active);
     void setCapButtons(Gtk::ToggleButton *active);
+    void setPaintOrderButtons(Gtk::ToggleButton *active);
     void scaleLine();
     void setScaledDash(SPCSSAttr *css, int ndash, double *dash, double offset, double scale);
     void setMarkerColor(SPObject *marker, int loc, SPItem *item);
@@ -203,6 +207,12 @@ private:
     StrokeStyleButton *capButt;
     StrokeStyleButton *capRound;
     StrokeStyleButton *capSquare;
+    StrokeStyleButton *paintOrderFSM;
+    StrokeStyleButton *paintOrderSFM;
+    StrokeStyleButton *paintOrderFMS;
+    StrokeStyleButton *paintOrderMFS;
+    StrokeStyleButton *paintOrderSMF;
+    StrokeStyleButton *paintOrderMSF;
     SPDashSelector *dashSelector;
 
     gboolean update;

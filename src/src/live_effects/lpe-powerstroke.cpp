@@ -15,6 +15,11 @@
 
 #include "sp-shape.h"
 #include "style.h"
+#include "xml/repr.h"
+#include "sp-paint-server.h"
+#include "svg/svg-color.h"
+#include "desktop-style.h"
+#include "svg/css-ostringstream.h"
 #include "display/curve.h"
 
 #include <2geom/path.h>
@@ -22,13 +27,15 @@
 #include <2geom/sbasis-geometric.h>
 #include <2geom/transforms.h>
 #include <2geom/bezier-utils.h>
-#include <2geom/svg-elliptical-arc.h>
+#include <2geom/elliptical-arc.h>
 #include <2geom/sbasis-to-bezier.h>
 #include <2geom/path-sink.h>
 #include <2geom/path-intersection.h>
 #include <2geom/crossing.h>
 #include <2geom/ellipse.h>
+#include <2geom/circle.h>
 #include <2geom/math-utils.h>
+#include "helper/geom.h"
 #include <math.h>
 
 #include "spiro.h"
@@ -41,9 +48,9 @@ namespace Geom {
 static boost::optional<Point> intersection_point( Point const & origin_a, Point const & vector_a,
                                            Point const & origin_b, Point const & vector_b)
 {
-    Coord denom = cross(vector_b, vector_a);
+    Coord denom = cross(vector_a, vector_b);
     if (!are_near(denom,0.)){
-        Coord t = (cross(origin_a,vector_b) + cross(vector_b,origin_b)) / denom;
+        Coord t = (cross(vector_b, origin_a) + cross(origin_b, vector_b)) / denom;
         return origin_a + t * vector_a;
     }
     return boost::none;
@@ -89,71 +96,6 @@ static Ellipse find_ellipse(Point P, Point Q, Point O)
 }
 
 /**
- * Refer to: Weisstein, Eric W. "Circle-Circle Intersection."
-             From MathWorld--A Wolfram Web Resource.
-             http://mathworld.wolfram.com/Circle-CircleIntersection.html
- *
- * @return 0 if no intersection
- * @return 1 if one circle is contained in the other
- * @return 2 if intersections are found (they are written to p0 and p1)
- */
-static int circle_circle_intersection(Circle const &circle0, Circle const &circle1,
-                                      Point & p0, Point & p1)
-{
-    Point X0 = circle0.center();
-    double r0 = circle0.ray();
-    Point X1 = circle1.center();
-    double r1 = circle1.ray();
-
-    /* dx and dy are the vertical and horizontal distances between
-    * the circle centers.
-    */
-    Point D = X1 - X0;
-
-    /* Determine the straight-line distance between the centers. */
-    double d = L2(D);
-
-    /* Check for solvability. */
-    if (d > (r0 + r1))
-    {
-        /* no solution. circles do not intersect. */
-        return 0;
-    }
-    if (d <= fabs(r0 - r1))
-    {
-        /* no solution. one circle is contained in the other */
-        return 1;
-    }
-
-    /* 'point 2' is the point where the line through the circle
-    * intersection points crosses the line between the circle
-    * centers.  
-    */
-
-    /* Determine the distance from point 0 to point 2. */
-    double a = ((r0*r0) - (r1*r1) + (d*d)) / (2.0 * d) ;
-
-    /* Determine the coordinates of point 2. */
-    Point p2 = X0 + D * (a/d);
-
-    /* Determine the distance from point 2 to either of the
-    * intersection points.
-    */
-    double h = std::sqrt((r0*r0) - (a*a));
-
-    /* Now determine the offsets of the intersection points from
-    * point 2.
-    */
-    Point r = (h/d)*rot90(D);
-
-    /* Determine the absolute intersection points. */
-    p0 = p2 + r;
-    p1 = p2 - r;
-
-    return 2;
-}
-
-/**
  * Find circle that touches inside of the curve, with radius matching the curvature, at time value \c t.
  * Because this method internally uses unitTangentAt, t should be smaller than 1.0 (see unitTangentAt).
  */
@@ -161,11 +103,14 @@ static Circle touching_circle( D2<SBasis> const &curve, double t, double tol=0.0
 {
     //Piecewise<SBasis> k = curvature(curve, tol);
     D2<SBasis> dM=derivative(curve);
-    if ( are_near(L2sq(dM(t)),0.) ) {
+    if ( are_near(L2sq(dM(t)),0.) && (dM[0].size() > 1) && (dM[1].size() > 1) ) {
         dM=derivative(dM);
     }
-    if ( are_near(L2sq(dM(t)),0.) ) {   // try second time
+    if ( are_near(L2sq(dM(t)),0.) && (dM[0].size() > 1) && (dM[1].size() > 1) ) {   // try second time
         dM=derivative(dM);
+    }
+    if ( are_near(L2sq(dM(t)),0.) && (dM[0].size() > 1) && (dM[1].size() > 1) ) {   // admit defeat
+        return Geom::Circle(Geom::Point(0., 0.), 0.);
     }
     Piecewise<D2<SBasis> > unitv = unitVector(dM,tol);
     Piecewise<SBasis> dMlength = dot(Piecewise<D2<SBasis> >(dM),unitv);
@@ -185,11 +130,12 @@ namespace Inkscape {
 namespace LivePathEffect {
 
 static const Util::EnumData<unsigned> InterpolatorTypeData[] = {
+    {Geom::Interpolate::INTERP_CUBICBEZIER_SMOOTH,  N_("CubicBezierSmooth"), "CubicBezierSmooth"},
     {Geom::Interpolate::INTERP_LINEAR          , N_("Linear"), "Linear"},
     {Geom::Interpolate::INTERP_CUBICBEZIER          , N_("CubicBezierFit"), "CubicBezierFit"},
-//    {Geom::Interpolate::INTERP_CUBICBEZIER_JOHAN     , N_("CubicBezierJohan"), "CubicBezierJohan"},
+    {Geom::Interpolate::INTERP_CUBICBEZIER_JOHAN     , N_("CubicBezierJohan"), "CubicBezierJohan"},
     {Geom::Interpolate::INTERP_SPIRO  , N_("SpiroInterpolator"), "SpiroInterpolator"},
-    {Geom::Interpolate::INTERP_CENTRIPETAL_CATMULLROM  , N_("Centripetal Catmull-Rom"), "CentripetalCatmullRom"}
+    {Geom::Interpolate::INTERP_CENTRIPETAL_CATMULLROM, N_("Centripetal Catmull-Rom"), "CentripetalCatmullRom"}
 };
 static const Util::EnumDataConverter<unsigned> InterpolatorTypeConverter(InterpolatorTypeData, sizeof(InterpolatorTypeData)/sizeof(*InterpolatorTypeData));
 
@@ -231,12 +177,12 @@ LPEPowerStroke::LPEPowerStroke(LivePathEffectObject *lpeobject) :
     Effect(lpeobject),
     offset_points(_("Offset points"), _("Offset points"), "offset_points", &wr, this),
     sort_points(_("Sort points"), _("Sort offset points according to their time value along the curve"), "sort_points", &wr, this, true),
-    interpolator_type(_("Interpolator type:"), _("Determines which kind of interpolator will be used to interpolate between stroke width along the path"), "interpolator_type", InterpolatorTypeConverter, &wr, this, Geom::Interpolate::INTERP_CUBICBEZIER_JOHAN),
+    interpolator_type(_("Interpolator type:"), _("Determines which kind of interpolator will be used to interpolate between stroke width along the path"), "interpolator_type", InterpolatorTypeConverter, &wr, this, Geom::Interpolate::INTERP_CUBICBEZIER),
     interpolator_beta(_("Smoothness:"), _("Sets the smoothness for the CubicBezierJohan interpolator; 0 = linear interpolation, 1 = smooth"), "interpolator_beta", &wr, this, 0.2),
-    start_linecap_type(_("Start cap:"), _("Determines the shape of the path's start"), "start_linecap_type", LineCapTypeConverter, &wr, this, LINECAP_ROUND),
-    linejoin_type(_("Join:"), _("Determines the shape of the path's corners"), "linejoin_type", LineJoinTypeConverter, &wr, this, LINEJOIN_ROUND),
+    start_linecap_type(_("Start cap:"), _("Determines the shape of the path's start"), "start_linecap_type", LineCapTypeConverter, &wr, this, LINECAP_BUTT),
+    linejoin_type(_("Join:"), _("Determines the shape of the path's corners"), "linejoin_type", LineJoinTypeConverter, &wr, this, LINEJOIN_EXTRP_MITER_ARC),
     miter_limit(_("Miter limit:"), _("Maximum length of the miter (in units of stroke width)"), "miter_limit", &wr, this, 4.),
-    end_linecap_type(_("End cap:"), _("Determines the shape of the path's end"), "end_linecap_type", LineCapTypeConverter, &wr, this, LINECAP_ROUND)
+    end_linecap_type(_("End cap:"), _("Determines the shape of the path's end"), "end_linecap_type", LineCapTypeConverter, &wr, this, LINECAP_BUTT)
 {
     show_orig_path = true;
 
@@ -260,25 +206,57 @@ LPEPowerStroke::~LPEPowerStroke()
 
 }
 
-
 void
 LPEPowerStroke::doOnApply(SPLPEItem const* lpeitem)
 {
-    if (SP_IS_SHAPE(lpeitem)) {
+    if (SP_IS_SHAPE(lpeitem) && offset_points.data().empty()) {
+        SPLPEItem* item = const_cast<SPLPEItem*>(lpeitem);
         std::vector<Geom::Point> points;
-        Geom::PathVector const &pathv = SP_SHAPE(lpeitem)->_curve->get_pathvector();
-        double width = (lpeitem && lpeitem->style) ? lpeitem->style->stroke_width.computed : 1.;
+        Geom::PathVector const &pathv = pathv_to_linear_and_cubic_beziers(SP_SHAPE(lpeitem)->_curve->get_pathvector());
+        double width = (lpeitem && lpeitem->style) ? lpeitem->style->stroke_width.computed / 2 : 1.;
+        
+        SPCSSAttr *css = sp_repr_css_attr_new ();
+        if (lpeitem->style) {
+            if (lpeitem->style->stroke.isPaintserver()) {
+                SPPaintServer * server = lpeitem->style->getStrokePaintServer();
+                if (server) {
+                    Glib::ustring str;
+                    str += "url(#";
+                    str += server->getId();
+                    str += ")";
+                    sp_repr_css_set_property (css, "fill", str.c_str());
+                }
+            } else if (lpeitem->style->stroke.isColor()) {
+                gchar c[64];
+                sp_svg_write_color (c, sizeof(c), lpeitem->style->stroke.value.color.toRGBA32(SP_SCALE24_TO_FLOAT(lpeitem->style->stroke_opacity.value)));
+                sp_repr_css_set_property (css, "fill", c);
+            } else {
+                sp_repr_css_set_property (css, "fill", "none");
+            }
+        } else {
+            sp_repr_css_unset_property (css, "fill");
+        }
+
+        sp_repr_css_set_property(css, "fill-rule", "nonzero");        
+        sp_repr_css_set_property(css, "stroke", "none");
+        
+        sp_desktop_apply_css_recursive(item, css, true);
+        sp_repr_css_attr_unref (css);
+        
+        item->updateRepr();
         if (pathv.empty()) {
-            points.push_back( Geom::Point(0.,width) );
+            points.push_back( Geom::Point(0.2,width) );
             points.push_back( Geom::Point(0.5,width) );
-            points.push_back( Geom::Point(1.,width) );
+            points.push_back( Geom::Point(0.8,width) );
         } else {
             Geom::Path const &path = pathv.front();
             Geom::Path::size_type const size = path.size_default();
-            points.push_back( Geom::Point(0.,width) );
+            if (!path.closed()) {
+                points.push_back( Geom::Point(0.2,width) );
+            }
             points.push_back( Geom::Point(0.5*size,width) );
             if (!path.closed()) {
-                points.push_back( Geom::Point(size,width) );
+                points.push_back( Geom::Point(size - 0.2,width) );
             }
         }
         offset_points.param_set_and_write_new_value(points);
@@ -287,8 +265,43 @@ LPEPowerStroke::doOnApply(SPLPEItem const* lpeitem)
     }
 }
 
+void LPEPowerStroke::doOnRemove(SPLPEItem const* lpeitem)
+{
+    if (SP_IS_SHAPE(lpeitem)) {
+        SPLPEItem *item = const_cast<SPLPEItem*>(lpeitem);
+        SPCSSAttr *css = sp_repr_css_attr_new ();
+        if (lpeitem->style->fill.isPaintserver()) {
+            SPPaintServer * server = lpeitem->style->getFillPaintServer();
+            if (server) {
+                Glib::ustring str;
+                str += "url(#";
+                str += server->getId();
+                str += ")";
+                sp_repr_css_set_property (css, "stroke", str.c_str());
+            }
+        } else if (lpeitem->style->fill.isColor()) {
+            char c[64] = {0};
+            sp_svg_write_color (c, sizeof(c), lpeitem->style->fill.value.color.toRGBA32(SP_SCALE24_TO_FLOAT(lpeitem->style->fill_opacity.value)));
+            sp_repr_css_set_property (css, "stroke", c);
+        } else {
+            sp_repr_css_set_property (css, "stroke", "none");
+        }
+
+        Inkscape::CSSOStringStream os;
+        os << offset_points.median_width() * 2;
+        sp_repr_css_set_property (css, "stroke-width", os.str().c_str());
+
+        sp_repr_css_set_property(css, "fill", "none");
+
+        sp_desktop_apply_css_recursive(item, css, true);
+        sp_repr_css_attr_unref (css);
+
+        item->updateRepr();
+    }
+}
+
 void
-LPEPowerStroke::adjustForNewPath(std::vector<Geom::Path> const & path_in)
+LPEPowerStroke::adjustForNewPath(Geom::PathVector const & path_in)
 {
     if (!path_in.empty()) {
         offset_points.recalculate_controlpoints_for_new_pwd2(path_in[0].toPwSb());
@@ -312,6 +325,8 @@ static Geom::Path path_from_piecewise_fix_cusps( Geom::Piecewise<Geom::D2<Geom::
     if (B.size() == 0) {
         return pb.peek().front();
     }
+
+    pb.setStitching(true);
 
     Geom::Point start = B[0].at0();
     pb.moveTo(start);
@@ -372,7 +387,7 @@ static Geom::Path path_from_piecewise_fix_cusps( Geom::Piecewise<Geom::D2<Geom::
                          break;
                     }
 
-                    pb.arcTo( ellipse.ray(Geom::X), ellipse.ray(Geom::Y), ellipse.rot_angle(),
+                    pb.arcTo( ellipse.ray(Geom::X), ellipse.ray(Geom::Y), ellipse.rotationAngle(),
                               false, width < 0, B[i].at0() );
 
                     break;
@@ -408,24 +423,24 @@ static Geom::Path path_from_piecewise_fix_cusps( Geom::Piecewise<Geom::D2<Geom::
                     // Extrapolate using the curvature at the end of the path segments to join
                     Geom::Circle circle1 = Geom::touching_circle(reverse(B[prev_i]), 0.0);
                     Geom::Circle circle2 = Geom::touching_circle(B[i], 0.0);
-                    Geom::Point points[2];
-                    int solutions = circle_circle_intersection(circle1, circle2, points[0], points[1]);
-                    if (solutions == 2) {
+                    std::vector<Geom::ShapeIntersection> solutions;
+                    solutions = circle1.intersect(circle2);
+                    if (solutions.size() == 2) {
                         Geom::Point sol(0.,0.);
-                        if ( dot(tang2,points[0]-B[i].at0()) > 0 ) {
+                        if ( dot(tang2, solutions[0].point() - B[i].at0()) > 0 ) {
                             // points[0] is bad, choose points[1]
-                            sol = points[1];
-                        } else if ( dot(tang2,points[1]-B[i].at0()) > 0 ) { // points[0] could be good, now check points[1]
+                            sol = solutions[1].point();
+                        } else if ( dot(tang2, solutions[1].point() - B[i].at0()) > 0 ) { // points[0] could be good, now check points[1]
                             // points[1] is bad, choose points[0]
-                            sol = points[0];
+                            sol = solutions[0].point();
                         } else {
                             // both points are good, choose nearest
-                            sol = ( distanceSq(B[i].at0(), points[0]) < distanceSq(B[i].at0(), points[1]) ) ?
-                                    points[0] : points[1];
+                            sol = ( distanceSq(B[i].at0(), solutions[0].point()) < distanceSq(B[i].at0(), solutions[1].point()) ) ?
+                                    solutions[0].point() : solutions[1].point();
                         }
 
-                        Geom::EllipticalArc *arc0 = circle1.arc(B[prev_i].at1(), 0.5*(B[prev_i].at1()+sol), sol, true);
-                        Geom::EllipticalArc *arc1 = circle2.arc(sol, 0.5*(sol+B[i].at0()), B[i].at0(), true);
+                        Geom::EllipticalArc *arc0 = circle1.arc(B[prev_i].at1(), 0.5*(B[prev_i].at1()+sol), sol);
+                        Geom::EllipticalArc *arc1 = circle2.arc(sol, 0.5*(sol+B[i].at0()), B[i].at0());
 
                         if (arc0) {
                             build_from_sbasis(pb,arc0->toSBasis(), tol, false);
@@ -500,7 +515,7 @@ static Geom::Path path_from_piecewise_fix_cusps( Geom::Piecewise<Geom::D2<Geom::
 
                     Geom::Path spiro;
                     Spiro::spiro_run(controlpoints, 4, spiro);
-                    pb.append(spiro.portion(1,spiro.size_open()-1), Geom::Path::STITCH_DISCONTINUOUS);
+                    pb.append(spiro.portion(1, spiro.size_open() - 1));
                     break;
                 }
                 case LINEJOIN_BEVEL:
@@ -519,15 +534,15 @@ static Geom::Path path_from_piecewise_fix_cusps( Geom::Piecewise<Geom::D2<Geom::
                 if (cross.size() != 1) {
                     // empty crossing or too many crossings: default to bevel
                     pb.lineTo(B[i].at0());
-                    pb.append(bzr2, Geom::Path::STITCH_DISCONTINUOUS);
+                    pb.append(bzr2);
                 } else {
                     // :-) quick hack:
                     for (unsigned i=0; i < bzr1.size_open(); ++i) {
                         pb.backspace();
                     }
 
-                    pb.append( bzr1.portion(0, cross[0].ta), Geom::Path::STITCH_DISCONTINUOUS );
-                    pb.append( bzr2.portion(cross[0].tb, bzr2.size_open()), Geom::Path::STITCH_DISCONTINUOUS );
+                    pb.append( bzr1.portion(0, cross[0].ta) );
+                    pb.append( bzr2.portion(cross[0].tb, bzr2.size_open()) );
                 }
             }
         } else {
@@ -541,21 +556,20 @@ static Geom::Path path_from_piecewise_fix_cusps( Geom::Piecewise<Geom::D2<Geom::
 }
 
 
-std::vector<Geom::Path>
-LPEPowerStroke::doEffect_path (std::vector<Geom::Path> const & path_in)
+Geom::PathVector
+LPEPowerStroke::doEffect_path (Geom::PathVector const & path_in)
 {
     using namespace Geom;
 
-    std::vector<Geom::Path> path_out;
+    Geom::PathVector path_out;
     if (path_in.empty()) {
         return path_out;
     }
-
-    // for now, only regard first subpath and ignore the rest
-    Geom::Piecewise<Geom::D2<Geom::SBasis> > pwd2_in = path_in[0].toPwSb();
-
+    Geom::PathVector pathv = pathv_to_linear_and_cubic_beziers(path_in);
+    Geom::Piecewise<Geom::D2<Geom::SBasis> > pwd2_in = pathv[0].toPwSb();
     Piecewise<D2<SBasis> > der = derivative(pwd2_in);
-    Piecewise<D2<SBasis> > n = rot90(unitVector(der));
+    Piecewise<D2<SBasis> > n = unitVector(der,0.0001);
+    n = rot90(n);
     offset_points.set_pwd2(pwd2_in, n);
 
     LineCapType end_linecap = static_cast<LineCapType>(end_linecap_type.get_value());
@@ -568,7 +582,7 @@ LPEPowerStroke::doEffect_path (std::vector<Geom::Path> const & path_in)
     if (sort_points) {
         sort(ts.begin(), ts.end(), compare_offsets);
     }
-    if (path_in[0].closed()) {
+    if (pathv[0].closed()) {
         // add extra points for interpolation between first and last point
         Point first_point = ts.front();
         Point last_point = ts.back();
@@ -590,11 +604,13 @@ LPEPowerStroke::doEffect_path (std::vector<Geom::Path> const & path_in)
     for (std::size_t i = 0, e = ts.size(); i < e; ++i) {
         ts[i][Geom::X] *= xcoord_scaling;
     }
-
     // create stroke path where points (x,y) := (t, offset)
     Geom::Interpolate::Interpolator *interpolator = Geom::Interpolate::Interpolator::create(static_cast<Geom::Interpolate::InterpolatorType>(interpolator_type.get_value()));
     if (Geom::Interpolate::CubicBezierJohan *johan = dynamic_cast<Geom::Interpolate::CubicBezierJohan*>(interpolator)) {
         johan->setBeta(interpolator_beta);
+    }
+    if (Geom::Interpolate::CubicBezierSmooth *smooth = dynamic_cast<Geom::Interpolate::CubicBezierSmooth*>(interpolator)) {
+        smooth->setBeta(interpolator_beta);
     }
     Geom::Path strokepath = interpolator->interpolateToPath(ts);
     delete interpolator;
@@ -608,7 +624,7 @@ LPEPowerStroke::doEffect_path (std::vector<Geom::Path> const & path_in)
     // find time values for which x lies outside path domain
     // and only take portion of x and y that lies within those time values
     std::vector< double > rtsmin = roots (x - pwd2_in.domain().min());
-    std::vector< double > rtsmax = roots (x - pwd2_in.domain().max());
+    std::vector< double > rtsmax = roots (x + pwd2_in.domain().max());
     if ( !rtsmin.empty() && !rtsmax.empty() ) {
         x = portion(x, rtsmin.at(0), rtsmax.at(0));
         y = portion(y, rtsmin.at(0), rtsmax.at(0));
@@ -621,8 +637,7 @@ LPEPowerStroke::doEffect_path (std::vector<Geom::Path> const & path_in)
 
     Geom::Path fixed_path       = path_from_piecewise_fix_cusps( pwd2_out,   y,          jointype, miter_limit, LPE_CONVERSION_TOLERANCE);
     Geom::Path fixed_mirrorpath = path_from_piecewise_fix_cusps( mirrorpath, reverse(y), jointype, miter_limit, LPE_CONVERSION_TOLERANCE);
-
-    if (path_in[0].closed()) {
+    if (pathv[0].closed()) {
         fixed_path.close(true);
         path_out.push_back(fixed_path);
         fixed_mirrorpath.close(true);
@@ -660,13 +675,12 @@ LPEPowerStroke::doEffect_path (std::vector<Geom::Path> const & path_in)
             default:
             {
                 double radius1 = 0.5 * distance(pwd2_out.lastValue(), mirrorpath.firstValue());
-                fixed_path.appendNew<SVGEllipticalArc>( radius1, radius1, M_PI/2., false, y.lastValue() < 0, mirrorpath.firstValue() );
+                fixed_path.appendNew<EllipticalArc>( radius1, radius1, M_PI/2., false, y.lastValue() < 0, mirrorpath.firstValue() );
                 break;
             }
         }
 
-        fixed_path.append(fixed_mirrorpath, Geom::Path::STITCH_DISCONTINUOUS);
-
+        fixed_path.append(fixed_mirrorpath);
         switch (start_linecap) {
             case LINECAP_ZERO_WIDTH:
                 // do nothing
@@ -698,15 +712,13 @@ LPEPowerStroke::doEffect_path (std::vector<Geom::Path> const & path_in)
             default:
             {
                 double radius2 = 0.5 * distance(pwd2_out.firstValue(), mirrorpath.lastValue());
-                fixed_path.appendNew<SVGEllipticalArc>( radius2, radius2, M_PI/2., false, y.firstValue() < 0, pwd2_out.firstValue() );
+                fixed_path.appendNew<EllipticalArc>( radius2, radius2, M_PI/2., false, y.firstValue() < 0, pwd2_out.firstValue() );
                 break;
             }
         }
-
         fixed_path.close(true);
         path_out.push_back(fixed_path);
     }
-
     return path_out;
 }
 

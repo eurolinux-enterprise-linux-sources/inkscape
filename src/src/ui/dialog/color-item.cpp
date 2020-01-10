@@ -17,10 +17,6 @@
 
 #include <errno.h>
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/label.h>
 #include <glibmm/i18n.h>
 #include <cairo.h>
@@ -29,7 +25,7 @@
 #include "color-item.h"
 
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "desktop-style.h"
 #include "display/cairo-utils.h"
 #include "document.h"
@@ -476,7 +472,7 @@ void ColorItem::_updatePreviews()
     {
         SPDesktop *desktop = SP_ACTIVE_DESKTOP;
         if ( desktop ) {
-            SPDocument* document = sp_desktop_document( desktop );
+            SPDocument* document = desktop->getDocument();
             Inkscape::XML::Node *rroot =  document->getReprRoot();
             if ( rroot ) {
 
@@ -575,6 +571,8 @@ Gtk::Widget* ColorItem::getPreview(PreviewStyle style, ViewType view, ::PreviewS
         widget = lbl;
     } else {
         GtkWidget* eekWidget = eek_preview_new();
+        gtk_widget_set_name( eekWidget, "ColorItemPreview" );
+
         EekPreview * preview = EEK_PREVIEW(eekWidget);
         Gtk::Widget* newBlot = Glib::wrap(eekWidget);
         _regenPreview(preview);
@@ -684,6 +682,7 @@ void ColorItem::buttonClicked(bool secondary)
                 descr = secondary? _("Set stroke color to none") : _("Set fill color to none");
                 break;
             }
+//mark
             case ege::PaintDef::RGB: {
                 Glib::ustring colorspec;
                 if ( _grad ){
@@ -696,6 +695,7 @@ void ColorItem::buttonClicked(bool secondary)
                     sp_svg_write_color(c, sizeof(c), rgba);
                     colorspec = c;
                 }
+//end mark
                 sp_repr_css_set_property( css, attrName, colorspec.c_str() );
                 descr = secondary? _("Set stroke color from swatch") : _("Set fill color from swatch");
                 break;
@@ -704,7 +704,7 @@ void ColorItem::buttonClicked(bool secondary)
         sp_desktop_set_style(desktop, css);
         sp_repr_css_attr_unref(css);
 
-        DocumentUndo::done( sp_desktop_document(desktop), SP_VERB_DIALOG_SWATCHES, descr.c_str() );
+        DocumentUndo::done( desktop->getDocument(), SP_VERB_DIALOG_SWATCHES, descr.c_str() );
     }
 }
 

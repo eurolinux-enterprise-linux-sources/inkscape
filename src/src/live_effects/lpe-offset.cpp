@@ -20,7 +20,7 @@
 #include <2geom/path.h>
 #include <2geom/piecewise.h>
 #include <2geom/sbasis-geometric.h>
-#include <2geom/svg-elliptical-arc.h>
+#include <2geom/elliptical-arc.h>
 #include <2geom/transforms.h>
 
 namespace Inkscape {
@@ -31,7 +31,7 @@ LPEOffset::LPEOffset(LivePathEffectObject *lpeobject) :
     offset_pt(_("Offset"), _("Handle to control the distance of the offset from the curve"), "offset_pt", &wr, this)
 {
     show_orig_path = true;
-
+    apply_to_clippath_and_mask = true;
     registerParameter(dynamic_cast<Parameter *>(&offset_pt));
 }
 
@@ -42,7 +42,9 @@ LPEOffset::~LPEOffset()
 void
 LPEOffset::doOnApply(SPLPEItem const* lpeitem)
 {
-    offset_pt.param_set_and_write_new_value(*(SP_SHAPE(lpeitem)->_curve->first_point()));
+    Geom::Point offset = *(SP_SHAPE(lpeitem)->_curve->first_point());
+    offset_pt.param_update_default(offset);
+    offset_pt.param_setValue(offset,true);
 }
 
 static void append_half_circle(Geom::Piecewise<Geom::D2<Geom::SBasis> > &pwd2,
@@ -50,7 +52,7 @@ static void append_half_circle(Geom::Piecewise<Geom::D2<Geom::SBasis> > &pwd2,
     using namespace Geom;
 
     double r = L2(dir);
-    SVGEllipticalArc cap(center + dir, r, r, angle_between(Point(1,0), dir), false, false, center - dir);
+    EllipticalArc cap(center + dir, r, r, angle_between(Point(1,0), dir), false, false, center - dir);
     Piecewise<D2<SBasis> > cap_pwd2(cap.toSBasis());
     pwd2.continuousConcat(cap_pwd2);
 }
@@ -62,7 +64,7 @@ LPEOffset::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_
 
     Piecewise<D2<SBasis> > output;
 
-    double t = nearest_point(offset_pt, pwd2_in);
+    double t = nearest_time(offset_pt, pwd2_in);
     Point A = pwd2_in.valueAt(t);
     double offset = L2(A - offset_pt);
 

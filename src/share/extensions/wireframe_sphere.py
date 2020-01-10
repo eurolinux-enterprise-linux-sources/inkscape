@@ -45,7 +45,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 ######VERSION HISTORY#####
     Ver.       Date                       Notes
@@ -59,8 +59,8 @@ from math import *
 # local library
 import inkex
 import simplestyle
+from simpletransform import computePointInNode
 
-inkex.localize()
 
 #SVG OUTPUT FUNCTIONS ================================================
 def draw_SVG_ellipse((rx, ry), (cx, cy), width, parent, start_end=(0,2*pi),transform='' ):
@@ -129,7 +129,7 @@ class Wireframe_Sphere(inkex.Effect):
 
             #INKSCAPE GROUP TO CONTAIN EVERYTHING
             
-            centre = self.view_center   #Put in in the centre of the current view
+            centre = tuple(computePointInNode(list(self.view_center), self.current_layer))   #Put in in the centre of the current view
             grp_transform = 'translate' + str( centre ) + flip
             grp_name = 'WireframeSphere'
             grp_attribs = {inkex.addNS('label','inkscape'):grp_name,

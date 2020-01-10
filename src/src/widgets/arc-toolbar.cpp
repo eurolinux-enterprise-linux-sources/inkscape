@@ -31,13 +31,13 @@
 #include <glibmm/i18n.h>
 
 #include "arc-toolbar.h"
-#include "desktop-handles.h"
+
 #include "desktop.h"
 #include "document-undo.h"
-#include "ege-adjustment-action.h"
-#include "ege-output-action.h"
-#include "ege-select-one-action.h"
-#include "ink-action.h"
+#include "widgets/ege-adjustment-action.h"
+#include "widgets/ege-output-action.h"
+#include "widgets/ege-select-one-action.h"
+#include "widgets/ink-action.h"
 #include "mod360.h"
 #include "preferences.h"
 #include "selection.h"
@@ -45,6 +45,7 @@
 #include "toolbox.h"
 #include "ui/icon-names.h"
 #include "ui/uxmanager.h"
+#include "ui/tools/arc-tool.h"
 #include "verbs.h"
 #include "widgets/spinbutton-events.h"
 #include "xml/node-event-vector.h"
@@ -80,7 +81,7 @@ sp_arctb_startend_value_changed(GtkAdjustment *adj, GObject *tbl, gchar const *v
 {
     SPDesktop *desktop = static_cast<SPDesktop *>(g_object_get_data( tbl, "desktop" ));
 
-    if (DocumentUndo::getUndoSensitive(sp_desktop_document(desktop))) {
+    if (DocumentUndo::getUndoSensitive(desktop->getDocument())) {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setDouble(Glib::ustring("/tools/shapes/arc/") + value_name, gtk_adjustment_get_value(adj));
     }
@@ -96,12 +97,9 @@ sp_arctb_startend_value_changed(GtkAdjustment *adj, GObject *tbl, gchar const *v
     gchar* namespaced_name = g_strconcat("sodipodi:", value_name, NULL);
 
     bool modmade = false;
-    for (GSList const *items = sp_desktop_selection(desktop)->itemList();
-         items != NULL;
-         items = items->next)
-    {
-        SPItem *item = SP_ITEM(items->data);
-
+    std::vector<SPItem*> itemlist=desktop->getSelection()->itemList();
+    for(std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i){
+        SPItem *item = *i;
         if (SP_IS_GENERICELLIPSE(item)) {
 
             SPGenericEllipse *ge = SP_GENERICELLIPSE(item);
@@ -127,7 +125,7 @@ sp_arctb_startend_value_changed(GtkAdjustment *adj, GObject *tbl, gchar const *v
     sp_arctb_sensitivize( tbl, gtk_adjustment_get_value(adj), gtk_adjustment_get_value(other) );
 
     if (modmade) {
-        DocumentUndo::maybeDone(sp_desktop_document(desktop), value_name, SP_VERB_CONTEXT_ARC,
+        DocumentUndo::maybeDone(desktop->getDocument(), value_name, SP_VERB_CONTEXT_ARC,
                                 _("Arc: Change start/end"));
     }
 
@@ -149,7 +147,7 @@ static void sp_arctb_end_value_changed(GtkAdjustment *adj, GObject *tbl)
 static void sp_arctb_open_state_changed( EgeSelectOneAction *act, GObject *tbl )
 {
     SPDesktop *desktop = static_cast<SPDesktop *>(g_object_get_data( tbl, "desktop" ));
-    if (DocumentUndo::getUndoSensitive(sp_desktop_document(desktop))) {
+    if (DocumentUndo::getUndoSensitive(desktop->getDocument())) {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setBool("/tools/shapes/arc/open", ege_select_one_action_get_active(act) != 0);
     }
@@ -165,11 +163,9 @@ static void sp_arctb_open_state_changed( EgeSelectOneAction *act, GObject *tbl )
     bool modmade = false;
 
     if ( ege_select_one_action_get_active(act) != 0 ) {
-        for (GSList const *items = sp_desktop_selection(desktop)->itemList();
-             items != NULL;
-             items = items->next)
-        {
-            SPItem *item = reinterpret_cast<SPItem*>(items->data);
+    	std::vector<SPItem*> itemlist=desktop->getSelection()->itemList();
+        for(std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i){
+            SPItem *item = *i;
             if (SP_IS_GENERICELLIPSE(item)) {
                 Inkscape::XML::Node *repr = item->getRepr();
                 repr->setAttribute("sodipodi:open", "true");
@@ -178,11 +174,9 @@ static void sp_arctb_open_state_changed( EgeSelectOneAction *act, GObject *tbl )
             }
         }
     } else {
-        for (GSList const *items = sp_desktop_selection(desktop)->itemList();
-             items != NULL;
-             items = items->next)
-        {
-            SPItem *item = reinterpret_cast<SPItem *>(items->data);
+    	std::vector<SPItem*> itemlist=desktop->getSelection()->itemList();
+        for(std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i){
+            SPItem *item = *i;
             if (SP_IS_GENERICELLIPSE(item)) {
                 Inkscape::XML::Node *repr = item->getRepr();
                 repr->setAttribute("sodipodi:open", NULL);
@@ -193,7 +187,7 @@ static void sp_arctb_open_state_changed( EgeSelectOneAction *act, GObject *tbl )
     }
 
     if (modmade) {
-        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_ARC,
+        DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_ARC,
                            _("Arc: Change open/closed"));
     }
 
@@ -270,11 +264,9 @@ static void sp_arc_toolbox_selection_changed(Inkscape::Selection *selection, GOb
 
     purge_repr_listener( tbl, tbl );
 
-    for (GSList const *items = selection->itemList();
-         items != NULL;
-         items = items->next)
-    {
-        SPItem *item = reinterpret_cast<SPItem *>(items->data);
+    std::vector<SPItem*> itemlist=selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i){
+        SPItem *item = *i;
         if (SP_IS_GENERICELLIPSE(item)) {
             n_selected++;
             repr = item->getRepr();
@@ -304,6 +296,7 @@ static void sp_arc_toolbox_selection_changed(Inkscape::Selection *selection, GOb
     }
 }
 
+static void arc_toolbox_check_ec(SPDesktop* dt, Inkscape::UI::Tools::ToolBase* ec, GObject* holder);
 
 void sp_arc_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GObject* holder)
 {
@@ -402,14 +395,22 @@ void sp_arc_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GObjec
         sp_arctb_sensitivize( holder, gtk_adjustment_get_value(adj1), gtk_adjustment_get_value(adj2) );
     }
 
-
-    sigc::connection *connection = new sigc::connection(
-        sp_desktop_selection(desktop)->connectChanged(sigc::bind(sigc::ptr_fun(sp_arc_toolbox_selection_changed), G_OBJECT(holder)))
-        );
-    g_signal_connect( holder, "destroy", G_CALLBACK(delete_connection), connection );
+    desktop->connectEventContextChanged(sigc::bind(sigc::ptr_fun(arc_toolbox_check_ec), holder));
     g_signal_connect( holder, "destroy", G_CALLBACK(purge_repr_listener), holder );
 }
 
+static void arc_toolbox_check_ec(SPDesktop* desktop, Inkscape::UI::Tools::ToolBase* ec, GObject* holder)
+{
+    static sigc::connection changed;
+
+    if (SP_IS_ARC_CONTEXT(ec)) {
+        changed = desktop->getSelection()->connectChanged(sigc::bind(sigc::ptr_fun(sp_arc_toolbox_selection_changed), holder));
+        sp_arc_toolbox_selection_changed(desktop->getSelection(), holder);
+    } else {
+        if (changed)
+            changed.disconnect();
+    }
+}
 
 /*
   Local Variables:

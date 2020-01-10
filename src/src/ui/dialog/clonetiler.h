@@ -11,7 +11,6 @@
 #define __SP_CLONE_TILER_H__
 
 #include "ui/widget/panel.h"
-#include <gtk/gtk.h>
 
 #include "ui/dialog/desktop-tracker.h"
 #include "ui/widget/color-picker.h"
@@ -32,7 +31,7 @@ public:
     virtual ~CloneTiler();
 
     static CloneTiler &getInstance() { return *new CloneTiler(); }
-
+    void show_page_trace();
 protected:
 
     GtkWidget * clonetiler_new_tab(GtkWidget *nb, const gchar *label);
@@ -58,8 +57,8 @@ protected:
     static void clonetiler_keep_bbox_toggled(GtkToggleButton *tb, gpointer /*data*/);
     static void clonetiler_apply(GtkWidget */*widget*/, GtkWidget *dlg);
     static void clonetiler_unclump(GtkWidget */*widget*/, void *);
-    static void clonetiler_change_selection(Inkscape::Application * /*inkscape*/, Inkscape::Selection *selection, GtkWidget *dlg);
-    static void clonetiler_external_change(Inkscape::Application * /*inkscape*/, GtkWidget *dlg);
+    static void clonetiler_change_selection(Inkscape::Selection *selection, GtkWidget *dlg);
+    static void clonetiler_external_change(GtkWidget *dlg);
     static void clonetiler_disconnect_gsignal(GObject *widget, gpointer source);
     static void clonetiler_reset(GtkWidget */*widget*/, GtkWidget *dlg);
     static guint clonetiler_number_of_clones(SPObject *obj);
@@ -114,6 +113,8 @@ private:
     CloneTiler& operator=(CloneTiler const &d);
 
     GtkWidget *dlg;
+    GtkWidget *nb;
+    GtkWidget *b;
     SPDesktop *desktop;
     DesktopTracker deskTrack;
     Inkscape::UI::Widget::ColorPicker *color_picker;
@@ -130,6 +131,7 @@ private:
 
     sigc::connection desktopChangeConn;
     sigc::connection selectChangedConn;
+    sigc::connection externChangedConn;
     sigc::connection subselChangedConn;
     sigc::connection selectModifiedConn;
     sigc::connection color_changed_connection;

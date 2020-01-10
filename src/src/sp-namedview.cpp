@@ -29,7 +29,7 @@
 #include "document.h"
 #include "document-undo.h"
 #include "desktop-events.h"
-#include "desktop-handles.h"
+
 #include "sp-guide.h"
 #include "sp-item-group.h"
 #include "sp-namedview.h"
@@ -51,51 +51,45 @@ using Inkscape::Util::unit_table;
 #define DEFAULTPAGECOLOR 0xffffff00
 
 static void sp_namedview_setup_guides(SPNamedView * nv);
+static void sp_namedview_lock_guides(SPNamedView * nv);
 static void sp_namedview_show_single_guide(SPGuide* guide, bool show);
+static void sp_namedview_lock_single_guide(SPGuide* guide, bool show);
 
 static gboolean sp_str_to_bool(const gchar *str);
 static gboolean sp_nv_read_opacity(const gchar *str, guint32 *color);
 
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createNamedView() {
-		return new SPNamedView();
-	}
-
-	bool namedViewRegistered = SPFactory::instance().registerObject("sodipodi:namedview", createNamedView);
-}
-
 SPNamedView::SPNamedView() : SPObjectGroup(), snap_manager(this) {
-	this->zoom = 0;
-	this->guidecolor = 0;
-	this->guidehicolor = 0;
-	this->views = NULL;
-	this->borderlayer = 0;
-//	this->units = NULL;
-	this->window_x = 0;
-	this->cy = 0;
-	this->window_y = 0;
-    this->svg_units = unit_table.getUnit("px"); // legacy behavior: if no viewbox present, default to 'px' units
+
+    this->zoom = 0;
+    this->guidecolor = 0;
+    this->guidehicolor = 0;
+    this->views.clear();
+    this->borderlayer = 0;
+    this->page_size_units = NULL;
+    this->window_x = 0;
+    this->cy = 0;
+    this->window_y = 0;
     this->display_units = NULL;
-	this->page_size_units = NULL;
-	this->pagecolor = 0;
-	this->cx = 0;
-	this->pageshadow = 0;
-	this->window_width = 0;
-	this->window_height = 0;
-	this->window_maximized = 0;
-	this->bordercolor = 0;
+    this->page_size_units = NULL;
+    this->pagecolor = 0;
+    this->cx = 0;
+    this->pageshadow = 0;
+    this->window_width = 0;
+    this->window_height = 0;
+    this->window_maximized = 0;
+    this->bordercolor = 0;
 
     this->editable = TRUE;
     this->showguides = TRUE;
+    this->lockguides = false;
     this->grids_visible = false;
     this->showborder = TRUE;
+    this->pagecheckerboard = FALSE;
     this->showpageshadow = TRUE;
 
-    this->guides = NULL;
+    this->guides.clear();
     this->viewcount = 0;
-    this->grids = NULL;
+    this->grids.clear();
 
     this->default_layer_id = 0;
 
@@ -214,6 +208,7 @@ void SPNamedView::build(SPDocument *document, Inkscape::XML::Node *repr) {
     this->readAttr( "bordercolor" );
     this->readAttr( "borderopacity" );
     this->readAttr( "pagecolor" );
+    this->readAttr( "inkscape:pagecheckerboard" );
     this->readAttr( "inkscape:pageopacity" );
     this->readAttr( "inkscape:pageshadow" );
     this->readAttr( "inkscape:zoom" );
@@ -250,43 +245,31 @@ void SPNamedView::build(SPDocument *document, Inkscape::XML::Node *repr) {
     this->readAttr( "inkscape:snap-page" );
     this->readAttr( "inkscape:current-layer" );
     this->readAttr( "inkscape:connector-spacing" );
+    this->readAttr( "inkscape:lockguides" );
 
     /* Construct guideline list */
     for (SPObject *o = this->firstChild() ; o; o = o->getNext() ) {
         if (SP_IS_GUIDE(o)) {
             SPGuide * g = SP_GUIDE(o);
-            this->guides = g_slist_prepend(this->guides, g);
+            this->guides.push_back(g);
             //g_object_set(G_OBJECT(g), "color", nv->guidecolor, "hicolor", nv->guidehicolor, NULL);
             g->setColor(this->guidecolor);
             g->setHiColor(this->guidehicolor);
+            g->readAttr( "inkscape:color" );
         }
     }
 
     // backwards compatibility with grid settings (pre 0.46)
     sp_namedview_generate_old_grid(this, document, repr);
-
-    // If viewbox defined: try to calculate the SVG unit from document width and viewbox
-    if (document->getRoot()->viewBox_set) {
-        Inkscape::Util::Quantity svgwidth = document->getWidth();
-        Geom::Rect viewbox = document->getRoot()->viewBox;
-        double factor = svgwidth.value(unit_table.primary(Inkscape::Util::UNIT_TYPE_LINEAR)) / viewbox.width(); 
-        svg_units = unit_table.findUnit(factor, Inkscape::Util::UNIT_TYPE_LINEAR);
-    }
 }
 
 void SPNamedView::release() {
-    if (this->guides) {
-        g_slist_free(this->guides);
-        this->guides = NULL;
-    }
+        this->guides.clear();
 
     // delete grids:
-    while ( this->grids ) {
-        Inkscape::CanvasGrid *gr = (Inkscape::CanvasGrid *)this->grids->data; // get first entry
-        delete gr;
-        this->grids = g_slist_remove_link(this->grids, this->grids); // deletes first entry
-    }
-
+    for(std::vector<Inkscape::CanvasGrid *>::const_iterator it=this->grids.begin();it!=this->grids.end();++it )
+        delete *it;
+    this->grids.clear();
     SPObjectGroup::release();
 }
 
@@ -332,9 +315,9 @@ void SPNamedView::set(unsigned int key, const gchar* value) {
                 this->guidecolor = (this->guidecolor & 0xff) | sp_svg_read_color(value, this->guidecolor);
             }
 
-            for (GSList *l = this->guides; l != NULL; l = l->next) {
-                //g_object_set(G_OBJECT(l->data), "color", nv->guidecolor, NULL);
-            	SP_GUIDE(l->data)->setColor(this->guidecolor);
+            for(std::vector<SPGuide *>::const_iterator it=this->guides.begin();it!=this->guides.end();++it ) {
+                (*it)->setColor(this->guidecolor);
+                (*it)->readAttr("inkscape:color");
             }
 
             this->requestModified(SP_OBJECT_MODIFIED_FLAG);
@@ -343,9 +326,9 @@ void SPNamedView::set(unsigned int key, const gchar* value) {
             this->guidecolor = (this->guidecolor & 0xffffff00) | (DEFAULTGUIDECOLOR & 0xff);
             sp_nv_read_opacity(value, &this->guidecolor);
 
-            for (GSList *l = this->guides; l != NULL; l = l->next) {
-                //g_object_set(G_OBJECT(l->data), "color", nv->guidecolor, NULL);
-            	SP_GUIDE(l->data)->setColor(this->guidecolor);
+            for(std::vector<SPGuide *>::const_iterator it=this->guides.begin();it!=this->guides.end();++it ) {
+                (*it)->setColor(this->guidecolor);
+                (*it)->readAttr("inkscape:color");
             }
 
             this->requestModified(SP_OBJECT_MODIFIED_FLAG);
@@ -356,10 +339,8 @@ void SPNamedView::set(unsigned int key, const gchar* value) {
             if (value) {
                 this->guidehicolor = (this->guidehicolor & 0xff) | sp_svg_read_color(value, this->guidehicolor);
             }
-
-            for (GSList *l = this->guides; l != NULL; l = l->next) {
-                //g_object_set(G_OBJECT(l->data), "hicolor", nv->guidehicolor, NULL);
-            	SP_GUIDE(l->data)->setHiColor(this->guidehicolor);
+            for(std::vector<SPGuide *>::const_iterator it=this->guides.begin();it!=this->guides.end();++it ) {
+            	(*it)->setHiColor(this->guidehicolor);
             }
 
             this->requestModified(SP_OBJECT_MODIFIED_FLAG);
@@ -367,10 +348,8 @@ void SPNamedView::set(unsigned int key, const gchar* value) {
     case SP_ATTR_GUIDEHIOPACITY:
             this->guidehicolor = (this->guidehicolor & 0xffffff00) | (DEFAULTGUIDEHICOLOR & 0xff);
             sp_nv_read_opacity(value, &this->guidehicolor);
-
-            for (GSList *l = this->guides; l != NULL; l = l->next) {
-                //g_object_set(G_OBJECT(l->data), "hicolor", nv->guidehicolor, NULL);
-            	SP_GUIDE(l->data)->setHiColor(this->guidehicolor);
+            for(std::vector<SPGuide *>::const_iterator it=this->guides.begin();it!=this->guides.end();++it ) {
+            	(*it)->setHiColor(this->guidehicolor);
             }
 
             this->requestModified(SP_OBJECT_MODIFIED_FLAG);
@@ -401,6 +380,10 @@ void SPNamedView::set(unsigned int key, const gchar* value) {
             if (value) {
                 this->pagecolor = (this->pagecolor & 0xff) | sp_svg_read_color(value, this->pagecolor);
             }
+            this->requestModified(SP_OBJECT_MODIFIED_FLAG);
+            break;
+    case SP_ATTR_INKSCAPE_PAGECHECKERBOARD:
+            this->pagecheckerboard = (value) ? sp_str_to_bool (value) : false;
             this->requestModified(SP_OBJECT_MODIFIED_FLAG);
             break;
     case SP_ATTR_INKSCAPE_PAGEOPACITY:
@@ -525,7 +508,7 @@ void SPNamedView::set(unsigned int key, const gchar* value) {
             this->requestModified(SP_OBJECT_MODIFIED_FLAG);
             break;
     case SP_ATTR_INKSCAPE_SNAP_NODE_CUSP:
-            this->snap_manager.snapprefs.setTargetSnappable(Inkscape::SNAPTARGET_NODE_CUSP, value ? sp_str_to_bool(value) : FALSE);
+            this->snap_manager.snapprefs.setTargetSnappable(Inkscape::SNAPTARGET_NODE_CUSP, value ? sp_str_to_bool(value) : TRUE);
             this->requestModified(SP_OBJECT_MODIFIED_FLAG);
             break;
     case SP_ATTR_INKSCAPE_SNAP_BBOX_EDGE:
@@ -561,7 +544,7 @@ void SPNamedView::set(unsigned int key, const gchar* value) {
             static Inkscape::Util::Unit const *px = unit_table.getUnit("px");
             Inkscape::Util::Unit const *new_unit = px;
 
-            if (value) {
+            if (value && document->getRoot()->viewBox_set) {
                 Inkscape::Util::Unit const *const req_unit = unit_table.getUnit(value);
                 if ( !unit_table.hasUnit(value) ) {
                     g_warning("Unrecognized unit `%s'", value);
@@ -582,6 +565,7 @@ void SPNamedView::set(unsigned int key, const gchar* value) {
             break;
     }
     case SP_ATTR_UNITS: {
+        // Only used in "Custom size" section of Document Properties dialog
             Inkscape::Util::Unit const *new_unit = NULL;
 
             if (value) {
@@ -604,6 +588,11 @@ void SPNamedView::set(unsigned int key, const gchar* value) {
             this->requestModified(SP_OBJECT_MODIFIED_FLAG);
             break;
     }
+    case SP_ATTR_INKSCAPE_LOCKGUIDES:
+        this->lockguides = value ? sp_str_to_bool(value) : FALSE;
+        sp_namedview_lock_guides(this);
+        this->requestModified(SP_OBJECT_MODIFIED_FLAG);
+        break;
     default:
             SPObjectGroup::set(key, value);
             break;
@@ -618,10 +607,9 @@ static Inkscape::CanvasGrid*
 sp_namedview_add_grid(SPNamedView *nv, Inkscape::XML::Node *repr, SPDesktop *desktop) {
     Inkscape::CanvasGrid* grid = NULL;
     //check if namedview already has an object for this grid
-    for (GSList *l = nv->grids; l != NULL; l = l->next) {
-        Inkscape::CanvasGrid* g = (Inkscape::CanvasGrid*) l->data;
-        if (repr == g->repr) {
-            grid = g;
+    for(std::vector<Inkscape::CanvasGrid *>::const_iterator it=nv->grids.begin();it!=nv->grids.end();++it ) {
+        if (repr == (*it)->repr) {
+            grid = (*it);
             break;
         }
     }
@@ -634,14 +622,13 @@ sp_namedview_add_grid(SPNamedView *nv, Inkscape::XML::Node *repr, SPDesktop *des
             return NULL;
         }
         grid = Inkscape::CanvasGrid::NewGrid(nv, repr, nv->document, gridtype);
-        nv->grids = g_slist_append(nv->grids, grid);
+        nv->grids.push_back(grid);
     }
 
     if (!desktop) {
         //add canvasitem to all desktops
-        for (GSList *l = nv->views; l != NULL; l = l->next) {
-            SPDesktop *dt = static_cast<SPDesktop*>(l->data);
-            grid->createCanvasItem(dt);
+        for(std::vector<SPDesktop *>::const_iterator it=nv->views.begin();it!=nv->views.end();++it ) {
+            grid->createCanvasItem(*it);
         }
     } else {
         //add canvasitem only for specified desktop
@@ -664,21 +651,23 @@ void SPNamedView::child_added(Inkscape::XML::Node *child, Inkscape::XML::Node *r
 
         if (SP_IS_GUIDE(no)) {
             SPGuide *g = (SPGuide *) no;
-            this->guides = g_slist_prepend(this->guides, g);
+            this->guides.push_back(g);
 
             //g_object_set(G_OBJECT(g), "color", this->guidecolor, "hicolor", this->guidehicolor, NULL);
             g->setColor(this->guidecolor);
             g->setHiColor(this->guidehicolor);
+            g->readAttr("inkscape:color");
 
             if (this->editable) {
-                for (GSList *l = this->views; l != NULL; l = l->next) {
-                    g->SPGuide::showSPGuide(static_cast<SPDesktop*>(l->data)->guides, (GCallback) sp_dt_guide_event);
+                for(std::vector<SPDesktop *>::const_iterator it=this->views.begin();it!=this->views.end();++it ) {
+                    g->SPGuide::showSPGuide((*it)->guides, (GCallback) sp_dt_guide_event);
 
-                    if (static_cast<SPDesktop*>(l->data)->guides_active) {
-                        g->sensitize(sp_desktop_canvas(static_cast<SPDesktop*> (l->data)), TRUE);
+                    if ((*it)->guides_active) {
+                        g->sensitize((*it)->getCanvas(), TRUE);
                     }
 
                     sp_namedview_show_single_guide(SP_GUIDE(g), this->showguides);
+                    sp_namedview_lock_single_guide(SP_GUIDE(g), this->lockguides);
                 }
             }
         }
@@ -687,27 +676,19 @@ void SPNamedView::child_added(Inkscape::XML::Node *child, Inkscape::XML::Node *r
 
 void SPNamedView::remove_child(Inkscape::XML::Node *child) {
     if (!strcmp(child->name(), "inkscape:grid")) {
-        for ( GSList *iter = this->grids ; iter ; iter = iter->next ) {
-            Inkscape::CanvasGrid *gr = (Inkscape::CanvasGrid *)iter->data;
-
-            if ( gr->repr == child ) {
-                delete gr;
-                this->grids = g_slist_remove_link(this->grids, iter);
+        for(std::vector<Inkscape::CanvasGrid *>::iterator it=this->grids.begin();it!=this->grids.end();++it ) {
+            if ( (*it)->repr == child ) {
+                delete (*it);
+                this->grids.erase(it);
                 break;
             }
         }
     } else {
-        GSList **ref = &this->guides;
-        for ( GSList *iter = this->guides ; iter ; iter = iter->next ) {
-
-            if ( reinterpret_cast<SPObject *>(iter->data)->getRepr() == child ) {
-                *ref = iter->next;
-                iter->next = NULL;
-                g_slist_free_1(iter);
+        for(std::vector<SPGuide *>::iterator it=this->guides.begin();it!=this->guides.end();++it ) {
+            if ( (*it)->getRepr() == child ) {
+                this->guides.erase(it); 
                 break;
-            }
-
-            ref = &iter->next;
+            }   
         }
     }
 
@@ -730,15 +711,16 @@ Inkscape::XML::Node* SPNamedView::write(Inkscape::XML::Document *xml_doc, Inksca
 
 void SPNamedView::show(SPDesktop *desktop)
 {
-    for (GSList *l = guides; l != NULL; l = l->next) {
-        SP_GUIDE(l->data)->showSPGuide( desktop->guides, (GCallback) sp_dt_guide_event);
+    for(std::vector<SPGuide *>::const_iterator it=this->guides.begin();it!=this->guides.end();++it ) {
+        (*it)->showSPGuide( desktop->guides, (GCallback) sp_dt_guide_event);
         if (desktop->guides_active) {
-            SP_GUIDE(l->data)->sensitize(sp_desktop_canvas(desktop), TRUE);
+            (*it)->sensitize(desktop->getCanvas(), TRUE);
         }
-        sp_namedview_show_single_guide(SP_GUIDE(l->data), showguides);
+        sp_namedview_show_single_guide((*it), showguides);
+        sp_namedview_lock_single_guide((*it), lockguides);
     }
 
-    views = g_slist_prepend(views, desktop);
+    views.push_back(desktop);
 
     // generate grids specified in SVG:
     Inkscape::XML::Node *repr = this->getRepr();
@@ -755,7 +737,7 @@ void SPNamedView::show(SPDesktop *desktop)
 
 namespace {
 
-gint const MIN_ONSCREEN_DISTANCE = 50;
+gint const MIN_ONSCREEN_DISTANCE = 100;
 gdouble const NEWDOC_X_SCALE = 0.75;
 gdouble const NEWDOC_Y_SCALE = NEWDOC_X_SCALE;
 
@@ -775,12 +757,6 @@ Geom::Point calcAnchorPoint(gint const x, gint const y,
 
 } // namespace
 
-void SPNamedView::writeNewGrid(SPDocument *document,int gridtype)
-{
-    g_assert(this->getRepr() != NULL);
-    Inkscape::CanvasGrid::writeNewGridToRepr(this->getRepr(),document,static_cast<Inkscape::GridType>(gridtype));
-}
-
 /*
  * Restores window geometry from the document settings or defaults in prefs
  */
@@ -789,22 +765,42 @@ void sp_namedview_window_from_document(SPDesktop *desktop)
     SPNamedView *nv = desktop->namedview;
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     bool geometry_from_file = (1 == prefs->getInt("/options/savewindowgeometry/value", 0));
+    bool geometry_from_last = (2 == prefs->getInt("/options/savewindowgeometry/value", 0));
     gint default_geometry = prefs->getInt("/options/defaultwindowsize/value", 1);
     bool new_document = (nv->window_width <= 0) || (nv->window_height <= 0);
     bool show_dialogs = true;
 
     // restore window size and position stored with the document
-    bool sizeSet = false;
-
-    if ((geometry_from_file && nv->window_maximized) || (new_document && (default_geometry == 2))) {
+    if (geometry_from_last) {
+        // do nothing, as we already have code for that in interface.cpp
+        // TODO: Probably should not do similar things in two places
+    } else if ((geometry_from_file && nv->window_maximized) || (new_document && (default_geometry == 2))) {
         Gtk::Window *win = desktop->getToplevel();
         if (win) {
             win->maximize();
         }
-        sizeSet = true;
-    } else if (geometry_from_file && !nv->window_maximized) {
-        gint w = MIN(gdk_screen_width(), nv->window_width);
-        gint h = MIN(gdk_screen_height(), nv->window_height);
+    } else {
+        // gdk_screen_width() / gdk_screen_height() return the dimensions of all displays combined
+        // therefore we have to get the dimensions of one monitor explicitly (currently the primary monitor)
+        // TODO: account for multi-monitor setups (i.e. on which monitor do we want to display Inkscape?)
+        gint monitor_number;
+        GdkRectangle monitor_geometry;
+        monitor_number = gdk_screen_get_primary_monitor(gdk_screen_get_default());
+        gdk_screen_get_monitor_geometry(gdk_screen_get_default(), monitor_number, &monitor_geometry);
+
+        gint w = monitor_geometry.width;
+        gint h = monitor_geometry.height;
+        bool move_to_screen = false;
+        if (geometry_from_file and !new_document) {
+            w = MIN(w, nv->window_width);
+            h = MIN(h, nv->window_height);          
+            move_to_screen = true;
+        } else if (default_geometry == 1) {
+            w *= NEWDOC_X_SCALE;
+            h *= NEWDOC_Y_SCALE;
+        } else if (default_geometry == 0) {
+            w = h = 0; // use the smallest possible window size; could be a factor like NEWDOC_X_SCALE in future
+        } 
         if ((w > 0) && (h > 0)) {
 #ifndef WIN32
             gint dx= 0;
@@ -818,20 +814,12 @@ void sp_namedview_window_from_document(SPDesktop *desktop)
                 show_dialogs = FALSE;
             }
 #endif
-            Geom::Point origin = calcAnchorPoint(nv->window_x, nv->window_y, w, h, MIN_ONSCREEN_DISTANCE);
             desktop->setWindowSize(w, h);
-            desktop->setWindowPosition(origin);
-            sizeSet = true;
+            if (move_to_screen) {
+                Geom::Point origin = calcAnchorPoint(nv->window_x, nv->window_y, w, h, MIN_ONSCREEN_DISTANCE);
+                desktop->setWindowPosition(origin);
+            }
         }
-    }
-
-    if (!sizeSet && new_document && (default_geometry == 1))
-    {
-        gint w = gdk_screen_width() * NEWDOC_X_SCALE;
-        gint h = gdk_screen_height() * NEWDOC_Y_SCALE;
-        Geom::Point origin = calcAnchorPoint(nv->window_x, nv->window_y, w, h, MIN_ONSCREEN_DISTANCE);
-        desktop->setWindowSize(w, h);
-        desktop->setWindowPosition(origin);
     }
 
     // restore zoom and view
@@ -839,7 +827,7 @@ void sp_namedview_window_from_document(SPDesktop *desktop)
         && nv->cx != HUGE_VAL && !IS_NAN(nv->cx)
         && nv->cy != HUGE_VAL && !IS_NAN(nv->cy)) {
         desktop->zoom_absolute(nv->cx, nv->cy, nv->zoom);
-    } else if (sp_desktop_document(desktop)) { // document without saved zoom, zoom to its page
+    } else if (desktop->getDocument()) { // document without saved zoom, zoom to its page
         desktop->zoom_page();
     }
 
@@ -849,6 +837,12 @@ void sp_namedview_window_from_document(SPDesktop *desktop)
     if (show_dialogs) {
         desktop->show_dialogs();
     }
+}
+
+void SPNamedView::writeNewGrid(SPDocument *document,int gridtype)
+{
+    g_assert(this->getRepr() != NULL);
+    Inkscape::CanvasGrid::writeNewGridToRepr(this->getRepr(),document,static_cast<Inkscape::GridType>(gridtype));
 }
 
 bool SPNamedView::getSnapGlobal() const
@@ -899,8 +893,8 @@ void sp_namedview_document_from_window(SPDesktop *desktop)
     Geom::Rect const r = desktop->get_display_area();
 
     // saving window geometry is not undoable
-    bool saved = DocumentUndo::getUndoSensitive(sp_desktop_document(desktop));
-    DocumentUndo::setUndoSensitive(sp_desktop_document(desktop), false);
+    bool saved = DocumentUndo::getUndoSensitive(desktop->getDocument());
+    DocumentUndo::setUndoSensitive(desktop->getDocument(), false);
 
     if (save_viewport_in_file) {
         sp_repr_set_svg_double(view, "inkscape:zoom", desktop->current_zoom());
@@ -921,51 +915,56 @@ void sp_namedview_document_from_window(SPDesktop *desktop)
     view->setAttribute("inkscape:current-layer", desktop->currentLayer()->getId());
 
     // restore undoability
-    DocumentUndo::setUndoSensitive(sp_desktop_document(desktop), saved);
+    DocumentUndo::setUndoSensitive(desktop->getDocument(), saved);
 }
 
 void SPNamedView::hide(SPDesktop const *desktop)
 {
     g_assert(desktop != NULL);
-    g_assert(g_slist_find(views, desktop));
-
-    for (GSList *l = guides; l != NULL; l = l->next) {
-        SP_GUIDE(l->data)->hideSPGuide(sp_desktop_canvas(desktop));
+    g_assert(std::find(views.begin(),views.end(),desktop)!=views.end());
+    for(std::vector<SPGuide *>::iterator it=this->guides.begin();it!=this->guides.end();++it ) {
+        (*it)->hideSPGuide(desktop->getCanvas());
     }
-
-    views = g_slist_remove(views, desktop);
+    views.erase(std::remove(views.begin(),views.end(),desktop),views.end());
 }
 
-void SPNamedView::activateGuides(gpointer desktop, gboolean active)
+void SPNamedView::activateGuides(void* desktop, bool active)
 {
     g_assert(desktop != NULL);
-    g_assert(g_slist_find(views, desktop));
+    g_assert(std::find(views.begin(),views.end(),desktop)!=views.end());
 
     SPDesktop *dt = static_cast<SPDesktop*>(desktop);
-
-    for (GSList *l = guides; l != NULL; l = l->next) {
-        SP_GUIDE(l->data)->sensitize( sp_desktop_canvas(dt), active);
+    for(std::vector<SPGuide *>::iterator it=this->guides.begin();it!=this->guides.end();++it ) {
+        (*it)->sensitize(dt->getCanvas(), active);
     }
 }
 
 static void sp_namedview_setup_guides(SPNamedView *nv)
 {
-    for (GSList *l = nv->guides; l != NULL; l = l->next) {
-        sp_namedview_show_single_guide(SP_GUIDE(l->data), nv->showguides);
+    for(std::vector<SPGuide *>::iterator it=nv->guides.begin();it!=nv->guides.end();++it ) {
+        sp_namedview_show_single_guide(*it, nv->showguides);
+    }
+}
+
+static void sp_namedview_lock_guides(SPNamedView *nv)
+{
+    for(std::vector<SPGuide *>::iterator it=nv->guides.begin();it!=nv->guides.end();++it ) {
+        sp_namedview_lock_single_guide(*it, nv->lockguides);
     }
 }
 
 static void sp_namedview_show_single_guide(SPGuide* guide, bool show)
 {
-    for (GSList *v = guide->views; v != NULL; v = v->next) {
-        if (show) {
-            sp_canvas_item_show(SP_CANVAS_ITEM(v->data));
-            sp_canvas_item_show(SP_CANVAS_ITEM(SP_GUIDELINE(v->data)->origin));
-        } else {
-            sp_canvas_item_hide(SP_CANVAS_ITEM(v->data));
-            sp_canvas_item_hide(SP_CANVAS_ITEM(SP_GUIDELINE(v->data)->origin));
-        }
+    if (show) {
+        guide->showSPGuide();
+    } else {
+        guide->hideSPGuide();
     }
+}
+
+static void sp_namedview_lock_single_guide(SPGuide* guide, bool locked)
+{
+    guide->set_locked(locked, true);
 }
 
 void sp_namedview_toggle_guides(SPDocument *doc, Inkscape::XML::Node *repr)
@@ -983,6 +982,23 @@ void sp_namedview_toggle_guides(SPDocument *doc, Inkscape::XML::Node *repr)
     sp_repr_set_boolean(repr, "showguides", v);
     DocumentUndo::setUndoSensitive(doc, saved);
 
+    doc->setModifiedSinceSave();
+}
+
+void sp_namedview_guides_toggle_lock(SPDocument *doc, Inkscape::XML::Node *repr)
+{
+    unsigned int v;
+    unsigned int set = sp_repr_get_boolean(repr, "inkscape:lockguides", &v);
+    if (!set) { // hide guides if not specified, for backwards compatibility
+        v = true;
+    } else {
+        v = !v;
+    }
+
+    bool saved = DocumentUndo::getUndoSensitive(doc);
+    DocumentUndo::setUndoSensitive(doc, false);
+    sp_repr_set_boolean(repr, "inkscape:lockguides", v);
+    DocumentUndo::setUndoSensitive(doc, saved);
     doc->setModifiedSinceSave();
 }
 
@@ -1017,7 +1033,7 @@ guint SPNamedView::getViewCount()
     return ++viewcount;
 }
 
-GSList const *SPNamedView::getViewList() const
+std::vector<SPDesktop *> const SPNamedView::getViewList() const
 {
     return views;
 }
@@ -1133,17 +1149,11 @@ double SPNamedView::getMarginLength(gchar const * const key,
 
 /**
  * Returns namedview's default unit.
- * If no default unit is set, "pt" is returned
+ * If no default unit is set, "px" is returned
  */
-Inkscape::Util::Unit const * SPNamedView::getDefaultUnit() const
+Inkscape::Util::Unit const * SPNamedView::getDisplayUnit() const
 {
-    return display_units ? display_units : unit_table.getUnit("pt");
-}
-
-Inkscape::Util::Unit const & SPNamedView::getSVGUnit() const
-{
-    assert(svg_units);
-    return *svg_units; 
+    return display_units ? display_units : unit_table.getUnit("px");
 }
 
 /**
@@ -1151,38 +1161,33 @@ Inkscape::Util::Unit const & SPNamedView::getSVGUnit() const
  */
 Inkscape::CanvasGrid * sp_namedview_get_first_enabled_grid(SPNamedView *namedview)
 {
-    for (GSList const * l = namedview->grids; l != NULL; l = l->next) {
-        Inkscape::CanvasGrid * grid = (Inkscape::CanvasGrid*) l->data;
-        if (grid->isEnabled())
-            return grid;
+    for(std::vector<Inkscape::CanvasGrid *>::const_iterator it=namedview->grids.begin();it!=namedview->grids.end();++it ) {
+        if ((*it)->isEnabled())
+            return (*it);
     }
 
     return NULL;
 }
 
 void SPNamedView::translateGuides(Geom::Translate const &tr) {
-    for (GSList *l = guides; l != NULL; l = l->next) {
-        SPGuide &guide = *SP_GUIDE(l->data);
-        Geom::Point point_on_line = guide.point_on_line;
+    for(std::vector<SPGuide *>::iterator it=this->guides.begin();it!=this->guides.end();++it ) {
+        SPGuide &guide = *(*it);
+        Geom::Point point_on_line = guide.getPoint();
         point_on_line *= tr;
-        sp_guide_moveto(guide, point_on_line, true);
+        guide.moveto(point_on_line, true);
     }
 }
 
 void SPNamedView::translateGrids(Geom::Translate const &tr) {
-    for (GSList *l = grids; l != NULL; l = l->next) {
-        Inkscape::CanvasGrid* g = reinterpret_cast<Inkscape::CanvasGrid*>(l->data);
-        if (g) {
-            g->setOrigin(g->origin * tr);
-        }
+    for(std::vector<Inkscape::CanvasGrid *>::iterator it=this->grids.begin();it!=this->grids.end();++it ) {
+        (*it)->setOrigin((*it)->origin * tr);
     }
 }
 
 void SPNamedView::scrollAllDesktops(double dx, double dy, bool is_scrolling) {
-        for(GSList *l = views; l; l = l->next) {
-            SPDesktop *desktop = static_cast<SPDesktop *>(l->data);
-            desktop->scroll_world_in_svg_coords(dx, dy, is_scrolling);
-        }
+    for(std::vector<SPDesktop *>::iterator it=this->views.begin();it!=this->views.end();++it ) {
+        (*it)->scroll_world_in_svg_coords(dx, dy, is_scrolling);
+    }
 }
 
 

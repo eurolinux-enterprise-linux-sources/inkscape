@@ -16,19 +16,15 @@
 #include <glibmm.h>
 
 #ifdef WIN32
-#if WITH_GLIBMM_2_32
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-# include <glibmm/threads.h>
-#endif
-#endif
 
-#include "gc-core.h"
+#include "filedialogimpl-gtkmm.h"
+ 
+#include "inkgc/gc-core.h"
  // define WINVER high enough so we get the correct OPENFILENAMEW size
 #ifndef WINVER
 #define WINVER 0x0500 
 #endif
 #include <windows.h>
-#include "filedialogimpl-gtkmm.h"
 
 
 namespace Inkscape

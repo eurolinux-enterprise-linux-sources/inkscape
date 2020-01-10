@@ -17,10 +17,6 @@
 # include <config.h>
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 //Gtk includes
 #include <gtkmm/box.h>
 #include <gtkmm/eventbox.h>
@@ -30,7 +26,7 @@
 
 #include <cairomm/refptr.h>
 
-#if GTK_CHECK_VERSION(3,6,0)
+#if GTK_CHECK_VERSION(3,0,0)
 # include <gtkmm/searchentry.h>
 #endif
 
@@ -38,8 +34,7 @@
 
 //Inkscape includes
 #include "ui/dialog/filedialog.h"
-
-#include <dialogs/dialog-events.h>
+#include "ui/dialog-events.h"
 
 struct _xmlNode;
 typedef _xmlNode xmlNode;
@@ -341,7 +336,7 @@ public:
     Gtk::Label* label;
 };
 
-#if !GTK_CHECK_VERSION(3,6,0)
+#if !GTK_CHECK_VERSION(3,0,0)
 /**
  * A Gtk::Entry with search & clear icons
  */
@@ -465,7 +460,7 @@ private:
     Glib::ustring filename_image;
     Glib::ustring filename_thumbnail;
 
-#if GTK_CHECK_VERSION(3,6,0)
+#if GTK_CHECK_VERSION(3,0,0)
     Gtk::SearchEntry *entry_search;
 #else
     SearchEntry *entry_search;

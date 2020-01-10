@@ -1,10 +1,4 @@
-#define __CURVE_C__
-
-/** \file
- * Routines for SPCurve and for its Geom::PathVector
- */
-
-/*
+/**
  * Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   Johan Engelen
@@ -14,7 +8,7 @@
  * Copyright (C) 2002 Lauris Kaplinski
  * Copyright (C) 2008 Johan Engelen
  *
- * Released under GNU GPL
+ * Released under GNU GPL, see file 'COPYING' for more information
  */
 
 #include "display/curve.h"
@@ -25,6 +19,10 @@
 #include <2geom/sbasis-to-bezier.h>
 #include <2geom/point.h>
 
+/**
+ * Routines for SPCurve and for its Geom::PathVector
+ */
+
 /* Constructors */
 
 /**
@@ -33,14 +31,12 @@
 SPCurve::SPCurve()
   : _refcount(1),
     _pathv()
-{
-}
+{}
 
 SPCurve::SPCurve(Geom::PathVector const& pathv)
   : _refcount(1),
     _pathv(pathv)
-{
-}
+{}
 
 SPCurve *
 SPCurve::new_from_rect(Geom::Rect const &rect, bool all_four_sides)
@@ -50,7 +46,7 @@ SPCurve::new_from_rect(Geom::Rect const &rect, bool all_four_sides)
     Geom::Point p = rect.corner(0);
     c->moveto(p);
 
-    for (int i=3; i>=1; i--) {
+    for (int i=3; i>=1; --i) {
         c->lineto(rect.corner(i));
     }
 
@@ -89,16 +85,10 @@ SPCurve::get_pathvector() const
  * Returns the number of segments of all paths summed
  * This count includes the closing line segment of a closed path.
  */
-guint
+size_t
 SPCurve::get_segment_count() const
 {
-    guint nr = 0;
-    for(Geom::PathVector::const_iterator it = _pathv.begin(); it != _pathv.end(); ++it) {
-        nr += (*it).size();
-
-        if (it->closed())   nr += 1;
-    }
-    return nr;
+    return _pathv.curveCount();
 }
 
 /**
@@ -202,7 +192,7 @@ SPCurve::reset()
  * Calls SPCurve::moveto() with point made of given coordinates.
  */
 void
-SPCurve::moveto(gdouble x, gdouble y)
+SPCurve::moveto(double x, double y)
 {
     moveto(Geom::Point(x, y));
 }
@@ -213,8 +203,9 @@ SPCurve::moveto(gdouble x, gdouble y)
 void
 SPCurve::moveto(Geom::Point const &p)
 {
-    _pathv.push_back( Geom::Path() );  // for some reason Geom::Path(p) does not work...
-    _pathv.back().start(p);
+    Geom::Path path(p);
+    path.setStitching(true);
+    _pathv.push_back(path);
 }
 
 /**
@@ -231,7 +222,7 @@ SPCurve::lineto(Geom::Point const &p)
  * Calls SPCurve::lineto( Geom::Point(x,y) )
  */
 void
-SPCurve::lineto(gdouble x, gdouble y)
+SPCurve::lineto(double x, double y)
 {
     lineto(Geom::Point(x,y));
 }
@@ -251,7 +242,7 @@ SPCurve::quadto(Geom::Point const &p1, Geom::Point const &p2)
  * All coordinates must be finite.
  */
 void
-SPCurve::quadto(gdouble x1, gdouble y1, gdouble x2, gdouble y2)
+SPCurve::quadto(double x1, double y1, double x2, double y2)
 {
     quadto( Geom::Point(x1,y1), Geom::Point(x2,y2) );
 }
@@ -271,7 +262,7 @@ SPCurve::curveto(Geom::Point const &p0, Geom::Point const &p1, Geom::Point const
  * All coordinates must be finite.
  */
 void
-SPCurve::curveto(gdouble x0, gdouble y0, gdouble x1, gdouble y1, gdouble x2, gdouble y2)
+SPCurve::curveto(double x0, double y0, double x1, double y1, double x2, double y2)
 {
     curveto( Geom::Point(x0,y0), Geom::Point(x1,y1), Geom::Point(x2,y2) );
 }
@@ -311,6 +302,18 @@ SPCurve::is_empty() const
 }
 
 /**
+ * True if paths are in curve. If it only contains a path with only a moveto, the path is considered as unset FALSE
+ */
+bool
+SPCurve::is_unset() const
+{
+    if (get_segment_count()) {
+        return false;
+    }
+    return true;
+}
+
+/**
  * True iff all subpaths are closed.
  * Returns false if the curve is empty.
  */
@@ -329,6 +332,20 @@ SPCurve::is_closed() const
         }
         return closed;
     }
+}
+
+/**
+ * True if both curves are equal
+ */
+bool
+SPCurve::is_equal(SPCurve * other) const
+{
+    if(other == NULL) {
+        return false;
+    } else if(_pathv == other->get_pathvector()){
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -478,7 +495,7 @@ SPCurve::last_point() const
 SPCurve *
 SPCurve::create_reverse() const
 {
-    SPCurve *new_curve = new SPCurve(Geom::reverse_paths_and_order(_pathv));
+    SPCurve *new_curve = new SPCurve(_pathv.reversed());
 
     return new_curve;
 }
@@ -505,7 +522,7 @@ SPCurve::append(SPCurve const *curve2,
             _pathv.push_back( (*it) );
         }
 
-        for (it++; it != curve2->_pathv.end(); ++it) {
+        for (++it; it != curve2->_pathv.end(); ++it) {
             _pathv.push_back( (*it) );
         }
     } else {
@@ -522,7 +539,7 @@ SPCurve::append(SPCurve const *curve2,
  * When one of the curves is empty, this curves path becomes the non-empty path.
  */
 SPCurve *
-SPCurve::append_continuous(SPCurve const *c1, gdouble tolerance)
+SPCurve::append_continuous(SPCurve const *c1, double tolerance)
 {
     using Geom::X;
     using Geom::Y;
@@ -632,25 +649,15 @@ SPCurve::move_endpoints(Geom::Point const &new_p0, Geom::Point const &new_p1)
  * Sum of nodes in all the paths. When a path is closed, and its closing line segment is of zero-length,
  * this function will not count the closing knot double (so basically ignores the closing line segment when it has zero length)
  */
-guint
+size_t
 SPCurve::nodes_in_path() const
 {
-    guint nr = 0;
+    size_t nr = 0;
     for(Geom::PathVector::const_iterator it = _pathv.begin(); it != _pathv.end(); ++it) {
-        nr += (*it).size();
-
-        nr++; // count last node (this works also for closed paths because although they don't have a 'last node', they do have an extra segment
-
-        // do not count closing knot double for zero-length closing line segments
-        // however, if the path is only a moveto, and is closed, do not subtract 1 (otherwise the result will be zero nodes)
-        if ( it->closed()
-             && ((*it).size() != 0) )
-        {
-            Geom::Curve const &c = it->back_closed();
-            if (are_near(c.initialPoint(), c.finalPoint())) {
-                nr--;   
-            }
-        }
+        // if the path does not have any segments, it is a naked moveto,
+        // and therefore any path has at least one valid node
+        size_t psize = std::max<size_t>(1, it->size_closed());
+        nr += psize;
     }
 
     return nr;
@@ -686,4 +693,4 @@ SPCurve::last_point_additive_move(Geom::Point const & p)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:

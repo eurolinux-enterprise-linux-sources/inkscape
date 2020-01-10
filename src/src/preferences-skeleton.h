@@ -1,8 +1,9 @@
 #ifndef SEEN_PREFERENCES_SKELETON_H
 #define SEEN_PREFERENCES_SKELETON_H
 
-#include <inkscape-version.h>
+#include "inkscape-version.h"
 
+// FIXME why is this here?
 #ifdef N_
 #undef N_
 #endif
@@ -73,8 +74,7 @@ static char const preferences_skeleton[] =
 "  </group>\n"
 "\n"
 "  <group id=\"tools\"\n"
-"         bounding_box=\"0\"\n"
-"         style=\"fill:none;stroke:black;stroke-opacity:1;stroke-width:1px;stroke-linejoin:miter;stroke-linecap:butt;\">\n"
+"         bounding_box=\"0\">\n"
 "    <group id=\"shapes\" style=\"fill-rule:evenodd;\" selcue=\"1\" gradientdrag=\"1\">\n"
 "      <eventcontext id=\"rect\" style=\"fill:blue;\" usecurrent=\"1\"/>\n"
 "      <eventcontext id=\"3dbox\" style=\"stroke:none;stroke-linejoin:round;\" usecurrent=\"1\">\n"
@@ -87,10 +87,10 @@ static char const preferences_skeleton[] =
 "      </eventcontext>\n"
 "      <eventcontext id=\"arc\" style=\"fill:red;\" end=\"0\" start=\"0\" usecurrent=\"1\"/>\n"
 "      <eventcontext id=\"star\" magnitude=\"5\" style=\"fill:yellow;\" usecurrent=\"1\"/>\n"
-"      <eventcontext id=\"spiral\" style=\"fill:none;\" usecurrent=\"0\"/>\n"
+"      <eventcontext id=\"spiral\" style=\"fill:none;stroke:black\" expansion=\"1\" usecurrent=\"0\"/>\n"
 "    </group>\n"
 "    <group id=\"freehand\"\n"
-"         style=\"fill:none;fill-rule:evenodd;stroke:black;stroke-opacity:1;stroke-linejoin:miter;stroke-linecap:butt;\">\n"
+"         style=\"fill:none;stroke:black;stroke-opacity:1;stroke-linejoin:miter;stroke-linecap:butt;\">\n"
 "      <eventcontext id=\"pencil\" tolerance=\"4.0\" selcue=\"1\" style=\"stroke-width:1px;\" usecurrent=\"0\" average_all_sketches=\"1\"/>\n"
 "      <eventcontext id=\"pen\" mode=\"drag\" selcue=\"1\" style=\"stroke-width:1px;\" usecurrent=\"0\"/>\n"
 "    </group>\n"
@@ -139,6 +139,7 @@ static char const preferences_skeleton[] =
 "      <dash id=\"dash-1-12\" style=\"stroke-dasharray:1,12\"/>\n"
 "      <dash id=\"dash-1-24\" style=\"stroke-dasharray:1,24\"/>\n"
 "      <dash id=\"dash-1-48\" style=\"stroke-dasharray:1,48\"/>\n"
+"      <dash id=\"dash-empty\" style=\"stroke-dasharray:0 11\"/>\n"
 "      <dash id=\"dash-2-1\" style=\"stroke-dasharray:2,1\"/>\n"
 "      <dash id=\"dash-3-1\" style=\"stroke-dasharray:3,1\"/>\n"
 "      <dash id=\"dash-4-1\" style=\"stroke-dasharray:4,1\"/>\n"
@@ -215,7 +216,6 @@ static char const preferences_skeleton[] =
 "    <group id=\"input\" />\n"
 "    <group id=\"colorpickerwindow\" />\n"
 "    <group id=\"undo-history\" />\n"
-"    <group id=\"filtereffects\" />\n"
 "    <group id=\"transparency\"\n"
 "       on-focus=\"1.0\"\n"
 "       on-blur=\"0.50\"\n"
@@ -268,7 +268,7 @@ static char const preferences_skeleton[] =
 "    <group id=\"zoomcorrection\" value=\"1.0\" unit=\"mm\"/>\n"
 "    <group id=\"keyscroll\" value=\"15\"/>\n"
 "    <group id=\"wheelscroll\" value=\"40\"/>\n"
-"    <group id=\"spacepans\" value=\"0\"/>\n"
+"    <group id=\"spacebarpans\" value=\"1\"/>\n"
 "    <group id=\"wheelzooms\" value=\"0\"/>\n"
 "    <group id=\"transientpolicy\" value=\"1\"/>\n"
 "    <group id=\"scrollingacceleration\" value=\"0.4\"/>\n"
@@ -338,7 +338,8 @@ static char const preferences_skeleton[] =
 "           style_defaults_remove=\"0\" "
 "           check_on_reading=\"0\" "
 "           check_on_editing=\"0\" "
-"           check_on_writing=\"0\"/>\n"
+"           check_on_writing=\"0\" "
+"           sort_attributes=\"0\"/>\n"
 "    <group id=\"externalresources\">\n"
 "      <group id=\"xml\" "
 "           allow_net_access=\"0\"/>\n"

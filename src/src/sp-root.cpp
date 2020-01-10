@@ -13,10 +13,6 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
 #include <string>
 #include <2geom/transforms.h>
 
@@ -30,17 +26,7 @@
 #include "svg/stringstream.h"
 #include "svg/svg.h"
 #include "xml/repr.h"
-
-#include "sp-factory.h"
-
-namespace {
-SPObject *createRoot()
-{
-    return new SPRoot();
-}
-
-bool rootRegistered = SPFactory::instance().registerObject("svg:svg", createRoot);
-}
+#include "util/units.h"
 
 SPRoot::SPRoot() : SPGroup(), SPViewBox()
 {
@@ -298,7 +284,7 @@ void SPRoot::update(SPCtx *ctx, guint flags)
     SPItemCtx rctx = *ictx;
     rctx.viewport = Geom::Rect::from_xywh( this->x.computed, this->y.computed,
                                            this->width.computed, this->height.computed );
-    rctx = get_rctx( &rctx );
+    rctx = get_rctx( &rctx, Inkscape::Util::Quantity::convert(1, this->document->getDisplayUnit(), "px") );
 
     /* And invoke parent method */
     SPGroup::update((SPCtx *) &rctx, flags);
@@ -327,9 +313,11 @@ Inkscape::XML::Node *SPRoot::write(Inkscape::XML::Document *xml_doc, Inkscape::X
         repr = xml_doc->createElement("svg:svg");
     }
 
-    if (flags & SP_OBJECT_WRITE_EXT) {
-        repr->setAttribute("inkscape:version", Inkscape::version_string);
-    }
+    /* Only update version string on successful write to file. This is handled by 'file_save()'.
+     * if (flags & SP_OBJECT_WRITE_EXT) {
+     *   repr->setAttribute("inkscape:version", Inkscape::version_string);
+     * }
+     */
 
     if (!repr->attribute("version")) {
         gchar *myversion = sp_version_to_string(this->version.svg);
@@ -374,6 +362,15 @@ Inkscape::DrawingItem *SPRoot::show(Inkscape::Drawing &drawing, unsigned int key
         Inkscape::DrawingGroup *g = dynamic_cast<Inkscape::DrawingGroup *>(ai);
         g->setChildTransform(this->c2p);
     }
+
+    // Uncomment to print out XML tree
+    // getRepr()->recursivePrintTree(0);
+    
+    // Uncomment to print out SP Object tree
+    // recursivePrintTree(0);
+    
+    // Uncomment to print out Display Item tree
+    // ai->recursivePrintTree(0);
 
     return ai;
 }

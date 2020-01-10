@@ -11,9 +11,10 @@
  *   Jon A. Cruz <jon@joncruz.org>
  *   Abhishek Sharma
  *   David Xiong
+ *   Tavmjong Bah
  *
  * Copyright (C) 2006 Johan Engelen <johan@shouraizou.nl>
- * Copyright (C) 1999-2012 Authors
+ * Copyright (C) 1999-2016 Authors
  * Copyright (C) 2004 David Turner
  * Copyright (C) 2001-2002 Ximian, Inc.
  *
@@ -30,10 +31,13 @@
 # include "config.h"
 #endif
 
+#include <gtkmm.h>
+
 #include "ui/dialog/ocaldialogs.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "dir-util.h"
+#include "extension/effect.h"
 #include "document-private.h"
 #include "document-undo.h"
 #include "ui/tools/tool-base.h"
@@ -45,8 +49,8 @@
 #include "helper/png-write.h"
 #include "id-clash.h"
 #include "inkscape.h"
-#include "inkscape.h"
-#include "interface.h"
+#include "inkscape-version.h"
+#include "ui/interface.h"
 #include "io/sys.h"
 #include "message.h"
 #include "message-stack.h"
@@ -66,15 +70,6 @@
 #include "verbs.h"
 #include "event-log.h"
 #include "ui/dialog/font-substitution.h"
-
-#include <gtk/gtk.h>
-#include <gtkmm/main.h>
-
-#include <glibmm/convert.h>
-#include <glibmm/i18n.h>
-#include <glibmm/miscutils.h>
-
-#include <string>
 
 using Inkscape::DocumentUndo;
 
@@ -141,13 +136,6 @@ SPDesktop *sp_file_new(const std::string &templ)
         DocumentUndo::setUndoSensitive(doc, true);
     }
     
-    // Set viewBox if it doesn't exist
-    if (!doc->getRoot()->viewBox_set) {
-        DocumentUndo::setUndoSensitive(doc, false);
-        doc->setViewBox(Geom::Rect::from_xywh(0, 0, doc->getWidth().value(doc->getDefaultUnit()), doc->getHeight().value(doc->getDefaultUnit())));
-        DocumentUndo::setUndoSensitive(doc, true);
-    }
-    
     SPDesktop *olddesktop = SP_ACTIVE_DESKTOP;
     if (olddesktop)
         olddesktop->setWaitingCursor();
@@ -177,7 +165,7 @@ SPDesktop *sp_file_new(const std::string &templ)
 Glib::ustring sp_file_default_template_uri()
 {
     std::list<gchar *> sources;
-    sources.push_back( profile_path("templates") ); // first try user's local dir
+    sources.push_back( Inkscape::Application::profile_path("templates") ); // first try user's local dir
     sources.push_back( g_strdup(INKSCAPE_TEMPLATESDIR) ); // then the system templates dir
     std::list<gchar const*> baseNames;
     gchar const* localized = _("default.svg");
@@ -289,7 +277,7 @@ bool sp_file_open(const Glib::ustring &uri,
 
     if (doc) {
 
-        SPDocument *existing = desktop ? sp_desktop_document(desktop) : NULL;
+        SPDocument *existing = desktop ? desktop->getDocument() : NULL;
 
         if (existing && existing->virgin && replace_empty) {
             // If the current desktop is empty, open the document there
@@ -308,6 +296,19 @@ bool sp_file_open(const Glib::ustring &uri,
         // everyone who cares now has a reference, get rid of our`s
         doc->doUnref();
 
+        SPRoot *root = doc->getRoot();
+
+        // This is the only place original values should be set.
+        root->original.inkscape = root->version.inkscape;
+        root->original.svg      = root->version.svg;
+
+        if (INKSCAPE.use_gui()) {
+            // Fix dpi of old files
+            if (sp_version_inside_range(root->version.inkscape, 0, 1, 0, 92)) {
+                sp_file_convert_dpi(doc);
+            }
+        } // If use_gui
+
         // resize the window to match the document properties
         sp_namedview_window_from_document(desktop);
         sp_namedview_update_layers_from_document(desktop);
@@ -316,7 +317,7 @@ bool sp_file_open(const Glib::ustring &uri,
             sp_file_add_recent( doc->getURI() );
         }
 
-        if ( inkscape_use_gui() ) {
+        if ( INKSCAPE.use_gui() ) {
             // Perform a fixup pass for hrefs.
             if ( Inkscape::ResourceManager::getManager().fixupBrokenLinks(doc) ) {
                 Glib::ustring msg = _("Broken links have been changed to point to existing files.");
@@ -348,7 +349,7 @@ void sp_file_revert_dialog()
     SPDesktop  *desktop = SP_ACTIVE_DESKTOP;
     g_assert(desktop != NULL);
 
-    SPDocument *doc = sp_desktop_document(desktop);
+    SPDocument *doc = desktop->getDocument();
     g_assert(doc != NULL);
 
     Inkscape::XML::Node *repr = doc->getReprRoot();
@@ -659,6 +660,8 @@ file_save(Gtk::Window &parentWindow, SPDocument *doc, const Glib::ustring &uri,
     if (!doc || uri.size()<1) //Safety check
         return false;
 
+    Inkscape::Version save = doc->getRoot()->version.inkscape;
+    doc->getReprRoot()->setAttribute("inkscape:version", Inkscape::version_string);
     try {
         Inkscape::Extension::save(key, doc, uri.c_str(),
                                   false,
@@ -671,7 +674,9 @@ file_save(Gtk::Window &parentWindow, SPDocument *doc, const Glib::ustring &uri,
         sp_ui_error_dialog(text);
         g_free(text);
         g_free(safeUri);
-        return FALSE;
+        // Restore Inkscape version
+        doc->getReprRoot()->setAttribute("inkscape:version", sp_version_to_string( save ));
+        return false;
     } catch (Inkscape::Extension::Output::file_read_only &e) {
         gchar *safeUri = Inkscape::IO::sanitizeString(uri.c_str());
         gchar *text = g_strdup_printf(_("File %s is write protected. Please remove write protection and try again."), safeUri);
@@ -679,7 +684,8 @@ file_save(Gtk::Window &parentWindow, SPDocument *doc, const Glib::ustring &uri,
         sp_ui_error_dialog(text);
         g_free(text);
         g_free(safeUri);
-        return FALSE;
+        doc->getReprRoot()->setAttribute("inkscape:version", sp_version_to_string( save ));
+        return false;
     } catch (Inkscape::Extension::Output::save_failed &e) {
         gchar *safeUri = Inkscape::IO::sanitizeString(uri.c_str());
         gchar *text = g_strdup_printf(_("File %s could not be saved."), safeUri);
@@ -687,15 +693,18 @@ file_save(Gtk::Window &parentWindow, SPDocument *doc, const Glib::ustring &uri,
         sp_ui_error_dialog(text);
         g_free(text);
         g_free(safeUri);
-        return FALSE;
+        doc->getReprRoot()->setAttribute("inkscape:version", sp_version_to_string( save ));
+        return false;
     } catch (Inkscape::Extension::Output::save_cancelled &e) {
         SP_ACTIVE_DESKTOP->messageStack()->flash(Inkscape::ERROR_MESSAGE, _("Document not saved."));
-        return FALSE;
+        doc->getReprRoot()->setAttribute("inkscape:version", sp_version_to_string( save ));
+        return false;
     } catch (Inkscape::Extension::Output::no_overwrite &e) {
         return sp_file_save_dialog(parentWindow, doc, save_method);
     } catch (...) {
         SP_ACTIVE_DESKTOP->messageStack()->flash(Inkscape::ERROR_MESSAGE, _("Document not saved."));
-        return FALSE;
+        doc->getReprRoot()->setAttribute("inkscape:version", sp_version_to_string( save ));
+        return false;
     }
 
     if (SP_ACTIVE_DESKTOP) {
@@ -763,7 +772,7 @@ file_save_remote(SPDocument */*doc*/,
         return false;
     }
 
-    result = gnome_vfs_create (&to_handle, uri_local, GNOME_VFS_OPEN_WRITE, FALSE, GNOME_VFS_PERM_USER_ALL);
+    gnome_vfs_create (&to_handle, uri_local, GNOME_VFS_OPEN_WRITE, FALSE, GNOME_VFS_PERM_USER_ALL);
     result = gnome_vfs_open (&to_handle, uri_local, GNOME_VFS_OPEN_WRITE);
 
     if (result != GNOME_VFS_OK) {
@@ -776,8 +785,8 @@ file_save_remote(SPDocument */*doc*/,
         result = gnome_vfs_read (from_handle, buffer, 8192, &bytes_read);
 
         if ((result == GNOME_VFS_ERROR_EOF) &&(!bytes_read)){
-            result = gnome_vfs_close (from_handle);
-            result = gnome_vfs_close (to_handle);
+            gnome_vfs_close (from_handle);
+            gnome_vfs_close (to_handle);
             return true;
         }
 
@@ -1055,15 +1064,16 @@ void sp_import_document(SPDesktop *desktop, SPDocument *clipdoc, bool in_place)
 {
     //TODO: merge with file_import()
 
-    SPDocument *target_document = sp_desktop_document(desktop);
+    SPDocument *target_document = desktop->getDocument();
     Inkscape::XML::Node *root = clipdoc->getReprRoot();
     Inkscape::XML::Node *target_parent = desktop->currentLayer()->getRepr();
 
     // copy definitions
     desktop->doc()->importDefs(clipdoc);
 
+    Inkscape::XML::Node* clipboard = NULL;
     // copy objects
-    GSList *pasted_objects = NULL;
+    std::vector<Inkscape::XML::Node*> pasted_objects;
     for (Inkscape::XML::Node *obj = root->firstChild() ; obj ; obj = obj->next()) {
         // Don't copy metadata, defs, named views and internal clipboard contents to the document
         if (!strcmp(obj->name(), "svg:defs")) {
@@ -1076,21 +1086,45 @@ void sp_import_document(SPDesktop *desktop, SPDocument *clipdoc, bool in_place)
             continue;
         }
         if (!strcmp(obj->name(), "inkscape:clipboard")) {
+    	clipboard = obj;
             continue;
         }
         Inkscape::XML::Node *obj_copy = obj->duplicate(target_document->getReprDoc());
         target_parent->appendChild(obj_copy);
         Inkscape::GC::release(obj_copy);
 
-        pasted_objects = g_slist_prepend(pasted_objects, (gpointer) obj_copy);
+        pasted_objects.push_back(obj_copy);
     }
 
+    /*  take that stuff into account:
+     *   if( use && selection->includes(use->get_original()) ){//we are copying something whose parent is also copied (!)
+     *       transform = ((SPItem*)(use->get_original()->parent))->i2doc_affine().inverse() * transform;
+     *   }
+     *
+     */
+    std::vector<Inkscape::XML::Node*> pasted_objects_not;
+    if(clipboard)
+    for (Inkscape::XML::Node *obj = clipboard->firstChild() ; obj ; obj = obj->next()) {
+    	if(target_document->getObjectById(obj->attribute("id"))) continue;
+        Inkscape::XML::Node *obj_copy = obj->duplicate(target_document->getReprDoc());
+        SPObject * pasted = desktop->currentLayer()->appendChildRepr(obj_copy);
+        Inkscape::GC::release(obj_copy);
+        SPLPEItem * pasted_lpe_item = dynamic_cast<SPLPEItem *>(pasted);
+        if (pasted_lpe_item){
+            pasted_lpe_item->forkPathEffectsIfNecessary(1);
+        } 
+        pasted_objects_not.push_back(obj_copy);
+    }
+    Inkscape::Selection *selection = desktop->getSelection();
+    selection->setReprList(pasted_objects_not);
+    Geom::Affine doc2parent = SP_ITEM(desktop->currentLayer())->i2doc_affine().inverse();
+    sp_selection_apply_affine(selection, desktop->dt2doc() * doc2parent * desktop->doc2dt(), true, false, false);
+    sp_selection_delete(desktop);
+
     // Change the selection to the freshly pasted objects
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
     selection->setReprList(pasted_objects);
 
     // Apply inverse of parent transform
-    Geom::Affine doc2parent = SP_ITEM(desktop->currentLayer())->i2doc_affine().inverse();
     sp_selection_apply_affine(selection, desktop->dt2doc() * doc2parent * desktop->doc2dt(), true, false, false);
 
     // Update (among other things) all curves in paths, for bounds() to work
@@ -1123,8 +1157,7 @@ void sp_import_document(SPDesktop *desktop, SPDocument *clipdoc, bool in_place)
 
         sp_selection_move_relative(selection, offset);
     }
-
-    g_slist_free(pasted_objects);
+    target_document->emitReconstructionFinish();
 }
 
 
@@ -1213,6 +1246,7 @@ file_import(SPDocument *in_doc, const Glib::ustring &uri,
                 }
             }
         }
+        in_doc->emitReconstructionFinish();
         if (newgroup) new_obj = place_to_insert->appendChildRepr(newgroup);
 
         // release some stuff
@@ -1221,7 +1255,7 @@ file_import(SPDocument *in_doc, const Glib::ustring &uri,
 
         // select and move the imported item
         if (new_obj && SP_IS_ITEM(new_obj)) {
-            Inkscape::Selection *selection = sp_desktop_selection(desktop);
+            Inkscape::Selection *selection = desktop->getSelection();
             selection->set(SP_ITEM(new_obj));
 
             // preserve parent and viewBox transformations
@@ -1232,7 +1266,7 @@ file_import(SPDocument *in_doc, const Glib::ustring &uri,
 
             // move to mouse pointer
             {
-                sp_desktop_document(desktop)->ensureUpToDate();
+                desktop->getDocument()->ensureUpToDate();
                 Geom::OptRect sel_bbox = selection->visualBounds();
                 if (sel_bbox) {
                     Geom::Point m( desktop->point() - sel_bbox->midpoint() );

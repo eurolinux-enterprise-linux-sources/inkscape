@@ -189,8 +189,7 @@ void UXManagerImpl::setTask(SPDesktop* dt, gint val)
     for (vector<SPDesktopWidget*>::iterator it = dtws.begin(); it != dtws.end(); ++it) {
         SPDesktopWidget* dtw = *it;
 
-        // This is disabled in the 0.91 stable version as it breaks the GUI.
-        // See bug #619903
+        // This is disabled in the 0.92 stable version as it breaks the GUI.
         // In case someone set this when it was enabled, we ignore this setting.
         //gboolean notDone = Inkscape::Preferences::get()->getBool("/options/workarounds/dynamicnotdone", false);
         gboolean notDone = false;
@@ -248,12 +247,13 @@ void UXManagerImpl::delTrack( SPDesktopWidget* dtw )
 
 void UXManagerImpl::connectToDesktop( vector<GtkWidget *> const & toolboxes, SPDesktop *desktop )
 {
+    if (!desktop)
+    {
+        return;
+    }
     TrackItem &tracker = trackedBoxes[desktop];
     vector<GtkWidget*>& tracked = tracker.boxes;
-    if (desktop)
-    {
-        tracker.destroyConn = desktop->connectDestroy(&desktopDestructHandler);
-    }
+    tracker.destroyConn = desktop->connectDestroy(&desktopDestructHandler);
 
     for (vector<GtkWidget*>::const_iterator it = toolboxes.begin(); it != toolboxes.end(); ++it ) {
         GtkWidget* toolbox = *it;

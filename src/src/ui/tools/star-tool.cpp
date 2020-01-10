@@ -30,7 +30,7 @@
 #include "document-undo.h"
 #include "sp-namedview.h"
 #include "selection.h"
-#include "desktop-handles.h"
+
 #include "snap.h"
 #include "desktop.h"
 #include "desktop-style.h"
@@ -41,7 +41,7 @@
 #include "xml/repr.h"
 #include "xml/node-event-vector.h"
 #include "context-fns.h"
-#include "shape-editor.h"
+#include "ui/shape-editor.h"
 #include "verbs.h"
 #include "display/sp-canvas-item.h"
 
@@ -49,19 +49,9 @@
 
 using Inkscape::DocumentUndo;
 
-#include "tool-factory.h"
-
 namespace Inkscape {
 namespace UI {
 namespace Tools {
-
-namespace {
-	ToolBase* createStarContext() {
-		return new StarTool();
-	}
-
-	bool starContextRegistered = ToolFactory::instance().registerObject("/tools/shapes/star", createStarContext);
-}
 
 const std::string& StarTool::getPrefsPath() {
 	return StarTool::prefsPath;
@@ -112,8 +102,8 @@ StarTool::~StarTool() {
 void StarTool::selection_changed(Inkscape::Selection* selection) {
     g_assert (selection != NULL);
 
-    this->shape_editor->unset_item(SH_KNOTHOLDER);
-    this->shape_editor->set_item(selection->singleItem(), SH_KNOTHOLDER);
+    this->shape_editor->unset_item();
+    this->shape_editor->set_item(selection->singleItem());
 }
 
 void StarTool::setup() {
@@ -127,12 +117,12 @@ void StarTool::setup() {
 
 	this->shape_editor = new ShapeEditor(this->desktop);
 
-	SPItem *item = sp_desktop_selection(this->desktop)->singleItem();
+	SPItem *item = this->desktop->getSelection()->singleItem();
 	if (item) {
-		this->shape_editor->set_item(item, SH_KNOTHOLDER);
+		this->shape_editor->set_item(item);
 	}
 
-	Inkscape::Selection *selection = sp_desktop_selection(this->desktop);
+	Inkscape::Selection *selection = this->desktop->getSelection();
 	
 	this->sel_changed_connection.disconnect();
 
@@ -168,7 +158,7 @@ bool StarTool::root_handler(GdkEvent* event) {
     static bool dragging;
 
     SPDesktop *desktop = this->desktop;
-    Inkscape::Selection *selection = sp_desktop_selection (desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
 
     this->tolerance = prefs->getIntLimited("/options/dragtolerance/value", 0, 0, 100);
@@ -441,8 +431,8 @@ void StarTool::finishItem() {
 
         desktop->canvas->endForcedFullRedraws();
 
-        sp_desktop_selection(desktop)->set(this->star);
-        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_STAR,
+        desktop->getSelection()->set(this->star);
+        DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_STAR,
                            _("Create star"));
 
         this->star = NULL;
@@ -450,7 +440,7 @@ void StarTool::finishItem() {
 }
 
 void StarTool::cancel() {
-    sp_desktop_selection(desktop)->clear();
+    desktop->getSelection()->clear();
     sp_canvas_item_ungrab(SP_CANVAS_ITEM(desktop->acetate), 0);
 
     if (this->star != NULL) {
@@ -465,7 +455,7 @@ void StarTool::cancel() {
 
     desktop->canvas->endForcedFullRedraws();
 
-    DocumentUndo::cancel(sp_desktop_document(desktop));
+    DocumentUndo::cancel(desktop->getDocument());
 }
 
 }

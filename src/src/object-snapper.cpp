@@ -19,6 +19,7 @@
 #include <2geom/rect.h>
 #include <2geom/line.h>
 #include <2geom/circle.h>
+#include <2geom/path-sink.h>
 #include "document.h"
 #include "sp-namedview.h"
 #include "sp-image.h"
@@ -91,7 +92,8 @@ void Inkscape::ObjectSnapper::_findCandidates(SPObject* parent,
 
     for ( SPObject *o = parent->firstChild(); o; o = o->getNext() ) {
         g_assert(dt != NULL);
-        if (SP_IS_ITEM(o) && !(dt->itemIsHidden(SP_ITEM(o)) && !clip_or_mask)) {
+        SPItem *item = dynamic_cast<SPItem *>(o);
+        if (item && !(dt->itemIsHidden(item) && !clip_or_mask)) {
             // Snapping to items in a locked layer is allowed
             // Don't snap to hidden objects, unless they're a clipped path or a mask
             /* See if this item is on the ignore list */
@@ -104,23 +106,22 @@ void Inkscape::ObjectSnapper::_findCandidates(SPObject* parent,
             }
 
             if (it == NULL || i == it->end()) {
-                SPItem *item = SP_ITEM(o);
                 if (item) {
                     if (!clip_or_mask) { // cannot clip or mask more than once
                         // The current item is not a clipping path or a mask, but might
                         // still be the subject of clipping or masking itself ; if so, then
                         // we should also consider that path or mask for snapping to
-                        SPObject *obj = SP_OBJECT(item->clip_ref ? item->clip_ref->getObject() : NULL);
+                        SPObject *obj = item->clip_ref ? item->clip_ref->getObject() : NULL;
                         if (obj && _snapmanager->snapprefs.isTargetSnappable(SNAPTARGET_PATH_CLIP)) {
                             _findCandidates(obj, it, false, bbox_to_snap, true, item->i2doc_affine());
                         }
-                        obj = SP_OBJECT(item->mask_ref ? item->mask_ref->getObject() : NULL);
+                        obj = item->mask_ref ? item->mask_ref->getObject() : NULL;
                         if (obj && _snapmanager->snapprefs.isTargetSnappable(SNAPTARGET_PATH_MASK)) {
                             _findCandidates(obj, it, false, bbox_to_snap, true, item->i2doc_affine());
                         }
                     }
 
-                    if (SP_IS_GROUP(o)) {
+                    if (dynamic_cast<SPGroup *>(item)) {
                         _findCandidates(o, it, false, bbox_to_snap, clip_or_mask, additional_affine);
                     } else {
                         Geom::OptRect bbox_of_item;
@@ -197,8 +198,10 @@ void Inkscape::ObjectSnapper::_collectNodes(SnapSourceType const &t,
         for (std::vector<SnapCandidateItem>::const_iterator i = _candidates->begin(); i != _candidates->end(); ++i) {
             //Geom::Affine i2doc(Geom::identity());
             SPItem *root_item = (*i).item;
-            if (SP_IS_USE((*i).item)) {
-                root_item = SP_USE((*i).item)->root();
+
+            SPUse *use = dynamic_cast<SPUse *>((*i).item);
+            if (use) {
+                root_item = use->root();
             }
             g_return_if_fail(root_item);
 
@@ -235,8 +238,9 @@ void Inkscape::ObjectSnapper::_collectNodes(SnapSourceType const &t,
                 // current selection (see the comment in SelTrans::centerRequest())
                 bool old_pref2 = _snapmanager->snapprefs.isTargetSnappable(SNAPTARGET_ROTATION_CENTER);
                 if (old_pref2) {
-                    for ( GSList const *itemlist = _snapmanager->getRotationCenterSource(); itemlist != NULL; itemlist = g_slist_next(itemlist) ) {
-                        if ((*i).item == reinterpret_cast<SPItem*>(itemlist->data)) {
+                	std::vector<SPItem*> rotationSource=_snapmanager->getRotationCenterSource();
+                    for ( std::vector<SPItem*>::const_iterator itemlist = rotationSource.begin(); itemlist != rotationSource.end(); ++itemlist) {
+                        if ((*i).item == *itemlist) {
                             // don't snap to this item's rotation center
                             _snapmanager->snapprefs.setTargetSnappable(SNAPTARGET_ROTATION_CENTER, false);
                             break;
@@ -382,9 +386,10 @@ void Inkscape::ObjectSnapper::_collectPaths(Geom::Point /*p*/,
             Geom::Affine i2doc(Geom::identity());
             SPItem *root_item = NULL;
             /* We might have a clone at hand, so make sure we get the root item */
-            if (SP_IS_USE((*i).item)) {
-                i2doc = SP_USE((*i).item)->get_root_transform();
-                root_item = SP_USE((*i).item)->root();
+            SPUse *use = dynamic_cast<SPUse *>((*i).item);
+            if (use) {
+                i2doc = use->get_root_transform();
+                root_item = use->root();
                 g_return_if_fail(root_item);
             } else {
                 i2doc = (*i).item->i2doc_affine();
@@ -396,7 +401,7 @@ void Inkscape::ObjectSnapper::_collectPaths(Geom::Point /*p*/,
             //Add the item's path to snap to
             if (_snapmanager->snapprefs.isTargetSnappable(SNAPTARGET_PATH, SNAPTARGET_PATH_INTERSECTION, SNAPTARGET_TEXT_BASELINE)) {
                 if (p_is_other || p_is_a_node || (!_snapmanager->snapprefs.getStrictSnapping() && p_is_a_bbox)) {
-                    if (SP_IS_TEXT(root_item) || SP_IS_FLOWTEXT(root_item)) {
+                    if (dynamic_cast<SPText *>(root_item) || dynamic_cast<SPFlowtext *>(root_item)) {
                         if (_snapmanager->snapprefs.isTargetSnappable(SNAPTARGET_TEXT_BASELINE)) {
                             // Snap to the text baseline
                             Text::Layout const *layout = te_get_layout(static_cast<SPItem *>(root_item));
@@ -411,15 +416,17 @@ void Inkscape::ObjectSnapper::_collectPaths(Geom::Point /*p*/,
                         // the CPU, so we'll only snap to paths having no more than 500 nodes
                         // This also leads to a lag of approx. 500 msec (in my lousy test set-up).
                         bool very_complex_path = false;
-                        if (SP_IS_PATH(root_item)) {
-                            very_complex_path = SP_PATH(root_item)->nodesInPath() > 500;
+                        SPPath *path = dynamic_cast<SPPath *>(root_item);
+                        if (path) {
+                            very_complex_path = path->nodesInPath() > 500;
                         }
 
                         if (!very_complex_path && root_item && _snapmanager->snapprefs.isTargetSnappable(SNAPTARGET_PATH, SNAPTARGET_PATH_INTERSECTION)) {
                             SPCurve *curve = NULL;
-                            if (SP_IS_SHAPE(root_item)) {
-                               curve = SP_SHAPE(root_item)->getCurve();
-                            }/* else if (SP_IS_TEXT(root_item) || SP_IS_FLOWTEXT(root_item)) {
+                            SPShape *shape = dynamic_cast<SPShape *>(root_item);
+                            if (shape) {
+                               curve = shape->getCurve();
+                            }/* else if (dynamic_cast<SPText *>(root_item) || dynamic_cast<SPFlowtext *>(root_item)) {
                                curve = te_get_layout(root_item)->convertToCurves();
                             }*/
                             if (curve) {
@@ -511,14 +518,14 @@ void Inkscape::ObjectSnapper::_snapPaths(IntermSnapResults &isr,
             for(Geom::PathVector::iterator it_pv = (it_p->path_vector)->begin(); it_pv != (it_p->path_vector)->end(); ++it_pv) {
                 // Find a nearest point for each curve within this path
                 // n curves will return n time values with 0 <= t <= 1
-                std::vector<double> anp = (*it_pv).nearestPointPerCurve(p_doc);
+                std::vector<double> anp = (*it_pv).nearestTimePerCurve(p_doc);
 
                 //std::cout << "#nearest points = " << anp.size() << " | p = " << p.getPoint() << std::endl;
                 // Now we will examine each of the nearest points, and determine whether it's within snapping range and if we should snap to it
                 std::vector<double>::const_iterator np = anp.begin();
                 unsigned int index = 0;
                 for (; np != anp.end(); ++np, index++) {
-                    Geom::Curve const *curve = &((*it_pv).at_index(index));
+                    Geom::Curve const *curve = &(it_pv->at(index));
                     Geom::Point const sp_doc = curve->pointAt(*np);
                     //dt->snapindicator->set_new_debugging_point(sp_doc*dt->doc2dt());
                     bool c1 = true;
@@ -617,64 +624,35 @@ void Inkscape::ObjectSnapper::_snapPathsConstrained(IntermSnapResults &isr,
     // PS: Because the paths we're about to snap to are all expressed relative to document coordinate system, we will have
     // to convert the snapper coordinates from the desktop coordinates to document coordinates
 
-    std::vector<Geom::Path> constraint_path;
+    Geom::PathVector constraint_path;
     if (c.isCircular()) {
         Geom::Circle constraint_circle(dt->dt2doc(c.getPoint()), c.getRadius());
-        constraint_circle.getPath(constraint_path);
+        Geom::PathBuilder pb;
+        pb.feed(constraint_circle);
+        pb.flush();
+        constraint_path = pb.peek();
     } else {
         Geom::Path constraint_line;
         constraint_line.start(p_min_on_cl);
         constraint_line.appendNew<Geom::LineSegment>(p_max_on_cl);
         constraint_path.push_back(constraint_line);
     }
-    // Length of constraint_path will always be one
 
     bool strict_snapping = _snapmanager->snapprefs.getStrictSnapping();
 
     // Find all intersections of the constrained path with the snap target candidates
-    std::vector<Geom::Point> intersections;
     for (std::vector<SnapCandidatePath >::const_iterator k = _paths_to_snap_to->begin(); k != _paths_to_snap_to->end(); ++k) {
         if (k->path_vector && _allowSourceToSnapToTarget(p.getSourceType(), (*k).target_type, strict_snapping)) {
             // Do the intersection math
-            Geom::CrossingSet cs = Geom::crossings(constraint_path, *(k->path_vector));
-            // Store the results as intersection points
-            unsigned int index = 0;
-            for (Geom::CrossingSet::const_iterator i = cs.begin(); i != cs.end(); ++i) {
-                if (index >= constraint_path.size()) {
-                    break;
-                }
-                // Reconstruct and store the points of intersection
-                for (Geom::Crossings::const_iterator m = (*i).begin(); m != (*i).end(); ++m) {
-                    intersections.push_back(constraint_path[index].pointAt((*m).ta));
-                }
-                index++;
-            }
+            std::vector<Geom::PVIntersection> inters = constraint_path.intersect(*(k->path_vector));
 
-            //Geom::crossings will not consider the closing segment apparently, so we'll handle that separately here
-            //TODO: This should have been fixed in rev. #9859, which makes this workaround obsolete
-            for(Geom::PathVector::iterator it_pv = k->path_vector->begin(); it_pv != k->path_vector->end(); ++it_pv) {
-                if (it_pv->closed()) {
-                    // Get the closing linesegment and convert it to a path
-                    Geom::Path cls;
-                    cls.close(false);
-                    cls.append(it_pv->back_closed());
-                    // Intersect that closing path with the constrained path
-                    Geom::Crossings cs = Geom::crossings(constraint_path.front(), cls);
-                    // Reconstruct and store the points of intersection
-                    index = 0; // assuming the constraint path vector has only one path
-                    for (Geom::Crossings::const_iterator m = cs.begin(); m != cs.end(); ++m) {
-                        intersections.push_back(constraint_path[index].pointAt((*m).ta));
-                    }
-                }
-            }
-
-            // Convert the collected points of intersection to snapped points
-            for (std::vector<Geom::Point>::iterator p_inters = intersections.begin(); p_inters != intersections.end(); ++p_inters) {
+            // Convert the collected intersections to snapped points
+            for (std::vector<Geom::PVIntersection>::const_iterator i = inters.begin(); i != inters.end(); ++i) {
                 // Convert to desktop coordinates
-                (*p_inters) = dt->doc2dt(*p_inters);
+                Geom::Point p_inters = dt->doc2dt(i->point());
                 // Construct a snapped point
-                Geom::Coord dist = Geom::L2(p.getPoint() - *p_inters);
-                SnappedPoint s = SnappedPoint(*p_inters, p.getSourceType(), p.getSourceNum(), k->target_type, dist, getSnapperTolerance(), getSnapperAlwaysSnap(), true, false, k->target_bbox);
+                Geom::Coord dist = Geom::L2(p.getPoint() - p_inters);
+                SnappedPoint s = SnappedPoint(p_inters, p.getSourceType(), p.getSourceNum(), k->target_type, dist, getSnapperTolerance(), getSnapperAlwaysSnap(), true, false, k->target_bbox);
                 // Store the snapped point
                 if (dist <= tolerance) { // If the intersection is within snapping range, then we might snap to it
                     isr.points.push_back(s);
@@ -711,10 +689,11 @@ void Inkscape::ObjectSnapper::freeSnap(IntermSnapResults &isr,
              * That path must not be ignored however when snapping to the paths, so we add it here
              * manually when applicable
              */
-            SPPath *path = NULL;
+            SPPath const *path = NULL;
             if (it != NULL) {
-                if (it->size() == 1 && SP_IS_PATH(*it->begin())) {
-                    path = SP_PATH(*it->begin());
+                SPPath const *tmpPath = dynamic_cast<SPPath const *>(*it->begin());
+                if ((it->size() == 1) && tmpPath) {
+                    path = tmpPath;
                 } // else: *it->begin() might be a SPGroup, e.g. when editing a LPE of text that has been converted to a group of paths
                 // as reported in bug #356743. In that case we can just ignore it, i.e. not snap to this item
             }

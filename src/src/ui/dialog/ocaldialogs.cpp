@@ -25,9 +25,9 @@
 
 #include "path-prefix.h"
 #include "filedialogimpl-gtkmm.h"
-#include "interface.h"
-#include "gc-core.h"
-#include <dialogs/dialog-events.h>
+#include "ui/interface.h"
+#include "inkgc/gc-core.h"
+#include "ui/dialog-events.h"
 #include "io/sys.h"
 #include "preferences.h"
 
@@ -573,7 +573,7 @@ void StatusWidget::end_process()
     clear();
 }
 
-#if !GTK_CHECK_VERSION(3,6,0)
+#if !GTK_CHECK_VERSION(3,0,0)
 SearchEntry::SearchEntry() : Gtk::Entry()
 {
     signal_changed().connect(sigc::mem_fun(*this, &SearchEntry::_on_changed));
@@ -1222,7 +1222,7 @@ ImportDialog::ImportDialog(Gtk::Window& parent_window, FileDialogType file_types
     label_not_found = new Gtk::Label();
     label_description = new Gtk::Label();
 
-#if GTK_CHECK_VERSION(3,6,0)
+#if GTK_CHECK_VERSION(3,0,0)
     entry_search = new Gtk::SearchEntry();
 #else
     entry_search = new SearchEntry();

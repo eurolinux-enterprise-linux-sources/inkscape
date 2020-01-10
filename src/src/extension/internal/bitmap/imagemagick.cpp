@@ -12,10 +12,6 @@
 # include "config.h"
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <libintl.h>
 
 #include <gtkmm/box.h>
@@ -25,10 +21,9 @@
 #include <glib/gstdio.h>
 
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "selection.h"
 #include "sp-object.h"
-#include "util/glib-list-iterators.h"
 
 #include "extension/effect.h"
 #include "extension/system.h"
@@ -70,8 +65,8 @@ ImageMagickDocCache::ImageMagickDocCache(Inkscape::UI::View::View * view) :
     _imageItems(NULL)
 {
     SPDesktop *desktop = (SPDesktop*)view;
-    const GSList *selectedItemList = desktop->selection->itemList();
-    int selectCount = g_slist_length((GSList *)selectedItemList);
+    const std::vector<SPItem*> selectedItemList = desktop->selection->itemList();
+    int selectCount = selectedItemList.size();
     
     // Init the data-holders
     _nodes = new Inkscape::XML::Node*[selectCount];
@@ -83,9 +78,8 @@ ImageMagickDocCache::ImageMagickDocCache(Inkscape::UI::View::View * view) :
     _imageItems = new SPItem*[selectCount];
 
     // Loop through selected items
-    for (; selectedItemList != NULL; selectedItemList = g_slist_next(selectedItemList))
-    {
-        SPItem *item = SP_ITEM(selectedItemList->data);
+    for (std::vector<SPItem*>::const_iterator i = selectedItemList.begin(); i != selectedItemList.end(); ++i) {
+        SPItem *item = *i;
         Inkscape::XML::Node *node = reinterpret_cast<Inkscape::XML::Node *>(item->getRepr());
         if (!strcmp(node->name(), "image") || !strcmp(node->name(), "svg:image"))
         {
@@ -219,6 +213,7 @@ ImageMagick::effect (Inkscape::Extension::Effect *module, Inkscape::UI::View::Vi
 
             dc->_nodes[i]->setAttribute("xlink:href", dc->_caches[i], true);            
             dc->_nodes[i]->setAttribute("sodipodi:absref", NULL, true);
+            delete blob;
         }
         catch (Magick::Exception &error_) {
             printf("Caught exception: %s \n", error_.what());
@@ -241,11 +236,10 @@ ImageMagick::prefs_effect(Inkscape::Extension::Effect *module, Inkscape::UI::Vie
 {
     SPDocument * current_document = view->doc();
 
-    using Inkscape::Util::GSListConstIterator;
-    GSListConstIterator<SPItem *> selected = sp_desktop_selection((SPDesktop *)view)->itemList();
+    std::vector<SPItem*> selected = ((SPDesktop *)view)->getSelection()->itemList();
     Inkscape::XML::Node * first_select = NULL;
-    if (selected != NULL) {
-        first_select = (*selected)->getRepr();
+    if (!selected.empty()) {
+        first_select = (selected.front())->getRepr();
     }
 
     return module->autogui(current_document, first_select, changeSignal);

@@ -31,6 +31,9 @@
 class SPClipPath;
 class SPMask;
 
+typedef struct _PangoFont PangoFont;
+typedef struct _PangoLayout PangoLayout;
+
 namespace Inkscape {
 class Pixbuf;
 
@@ -145,7 +148,14 @@ public:
     void addClippingRect(double x, double y, double width, double height);
 
     /* Rendering methods */
-    bool renderPathVector(Geom::PathVector const &pathv, SPStyle const *style, Geom::OptRect const &pbox);
+    enum CairoPaintOrder {
+        STROKE_OVER_FILL,
+        FILL_OVER_STROKE,
+        FILL_ONLY,
+        STROKE_ONLY
+    };
+
+    bool renderPathVector(Geom::PathVector const &pathv, SPStyle const *style, Geom::OptRect const &pbox, CairoPaintOrder order = STROKE_OVER_FILL);
     bool renderImage(Inkscape::Pixbuf *pb,
                      Geom::Affine const &image_transform, SPStyle const *style);
     bool renderGlyphtext(PangoFont *font, Geom::Affine const &font_matrix,
@@ -197,6 +207,7 @@ protected:
     CairoClipMode _clip_mode;
 
     CairoOmitTextPageState _omittext_state;
+    int _omittext_missing_pages;
 
     cairo_pattern_t *_createPatternForPaintServer(SPPaintServer const *const paintserver,
                                                   Geom::OptRect const &pbox, float alpha);
@@ -216,7 +227,7 @@ protected:
     void _prepareRenderGraphic(void);
     void _prepareRenderText(void);
 
-    GHashTable *font_table;
+    std::map<gpointer, cairo_font_face_t *> font_table;
     static void font_data_free(gpointer data);
 
     CairoRenderState *_createState(void);

@@ -12,13 +12,17 @@
 #ifndef SEEN_INKSCAPE_DISPLAY_DRAWING_ITEM_H
 #define SEEN_INKSCAPE_DISPLAY_DRAWING_ITEM_H
 
-#include <list>
-#include <exception>
+#include <2geom/rect.h>
+#include <2geom/affine.h>
 #include <boost/operators.hpp>
 #include <boost/utility.hpp>
 #include <boost/intrusive/list.hpp>
-#include <2geom/rect.h>
-#include <2geom/affine.h>
+#include <exception>
+#include <list>
+
+namespace Glib {
+class ustring;
+}
 
 class SPStyle;
 
@@ -108,6 +112,8 @@ public:
     bool cached() const { return _cached; }
     void setCached(bool c, bool persistent = false);
 
+    virtual void setStyle(SPStyle *style, SPStyle *context_style = NULL);
+    virtual void setChildrenStyle(SPStyle *context_style);
     void setOpacity(float opacity);
     void setAntialiasing(bool a);
     void setIsolation(unsigned isolation); // CSS Compositing and Blending
@@ -131,6 +137,9 @@ public:
     void clip(DrawingContext &dc, Geom::IntRect const &area);
     DrawingItem *pick(Geom::Point const &p, double delta, unsigned flags = 0);
 
+    virtual Glib::ustring name(); // For debugging
+    void recursivePrintTree(unsigned level = 0);  // For debugging
+
 protected:
     enum ChildType {
         CHILD_ORPHAN = 0, // no parent - implies _parent == NULL
@@ -149,7 +158,6 @@ protected:
     void _markForUpdate(unsigned state, bool propagate);
     void _markForRendering();
     void _invalidateFilterBackground(Geom::IntRect const &area);
-    void _setStyleCommon(SPStyle *&_style, SPStyle *style);
     double _cacheScore();
     Geom::OptIntRect _cacheRect();
     virtual unsigned _updateItem(Geom::IntRect const &/*area*/, UpdateContext const &/*ctx*/,
@@ -176,6 +184,9 @@ protected:
 
     unsigned _key; ///< Some SPItems can have more than one DrawingItem;
                    ///  this value is a hack used to distinguish between them
+    SPStyle *_style; // Not used by DrawingGlyphs
+    SPStyle *_context_style; // Used for 'context-fill', 'context-stroke'
+    
     float _opacity;
 
     Geom::Affine *_transform; ///< Incremental transform from parent to this item's coords

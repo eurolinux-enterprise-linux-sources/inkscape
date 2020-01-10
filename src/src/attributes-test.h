@@ -38,6 +38,13 @@ public:
 
    attindex.html lacks attributeName, begin, additive, font, marker;
    I've added these manually.
+
+   SVG 2: white-space, shape-inside, shape-outside, shape-padding, shape-margin
+   SVG 2: text-decoration-fill, text-decoration-stroke
+   SVG 2: solid-color, solid-opacity
+   SVG 2: Hatches and Meshes, radial gradient 'fr'
+   CSS 3: text-orientation
+   CSS 3: font-variant-xxx, font-feature-settings
 */
 struct {char const *attr; bool supported;} const all_attrs[] = {
     {"attributeName", true},
@@ -63,7 +70,6 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"baseProfile", false},
     {"bbox", true},
     {"bias", true},
-    {"block-progression", true},
     {"by", true},
     {"calcMode", true},
     {"cap-height", true},
@@ -98,21 +104,6 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"end", true},
     {"exponent", true},
     {"externalResourcesRequired", false},
-    {"feBlend", false},
-    {"feColorMatrix", false},
-    {"feComponentTransfer", false},
-    {"feComposite", false},
-    {"feConvolveMatrix", false},
-    {"feDiffuseLighting", false},
-    {"feDisplacementMap", false},
-    {"feFlood", false},
-    {"feGaussianBlur", false},
-    {"feImage", false},
-    {"feMerge", false},
-    {"feMorphology", false},
-    {"feOffset", false},
-    {"feSpecularLighting", false},
-    {"feTile", false},
     {"fill", true},
     {"fill-opacity", true},
     {"fill-rule", true},
@@ -122,16 +113,24 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"flood-color", true},
     {"flood-opacity", true},
     {"font-family", true},
+    {"font-feature-settings", true},
     {"font-size", true},
     {"font-size-adjust", true},
     {"font-stretch", true},
     {"font-style", true},
     {"font-variant", true},
+    {"font-variant-ligatures", true},
+    {"font-variant-position", true},
+    {"font-variant-caps", true},
+    {"font-variant-numeric", true},
+    {"font-variant-east-asian", true},
+    {"font-variant-alternates", true},
     {"font-weight", true},
     {"format", false},
     {"from", true},
     {"fx", true},
     {"fy", true},
+    {"fr", true},
     {"g1", true},
     {"g2", true},
     {"glyph-name", true},
@@ -163,7 +162,7 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"keySplines", true},
     {"keyTimes", true},
     {"lang", true},
-    {"lengthAdjust", false},
+    {"lengthAdjust", true},
     {"letter-spacing", true},
     {"lighting-color", true},
     {"limitingConeAngle", true},
@@ -246,6 +245,10 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"ry", true},
     {"scale", true},
     {"seed", true},
+    {"shape-inside", true},
+    {"shape-margin", true},
+    {"shape-outside", true},
+    {"shape-padding", true},
     {"shape-rendering", true},
     {"slope", true},
     {"spacing", false},
@@ -282,10 +285,12 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"text-decoration-line", true},
     {"text-decoration-style", true},
     {"text-decoration-color", true},
+    {"text-decoration-fill", true},
+    {"text-decoration-stroke", true},
     {"text-indent", true},
     {"text-rendering", true},
     {"text-transform", true},
-    {"textLength", false},
+    {"textLength", true},
     {"title", false},
     {"to", true},
     {"transform", true},
@@ -310,10 +315,12 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"viewBox", true},
     {"viewTarget", false},
     {"visibility", true},
+    {"white-space", true},
     {"width", true},
     {"widths", true},
     {"word-spacing", true},
     {"writing-mode", true},
+    {"text-orientation", true},
     {"x", true},
     {"x-height", true},
     {"x1", true},
@@ -339,52 +346,34 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
 
     /* Extra attributes. */
     {"id", true},
+    {"sodipodi:docname", true},
+    {"sodipodi:insensitive", true},
+    {"sodipodi:type", true},
     {"inkscape:collect", true},
     {"inkscape:document-units", true},
     {"inkscape:label", true},
-    {"sodipodi:insensitive", true},
-    {"sodipodi:nonprintable", true},
     {"inkscape:groupmode", true},
-    {"sodipodi:version", false},
     {"inkscape:version", true},
     {"inkscape:object-paths", true},
-    {"inkscape:snap-perpendicular", true},
-    {"inkscape:snap-tangential", true},
-    {"inkscape:snap-path-clip", true},
-    {"inkscape:snap-path-mask", true},
-    {"inkscape:object-nodes", true},
-    {"inkscape:bbox-paths", true},
-    {"inkscape:bbox-nodes", true},
-    {"inkscape:snap-page", true},
-    {"inkscape:snap-global", true},
-    {"inkscape:snap-bbox", true},
-    {"inkscape:snap-nodes", true},
-    {"inkscape:snap-others", true},
-    {"inkscape:snap-center", true},
-    {"inkscape:snap-smooth-nodes", true},
-    {"inkscape:snap-midpoints", true},
-    {"inkscape:snap-object-midpoints", true},
-    {"inkscape:snap-text-baseline", true},
-    {"inkscape:snap-bbox-edge-midpoints", true},
-    {"inkscape:snap-bbox-midpoints", true},
-    {"inkscape:snap-grids", true},
-    {"inkscape:snap-to-guides", true},
-    {"inkscape:snap-intersection-paths", true},
+
     {"inkscape:original-d", true},
     {"inkscape:pageopacity", true},
     {"inkscape:pageshadow", true},
     {"inkscape:path-effect", true},
+
+    // SPItem
     {"inkscape:transform-center-x", true},
     {"inkscape:transform-center-y", true},
-    {"inkscape:zoom", true},
-    {"inkscape:cx", true},
-    {"inkscape:cy", true},
-    {"inkscape:window-width", true},
-    {"inkscape:window-height", true},
-    {"inkscape:window-x", true},
-    {"inkscape:window-y", true},
-    {"inkscape:window-maximized", true},
-    {"inkscape:current-layer", true},
+    {"inkscape:highlight-color", true},
+
+    // Measure tool
+    {"inkscape:measure-start", true},
+    {"inkscape:measure-end", true},
+
+    // Spray tool
+    {"inkscape:spray-origin", true},
+
+    // Connector tool
     {"inkscape:connector-type", true},
     {"inkscape:connection-start", true},
     {"inkscape:connection-end", true},
@@ -394,10 +383,14 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"inkscape:connector-curvature", true},
     {"inkscape:connector-avoid", true},
     {"inkscape:connector-spacing", true},
+
+    // Ellipse, Spiral, Star
     {"sodipodi:cx", true},
     {"sodipodi:cy", true},
     {"sodipodi:rx", true},
     {"sodipodi:ry", true},
+
+    // Box tool
     {"inkscape:perspectiveID", true},
     {"inkscape:corner0", true},
     {"inkscape:corner7", true},
@@ -407,6 +400,8 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"inkscape:vp_y", true},
     {"inkscape:vp_z", true},
     {"inkscape:persp3d-origin", true},
+
+    // Star tool
     {"sodipodi:start", true},
     {"sodipodi:end", true},
     {"sodipodi:open", true},
@@ -439,9 +434,19 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"inkscape:layoutOptions", true},
     {"osb:paint", true},
 
+    /* SPSolidColor" */
+    {"solid-color", true},
+    {"solid-opacity", true},
+
     /* SPMeshPatch */
     {"tensor", true},
 
+    /* SPHash */
+    {"hatchUnits", true},
+    {"hatchContentUnits", true},
+    {"hatchTransform", true},
+    {"pitch", true},
+    
     /* SPNamedView */
     {"fit-margin-top", true},
     {"fit-margin-left", true},
@@ -452,6 +457,7 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"showgrid", true},
 //    {"gridtype", true},
     {"showguides", true},
+//    {"inkscape:lockguides", false}, //not sure about uncomment
     {"gridtolerance", true},
     {"guidetolerance", true},
     {"objecttolerance", true},
@@ -477,9 +483,50 @@ struct {char const *attr; bool supported;} const all_attrs[] = {
     {"borderopacity", true},
     {"pagecolor", true},
 
-    /* SPGuide */
-    {"position", true}
+    {"inkscape:zoom", true},
+    {"inkscape:cx", true},
+    {"inkscape:cy", true},
+    {"inkscape:window-width", true},
+    {"inkscape:window-height", true},
+    {"inkscape:window-x", true},
+    {"inkscape:window-y", true},
+    {"inkscape:window-maximized", true},
+    {"inkscape:current-layer", true},
+    {"inkscape:pagecheckerboard", true},
 
+    /* SPGuide */
+    {"position", true},
+    {"inkscape:color", true},
+    {"inkscape:lockguides", true},
+    {"inkscape:locked", true},
+
+    /* Snapping */
+    {"inkscape:snap-perpendicular", true},
+    {"inkscape:snap-tangential", true},
+    {"inkscape:snap-path-clip", true},
+    {"inkscape:snap-path-mask", true},
+    {"inkscape:object-nodes", true},
+    {"inkscape:bbox-paths", true},
+    {"inkscape:bbox-nodes", true},
+    {"inkscape:snap-page", true},
+    {"inkscape:snap-global", true},
+    {"inkscape:snap-bbox", true},
+    {"inkscape:snap-nodes", true},
+    {"inkscape:snap-others", true},
+    {"inkscape:snap-from-guide", true},
+    {"inkscape:snap-center", true},
+    {"inkscape:snap-smooth-nodes", true},
+    {"inkscape:snap-midpoints", true},
+    {"inkscape:snap-object-midpoints", true},
+    {"inkscape:snap-text-baseline", true},
+    {"inkscape:snap-bbox-edge-midpoints", true},
+    {"inkscape:snap-bbox-midpoints", true},
+    {"inkscape:snap-grids", true},
+    {"inkscape:snap-to-guides", true},
+    {"inkscape:snap-intersection-paths", true},
+
+    /* SPTag */
+    {"inkscape:expanded", true}
 };
 
 

@@ -3,6 +3,7 @@
 #define SEEN_PREVIEW_HOLDER_H
 /*
  * A simple interface for previewing representations.
+ * Used by Swatches
  *
  * Authors:
  *   Jon A. Cruz
@@ -14,10 +15,6 @@
 
 #if HAVE_CONFIG_H
 # include "config.h"
-#endif
-
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
 #endif
 
 #include <gtkmm/box.h>

@@ -12,10 +12,9 @@
 
 typedef struct _GtkWidget GtkWidget;
 class SPDesktop;
+struct InkscapeApplication;
 
 namespace Inkscape {
-
-struct Application;
 
 namespace UI {
 namespace Dialog {
@@ -37,7 +36,7 @@ public:
     sigc::connection connectDesktopChanged( const sigc::slot<void, SPDesktop*> & slot );
 
 private:
-    static gboolean activateDesktopCB(Inkscape::Application *inkscape, SPDesktop *desktop, DesktopTracker *self );
+    static void activateDesktopCB(SPDesktop *desktop, DesktopTracker *self );
     static bool hierarchyChangeCB(GtkWidget *widget, GtkWidget* prev, DesktopTracker *self);
 
     void handleHierarchyChange();
@@ -47,7 +46,7 @@ private:
     SPDesktop *desktop;
     GtkWidget *widget;
     gulong hierID;
-    gulong inkID;
+    sigc::connection inkID;
     bool trackActive;
     sigc::signal<void, SPDesktop*> desktopChangedSig;
 };

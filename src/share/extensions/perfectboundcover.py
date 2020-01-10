@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 import sys, inkex
 
@@ -135,7 +135,7 @@ class PerfectBoundCover(inkex.Effect):
             for guide in guides:
                 newguide = inkex.etree.Element(inkex.addNS('guide','sodipodi'))
                 newguide.set("orientation", guide[0])
-                newguide.set("position", "%f" % (guide[1] * 90))
+                newguide.set("position", "%f" % (guide[1] * 96))
                 namedview[0].append(newguide)
         
         '''

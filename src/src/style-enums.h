@@ -17,7 +17,7 @@
 
 /* SPFontStyle */
 
-#include "display/canvas-bpath.h"
+#include "display/canvas-bpath.h" // FIXME those enums belong here!
 
 enum SPCSSFontSize {
     SP_CSS_FONT_SIZE_XX_SMALL,
@@ -72,6 +72,75 @@ enum SPCSSFontStretch {
     SP_CSS_FONT_STRETCH_WIDER
 };
 
+// Can select more than one
+enum SPCSSFontVariantLigatures {
+    SP_CSS_FONT_VARIANT_LIGATURES_NONE            = 0,
+    SP_CSS_FONT_VARIANT_LIGATURES_COMMON          = 1,
+    SP_CSS_FONT_VARIANT_LIGATURES_DISCRETIONARY   = 2,
+    SP_CSS_FONT_VARIANT_LIGATURES_HISTORICAL      = 4,
+    SP_CSS_FONT_VARIANT_LIGATURES_CONTEXTUAL      = 8,
+    SP_CSS_FONT_VARIANT_LIGATURES_NORMAL          = 9, // Special case
+    SP_CSS_FONT_VARIANT_LIGATURES_NOCOMMON        = 16,
+    SP_CSS_FONT_VARIANT_LIGATURES_NODISCRETIONARY = 32,
+    SP_CSS_FONT_VARIANT_LIGATURES_NOHISTORICAL    = 64,
+    SP_CSS_FONT_VARIANT_LIGATURES_NOCONTEXTUAL    = 128
+};
+
+enum SPCSSFontVariantPosition {
+    SP_CSS_FONT_VARIANT_POSITION_NORMAL = 1,
+    SP_CSS_FONT_VARIANT_POSITION_SUB    = 2,
+    SP_CSS_FONT_VARIANT_POSITION_SUPER  = 4
+};
+
+enum SPCSSFontVariantCaps {
+    SP_CSS_FONT_VARIANT_CAPS_NORMAL      = 1,
+    SP_CSS_FONT_VARIANT_CAPS_SMALL       = 2,
+    SP_CSS_FONT_VARIANT_CAPS_ALL_SMALL   = 4,
+    SP_CSS_FONT_VARIANT_CAPS_PETITE      = 8,
+    SP_CSS_FONT_VARIANT_CAPS_ALL_PETITE  = 16,
+    SP_CSS_FONT_VARIANT_CAPS_UNICASE     = 32,
+    SP_CSS_FONT_VARIANT_CAPS_TITLING     = 64
+};
+
+// Can select more than one (see spec)
+enum SPCSSFontVariantNumeric {
+    SP_CSS_FONT_VARIANT_NUMERIC_NORMAL               = 0,
+    SP_CSS_FONT_VARIANT_NUMERIC_LINING_NUMS          = 1, 
+    SP_CSS_FONT_VARIANT_NUMERIC_OLDSTYLE_NUMS        = 2, 
+    SP_CSS_FONT_VARIANT_NUMERIC_PROPORTIONAL_NUMS    = 4, 
+    SP_CSS_FONT_VARIANT_NUMERIC_TABULAR_NUMS         = 8, 
+    SP_CSS_FONT_VARIANT_NUMERIC_DIAGONAL_FRACTIONS   = 16,
+    SP_CSS_FONT_VARIANT_NUMERIC_STACKED_FRACTIONS    = 32,
+    SP_CSS_FONT_VARIANT_NUMERIC_ORDINAL              = 64,
+    SP_CSS_FONT_VARIANT_NUMERIC_SLASHED_ZERO         = 128
+};
+
+// Quite complicated... (see spec)
+enum SPCSSFontVariantAlternates {
+    SP_CSS_FONT_VARIANT_ALTERNATES_NORMAL,
+    SP_CSS_FONT_VARIANT_ALTERNATES_HISTORICAL_FORMS,
+    SP_CSS_FONT_VARIANT_ALTERNATES_STYLISTIC,
+    SP_CSS_FONT_VARIANT_ALTERNATES_STYLESET,
+    SP_CSS_FONT_VARIANT_ALTERNATES_CHARACTER_VARIANT,
+    SP_CSS_FONT_VARIANT_ALTERNATES_SWASH,
+    SP_CSS_FONT_VARIANT_ALTERNATES_ORNAMENTS,
+    SP_CSS_FONT_VARIANT_ALTERNATES_ANNOTATION
+};
+
+// Can select more than one (see spec)
+enum SPCSSFontVariantEastAsian {
+    SP_CSS_FONT_VARIANT_EAST_ASIAN_NORMAL                  = 0,
+    SP_CSS_FONT_VARIANT_EAST_ASIAN_JIS78                   = 1,
+    SP_CSS_FONT_VARIANT_EAST_ASIAN_JIS83                   = 2,
+    SP_CSS_FONT_VARIANT_EAST_ASIAN_JIS90                   = 4,
+    SP_CSS_FONT_VARIANT_EAST_ASIAN_JIS04                   = 8,
+    SP_CSS_FONT_VARIANT_EAST_ASIAN_SIMPLIFIED              = 16,
+    SP_CSS_FONT_VARIANT_EAST_ASIAN_TRADITIONAL             = 32,
+    SP_CSS_FONT_VARIANT_EAST_ASIAN_FULL_WIDTH              = 64,
+    SP_CSS_FONT_VARIANT_EAST_ASIAN_PROPORTIONAL_WIDTH      = 128,
+    SP_CSS_FONT_VARIANT_EAST_ASIAN_RUBY                    = 256
+};
+
 enum SPCSSTextAlign {
     SP_CSS_TEXT_ALIGN_START,
     SP_CSS_TEXT_ALIGN_END,
@@ -94,17 +163,18 @@ enum SPCSSDirection {
     SP_CSS_DIRECTION_RTL
 };
 
-enum SPCSSBlockProgression {
-    SP_CSS_BLOCK_PROGRESSION_TB,
-    SP_CSS_BLOCK_PROGRESSION_RL,
-    SP_CSS_BLOCK_PROGRESSION_LR
-};
-
 enum SPCSSWritingMode {
     SP_CSS_WRITING_MODE_LR_TB,
     SP_CSS_WRITING_MODE_RL_TB,
     SP_CSS_WRITING_MODE_TB_RL,
     SP_CSS_WRITING_MODE_TB_LR
+};
+
+// CSS WRITING MODES 3
+enum SPCSSTextOrientation {
+    SP_CSS_TEXT_ORIENTATION_MIXED,
+    SP_CSS_TEXT_ORIENTATION_UPRIGHT,
+    SP_CSS_TEXT_ORIENTATION_SIDEWAYS
 };
 
 enum SPTextAnchor {
@@ -121,10 +191,24 @@ enum SPWhiteSpace {
     SP_CSS_WHITE_SPACE_PRELINE
 };
 
+// Not complete list
+enum SPCSSBaseline {
+    SP_CSS_BASELINE_AUTO,
+    SP_CSS_BASELINE_ALPHABETIC,
+    SP_CSS_BASELINE_IDEOGRAPHIC,
+    SP_CSS_BASELINE_HANGING,
+    SP_CSS_BASELINE_MATHEMATICAL,
+    SP_CSS_BASELINE_CENTRAL,
+    SP_CSS_BASELINE_MIDDLE,
+    SP_CSS_BASELINE_TEXT_BEFORE_EDGE,
+    SP_CSS_BASELINE_TEXT_AFTER_EDGE,
+    SP_CSS_BASELINE_SIZE  // Size of enum, keep last.
+};
+    
 enum SPCSSBaselineShift {
-  SP_CSS_BASELINE_SHIFT_BASELINE,
-  SP_CSS_BASELINE_SHIFT_SUB,
-  SP_CSS_BASELINE_SHIFT_SUPER
+    SP_CSS_BASELINE_SHIFT_BASELINE,
+    SP_CSS_BASELINE_SHIFT_SUB,
+    SP_CSS_BASELINE_SHIFT_SUPER
 };
 
 enum SPVisibility {
@@ -225,10 +309,14 @@ enum SPTextRendering {
     SP_CSS_TEXT_RENDERING_GEOMETRICPRECISION
 };
 
+enum SPVectorEffect {
+    SP_VECTOR_EFFECT_NONE,
+    SP_VECTOR_EFFECT_NON_SCALING_STROKE
+};
 
 struct SPStyleEnum {
-    gchar const *key;
-    gint value;
+    char const *key;
+    int value;
 };
 
 static SPStyleEnum const enum_fill_rule[] = {
@@ -309,6 +397,77 @@ static SPStyleEnum const enum_font_stretch[] = {
     {NULL, -1}
 };
 
+static SPStyleEnum const enum_font_variant_ligatures[] = {
+    {"none",                         SP_CSS_FONT_VARIANT_LIGATURES_NONE},
+    {"common-ligatures",             SP_CSS_FONT_VARIANT_LIGATURES_COMMON},
+    {"discretionary-ligatures",      SP_CSS_FONT_VARIANT_LIGATURES_DISCRETIONARY},
+    {"historical-ligatures",         SP_CSS_FONT_VARIANT_LIGATURES_HISTORICAL},
+    {"contextual",                   SP_CSS_FONT_VARIANT_LIGATURES_CONTEXTUAL},
+    {"normal",                       SP_CSS_FONT_VARIANT_LIGATURES_NORMAL},
+    {"no-common-ligatures",          SP_CSS_FONT_VARIANT_LIGATURES_NOCOMMON},
+    {"no-discretionary-ligatures",   SP_CSS_FONT_VARIANT_LIGATURES_NODISCRETIONARY},
+    {"no-historical-ligatures",      SP_CSS_FONT_VARIANT_LIGATURES_NOHISTORICAL},
+    {"no-contextual",                SP_CSS_FONT_VARIANT_LIGATURES_NOCONTEXTUAL},
+    {NULL, -1}
+};
+    
+static SPStyleEnum const enum_font_variant_position[] = {
+    {"normal", SP_CSS_FONT_VARIANT_POSITION_NORMAL},
+    {"sub", SP_CSS_FONT_VARIANT_POSITION_SUB},
+    {"super", SP_CSS_FONT_VARIANT_POSITION_SUPER},
+    {NULL, -1}
+};
+    
+static SPStyleEnum const enum_font_variant_caps[] = {
+    {"normal", SP_CSS_FONT_VARIANT_CAPS_NORMAL},
+    {"small-caps", SP_CSS_FONT_VARIANT_CAPS_SMALL},
+    {"all-small-caps", SP_CSS_FONT_VARIANT_CAPS_ALL_SMALL},
+    {"petite-caps", SP_CSS_FONT_VARIANT_CAPS_PETITE},
+    {"all-petite-caps", SP_CSS_FONT_VARIANT_CAPS_ALL_PETITE},
+    {"unicase", SP_CSS_FONT_VARIANT_CAPS_UNICASE},
+    {"titling", SP_CSS_FONT_VARIANT_CAPS_TITLING},
+    {NULL, -1}
+};
+    
+static SPStyleEnum const enum_font_variant_numeric[] = {
+    {"normal", SP_CSS_FONT_VARIANT_NUMERIC_NORMAL},
+    {"lining-nums", SP_CSS_FONT_VARIANT_NUMERIC_LINING_NUMS},
+    {"oldstyle-nums", SP_CSS_FONT_VARIANT_NUMERIC_OLDSTYLE_NUMS},
+    {"proportional-nums", SP_CSS_FONT_VARIANT_NUMERIC_PROPORTIONAL_NUMS},
+    {"tabular-nums", SP_CSS_FONT_VARIANT_NUMERIC_TABULAR_NUMS},
+    {"diagonal-fractions", SP_CSS_FONT_VARIANT_NUMERIC_DIAGONAL_FRACTIONS},
+    {"stacked-fractions", SP_CSS_FONT_VARIANT_NUMERIC_STACKED_FRACTIONS},
+    {"ordinal", SP_CSS_FONT_VARIANT_NUMERIC_ORDINAL},
+    {"slashed-zero", SP_CSS_FONT_VARIANT_NUMERIC_SLASHED_ZERO},
+    {NULL, -1}
+};
+    
+static SPStyleEnum const enum_font_variant_alternates[] = {
+    {"normal", SP_CSS_FONT_VARIANT_ALTERNATES_NORMAL},
+    {"historical-forms", SP_CSS_FONT_VARIANT_ALTERNATES_HISTORICAL_FORMS},
+    {"stylistic", SP_CSS_FONT_VARIANT_ALTERNATES_STYLISTIC},
+    {"styleset", SP_CSS_FONT_VARIANT_ALTERNATES_STYLESET},
+    {"character_variant", SP_CSS_FONT_VARIANT_ALTERNATES_CHARACTER_VARIANT},
+    {"swash", SP_CSS_FONT_VARIANT_ALTERNATES_SWASH},
+    {"ornaments", SP_CSS_FONT_VARIANT_ALTERNATES_ORNAMENTS},
+    {"annotation", SP_CSS_FONT_VARIANT_ALTERNATES_ANNOTATION},
+    {NULL, -1}
+};
+
+static SPStyleEnum const enum_font_variant_east_asian[] = {
+    {"normal", SP_CSS_FONT_VARIANT_EAST_ASIAN_NORMAL},
+    {"jis78", SP_CSS_FONT_VARIANT_EAST_ASIAN_JIS78},
+    {"jis83", SP_CSS_FONT_VARIANT_EAST_ASIAN_JIS83},
+    {"jis90", SP_CSS_FONT_VARIANT_EAST_ASIAN_JIS90},
+    {"jis04", SP_CSS_FONT_VARIANT_EAST_ASIAN_JIS04},
+    {"simplified", SP_CSS_FONT_VARIANT_EAST_ASIAN_SIMPLIFIED},
+    {"traditional", SP_CSS_FONT_VARIANT_EAST_ASIAN_TRADITIONAL},
+    {"full-width", SP_CSS_FONT_VARIANT_EAST_ASIAN_FULL_WIDTH},
+    {"proportional-width", SP_CSS_FONT_VARIANT_EAST_ASIAN_PROPORTIONAL_WIDTH},
+    {"ruby", SP_CSS_FONT_VARIANT_EAST_ASIAN_RUBY},
+    {NULL, -1}
+};
+
 static SPStyleEnum const enum_text_align[] = {
     {"start", SP_CSS_TEXT_ALIGN_START},
     {"end", SP_CSS_TEXT_ALIGN_END},
@@ -349,13 +508,6 @@ static SPStyleEnum const enum_direction[] = {
     {NULL, -1}
 };
 
-static SPStyleEnum const enum_block_progression[] = {
-    {"tb", SP_CSS_BLOCK_PROGRESSION_TB},
-    {"rl", SP_CSS_BLOCK_PROGRESSION_RL},
-    {"lr", SP_CSS_BLOCK_PROGRESSION_LR},
-    {NULL, -1}
-};
-
 static SPStyleEnum const enum_writing_mode[] = {
     /* Note that using the same enumerator for lr as lr-tb means we write as lr-tb even if the
      * input file said lr.  We prefer writing lr-tb on the grounds that the spec says the initial
@@ -364,12 +516,38 @@ static SPStyleEnum const enum_writing_mode[] = {
      * ECMA scripts may be surprised to find tb-rl in DOM if they set the attribute to rl, so
      * sharing enumerators for different strings may be a bug (once we support ecma script).
      */
+    // SVG 1.1  Deprecated but still must be supported in SVG 2.
     {"lr-tb", SP_CSS_WRITING_MODE_LR_TB},
     {"rl-tb", SP_CSS_WRITING_MODE_RL_TB},
     {"tb-rl", SP_CSS_WRITING_MODE_TB_RL},
     {"lr", SP_CSS_WRITING_MODE_LR_TB},
     {"rl", SP_CSS_WRITING_MODE_RL_TB},
     {"tb", SP_CSS_WRITING_MODE_TB_RL},
+    // SVG 2 & CSS 3 Writing Modes
+    {"horizontal-tb", SP_CSS_WRITING_MODE_LR_TB}, // This is correct, 'direction' distinguishes between 'lr' and 'rl'.
+    {"vertical-rl", SP_CSS_WRITING_MODE_TB_RL},
+    {"vertical-lr", SP_CSS_WRITING_MODE_TB_LR},
+    {NULL, -1}
+};
+
+// CSS WRITING MODES 3
+static SPStyleEnum const enum_text_orientation[] = {
+    {"mixed",                 SP_CSS_TEXT_ORIENTATION_MIXED}, // Default
+    {"upright",               SP_CSS_TEXT_ORIENTATION_UPRIGHT},
+    {"sideways",              SP_CSS_TEXT_ORIENTATION_SIDEWAYS},
+    {NULL, -1}
+};
+
+static SPStyleEnum const enum_baseline[] = {
+    {"auto",                  SP_CSS_BASELINE_AUTO}, // Default
+    {"alphabetic",            SP_CSS_BASELINE_ALPHABETIC},
+    {"ideographic",           SP_CSS_BASELINE_IDEOGRAPHIC},
+    {"hanging",               SP_CSS_BASELINE_HANGING},
+    {"mathematical",          SP_CSS_BASELINE_MATHEMATICAL},
+    {"central",               SP_CSS_BASELINE_CENTRAL},
+    {"middle",                SP_CSS_BASELINE_MIDDLE},
+    {"text-before-edge",      SP_CSS_BASELINE_TEXT_BEFORE_EDGE},
+    {"text-after-edge",       SP_CSS_BASELINE_TEXT_AFTER_EDGE},
     {NULL, -1}
 };
 
@@ -462,8 +640,8 @@ static SPStyleEnum const enum_image_rendering[] = {
     {"auto",                  SP_CSS_IMAGE_RENDERING_AUTO},
     {"optimizeSpeed",         SP_CSS_IMAGE_RENDERING_OPTIMIZESPEED},
     {"optimizeQuality",       SP_CSS_IMAGE_RENDERING_OPTIMIZEQUALITY},
-    {"-inkscape-crisp-edges", SP_CSS_IMAGE_RENDERING_CRISPEDGES},
-    {"-inkscape-pixelated",   SP_CSS_IMAGE_RENDERING_PIXELATED},
+    {"crisp-edges",           SP_CSS_IMAGE_RENDERING_CRISPEDGES},
+    {"pixelated",             SP_CSS_IMAGE_RENDERING_PIXELATED},
     {NULL, -1}
 };
 
@@ -491,6 +669,12 @@ static SPStyleEnum const enum_color_interpolation[] = {
     {"auto", SP_CSS_COLOR_INTERPOLATION_AUTO},
     {"sRGB", SP_CSS_COLOR_INTERPOLATION_SRGB},
     {"linearRGB", SP_CSS_COLOR_INTERPOLATION_LINEARRGB},
+    {NULL, -1}
+};
+
+static SPStyleEnum const enum_vector_effect[] = {
+    {"none",               SP_VECTOR_EFFECT_NONE},
+    {"non-scaling-stroke", SP_VECTOR_EFFECT_NON_SCALING_STROKE},
     {NULL, -1}
 };
 

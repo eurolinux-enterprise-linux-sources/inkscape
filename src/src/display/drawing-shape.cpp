@@ -9,7 +9,7 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glib.h>
+#include <glibmm.h>
 #include <2geom/curves.h>
 #include <2geom/pathvector.h>
 #include <2geom/path-sink.h>
@@ -34,15 +34,12 @@ namespace Inkscape {
 DrawingShape::DrawingShape(Drawing &drawing)
     : DrawingItem(drawing)
     , _curve(NULL)
-    , _style(NULL)
     , _last_pick(NULL)
     , _repick_after(0)
 {}
 
 DrawingShape::~DrawingShape()
 {
-    if (_style)
-        sp_style_unref(_style);
     if (_curve)
         _curve->unref();
 }
@@ -65,10 +62,17 @@ DrawingShape::setPath(SPCurve *curve)
 }
 
 void
-DrawingShape::setStyle(SPStyle *style)
+DrawingShape::setStyle(SPStyle *style, SPStyle *context_style)
 {
-    _setStyleCommon(_style, style);
-    _nrstyle.set(style);
+    DrawingItem::setStyle(style, context_style); // Must be first
+    _nrstyle.set(_style, _context_style);
+}
+
+void
+DrawingShape::setChildrenStyle(SPStyle* context_style)
+{
+    DrawingItem::setChildrenStyle( context_style );
+    _nrstyle.set(_style, _context_style);
 }
 
 unsigned
@@ -145,7 +149,6 @@ DrawingShape::_updateItem(Geom::IntRect const &area, UpdateContext const &ctx, u
             _bbox.unionWith(i->geometricBounds());
         }
     }
-
     return STATE_ALL;
 }
 
@@ -177,6 +180,10 @@ DrawingShape::_renderStroke(DrawingContext &dc)
     if( has_stroke ) {
         // TODO: remove segments outside of bbox when no dashes present
         dc.path(_curve->get_pathvector());
+        if (_style && _style->vector_effect.computed == SP_VECTOR_EFFECT_NON_SCALING_STROKE) {
+            dc.restore();
+            dc.save();
+        }
         _nrstyle.applyStroke(dc);
         dc.strokePreserve();
         dc.newPath(); // clear path
@@ -228,19 +235,23 @@ DrawingShape::_renderItem(DrawingContext &dc, Geom::IntRect const &area, unsigne
             Inkscape::DrawingContext::Save save(dc);
             dc.transform(_ctm);
 
+
             // update fill and stroke paints.
             // this cannot be done during nr_arena_shape_update, because we need a Cairo context
             // to render svg:pattern
             bool has_fill   = _nrstyle.prepareFill(dc, _item_bbox, _fill_pattern);
             bool has_stroke = _nrstyle.prepareStroke(dc, _item_bbox, _stroke_pattern);
             has_stroke &= (_nrstyle.stroke_width != 0);
-
             if (has_fill || has_stroke) {
-                // TODO: remove segments outside of bbox when no dashes present
                 dc.path(_curve->get_pathvector());
+                // TODO: remove segments outside of bbox when no dashes present
                 if (has_fill) {
                     _nrstyle.applyFill(dc);
                     dc.fillPreserve();
+                }
+                if (_style && _style->vector_effect.computed == SP_VECTOR_EFFECT_NON_SCALING_STROKE) {
+                    dc.restore();
+                    dc.save();
                 }
                 if (has_stroke) {
                     _nrstyle.applyStroke(dc);

@@ -28,9 +28,9 @@
 #include "document-undo.h"
 
 // needed for on-canvas editting:
-#include "tools-switch.h"
-#include "shape-editor.h"
-#include "desktop-handles.h"
+#include "ui/tools-switch.h"
+#include "ui/shape-editor.h"
+
 #include "selection.h"
 // clipboard support
 #include "ui/clipboard.h"
@@ -73,11 +73,25 @@ PathParam::PathParam( const Glib::ustring& label, const Glib::ustring& tip,
 PathParam::~PathParam()
 {
     remove_link();
-
+    using namespace Inkscape::UI;
+    SPDesktop *desktop = SP_ACTIVE_DESKTOP;
+    if (desktop) {
+        if (tools_isactive(desktop, TOOLS_NODES)) {
+            SPItem * item = SP_ACTIVE_DESKTOP->getSelection()->singleItem();
+            if (item != NULL) {
+                Inkscape::UI::Tools::NodeTool *nt = static_cast<Inkscape::UI::Tools::NodeTool*>(desktop->event_context);
+                std::set<ShapeRecord> shapes;
+                ShapeRecord r;
+                r.item = item;
+                shapes.insert(r);
+                nt->_multipath->setItems(shapes);
+            }
+        }
+    }
     g_free(defvalue);
 }
 
-std::vector<Geom::Path> const &
+Geom::PathVector const &
 PathParam::get_pathvector() const
 {
     return _pathvector;
@@ -207,6 +221,9 @@ PathParam::param_newWidget()
 void
 PathParam::param_editOncanvas(SPItem *item, SPDesktop * dt)
 {
+    SPDocument *document = dt->getDocument();
+    bool saved = DocumentUndo::getUndoSensitive(document);
+    DocumentUndo::setUndoSensitive(document, false);
     using namespace Inkscape::UI;
 
     // TODO remove the tools_switch atrocity.
@@ -223,11 +240,17 @@ PathParam::param_editOncanvas(SPItem *item, SPDesktop * dt)
     if (!href) {
         r.item = reinterpret_cast<SPItem*>(param_effect->getLPEObj());
         r.lpe_key = param_key;
+        Geom::PathVector stored_pv =  _pathvector;
+        param_write_to_repr("M0,0 L1,0");
+        gchar *svgd = sp_svg_write_path(stored_pv);
+        param_write_to_repr(svgd);
+        g_free(svgd);
     } else {
         r.item = ref.getObject();
     }
     shapes.insert(r);
     nt->_multipath->setItems(shapes);
+    DocumentUndo::setUndoSensitive(document, saved);
 }
 
 void
@@ -255,7 +278,7 @@ PathParam::param_transform_multiply(Geom::Affine const& postmul, bool /*set*/)
 }
 
 /*
- * See comments for set_new_value(std::vector<Geom::Path>).
+ * See comments for set_new_value(Geom::PathVector).
  */
 void
 PathParam::set_new_value (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & newpath, bool write_to_svg)
@@ -291,10 +314,15 @@ PathParam::set_new_value (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & newpa
  *          The new path data is not written to SVG. This method will emit the signal_path_changed signal.
  */
 void
-PathParam::set_new_value (std::vector<Geom::Path> const &newpath, bool write_to_svg)
+PathParam::set_new_value (Geom::PathVector const &newpath, bool write_to_svg)
 {
     remove_link();
-    _pathvector = newpath;
+    if (newpath.empty()) {
+        param_set_and_write_default();
+        return;
+    } else {
+        _pathvector = newpath;
+    }
     must_recalculate_pwd2 = true;
 
     if (write_to_svg) {
@@ -414,7 +442,7 @@ PathParam::linked_modified_callback(SPObject *linked_obj, guint /*flags*/)
 void
 PathParam::on_edit_button_click()
 {
-    SPItem * item = sp_desktop_selection(SP_ACTIVE_DESKTOP)->singleItem();
+    SPItem * item = SP_ACTIVE_DESKTOP->getSelection()->singleItem();
     if (item != NULL) {
         param_editOncanvas(item, SP_ACTIVE_DESKTOP);
     }
@@ -427,7 +455,13 @@ PathParam::paste_param_path(const char *svgd)
     if (svgd && *svgd) {
         // remove possible link to path
         remove_link();
-
+        SPItem * item = SP_ACTIVE_DESKTOP->getSelection()->singleItem();
+        if (item != NULL) {
+            Geom::PathVector path_clipboard =  sp_svg_read_pathv(svgd);
+            path_clipboard *= item->i2doc_affine().inverse();
+            svgd = sp_svg_write_path( path_clipboard );
+        }
+        
         param_write_to_repr(svgd);
         signal_path_pasted.emit();
     }

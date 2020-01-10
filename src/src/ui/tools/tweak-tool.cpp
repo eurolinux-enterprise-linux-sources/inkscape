@@ -28,7 +28,7 @@
 #include "selection.h"
 #include "desktop.h"
 #include "desktop-events.h"
-#include "desktop-handles.h"
+
 #include "desktop-style.h"
 #include "message-context.h"
 #include "pixmaps/cursor-tweak-move.xpm"
@@ -65,6 +65,8 @@
 #include "sp-gradient-reference.h"
 #include "sp-linear-gradient.h"
 #include "sp-radial-gradient.h"
+#include "sp-mesh-gradient.h"
+#include "sp-mesh-array.h"
 #include "gradient-chemistry.h"
 #include "sp-text.h"
 #include "sp-flowtext.h"
@@ -91,19 +93,9 @@ using Inkscape::DocumentUndo;
 
 #define DYNA_MIN_WIDTH 1.0e-6
 
-#include "tool-factory.h"
-
 namespace Inkscape {
 namespace UI {
 namespace Tools {
-
-namespace {
-	ToolBase* createTweakContext() {
-		return new TweakTool();
-	}
-
-	bool tweakContextRegistered = ToolFactory::instance().registerObject("/tools/tweak", createTweakContext);
-}
 
 const std::string& TweakTool::getPrefsPath() {
 	return TweakTool::prefsPath;
@@ -163,7 +155,7 @@ void TweakTool::update_cursor (bool with_shift) {
     gchar *sel_message = NULL;
 
     if (!desktop->selection->isEmpty()) {
-        num = g_slist_length(const_cast<GSList *>(desktop->selection->itemList()));
+        num = desktop->selection->itemList().size();
         sel_message = g_strdup_printf(ngettext("<b>%i</b> object selected","<b>%i</b> objects selected",num), num);
     } else {
         sel_message = g_strdup_printf("%s", _("<b>Nothing</b> selected"));
@@ -269,12 +261,11 @@ void TweakTool::setup() {
 
     {
         /* TODO: have a look at sp_dyna_draw_context_setup where the same is done.. generalize? at least make it an arcto! */
-        Geom::PathVector path;
-        Geom::Circle(0, 0, 1).getPath(path);
+        Geom::PathVector path = Geom::Path(Geom::Circle(0,0,1));
 
         SPCurve *c = new SPCurve(path);
 
-        this->dilate_area = sp_canvas_bpath_new(sp_desktop_controls(this->desktop), c);
+        this->dilate_area = sp_canvas_bpath_new(this->desktop->getControls(), c);
         c->unref();
         sp_canvas_bpath_set_fill(SP_CANVAS_BPATH(this->dilate_area), 0x00000000,(SPWindRule)0);
         sp_canvas_bpath_set_stroke(SP_CANVAS_BPATH(this->dilate_area), 0xff9900ff, 1.0, SP_STROKE_LINEJOIN_MITER, SP_STROKE_LINECAP_BUTT);
@@ -372,37 +363,42 @@ sp_tweak_dilate_recursive (Inkscape::Selection *selection, SPItem *item, Geom::P
 {
     bool did = false;
 
-    if (SP_IS_BOX3D(item) && !is_transform_mode(mode) && !is_color_mode(mode)) {
-        // convert 3D boxes to ordinary groups before tweaking their shapes
-        item = box3d_convert_to_group(SP_BOX3D(item));
-        selection->add(item);
+    {
+        SPBox3D *box = dynamic_cast<SPBox3D *>(item);
+        if (box && !is_transform_mode(mode) && !is_color_mode(mode)) {
+            // convert 3D boxes to ordinary groups before tweaking their shapes
+            item = box3d_convert_to_group(box);
+            selection->add(item);
+        }
     }
 
-    if (SP_IS_TEXT(item) || SP_IS_FLOWTEXT(item)) {
-        GSList *items = g_slist_prepend (NULL, item);
-        GSList *selected = NULL;
-        GSList *to_select = NULL;
+    if (dynamic_cast<SPText *>(item) || dynamic_cast<SPFlowtext *>(item)) {
+    	std::vector<SPItem*> items;
+        items.push_back(item);
+        std::vector<SPItem*> selected;
+        std::vector<Inkscape::XML::Node*> to_select;
         SPDocument *doc = item->document;
-        sp_item_list_to_curves (items, &selected, &to_select);
-        g_slist_free (items);
-        SPObject* newObj = doc->getObjectByRepr(static_cast<Inkscape::XML::Node *>(to_select->data));
-        g_slist_free (to_select);
-        item = SP_ITEM(newObj);
+        sp_item_list_to_curves (items, selected, to_select);
+        SPObject* newObj = doc->getObjectByRepr(to_select[0]);
+        item = dynamic_cast<SPItem *>(newObj);
+        g_assert(item != NULL);
         selection->add(item);
     }
 
-    if (SP_IS_GROUP(item) && !SP_IS_BOX3D(item)) {
+    if (dynamic_cast<SPGroup *>(item) && !dynamic_cast<SPBox3D *>(item)) {
         GSList *children = NULL;
         for (SPObject *child = item->firstChild() ; child; child = child->getNext() ) {
-            if (SP_IS_ITEM(child)) {
+            if (dynamic_cast<SPItem *>(static_cast<SPObject *>(child))) {
                 children = g_slist_prepend(children, child);
             }
         }
 
         for (GSList *i = children; i; i = i->next) {
-            SPItem *child = SP_ITEM(i->data);
-            if (sp_tweak_dilate_recursive (selection, SP_ITEM(child), p, vector, mode, radius, force, fidelity, reverse))
+            SPItem *child = dynamic_cast<SPItem *>(static_cast<SPObject *>(i->data));
+            g_assert(child != NULL);
+            if (sp_tweak_dilate_recursive (selection, child, p, vector, mode, radius, force, fidelity, reverse)) {
                 did = true;
+            }
         }
 
         g_slist_free(children);
@@ -509,13 +505,13 @@ sp_tweak_dilate_recursive (Inkscape::Selection *selection, SPItem *item, Geom::P
                 }
             }
 
-        } else if (SP_IS_PATH(item) || SP_IS_SHAPE(item)) {
+        } else if (dynamic_cast<SPPath *>(item) || dynamic_cast<SPShape *>(item)) {
 
             Inkscape::XML::Node *newrepr = NULL;
             gint pos = 0;
             Inkscape::XML::Node *parent = NULL;
             char const *id = NULL;
-            if (!SP_IS_PATH(item)) {
+            if (!dynamic_cast<SPPath *>(item)) {
                 newrepr = sp_selected_item_to_curved_repr(item, 0);
                 if (!newrepr) {
                     return false;
@@ -631,7 +627,8 @@ sp_tweak_dilate_recursive (Inkscape::Selection *selection, SPItem *item, Geom::P
                     if (newrepr) {
                         newrepr->setAttribute("d", str);
                     } else {
-                        if (SP_IS_LPE_ITEM(item) && SP_LPE_ITEM(item)->hasPathEffectRecursive()) {
+                        SPLPEItem *lpeitem = dynamic_cast<SPLPEItem *>(item);
+                        if (lpeitem && lpeitem->hasPathEffectRecursive()) {
                             item->getRepr()->setAttribute("inkscape:original-d", str);
                         } else {
                             item->getRepr()->setAttribute("d", str);
@@ -769,7 +766,7 @@ static void tweak_colors_in_gradient(SPItem *item, Inkscape::PaintTarget fill_or
 {
     SPGradient *gradient = getGradient(item, fill_or_stroke);
 
-    if (!gradient || !SP_IS_GRADIENT(gradient)) {
+    if (!gradient || !dynamic_cast<SPGradient *>(gradient)) {
         return;
     }
 
@@ -778,108 +775,132 @@ static void tweak_colors_in_gradient(SPItem *item, Inkscape::PaintTarget fill_or
     p *= (gradient->gradientTransform).inverse();
     // now p is in gradient's original coordinates
 
-    double pos = 0;
-    double r = 0;
-    if (SP_IS_LINEARGRADIENT(gradient)) {
-        SPLinearGradient *lg = SP_LINEARGRADIENT(gradient);
+    SPLinearGradient *lg = dynamic_cast<SPLinearGradient *>(gradient);
+    SPRadialGradient *rg = dynamic_cast<SPRadialGradient *>(gradient);
+    if (lg || rg) {
 
-        Geom::Point p1(lg->x1.computed, lg->y1.computed);
-        Geom::Point p2(lg->x2.computed, lg->y2.computed);
-        Geom::Point pdiff(p2 - p1);
-        double vl = Geom::L2(pdiff);
+        double pos = 0;
+        double r = 0;
 
-        // This is the matrix which moves and rotates the gradient line
-        // so it's oriented along the X axis:
-        Geom::Affine norm = Geom::Affine(Geom::Translate(-p1)) * Geom::Affine(Geom::Rotate(-atan2(pdiff[Geom::Y], pdiff[Geom::X])));
+        if (lg) {
+            Geom::Point p1(lg->x1.computed, lg->y1.computed);
+            Geom::Point p2(lg->x2.computed, lg->y2.computed);
+            Geom::Point pdiff(p2 - p1);
+            double vl = Geom::L2(pdiff);
 
-        // Transform the mouse point by it to find out its projection onto the gradient line:
-        Geom::Point pnorm = p * norm;
+            // This is the matrix which moves and rotates the gradient line
+            // so it's oriented along the X axis:
+            Geom::Affine norm = Geom::Affine(Geom::Translate(-p1)) *
+                Geom::Affine(Geom::Rotate(-atan2(pdiff[Geom::Y], pdiff[Geom::X])));
 
-        // Scale its X coordinate to match the length of the gradient line:
-        pos = pnorm[Geom::X] / vl;
-        // Calculate radius in lenfth-of-gradient-line units
-        r = radius / vl;
+            // Transform the mouse point by it to find out its projection onto the gradient line:
+            Geom::Point pnorm = p * norm;
 
-    } else if (SP_IS_RADIALGRADIENT(gradient)) {
-        SPRadialGradient *rg = SP_RADIALGRADIENT(gradient);
-        Geom::Point c (rg->cx.computed, rg->cy.computed);
-        pos = Geom::L2(p - c) / rg->r.computed;
-        r = radius / rg->r.computed;
-    }
+            // Scale its X coordinate to match the length of the gradient line:
+            pos = pnorm[Geom::X] / vl;
+            // Calculate radius in lenfth-of-gradient-line units
+            r = radius / vl;
 
-    // Normalize pos to 0..1, taking into accound gradient spread:
-    double pos_e = pos;
-    if (gradient->getSpread() == SP_GRADIENT_SPREAD_PAD) {
-        if (pos > 1) {
-            pos_e = 1;
         }
-        if (pos < 0) {
-            pos_e = 0;
+        if (rg) {
+            Geom::Point c (rg->cx.computed, rg->cy.computed);
+            pos = Geom::L2(p - c) / rg->r.computed;
+            r = radius / rg->r.computed;
         }
-    } else if (gradient->getSpread() == SP_GRADIENT_SPREAD_REPEAT) {
-        if (pos > 1 || pos < 0) {
-            pos_e = pos - floor(pos);
-        }
-    } else if (gradient->getSpread() == SP_GRADIENT_SPREAD_REFLECT) {
-        if (pos > 1 || pos < 0) {
-            bool odd = ((int)(floor(pos)) % 2 == 1);
-            pos_e = pos - floor(pos);
-            if (odd) {
-                pos_e = 1 - pos_e;
+
+        // Normalize pos to 0..1, taking into accound gradient spread:
+        double pos_e = pos;
+        if (gradient->getSpread() == SP_GRADIENT_SPREAD_PAD) {
+            if (pos > 1) {
+                pos_e = 1;
+            }
+            if (pos < 0) {
+                pos_e = 0;
+            }
+        } else if (gradient->getSpread() == SP_GRADIENT_SPREAD_REPEAT) {
+            if (pos > 1 || pos < 0) {
+                pos_e = pos - floor(pos);
+            }
+        } else if (gradient->getSpread() == SP_GRADIENT_SPREAD_REFLECT) {
+            if (pos > 1 || pos < 0) {
+                bool odd = ((int)(floor(pos)) % 2 == 1);
+                pos_e = pos - floor(pos);
+                if (odd) {
+                    pos_e = 1 - pos_e;
+                }
             }
         }
-    }
 
-    SPGradient *vector = sp_gradient_get_forked_vector_if_necessary(gradient, false);
+        SPGradient *vector = sp_gradient_get_forked_vector_if_necessary(gradient, false);
 
-    double offset_l = 0;
-    double offset_h = 0;
-    SPObject *child_prev = NULL;
-    for (SPObject *child = vector->firstChild(); child; child = child->getNext()) {
-        if (!SP_IS_STOP(child)) {
-            continue;
-        }
-        SPStop *stop = SP_STOP (child);
+        double offset_l = 0;
+        double offset_h = 0;
+        SPObject *child_prev = NULL;
+        for (SPObject *child = vector->firstChild(); child; child = child->getNext()) {
+            SPStop *stop = dynamic_cast<SPStop *>(child);
+            if (!stop) {
+                continue;
+            }
 
-        offset_h = stop->offset;
+            offset_h = stop->offset;
 
-        if (child_prev) {
+            if (child_prev) {
+                SPStop *prevStop = dynamic_cast<SPStop *>(child_prev);
+                g_assert(prevStop != NULL);
 
-            if (offset_h - offset_l > r && pos_e >= offset_l && pos_e <= offset_h) {
-                // the summit falls in this interstop, and the radius is small,
-                // so it only affects the ends of this interstop;
-                // distribute the force between the two endstops so that they
-                // get all the painting even if they are not touched by the brush
-                tweak_color (mode, stop->specified_color.v.c, rgb_goal,
-                                  force * (pos_e - offset_l) / (offset_h - offset_l),
-                                  do_h, do_s, do_l);
-                tweak_color (mode, SP_STOP(child_prev)->specified_color.v.c, rgb_goal,
-                                  force * (offset_h - pos_e) / (offset_h - offset_l),
-                                  do_h, do_s, do_l);
-                stop->updateRepr();
-                child_prev->updateRepr();
-                break;
-            } else {
-                // wide brush, may affect more than 2 stops,
-                // paint each stop by the force from the profile curve
-                if (offset_l <= pos_e && offset_l > pos_e - r) {
-                    tweak_color (mode, SP_STOP(child_prev)->specified_color.v.c, rgb_goal,
-                                 force * tweak_profile (fabs (pos_e - offset_l), r),
-                                 do_h, do_s, do_l);
-                    child_prev->updateRepr();
-                }
-
-                if (offset_h >= pos_e && offset_h < pos_e + r) {
+                if (offset_h - offset_l > r && pos_e >= offset_l && pos_e <= offset_h) {
+                    // the summit falls in this interstop, and the radius is small,
+                    // so it only affects the ends of this interstop;
+                    // distribute the force between the two endstops so that they
+                    // get all the painting even if they are not touched by the brush
                     tweak_color (mode, stop->specified_color.v.c, rgb_goal,
-                                 force * tweak_profile (fabs (pos_e - offset_h), r),
+                                 force * (pos_e - offset_l) / (offset_h - offset_l),
                                  do_h, do_s, do_l);
+                    tweak_color(mode, prevStop->specified_color.v.c, rgb_goal,
+                                force * (offset_h - pos_e) / (offset_h - offset_l),
+                                do_h, do_s, do_l);
+                    stop->updateRepr();
+                    child_prev->updateRepr();
+                    break;
+                } else {
+                    // wide brush, may affect more than 2 stops,
+                    // paint each stop by the force from the profile curve
+                    if (offset_l <= pos_e && offset_l > pos_e - r) {
+                        tweak_color(mode, prevStop->specified_color.v.c, rgb_goal,
+                                    force * tweak_profile (fabs (pos_e - offset_l), r),
+                                    do_h, do_s, do_l);
+                        child_prev->updateRepr();
+                    }
+
+                    if (offset_h >= pos_e && offset_h < pos_e + r) {
+                        tweak_color (mode, stop->specified_color.v.c, rgb_goal,
+                                     force * tweak_profile (fabs (pos_e - offset_h), r),
+                                     do_h, do_s, do_l);
+                        stop->updateRepr();
+                    }
+                }
+            }
+
+            offset_l = offset_h;
+            child_prev = child;
+        }
+    } else {
+        // Mesh
+        SPMeshGradient *mg = dynamic_cast<SPMeshGradient *>(gradient);
+        if (mg) {
+            SPMeshGradient *mg_array = dynamic_cast<SPMeshGradient *>(mg->getArray());
+            SPMeshNodeArray *array = &(mg_array->array);
+            // Every third node is a corner node
+            for( unsigned i=0; i < array->nodes.size(); i+=3 ) {
+                for( unsigned j=0; j < array->nodes[i].size(); j+=3 ) {
+                    SPStop *stop = array->nodes[i][j]->stop;
+                    double distance = Geom::L2(Geom::Point(p - array->nodes[i][j]->p)); 
+                    tweak_color (mode, stop->specified_color.v.c, rgb_goal,
+                                 force * tweak_profile (distance, radius), do_h, do_s, do_l);
                     stop->updateRepr();
                 }
             }
         }
-
-        offset_l = offset_h;
-        child_prev = child;
     }
 }
 
@@ -894,10 +915,11 @@ sp_tweak_color_recursive (guint mode, SPItem *item, SPItem *item_at_point,
 {
     bool did = false;
 
-    if (SP_IS_GROUP(item)) {
+    if (dynamic_cast<SPGroup *>(item)) {
         for (SPObject *child = item->firstChild() ; child; child = child->getNext() ) {
-            if (SP_IS_ITEM(child)) {
-                if (sp_tweak_color_recursive (mode, SP_ITEM(child), item_at_point,
+            SPItem *childItem = dynamic_cast<SPItem *>(child);
+            if (childItem) {
+                if (sp_tweak_color_recursive (mode, childItem, item_at_point,
                                           fill_goal, do_fill,
                                           stroke_goal, do_stroke,
                                           opacity_goal, do_opacity,
@@ -953,11 +975,11 @@ sp_tweak_color_recursive (guint mode, SPItem *item, SPItem *item_at_point,
                     //cycle through filter primitives
                     SPObject *primitive_obj = style->getFilter()->children;
                     while (primitive_obj) {
-                        if (SP_IS_FILTER_PRIMITIVE(primitive_obj)) {
-                            SPFilterPrimitive *primitive = SP_FILTER_PRIMITIVE(primitive_obj);
+                        SPFilterPrimitive *primitive = dynamic_cast<SPFilterPrimitive *>(primitive_obj);
+                        if (primitive) {
                             //if primitive is gaussianblur
-                            if(SP_IS_GAUSSIANBLUR(primitive)) {
-                                SPGaussianBlur * spblur = SP_GAUSSIANBLUR(primitive);
+                            SPGaussianBlur * spblur = dynamic_cast<SPGaussianBlur *>(primitive);
+                            if (spblur) {
                                 float num = spblur->stdDeviation.getNumber();
                                 blur_now += num * i2dt.descrim(); // sum all blurs in the filter
                             }
@@ -1020,7 +1042,7 @@ sp_tweak_color_recursive (guint mode, SPItem *item, SPItem *item_at_point,
 static bool
 sp_tweak_dilate (TweakTool *tc, Geom::Point event_p, Geom::Point p, Geom::Point vector, bool reverse)
 {
-    Inkscape::Selection *selection = sp_desktop_selection(SP_EVENT_CONTEXT(tc)->desktop);
+    Inkscape::Selection *selection = tc->desktop->getSelection();
     SPDesktop *desktop = SP_EVENT_CONTEXT(tc)->desktop;
 
     if (selection->isEmpty()) {
@@ -1076,11 +1098,9 @@ sp_tweak_dilate (TweakTool *tc, Geom::Point event_p, Geom::Point p, Geom::Point 
     double move_force = get_move_force(tc);
     double color_force = MIN(sqrt(path_force)/20.0, 1);
 
-    for (GSList *items = g_slist_copy(const_cast<GSList *>(selection->itemList()));
-         items != NULL;
-         items = items->next) {
-
-        SPItem *item = SP_ITEM(items->data);
+    std::vector<SPItem*> items=selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end(); ++i){
+        SPItem *item = *i;
 
         if (is_color_mode (tc->mode)) {
             if (do_fill || do_stroke || do_opacity) {
@@ -1187,7 +1207,7 @@ bool TweakTool::root_handler(GdkEvent* event) {
 
                 guint num = 0;
                 if (!desktop->selection->isEmpty()) {
-                    num = g_slist_length(const_cast<GSList *>(desktop->selection->itemList()));
+                    num = desktop->selection->itemList().size();
                 }
                 if (num == 0) {
                     this->message_context->flash(Inkscape::ERROR_MESSAGE, _("<b>Nothing selected!</b> Select objects to tweak."));
@@ -1223,55 +1243,55 @@ bool TweakTool::root_handler(GdkEvent* event) {
                 this->has_dilated = false;
                 switch (this->mode) {
                     case TWEAK_MODE_MOVE:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Move tweak"));
                         break;
                     case TWEAK_MODE_MOVE_IN_OUT:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Move in/out tweak"));
                         break;
                     case TWEAK_MODE_MOVE_JITTER:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Move jitter tweak"));
                         break;
                     case TWEAK_MODE_SCALE:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Scale tweak"));
                         break;
                     case TWEAK_MODE_ROTATE:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Rotate tweak"));
                         break;
                     case TWEAK_MODE_MORELESS:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Duplicate/delete tweak"));
                         break;
                     case TWEAK_MODE_PUSH:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Push path tweak"));
                         break;
                     case TWEAK_MODE_SHRINK_GROW:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Shrink/grow path tweak"));
                         break;
                     case TWEAK_MODE_ATTRACT_REPEL:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Attract/repel path tweak"));
                         break;
                     case TWEAK_MODE_ROUGHEN:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Roughen path tweak"));
                         break;
                     case TWEAK_MODE_COLORPAINT:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Color paint tweak"));
                         break;
                     case TWEAK_MODE_COLORJITTER:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Color jitter tweak"));
                         break;
                     case TWEAK_MODE_BLUR:
-                        DocumentUndo::done(sp_desktop_document(SP_EVENT_CONTEXT(this)->desktop),
+                        DocumentUndo::done(this->desktop->getDocument(),
                                            SP_VERB_CONTEXT_TWEAK, _("Blur tweak"));
                         break;
                 }

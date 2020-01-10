@@ -1,5 +1,5 @@
-#ifndef __NR_FILTER_TILE_H__
-#define __NR_FILTER_TILE_H__
+#ifndef SEEN_NR_FILTER_TILE_H
+#define SEEN_NR_FILTER_TILE_H
 
 /*
  * feTile filter primitive renderer
@@ -26,6 +26,7 @@ public:
     virtual ~FilterTile();
 
     virtual void render_cairo(FilterSlot &slot);
+    virtual void area_enlarge(Geom::IntRect &area, Geom::Affine const &trans);
     virtual double complexity(Geom::Affine const &ctm);
 };
 

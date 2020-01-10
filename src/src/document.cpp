@@ -46,11 +46,13 @@
 #include "widgets/desktop-widget.h"
 #include "desktop.h"
 #include "dir-util.h"
+#include "display/drawing.h"
 #include "display/drawing-item.h"
 #include "document-private.h"
 #include "document-undo.h"
+#include "file.h"
 #include "id-clash.h"
-#include "inkscape-private.h"
+#include "inkscape.h"
 #include "inkscape-version.h"
 #include "libavoid/router.h"
 #include "persp3d.h"
@@ -77,11 +79,11 @@ using Inkscape::Util::unit_table;
 // since we want it to happen when there are no more updates.
 #define SP_DOCUMENT_REROUTING_PRIORITY (G_PRIORITY_HIGH_IDLE - 1)
 
-
+bool sp_no_convert_text_baseline_spacing = false;
 static gint sp_document_idle_handler(gpointer data);
 static gint sp_document_rerouting_handler(gpointer data);
 
-gboolean sp_document_resource_list_free(gpointer key, gpointer value, gpointer data);
+//gboolean sp_document_resource_list_free(gpointer key, gpointer value, gpointer data);
 
 static gint doc_count = 0;
 static gint doc_mem_count = 0;
@@ -105,11 +107,11 @@ SPDocument::SPDocument() :
     rerouting_handler_id(0),
     profileManager(NULL), // deferred until after other initialization
     router(new Avoid::Router(Avoid::PolyLineRouting|Avoid::OrthogonalRouting)),
-    _collection_queue(NULL),
     oldSignalsConnected(false),
     current_persp3d(NULL),
     current_persp3d_impl(NULL),
-    _parent_document(NULL)
+    _parent_document(NULL),
+    _node_cache_valid(false)
 {
     // Penalise libavoid for choosing paths with needless extra segments.
     // This results in much better looking orthogonal connector paths.
@@ -119,16 +121,9 @@ SPDocument::SPDocument() :
 
     p->serial = next_serial++;
 
-    p->iddef = g_hash_table_new(g_direct_hash, g_direct_equal);
-    p->reprdef = g_hash_table_new(g_direct_hash, g_direct_equal);
-
-    p->resources = g_hash_table_new(g_str_hash, g_str_equal);
-
     p->sensitive = false;
     p->partial = NULL;
     p->history_size = 0;
-    p->undo = NULL;
-    p->redo = NULL;
     p->seeking = false;
 
     priv = p;
@@ -138,6 +133,7 @@ SPDocument::SPDocument() :
 
     // XXX only for testing!
     priv->undoStackObservers.add(p->console_output_undo_observer);
+    _node_cache = std::deque<SPItem*>();
 }
 
 SPDocument::~SPDocument() {
@@ -152,6 +148,14 @@ SPDocument::~SPDocument() {
     if (router) {
         delete router;
         router = NULL;
+    }
+
+    if (oldSignalsConnected) {
+        priv->selChangeConnection.disconnect();
+        priv->desktopActivatedConnection.disconnect();
+    } else {
+        _selection_changed_connection.disconnect();
+        _desktop_activated_connection.disconnect();
     }
 
     if (priv) {
@@ -169,17 +173,10 @@ SPDocument::~SPDocument() {
             root = NULL;
         }
 
-        if (priv->iddef) g_hash_table_destroy(priv->iddef);
-        if (priv->reprdef) g_hash_table_destroy(priv->reprdef);
-
         if (rdoc) Inkscape::GC::release(rdoc);
 
         /* Free resources */
-        g_hash_table_foreach_remove(priv->resources, sp_document_resource_list_free, this);
-        g_hash_table_destroy(priv->resources);
-
-        delete priv;
-        priv = NULL;
+        priv->resources.clear();
     }
 
     cr_cascade_unref(style_cascade);
@@ -208,17 +205,8 @@ SPDocument::~SPDocument() {
         rerouting_handler_id = 0;
     }
 
-    if (oldSignalsConnected) {
-        g_signal_handlers_disconnect_by_func(G_OBJECT(INKSCAPE),
-                                             reinterpret_cast<gpointer>(DocumentUndo::resetKey),
-                                             static_cast<gpointer>(this));
-    } else {
-        _selection_changed_connection.disconnect();
-        _desktop_activated_connection.disconnect();
-    }
-
     if (keepalive) {
-        inkscape_unref();
+        inkscape_unref(INKSCAPE);
         keepalive = FALSE;
     }
 
@@ -296,19 +284,18 @@ void SPDocument::queueForOrphanCollection(SPObject *object) {
     g_return_if_fail(object->document == this);
 
     sp_object_ref(object, NULL);
-    _collection_queue = g_slist_prepend(_collection_queue, object);
+    _collection_queue.push_back(object);
 }
 
 void SPDocument::collectOrphans() {
-    while (_collection_queue) {
-        GSList *objects=_collection_queue;
-        _collection_queue = NULL;
-        for ( GSList *iter=objects ; iter ; iter = iter->next ) {
-            SPObject *object=reinterpret_cast<SPObject *>(iter->data);
+    while (!_collection_queue.empty()) {
+        std::vector<SPObject *> objects(_collection_queue);
+        _collection_queue.clear();
+        for (std::vector<SPObject *>::const_iterator iter = objects.begin(); iter != objects.end(); ++iter) {
+            SPObject *object = *iter;
             object->collectOrphan();
             sp_object_unref(object, NULL);
         }
-        g_slist_free(objects);
     }
 }
 
@@ -369,7 +356,7 @@ SPDocument *SPDocument::createDoc(Inkscape::XML::Document *rdoc,
 
     // Create SPRoot element
     const std::string typeString = NodeTraits::get_type_string(*rroot);
-    SPObject* rootObj = SPFactory::instance().createObject(typeString);
+    SPObject* rootObj = SPFactory::createObject(typeString);
     document->root = dynamic_cast<SPRoot*>(rootObj);
 
     if (document->root == 0) {
@@ -382,11 +369,6 @@ SPDocument *SPDocument::createDoc(Inkscape::XML::Document *rdoc,
 
     // Recursively build object tree
     document->root->invoke_build(document, rroot, false);
-
-    /* fixme: Not sure about this, but lets assume ::build updates */
-    rroot->setAttribute("inkscape:version", Inkscape::version_string);
-    /* fixme: Again, I moved these here to allow version determining in ::build (Lauris) */
-
 
     /* Eliminate obsolete sodipodi:docbase, for privacy reasons */
     rroot->setAttribute("sodipodi:docbase", NULL);
@@ -447,7 +429,7 @@ SPDocument *SPDocument::createDoc(Inkscape::XML::Document *rdoc,
     rdf_set_defaults( document );
 
     if (keepalive) {
-        inkscape_ref();
+        inkscape_ref(INKSCAPE);
     }
 
     // Check if the document already has a perspective (e.g., when opening an existing
@@ -462,11 +444,31 @@ SPDocument *SPDocument::createDoc(Inkscape::XML::Document *rdoc,
     DocumentUndo::setUndoSensitive(document, true);
 
     // reset undo key when selection changes, so that same-key actions on different objects are not coalesced
-    g_signal_connect(G_OBJECT(INKSCAPE), "change_selection",
-                     G_CALLBACK(DocumentUndo::resetKey), document);
-    g_signal_connect(G_OBJECT(INKSCAPE), "activate_desktop",
-                     G_CALLBACK(DocumentUndo::resetKey), document);
+    document->priv->selChangeConnection = INKSCAPE.signal_selection_changed.connect(
+                sigc::hide(sigc::bind(
+                sigc::ptr_fun(&DocumentUndo::resetKey), document)
+    ));
+    document->priv->desktopActivatedConnection = INKSCAPE.signal_activate_desktop.connect(
+                sigc::hide(sigc::bind(
+                sigc::ptr_fun(&DocumentUndo::resetKey), document)
+    ));
     document->oldSignalsConnected = true;
+
+    /** Fix baseline spacing (pre-92 files) **/
+    if ( (!sp_no_convert_text_baseline_spacing)
+         && sp_version_inside_range( document->root->version.inkscape, 0, 1, 0, 92 ) ) {
+        sp_file_convert_text_baseline_spacing(document);
+    }
+
+    /** Fix font names in legacy documents (pre-92 files) **/
+    if ( sp_version_inside_range( document->root->version.inkscape, 0, 1, 0, 92 ) ) {
+        sp_file_convert_font_name(document);
+    }
+
+    /** Fix dpi (pre-92 files) **/
+    if ( !(INKSCAPE.use_gui()) && sp_version_inside_range( document->root->version.inkscape, 0, 1, 0, 92 ) ) {
+        sp_file_convert_dpi(document);
+    }
 
     return document;
 }
@@ -593,18 +595,86 @@ SPDocument *SPDocument::doUnref()
 }
 
 /// guaranteed not to return nullptr
-Inkscape::Util::Unit const* SPDocument::getDefaultUnit() const
+Inkscape::Util::Unit const* SPDocument::getDisplayUnit() const
 {
     SPNamedView const* nv = sp_document_namedview(this, NULL);
-    return nv ? nv->getDefaultUnit() : unit_table.getUnit("px");
+    return nv ? nv->getDisplayUnit() : unit_table.getUnit("px");
 }
 
-/// guaranteed not to return nullptr
-// returns 'px' units as default, like legacy Inkscape
-Inkscape::Util::Unit const& SPDocument::getSVGUnit() const
+/// Sets document scale (by changing viewBox)
+void SPDocument::setDocumentScale( double scaleX, double scaleY ) {
+
+    root->viewBox = Geom::Rect::from_xywh(
+        root->viewBox.left(),
+        root->viewBox.top(),
+        root->width.computed  * scaleX,
+        root->height.computed * scaleY );
+    root->viewBox_set = true;
+    root->updateRepr();
+}
+
+/// Sets document scale (by changing viewBox, x and y scaling equal) 
+void SPDocument::setDocumentScale( double scale ) {
+    setDocumentScale( scale, scale );
+}
+
+/// Returns document scale as defined by width/height (in pixels) and viewBox (real world to
+/// user-units).
+Geom::Scale SPDocument::getDocumentScale() const
 {
-    SPNamedView const* nv = sp_document_namedview(this, NULL);
-    return nv ? nv->getSVGUnit() : *unit_table.getUnit("px");
+    Geom::Scale scale;
+    if( root->viewBox_set ) {
+        double scale_x = 1.0;
+        double scale_y = 1.0;
+        if( root->viewBox.width() > 0.0 ) {
+            scale_x = root->width.computed / root->viewBox.width();
+        }
+        if( root->viewBox.height() > 0.0 ) {
+            scale_y = root->height.computed / root->viewBox.height();
+        }
+        scale = Geom::Scale(scale_x, scale_y);
+    }
+    // std::cout << "SPDocument::getDocumentScale():\n" << scale << std::endl;
+    return scale;
+}
+
+// Avoid calling root->updateRepr() twice by combining setting width and height.
+// (As done on every delete as clipboard calls this via fitToRect(). Also called in page-sizer.cpp)
+void SPDocument::setWidthAndHeight(const Inkscape::Util::Quantity &width, const Inkscape::Util::Quantity &height, bool changeSize)
+{
+    Inkscape::Util::Unit const *old_width_units = unit_table.getUnit("px");
+    if (root->width.unit)
+        old_width_units = unit_table.getUnit(root->width.unit);
+    gdouble old_width_converted;  // old width converted to new units
+    if (root->width.unit == SVGLength::PERCENT)
+        old_width_converted = Inkscape::Util::Quantity::convert(root->width.computed, "px", width.unit);
+    else
+        old_width_converted = Inkscape::Util::Quantity::convert(root->width.value, old_width_units, width.unit);
+
+    root->width.computed = width.value("px");
+    root->width.value = width.quantity;
+    root->width.unit = (SVGLength::Unit) width.unit->svgUnit();
+
+    Inkscape::Util::Unit const *old_height_units = unit_table.getUnit("px");
+    if (root->height.unit)
+        old_height_units = unit_table.getUnit(root->height.unit);
+    gdouble old_height_converted;  // old height converted to new units
+    if (root->height.unit == SVGLength::PERCENT)
+        old_height_converted = Inkscape::Util::Quantity::convert(root->height.computed, "px", height.unit);
+    else
+        old_height_converted = Inkscape::Util::Quantity::convert(root->height.value, old_height_units, height.unit);
+
+    root->height.computed = height.value("px");
+    root->height.value = height.quantity;
+    root->height.unit = (SVGLength::Unit) height.unit->svgUnit();
+
+    // viewBox scaled by relative change in page size (maintains document scale).
+    if (root->viewBox_set && changeSize) {
+        root->viewBox.setMax(Geom::Point(
+        root->viewBox.left() + (root->width.value /  old_width_converted ) * root->viewBox.width(),
+        root->viewBox.top()  + (root->height.value / old_height_converted) * root->viewBox.height()));
+    }
+    root->updateRepr();
 }
 
 Inkscape::Util::Quantity SPDocument::getWidth() const
@@ -626,17 +696,21 @@ Inkscape::Util::Quantity SPDocument::getWidth() const
 
 void SPDocument::setWidth(const Inkscape::Util::Quantity &width, bool changeSize)
 {
-    Inkscape::Util::Unit const *old_units = unit_table.getUnit("px");
+    Inkscape::Util::Unit const *old_width_units = unit_table.getUnit("px");
     if (root->width.unit)
-        old_units = unit_table.getUnit(root->width.unit);
-    gdouble old_converted = Inkscape::Util::Quantity::convert(root->width.value, old_units, width.unit);
+        old_width_units = unit_table.getUnit(root->width.unit);
+    gdouble old_width_converted;  // old width converted to new units
+    if (root->width.unit == SVGLength::PERCENT)
+        old_width_converted = Inkscape::Util::Quantity::convert(root->width.computed, "px", width.unit);
+    else
+        old_width_converted = Inkscape::Util::Quantity::convert(root->width.value, old_width_units, width.unit);
 
     root->width.computed = width.value("px");
     root->width.value = width.quantity;
     root->width.unit = (SVGLength::Unit) width.unit->svgUnit();
 
     if (root->viewBox_set && changeSize)
-        root->viewBox.setMax(Geom::Point(root->viewBox.left() + (root->width.value / old_converted) * root->viewBox.width(), root->viewBox.bottom()));
+        root->viewBox.setMax(Geom::Point(root->viewBox.left() + (root->width.value / old_width_converted) * root->viewBox.width(), root->viewBox.bottom()));
 
     root->updateRepr();
 }
@@ -661,19 +735,34 @@ Inkscape::Util::Quantity SPDocument::getHeight() const
 
 void SPDocument::setHeight(const Inkscape::Util::Quantity &height, bool changeSize)
 {
-    Inkscape::Util::Unit const *old_units = unit_table.getUnit("px");
+    Inkscape::Util::Unit const *old_height_units = unit_table.getUnit("px");
     if (root->height.unit)
-        old_units = unit_table.getUnit(root->height.unit);
-    gdouble old_converted = Inkscape::Util::Quantity::convert(root->height.value, old_units, height.unit);
+        old_height_units = unit_table.getUnit(root->height.unit);
+    gdouble old_height_converted;  // old height converted to new units
+    if (root->height.unit == SVGLength::PERCENT)
+        old_height_converted = Inkscape::Util::Quantity::convert(root->height.computed, "px", height.unit);
+    else
+        old_height_converted = Inkscape::Util::Quantity::convert(root->height.value, old_height_units, height.unit);
 
     root->height.computed = height.value("px");
     root->height.value = height.quantity;
     root->height.unit = (SVGLength::Unit) height.unit->svgUnit();
 
     if (root->viewBox_set && changeSize)
-        root->viewBox.setMax(Geom::Point(root->viewBox.right(), root->viewBox.top() + (root->height.value / old_converted) * root->viewBox.height()));
+        root->viewBox.setMax(Geom::Point(root->viewBox.right(), root->viewBox.top() + (root->height.value / old_height_converted) * root->viewBox.height()));
 
     root->updateRepr();
+}
+
+Geom::Rect SPDocument::getViewBox() const
+{
+    Geom::Rect viewBox;
+    if (root->viewBox_set) {
+        viewBox = root->viewBox;
+    } else {
+        viewBox = Geom::Rect::from_xywh( 0, 0, getWidth().value("px"), getHeight().value("px"));
+    }
+    return viewBox;
 }
 
 void SPDocument::setViewBox(const Geom::Rect &viewBox)
@@ -709,7 +798,7 @@ void SPDocument::fitToRect(Geom::Rect const &rect, bool with_margins)
 
     double const old_height = getHeight().value("px");
     Inkscape::Util::Unit const *nv_units = unit_table.getUnit("px");
-    if (root->height.unit)
+    if (root->height.unit && (root->height.unit != SVGLength::PERCENT))
         nv_units = unit_table.getUnit(root->height.unit);
     SPNamedView *nv = sp_document_namedview(this, NULL);
     
@@ -736,9 +825,10 @@ void SPDocument::fitToRect(Geom::Rect const &rect, bool with_margins)
             rect.min() - Geom::Point(margin_left, margin_bottom),
             rect.max() + Geom::Point(margin_right, margin_top));
     
-    
-    setWidth(Inkscape::Util::Quantity(Inkscape::Util::Quantity::convert(rect_with_margins.width(), "px", nv_units), nv_units));
-    setHeight(Inkscape::Util::Quantity(Inkscape::Util::Quantity::convert(rect_with_margins.height(), "px", nv_units), nv_units));
+    setWidthAndHeight(
+        Inkscape::Util::Quantity(Inkscape::Util::Quantity::convert(rect_with_margins.width(),  "px", nv_units), nv_units),
+        Inkscape::Util::Quantity(Inkscape::Util::Quantity::convert(rect_with_margins.height(), "px", nv_units), nv_units)
+        );
 
     Geom::Translate const tr(
             Geom::Point(0, old_height - rect_with_margins.height())
@@ -882,6 +972,10 @@ SPDocument::emitReconstructionFinish(void)
 {
     // printf("Finishing Reconstruction\n");
     priv->_reconstruction_finish_signal.emit();
+    // indicates that gradients are reloaded (to rebuild the Auto palette)
+    priv->resources_changed_signals[g_quark_from_string("gradient")].emit();
+    priv->resources_changed_signals[g_quark_from_string("filter")].emit();
+
 
 /**    
     // Reference to the old persp3d object is invalid after reconstruction.
@@ -902,17 +996,24 @@ void SPDocument::_emitModified() {
     static guint const flags = SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG | SP_OBJECT_PARENT_MODIFIED_FLAG;
     root->emitModified(0);
     priv->modified_signal.emit(flags);
+    _node_cache_valid=false;
 }
 
 void SPDocument::bindObjectToId(gchar const *id, SPObject *object) {
     GQuark idq = g_quark_from_string(id);
 
     if (object) {
-        g_assert(g_hash_table_lookup(priv->iddef, GINT_TO_POINTER(idq)) == NULL);
-        g_hash_table_insert(priv->iddef, GINT_TO_POINTER(idq), object);
+        if(object->getId())
+            priv->iddef.erase(object->getId());
+        g_assert(priv->iddef.find(id)==priv->iddef.end());
+        priv->iddef[id] = object;
+        //g_assert(g_hash_table_lookup(priv->iddef, GINT_TO_POINTER(idq)) == NULL);
+        //g_hash_table_insert(priv->iddef, GINT_TO_POINTER(idq), object);
     } else {
-        g_assert(g_hash_table_lookup(priv->iddef, GINT_TO_POINTER(idq)) != NULL);
-        g_hash_table_remove(priv->iddef, GINT_TO_POINTER(idq));
+        g_assert(priv->iddef.find(id)!=priv->iddef.end());
+        priv->iddef.erase(id);
+        //g_assert(g_hash_table_lookup(priv->iddef, GINT_TO_POINTER(idq)) != NULL);
+        //g_hash_table_remove(priv->iddef, GINT_TO_POINTER(idq));
     }
 
     SPDocumentPrivate::IDChangedSignalMap::iterator pos;
@@ -947,15 +1048,16 @@ SPObject *SPDocument::getObjectById(Glib::ustring const &id) const
 SPObject *SPDocument::getObjectById(gchar const *id) const
 {
     g_return_val_if_fail(id != NULL, NULL);
-    if (!priv || !priv->iddef) {
+    if (!priv || priv->iddef.empty()) {
     	return NULL;
     }
 
-    GQuark idq = g_quark_from_string(id);
-    gpointer rv = g_hash_table_lookup(priv->iddef, GINT_TO_POINTER(idq));
-    if(rv != NULL)
+    // GQuark idq = g_quark_from_string(id);
+    std::map<std::string, SPObject *>::iterator rv = priv->iddef.find(id);
+    //gpointer rv = g_hash_table_lookup(priv->iddef, GINT_TO_POINTER(idq));
+    if(rv != priv->iddef.end())
     {
-        return static_cast<SPObject*>(rv);
+        return (rv->second);
     }
     else
     {
@@ -972,18 +1074,22 @@ sigc::connection SPDocument::connectIdChanged(gchar const *id,
 void SPDocument::bindObjectToRepr(Inkscape::XML::Node *repr, SPObject *object)
 {
     if (object) {
-        g_assert(g_hash_table_lookup(priv->reprdef, repr) == NULL);
-        g_hash_table_insert(priv->reprdef, repr, object);
+        g_assert(priv->reprdef.find(repr)==priv->reprdef.end());
+        priv->reprdef[repr] = object;
     } else {
-        g_assert(g_hash_table_lookup(priv->reprdef, repr) != NULL);
-        g_hash_table_remove(priv->reprdef, repr);
+        g_assert(priv->reprdef.find(repr)!=priv->reprdef.end());
+        priv->reprdef.erase(repr); 
     }
 }
 
 SPObject *SPDocument::getObjectByRepr(Inkscape::XML::Node *repr) const
 {
     g_return_val_if_fail(repr != NULL, NULL);
-    return static_cast<SPObject*>(g_hash_table_lookup(priv->reprdef, repr));
+    std::map<Inkscape::XML::Node *, SPObject *>::iterator rv = priv->reprdef.find(repr);
+    if(rv != priv->reprdef.end())
+        return (rv->second);
+    else
+        return NULL;
 }
 
 Glib::ustring SPDocument::getLanguage() const
@@ -1166,20 +1272,20 @@ static bool overlaps(Geom::Rect const &area, Geom::Rect const &box)
     return area.intersects(box);
 }
 
-static GSList *find_items_in_area(GSList *s, SPGroup *group, unsigned int dkey, Geom::Rect const &area,
-                                  bool (*test)(Geom::Rect const &, Geom::Rect const &), bool take_insensitive = false)
+static std::vector<SPItem*> &find_items_in_area(std::vector<SPItem*> &s, SPGroup *group, unsigned int dkey, Geom::Rect const &area,
+                                  bool (*test)(Geom::Rect const &, Geom::Rect const &), bool take_insensitive = false, bool into_groups = false)
 {
     g_return_val_if_fail(SP_IS_GROUP(group), s);
 
     for ( SPObject *o = group->firstChild() ; o ; o = o->getNext() ) {
         if ( SP_IS_ITEM(o) ) {
-            if (SP_IS_GROUP(o) && SP_GROUP(o)->effectiveLayerMode(dkey) == SPGroup::LAYER ) {
-                s = find_items_in_area(s, SP_GROUP(o), dkey, area, test);
+            if (SP_IS_GROUP(o) && (SP_GROUP(o)->effectiveLayerMode(dkey) == SPGroup::LAYER || into_groups)) {
+                s = find_items_in_area(s, SP_GROUP(o), dkey, area, test, take_insensitive, into_groups);
             } else {
                 SPItem *child = SP_ITEM(o);
                 Geom::OptRect box = child->desktopVisualBounds();
                 if ( box && test(area, *box) && (take_insensitive || child->isVisibleAndUnlocked(dkey))) {
-                    s = g_slist_append(s, child);
+                    s.push_back(child);
                 }
             }
         }
@@ -1206,7 +1312,7 @@ static bool item_is_in_group(SPItem *item, SPGroup *group)
     return inGroup;
 }
 
-SPItem *SPDocument::getItemFromListAtPointBottom(unsigned int dkey, SPGroup *group, GSList const *list,Geom::Point const &p, bool take_insensitive)
+SPItem *SPDocument::getItemFromListAtPointBottom(unsigned int dkey, SPGroup *group, std::vector<SPItem*> const &list,Geom::Point const &p, bool take_insensitive)
 {
     g_return_val_if_fail(group, NULL);
     SPItem *bottomMost = 0;
@@ -1218,9 +1324,10 @@ SPItem *SPDocument::getItemFromListAtPointBottom(unsigned int dkey, SPGroup *gro
         if ( SP_IS_ITEM(o) ) {
             SPItem *item = SP_ITEM(o);
             Inkscape::DrawingItem *arenaitem = item->get_arenaitem(dkey);
+            arenaitem->drawing().update();
             if (arenaitem && arenaitem->pick(p, delta, 1) != NULL
                 && (take_insensitive || item->isVisibleAndUnlocked(dkey))) {
-                if (g_slist_find((GSList *) list, item) != NULL) {
+                if (find(list.begin(),list.end(),item)!=list.end() ) {
                     bottomMost = item;
                 }
             }
@@ -1235,51 +1342,62 @@ SPItem *SPDocument::getItemFromListAtPointBottom(unsigned int dkey, SPGroup *gro
 }
 
 /**
-Returns the topmost (in z-order) item from the descendants of group (recursively) which
-is at the point p, or NULL if none. Honors into_groups on whether to recurse into
-non-layer groups or not. Honors take_insensitive on whether to return insensitive
-items. If upto != NULL, then if item upto is encountered (at any level), stops searching
-upwards in z-order and returns what it has found so far (i.e. the found item is
-guaranteed to be lower than upto).
- */
-static SPItem *find_item_at_point(unsigned int dkey, SPGroup *group, Geom::Point const &p, gboolean into_groups, bool take_insensitive = false, SPItem *upto = NULL)
+Turn the SVG DOM into a flat list of nodes that can be searched from top-down.
+The list can be persisted, which improves "find at multiple points" speed.
+*/
+void SPDocument::build_flat_item_list(unsigned int dkey, SPGroup *group, gboolean into_groups) const
 {
-    SPItem *seen = NULL;
-    SPItem *newseen = NULL;
-    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    gdouble delta = prefs->getDouble("/options/cursortolerance/value", 1.0);
-
     for ( SPObject *o = group->firstChild() ; o ; o = o->getNext() ) {
         if (!SP_IS_ITEM(o)) {
             continue;
         }
 
-        if (upto && SP_ITEM(o) == upto) {
-            break;
-        }
-
         if (SP_IS_GROUP(o) && (SP_GROUP(o)->effectiveLayerMode(dkey) == SPGroup::LAYER || into_groups)) {
-            // if nothing found yet, recurse into the group
-            newseen = find_item_at_point(dkey, SP_GROUP(o), p, into_groups, take_insensitive, upto);
-            if (newseen) {
-                seen = newseen;
-                newseen = NULL;
-            }
-
-            if (item_is_in_group(upto, SP_GROUP(o))) {
-                break;
-            }
+            build_flat_item_list(dkey, SP_GROUP(o), into_groups);
         } else {
             SPItem *child = SP_ITEM(o);
-            Inkscape::DrawingItem *arenaitem = child->get_arenaitem(dkey);
 
-            // seen remembers the last (topmost) of items pickable at this point
-            if (arenaitem && arenaitem->pick(p, delta, 1) != NULL
-                && (take_insensitive || child->isVisibleAndUnlocked(dkey))) {
-                seen = child;
+            if (child->isVisibleAndUnlocked(dkey)) {
+                _node_cache.push_front(child);
             }
         }
     }
+}
+
+/**
+Returns the topmost (in z-order) item from the descendants of group (recursively) which
+is at the point p, or NULL if none. Honors into_groups on whether to recurse into
+non-layer groups or not. Honors take_insensitive on whether to return insensitive
+items. If upto != NULL, then if item upto is encountered (at any level), stops searching
+upwards in z-order and returns what it has found so far (i.e. the found item is
+guaranteed to be lower than upto). Requires a list of nodes built by
+build_flat_item_list.
+ */
+static SPItem *find_item_at_point(std::deque<SPItem*> *nodes, unsigned int dkey, Geom::Point const &p, SPItem* upto=NULL)
+{
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    gdouble delta = prefs->getDouble("/options/cursortolerance/value", 1.0);
+
+    SPItem *seen = NULL;
+    SPItem *child;
+    bool seen_upto = (!upto);
+    for (std::deque<SPItem*>::const_iterator i = nodes->begin(); i != nodes->end(); ++i) {
+        child = *i;
+        if (!seen_upto){
+            if(child == upto)
+                seen_upto = true;
+            continue;
+        }
+        Inkscape::DrawingItem *arenaitem = child->get_arenaitem(dkey);
+        if (arenaitem) {
+            arenaitem->drawing().update();
+            if (arenaitem->pick(p, delta, 1) != NULL) {
+                seen = child;
+                break;
+            }
+        }
+    }
+
     return seen;
 }
 
@@ -1306,6 +1424,9 @@ static SPItem *find_group_at_point(unsigned int dkey, SPGroup *group, Geom::Poin
         if (SP_IS_GROUP(o) && SP_GROUP(o)->effectiveLayerMode(dkey) != SPGroup::LAYER ) {
             SPItem *child = SP_ITEM(o);
             Inkscape::DrawingItem *arenaitem = child->get_arenaitem(dkey);
+            if (arenaitem) {
+                arenaitem->drawing().update();
+            }
 
             // seen remembers the last (topmost) of groups pickable at this point
             if (arenaitem && arenaitem->pick(p, delta, 1) != NULL) {
@@ -1322,11 +1443,11 @@ static SPItem *find_group_at_point(unsigned int dkey, SPGroup *group, Geom::Poin
  * Assumes box is normalized (and g_asserts it!)
  *
  */
-GSList *SPDocument::getItemsInBox(unsigned int dkey, Geom::Rect const &box) const
+std::vector<SPItem*> SPDocument::getItemsInBox(unsigned int dkey, Geom::Rect const &box, bool into_groups) const
 {
-    g_return_val_if_fail(this->priv != NULL, NULL);
-
-    return find_items_in_area(NULL, SP_GROUP(this->root), dkey, box, is_within);
+    std::vector<SPItem*> x;
+    g_return_val_if_fail(this->priv != NULL, x);
+    return find_items_in_area(x, SP_GROUP(this->root), dkey, box, is_within, false, into_groups);
 }
 
 /*
@@ -1336,16 +1457,16 @@ GSList *SPDocument::getItemsInBox(unsigned int dkey, Geom::Rect const &box) cons
  *
  */
 
-GSList *SPDocument::getItemsPartiallyInBox(unsigned int dkey, Geom::Rect const &box) const
+std::vector<SPItem*> SPDocument::getItemsPartiallyInBox(unsigned int dkey, Geom::Rect const &box, bool into_groups) const
 {
-    g_return_val_if_fail(this->priv != NULL, NULL);
-
-    return find_items_in_area(NULL, SP_GROUP(this->root), dkey, box, overlaps);
+    std::vector<SPItem*> x;
+    g_return_val_if_fail(this->priv != NULL, x);
+    return find_items_in_area(x, SP_GROUP(this->root), dkey, box, overlaps, false, into_groups);
 }
 
-GSList *SPDocument::getItemsAtPoints(unsigned const key, std::vector<Geom::Point> points) const
+std::vector<SPItem*> SPDocument::getItemsAtPoints(unsigned const key, std::vector<Geom::Point> points, bool all_layers, size_t limit) const 
 {
-    GSList *items = NULL;
+    std::vector<SPItem*> items;
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
 
     // When picking along the path, we don't want small objects close together
@@ -1354,11 +1475,31 @@ GSList *SPDocument::getItemsAtPoints(unsigned const key, std::vector<Geom::Point
     gdouble saved_delta = prefs->getDouble("/options/cursortolerance/value", 1.0);
     prefs->setDouble("/options/cursortolerance/value", 0.25);
 
-    for(unsigned int i = 0; i < points.size(); i++) {
-        SPItem *item = getItemAtPoint(key, points[i],
-                                                 false, NULL);
-        if (item && !g_slist_find(items, item))
-            items = g_slist_prepend (items, item);
+    // Cache a flattened SVG DOM to speed up selection.
+    if(!_node_cache_valid){
+        _node_cache.clear();
+        build_flat_item_list(key, SP_GROUP(this->root), true);
+        _node_cache_valid=true;
+    }
+    SPObject *current_layer = SP_ACTIVE_DESKTOP->currentLayer();
+    SPDesktop *desktop = SP_ACTIVE_DESKTOP;
+    Inkscape::LayerModel *layer_model = NULL;
+    if(desktop){
+        layer_model = desktop->layers;
+    }
+    size_t item_counter = 0;
+    for(int i = points.size()-1;i>=0; i--) {
+        SPItem *item = find_item_at_point(&_node_cache, key, points[i]);
+        if (item && items.end()==find(items.begin(),items.end(), item))
+            if(all_layers || (layer_model && layer_model->layerForObject(item) == current_layer)){
+                items.push_back(item);
+                item_counter++;
+                //limit 0 = no limit
+                if(item_counter == limit){
+                    prefs->setDouble("/options/cursortolerance/value", saved_delta);
+                    return items;
+                }
+            }
     }
 
     // and now we restore it back
@@ -1368,11 +1509,26 @@ GSList *SPDocument::getItemsAtPoints(unsigned const key, std::vector<Geom::Point
 }
 
 SPItem *SPDocument::getItemAtPoint( unsigned const key, Geom::Point const &p,
-                                    gboolean const into_groups, SPItem *upto) const
+                                    bool const into_groups, SPItem *upto) const 
 {
     g_return_val_if_fail(this->priv != NULL, NULL);
 
-    return find_item_at_point(key, SP_GROUP(this->root), p, into_groups, false, upto);
+    // Build a flattened SVG DOM for find_item_at_point.
+    std::deque<SPItem*> bak(_node_cache);
+    if(!into_groups){
+        _node_cache.clear();
+        build_flat_item_list(key, SP_GROUP(this->root), into_groups);
+    }
+    if(!_node_cache_valid && into_groups){
+        _node_cache.clear();
+        build_flat_item_list(key, SP_GROUP(this->root), true);
+        _node_cache_valid=true;
+    }
+    
+    SPItem *res = find_item_at_point(&_node_cache, key, p, upto);
+    if(!into_groups)
+        _node_cache = bak;
+    return res;
 }
 
 SPItem *SPDocument::getGroupAtPoint(unsigned int key, Geom::Point const &p) const
@@ -1381,7 +1537,6 @@ SPItem *SPDocument::getGroupAtPoint(unsigned int key, Geom::Point const &p) cons
 
     return find_group_at_point(key, SP_GROUP(this->root), p);
 }
-
 
 // Resource management
 
@@ -1395,13 +1550,20 @@ bool SPDocument::addResource(gchar const *key, SPObject *object)
     bool result = false;
 
     if ( !object->cloned ) {
-        GSList *rlist = (GSList*)g_hash_table_lookup(priv->resources, key);
-        g_return_val_if_fail(!g_slist_find(rlist, object), false);
-        rlist = g_slist_prepend(rlist, object);
-        g_hash_table_insert(priv->resources, (gpointer) key, rlist);
+        std::vector<SPObject *> rlist = priv->resources[key];
+        g_return_val_if_fail(std::find(rlist.begin(),rlist.end(),object) == rlist.end(), false);
+        priv->resources[key].insert(priv->resources[key].begin(),object);
 
         GQuark q = g_quark_from_string(key);
-        priv->resources_changed_signals[q].emit();
+
+        /*in general, do not send signal if the object has no id (yet),
+        it means the object is not completely built.
+        (happens when pasting swatches across documents, cf bug 1495106)
+        [this check should be more generally presend on emit() calls since 
+        the backtrace is unusable with crashed from this cause]
+        */
+        if(object->getId() || dynamic_cast<SPGroup*>(object) )
+            priv->resources_changed_signals[q].emit();
 
         result = true;
     }
@@ -1419,11 +1581,11 @@ bool SPDocument::removeResource(gchar const *key, SPObject *object)
     bool result = false;
 
     if ( !object->cloned ) {
-        GSList *rlist = (GSList*)g_hash_table_lookup(priv->resources, key);
-        g_return_val_if_fail(rlist != NULL, false);
-        g_return_val_if_fail(g_slist_find(rlist, object), false);
-        rlist = g_slist_remove(rlist, object);
-        g_hash_table_insert(priv->resources, (gpointer) key, rlist);
+        std::vector<SPObject *> rlist = priv->resources[key];
+        g_return_val_if_fail(!rlist.empty(), false);
+        std::vector<SPObject*>::iterator it = std::find(priv->resources[key].begin(),priv->resources[key].end(),object);
+        g_return_val_if_fail(it != rlist.end(), false);
+        priv->resources[key].erase(it);
 
         GQuark q = g_quark_from_string(key);
         priv->resources_changed_signals[q].emit();
@@ -1434,12 +1596,13 @@ bool SPDocument::removeResource(gchar const *key, SPObject *object)
     return result;
 }
 
-GSList const *SPDocument::getResourceList(gchar const *key) const
+std::vector<SPObject *> const SPDocument::getResourceList(gchar const *key) const
 {
-    g_return_val_if_fail(key != NULL, NULL);
-    g_return_val_if_fail(*key != '\0', NULL);
+    std::vector<SPObject *> emptyset;
+    g_return_val_if_fail(key != NULL, emptyset);
+    g_return_val_if_fail(*key != '\0', emptyset);
 
-    return (GSList*)g_hash_table_lookup(this->priv->resources, key);
+    return this->priv->resources[key];
 }
 
 sigc::connection SPDocument::connectResourcesChanged(gchar const *key,
@@ -1450,13 +1613,6 @@ sigc::connection SPDocument::connectResourcesChanged(gchar const *key,
 }
 
 /* Helpers */
-
-gboolean
-sp_document_resource_list_free(gpointer /*key*/, gpointer value, gpointer /*data*/)
-{
-    g_slist_free((GSList *) value);
-    return TRUE;
-}
 
 static unsigned int count_objects_recursive(SPObject *obj, unsigned int count)
 {
@@ -1469,11 +1625,22 @@ static unsigned int count_objects_recursive(SPObject *obj, unsigned int count)
     return count;
 }
 
+/**
+ * Count the number of objects in a given document recursively using the count_objects_recursive helper function
+ * 
+ * @param[in] document Pointer to the document for counting objects
+ * @return Numer of objects in the document
+ */
 static unsigned int objects_in_document(SPDocument *document)
 {
     return count_objects_recursive(document->getRoot(), 0);
 }
 
+/**
+ * Remove unused definitions etc. recursively from an object and its siblings
+ *
+ * @param[inout] obj Object which shall be "cleaned"
+ */
 static void vacuum_document_recursive(SPObject *obj)
 {
     if (SP_IS_DEFS(obj)) {
@@ -1488,10 +1655,15 @@ static void vacuum_document_recursive(SPObject *obj)
     }
 }
 
+/**
+ * Remove unused definitions etc. recursively from an entire document.
+ *
+ * @return Number of removed objects
+ */
 unsigned int SPDocument::vacuumDocument()
 {
     unsigned int start = objects_in_document(this);
-    unsigned int end = start;
+    unsigned int end;
     unsigned int newend = start;
 
     unsigned int iterations = 0;
@@ -1506,6 +1678,7 @@ unsigned int SPDocument::vacuumDocument()
         newend = objects_in_document(this);
 
     } while (iterations < 100 && newend < end);
+    // We stop if vacuum_document_recursive doesn't remove any more objects or after 100 iterations, whichever occurs first.
 
     return start - newend;
 }
@@ -1514,6 +1687,11 @@ bool SPDocument::isSeeking() const {
     return priv->seeking;
 }
 
+/**
+ * Indicate to the user if the document has been modified since the last save by displaying a "*" in front of the name of the file in the window title.
+ *
+ * @param[in] modified True if the document has been modified.
+ */
 void SPDocument::setModifiedSinceSave(bool modified) {
     this->modified_since_save = modified;
     if (SP_ACTIVE_DESKTOP) {
@@ -1534,11 +1712,18 @@ void SPDocument::setModifiedSinceSave(bool modified) {
 void SPDocument::importDefs(SPDocument *source)
 {
     Inkscape::XML::Node *root = source->getReprRoot();
-    Inkscape::XML::Node *defs = sp_repr_lookup_name(root, "svg:defs", 1);
     Inkscape::XML::Node *target_defs = this->getDefs()->getRepr();
+    std::vector<Inkscape::XML::Node const *> defsNodes = sp_repr_lookup_name_many(root, "svg:defs");
 
     prevent_id_clashes(source, this);
     
+    for (std::vector<Inkscape::XML::Node const *>::iterator defs = defsNodes.begin(); defs != defsNodes.end(); ++defs) {
+       importDefsNode(source, const_cast<Inkscape::XML::Node *>(*defs), target_defs);
+    }
+}
+
+void SPDocument::importDefsNode(SPDocument *source, Inkscape::XML::Node *defs, Inkscape::XML::Node *target_defs)
+{    
     int stagger=0;
 
     /*  Note, "clipboard" throughout the comments means "the document that is either the clipboard
@@ -1581,11 +1766,10 @@ void SPDocument::importDefs(SPDocument *source)
     
     /* First pass: remove duplicates in clipboard of definitions in document */
     for (Inkscape::XML::Node *def = defs->firstChild() ; def ; def = def->next()) {
-
+        if(def->type() != Inkscape::XML::ELEMENT_NODE)continue;
         /* If this  clipboard has been pasted into one document, and is now being pasted into another,
         or pasted again into the same, it will already have been processed.  If we detect that then 
         skip the rest of this pass. */
-
         Glib::ustring defid = def->attribute("id");
         if( defid.find( DuplicateDefString ) != Glib::ustring::npos )break;
 
@@ -1615,6 +1799,7 @@ void SPDocument::importDefs(SPDocument *source)
 
     /* Second pass: remove duplicates in clipboard of earlier definitions in clipboard */
     for (Inkscape::XML::Node *def = defs->firstChild() ; def ; def = def->next()) {
+        if(def->type() != Inkscape::XML::ELEMENT_NODE)continue;
         Glib::ustring defid = def->attribute("id");
         if( defid.find( DuplicateDefString ) != Glib::ustring::npos )continue; // this one already handled
         SPObject *src = source->getObjectByRepr(def);
@@ -1642,6 +1827,7 @@ void SPDocument::importDefs(SPDocument *source)
 
     /* Final pass: copy over those parts which are not duplicates  */
     for (Inkscape::XML::Node *def = defs->firstChild() ; def ; def = def->next()) {
+        if(def->type() != Inkscape::XML::ELEMENT_NODE)continue;
 
         /* Ignore duplicate defs marked in the first pass */
         Glib::ustring defid = def->attribute("id");

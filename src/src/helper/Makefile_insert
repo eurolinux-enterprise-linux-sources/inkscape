@@ -12,8 +12,11 @@ ink_common_sources +=	\
 	helper/geom-curves.h	\
 	helper/geom-nodetype.cpp	\
 	helper/geom-nodetype.h	\
+	helper/geom-pathstroke.cpp      \
+	helper/geom-pathstroke.h        \
 	helper/gnome-utils.cpp	\
 	helper/gnome-utils.h	\
+	helper/mathfns.h \
 	helper/png-write.cpp	\
 	helper/png-write.h	\
 	helper/sp-marshal.cpp	\

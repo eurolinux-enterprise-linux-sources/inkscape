@@ -4,6 +4,7 @@
 /* Authors:
  *   Nicholas Bishop <nicholasbishop@gmail.com>
  *   Rodrigo Kumpera <kumpera@gmail.com>
+ *   insaner
  *
  * Copyright (C) 2007 Authors
  *
@@ -26,6 +27,9 @@
 
 #include <gtkmm/notebook.h>
 #include <gtkmm/sizegroup.h>
+
+#include <gtkmm/paned.h>
+#include <gtkmm/scrolledwindow.h>
 
 namespace Inkscape {
 namespace UI {
@@ -69,11 +73,13 @@ private:
                 add(filter);
                 add(label);
                 add(sel);
+                add(count);
             }
 
             Gtk::TreeModelColumn<SPFilter*> filter;
             Gtk::TreeModelColumn<Glib::ustring> label;
             Gtk::TreeModelColumn<int> sel;
+            Gtk::TreeModelColumn<int> count;
         };
 
         void setTargetDesktop(SPDesktop *desktop);
@@ -89,6 +95,7 @@ private:
         bool on_filter_move(const Glib::RefPtr<Gdk::DragContext>& /*context*/, int x, int y, guint /*time*/);
         void on_selection_toggled(const Glib::ustring&);
 
+        void update_counts();
         void update_filters();
         void filter_list_button_release(GdkEventButton*);
         void add_filter();
@@ -123,7 +130,11 @@ private:
         Gtk::Button _add;
         Glib::RefPtr<Gtk::Menu> _menu;
         sigc::signal<void> _signal_filter_changed;
+#if __cplusplus <= 199711L
         std::auto_ptr<Inkscape::XML::SignalObserver> _observer;
+#else
+        std::unique_ptr<Inkscape::XML::SignalObserver> _observer;
+#endif
     };
 
     class PrimitiveColumns : public Gtk::TreeModel::ColumnRecord
@@ -239,7 +250,11 @@ private:
         sigc::connection _scroll_connection;
         int _autoscroll_y;
         int _autoscroll_x;
+#if __cplusplus <= 199711L
         std::auto_ptr<Inkscape::XML::SignalObserver> _observer;
+#else
+        std::unique_ptr<Inkscape::XML::SignalObserver> _observer;
+#endif
         int _input_type_width;
         int _input_type_height;
     };
@@ -265,9 +280,15 @@ private:
     // Primitives Info Box  
     Gtk::Label _infobox_desc;
     Gtk::Image _infobox_icon;
+    Gtk::ScrolledWindow* _sw_infobox;
 
     // View/add primitives
-    Gtk::VBox _primitive_box;
+#if WITH_GTKMM_3_0
+    Gtk::Paned* _primitive_box;
+#else
+    Gtk::VPaned* _primitive_box;
+#endif
+    
     UI::Widget::ComboBoxEnum<Inkscape::Filters::FilterPrimitiveType> _add_primitive_type;
     Gtk::Button _add_primitive;
 

@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#!/usr/bin/env python
 '''
 Copyright (C) 2007 Aaron Spike  (aaron @ ekips.org)
 Copyright (C) 2007 Tavmjong Bah (tavmjong @ free.fr)
@@ -15,11 +15,12 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 
 import inkex
 import simplestyle, sys
+from simpletransform import computePointInNode
 from math import *
 import string
 
@@ -158,7 +159,8 @@ class Gears(inkex.Effect):
 
         # Embed gear in group to make animation easier:
         #  Translate group, Rotate path.
-        t = 'translate(' + str( self.view_center[0] ) + ',' + str( self.view_center[1] ) + ')'
+        view_center = computePointInNode(list(self.view_center), self.current_layer)
+        t = 'translate(' + str( view_center[0] ) + ',' + str( view_center[1] ) + ')'
         g_attribs = {inkex.addNS('label','inkscape'):'Gear' + str( teeth ),
                      'transform':t }
         g = inkex.etree.SubElement(self.current_layer, 'g', g_attribs)

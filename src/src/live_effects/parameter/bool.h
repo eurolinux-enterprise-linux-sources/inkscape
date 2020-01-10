@@ -4,7 +4,7 @@
 /*
  * Inkscape::LivePathEffectParameters
  *
-* Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
+ * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
@@ -25,7 +25,8 @@ public:
                const Glib::ustring& key,
                Inkscape::UI::Widget::Registry* wr,
                Effect* effect,
-               bool default_value = false);
+               bool default_value = false,
+               bool no_widget = false);
     virtual ~BoolParam();
 
     virtual Gtk::Widget * param_newWidget();
@@ -46,6 +47,7 @@ private:
 
     bool value;
     bool defvalue;
+    bool hide_widget;
 };
 
 

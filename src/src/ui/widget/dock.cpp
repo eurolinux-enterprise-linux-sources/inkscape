@@ -56,6 +56,7 @@ Dock::Dock(Gtk::Orientation orientation)
 #endif
       _scrolled_window (Gtk::manage(new Gtk::ScrolledWindow))
 {
+    _scrolled_window->set_name("Dock");
 #if WITH_GDL_3_6
     gtk_orientable_set_orientation(GTK_ORIENTABLE(_gdl_dock_bar),
                                    static_cast<GtkOrientation>(orientation));
@@ -119,8 +120,9 @@ Dock::Dock(Gtk::Orientation orientation)
 
     gdl_dock_bar_set_style(_gdl_dock_bar, gdl_dock_bar_style);
 
-    g_signal_connect(G_OBJECT(INKSCAPE), "dialogs_hide", G_CALLBACK(hideCallback), (void *)this);
-    g_signal_connect(G_OBJECT(INKSCAPE), "dialogs_unhide", G_CALLBACK(unhideCallback), (void *)this);
+
+    INKSCAPE.signal_dialogs_hide.connect(sigc::mem_fun(*this, &Dock::hide));
+    INKSCAPE.signal_dialogs_unhide.connect(sigc::mem_fun(*this, &Dock::show));
 
     g_signal_connect(_paned->gobj(), "button-press-event", G_CALLBACK(_on_paned_button_event), (void *)this);
     g_signal_connect(_paned->gobj(), "button-release-event", G_CALLBACK(_on_paned_button_event), (void *)this);

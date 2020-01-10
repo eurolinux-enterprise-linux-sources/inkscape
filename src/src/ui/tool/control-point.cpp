@@ -11,7 +11,7 @@
 #include <gdkmm.h>
 #include <2geom/point.h>
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "display/sp-canvas.h"
 #include "display/snap-indicator.h"
 #include "ui/tools/tool-base.h"
@@ -71,15 +71,17 @@ ControlPoint::ControlPoint(SPDesktop *d, Geom::Point const &initial_pos, SPAncho
     _cset(cset),
     _state(STATE_NORMAL),
     _position(initial_pos),
-    _lurking(false)
+    _lurking(false),
+    _double_clicked(false)
 {
     _canvas_item = sp_canvas_item_new(
-        group ? group : sp_desktop_controls(_desktop), SP_TYPE_CTRL,
+        group ? group : _desktop->getControls(), SP_TYPE_CTRL,
         "anchor", (SPAnchorType) anchor, "size", (gdouble) pixbuf->get_width(),
         "shape", SP_CTRL_SHAPE_BITMAP, "pixbuf", pixbuf->gobj(),
         "filled", TRUE, "fill_color", _cset.normal.fill,
         "stroked", TRUE, "stroke_color", _cset.normal.stroke,
         "mode", SP_CTRL_MODE_XOR, NULL);
+
     _commonInit();
 }
 
@@ -91,9 +93,10 @@ ControlPoint::ControlPoint(SPDesktop *d, Geom::Point const &initial_pos, SPAncho
     _cset(cset),
     _state(STATE_NORMAL),
     _position(initial_pos),
-    _lurking(false)
+    _lurking(false),
+    _double_clicked(false)
 {
-    _canvas_item = ControlManager::getManager().createControl(group ? group : sp_desktop_controls(_desktop), type);
+    _canvas_item = ControlManager::getManager().createControl(group ? group : _desktop->getControls(), type);
     g_object_set(_canvas_item,
                  "anchor", anchor,
                  "filled", TRUE, "fill_color", _cset.normal.fill,
@@ -245,7 +248,8 @@ bool ControlPoint::_eventHandler(Inkscape::UI::Tools::ToolBase *event_context, G
     static Geom::Point pointer_offset;
     // number of last doubleclicked button
     static unsigned next_release_doubleclick = 0;
-    
+    _double_clicked = false;
+
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     int drag_tolerance = prefs->getIntLimited("/options/dragtolerance/value", 0, 0, 100);
     GdkEventMotion em;
@@ -278,6 +282,7 @@ bool ControlPoint::_eventHandler(Inkscape::UI::Tools::ToolBase *event_context, G
         Ca = _desktop->canvas;
         em = event->motion;
         combine_motion_events(Ca, em, 0);
+
         if (_event_grab && ! event_context->space_panning) {
             _desktop->snapindicator->remove_snaptarget(); 
             bool transferred = false;
@@ -298,6 +303,7 @@ bool ControlPoint::_eventHandler(Inkscape::UI::Tools::ToolBase *event_context, G
                     _drag_initiated = true;
                 }
             }
+
             if (!transferred) {
                 // dragging in progress
                 Geom::Point new_pos = _desktop->w2d(event_point(event->motion)) + pointer_offset;
@@ -305,7 +311,7 @@ bool ControlPoint::_eventHandler(Inkscape::UI::Tools::ToolBase *event_context, G
                 dragged(new_pos, &em);
                 move(new_pos);
                 _updateDragTip(&em); // update dragging tip after moving to new position
-                
+
                 _desktop->scroll_to_point(new_pos);
                 _desktop->set_coordinate_status(_position);
                 sp_event_context_snap_delay_handler(event_context, NULL,
@@ -342,6 +348,7 @@ bool ControlPoint::_eventHandler(Inkscape::UI::Tools::ToolBase *event_context, G
             } else {
                 // it is the end of a click
                 if (next_release_doubleclick) {
+                    _double_clicked = true;
                     return doubleclicked(&event->button);
                 } else {
                     return clicked(&event->button);

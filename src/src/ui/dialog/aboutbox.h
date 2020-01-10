@@ -15,14 +15,6 @@
 #ifndef INKSCAPE_UI_DIALOG_ABOUTBOX_H
 #define INKSCAPE_UI_DIALOG_ABOUTBOX_H
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/dialog.h>
 
 namespace Inkscape {
@@ -55,13 +47,13 @@ private:
 
 #endif // INKSCAPE_UI_DIALOG_ABOUTBOX_H
 
-/* 
+/*
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0))
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

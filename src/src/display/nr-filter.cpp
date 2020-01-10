@@ -9,7 +9,6 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "display/nr-filter-image.h"
 #include <glib.h>
 #include <cmath>
 #include <cstring>
@@ -29,6 +28,7 @@
 #include "display/nr-filter-component-transfer.h"
 #include "display/nr-filter-diffuselighting.h"
 #include "display/nr-filter-displacement-map.h"
+#include "display/nr-filter-image.h"
 #include "display/nr-filter-flood.h"
 #include "display/nr-filter-gaussian.h"
 #include "display/nr-filter-merge.h"
@@ -108,7 +108,9 @@ int Filter::render(Inkscape::DrawingItem const *item, DrawingContext &graphic, D
         graphic.setOperator(CAIRO_OPERATOR_OVER);
         return 1;
     }
-
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    item->drawing().setFilterQuality(prefs->getInt("/options/filterquality/value", 0));
+    item->drawing().setBlurQuality(prefs->getInt("/options/blurquality/value", 0));
     FilterQuality const filterquality = (FilterQuality)item->drawing().filterQuality();
     int const blurquality = item->drawing().blurQuality();
 
@@ -200,7 +202,7 @@ void Filter::area_enlarge(Geom::IntRect &bbox, Inkscape::DrawingItem const *item
 
     Geom::Rect item_bbox;
     Geom::OptRect maybe_bbox = item->itemBounds();
-    if (maybe_bbox.isEmpty()) {
+    if (maybe_bbox.empty()) {
         // Code below needs a bounding box
         return;
     }

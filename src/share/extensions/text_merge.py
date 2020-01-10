@@ -73,8 +73,8 @@ class Merge(inkex.Effect):
             parentnode = self.current_layer
             file = self.args[ -1 ]
 
-            #get all bounding boxes in file by calling inkscape again with the --query-all command line option
-            #it returns a comma seperated list structured id,x,y,w,h
+            # get all bounding boxes in file by calling inkscape again with the --query-all command line option
+            # it returns a comma separated list structured id,x,y,w,h
             if bsubprocess:
                 p = Popen('inkscape --query-all "%s"' % (file), shell=True, stdout=PIPE, stderr=PIPE)
                 err = p.stderr
@@ -199,4 +199,4 @@ if __name__ == '__main__':
     e = Merge()
     e.affect()
 
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99
+# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 fileencoding=utf-8 textwidth=99

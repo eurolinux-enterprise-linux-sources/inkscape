@@ -18,7 +18,8 @@
 #ifndef SEEN_INKSCAPE_XML_SIMPLE_NODE_H
 #define SEEN_INKSCAPE_XML_SIMPLE_NODE_H
 
-#include <glib.h> // g_assert()
+#include <cassert>
+#include <iostream>
 
 #include "xml/node.h"
 #include "xml/attribute-record.h"
@@ -38,7 +39,7 @@ class SimpleNode
 : virtual public Node, public Inkscape::GC::Managed<>
 {
 public:
-    gchar const *name() const;
+    char const *name() const;
     int code() const { return _name; }
     void setCodeUnsafe(int code) {
         _name = code;
@@ -83,14 +84,14 @@ public:
     unsigned position() const;
     void setPosition(int pos);
 
-    gchar const *attribute(gchar const *key) const;
-    void setAttribute(gchar const *key, gchar const *value, bool is_interactive=false);
-    bool matchAttributeName(gchar const *partial_name) const;
+    char const *attribute(char const *key) const;
+    void setAttribute(char const *key, char const *value, bool is_interactive=false);
+    bool matchAttributeName(char const *partial_name) const;
 
-    gchar const *content() const;
-    void setContent(gchar const *value);
+    char const *content() const;
+    void setContent(char const *value);
 
-    void mergeFrom(Node const *src, gchar const *key);
+    void mergeFrom(Node const *src, char const *key);
 
     Inkscape::Util::List<AttributeRecord const> attributeList() const {
         return _attributes;
@@ -100,7 +101,7 @@ public:
     void synthesizeEvents(NodeObserver &observer);
 
     void addListener(NodeEventVector const *vector, void *data) {
-        g_assert(vector != NULL);
+        assert(vector != NULL);
         _observers.addListener(*vector, data);
     }
     void addObserver(NodeObserver &observer) {
@@ -119,6 +120,8 @@ public:
     void removeSubtreeObserver(NodeObserver &observer) {
         _subtree_observers.remove(observer);
     }
+
+    void recursivePrintTree(unsigned level = 0);
 
 protected:
     SimpleNode(int code, Document *document);

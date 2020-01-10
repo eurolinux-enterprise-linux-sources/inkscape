@@ -35,7 +35,7 @@
 #include "print.h"
 #include "document.h"
 #include "style.h"
-#include "marker.h"
+#include "sp-marker.h"
 #include "sp-path.h"
 #include "preferences.h"
 #include "attributes.h"
@@ -47,7 +47,7 @@
 #include "bad-uri-exception.h"
 #include "xml/repr.h"
 
-#include "util/mathfns.h" // for triangle_area()
+#include "helper/mathfns.h" // for triangle_area()
 
 #include "splivarot.h" // for bounding box calculation
 
@@ -95,12 +95,12 @@ void SPShape::release() {
         if (this->_marker[i]) {
 
             for (SPItemView *v = this->display; v != NULL; v = v->next) {
-              sp_marker_hide ((SPMarker *) this->_marker[i], v->arenaitem->key() + i);
+                sp_marker_hide(_marker[i], v->arenaitem->key() + i);
             }
 
             this->_release_connect[i].disconnect();
             this->_modified_connect[i].disconnect();
-            this->_marker[i] = sp_object_hunref (this->_marker[i], this);
+            _marker[i] = static_cast<SPMarker *>(sp_object_hunref(_marker[i], this));
         }
     }
     
@@ -126,6 +126,7 @@ Inkscape::XML::Node* SPShape::write(Inkscape::XML::Document *xml_doc, Inkscape::
 }
 
 void SPShape::update(SPCtx* ctx, guint flags) {
+    // std::cout << "SPShape::update(): " << (getId()?getId():"null") << std::endl;
     SPLPEItem::update(ctx, flags);
 
     /* This stanza checks that an object's marker style agrees with
@@ -145,7 +146,15 @@ void SPShape::update(SPCtx* ctx, guint flags) {
 
             for (SPItemView *v = ((SPItem *) (this))->display; v != NULL; v = v->next) {
                 Inkscape::DrawingShape *sh = dynamic_cast<Inkscape::DrawingShape *>(v->arenaitem);
-                sh->setStyle(this->style);
+                if (hasMarkers()) {
+                    this->context_style = this->style;
+                    sh->setStyle(this->style, this->context_style);
+                    // Done at end:
+                    // sh->setChildrenStyle(this->context_style); //Resolve 'context-xxx' in children.
+                } else if (this->parent) {
+                    this->context_style = this->parent->context_style;
+                    sh->setStyle(this->style, this->context_style);
+                }
             }
         }
     }
@@ -163,6 +172,7 @@ void SPShape::update(SPCtx* ctx, guint flags) {
     }
 
     if (this->hasMarkers ()) {
+
         /* Dimension marker views */
         for (SPItemView *v = this->display; v != NULL; v = v->next) {
             if (!v->arenaitem->key()) {
@@ -170,10 +180,10 @@ void SPShape::update(SPCtx* ctx, guint flags) {
             }
 
             for (int i = 0 ; i < SP_MARKER_LOC_QTY ; i++) {
-                if (this->_marker[i]) {
-                    sp_marker_show_dimension ((SPMarker *) this->_marker[i],
-                                              v->arenaitem->key() + i,
-                                              this->numberOfMarkers (i));
+                if (_marker[i]) {
+                    sp_marker_show_dimension(_marker[i],
+                                             v->arenaitem->key() + i,
+                                             numberOfMarkers(i));
                 }
             }
         }
@@ -181,6 +191,13 @@ void SPShape::update(SPCtx* ctx, guint flags) {
         /* Update marker views */
         for (SPItemView *v = this->display; v != NULL; v = v->next) {
             sp_shape_update_marker_view (this, v->arenaitem);
+        }
+    
+        // Marker selector needs this here or marker previews are not rendered.
+        for (SPItemView *v = this->display; v != NULL; v = v->next) {
+            Inkscape::DrawingShape *sh = dynamic_cast<Inkscape::DrawingShape *>(v->arenaitem);
+
+            sh->setChildrenStyle(this->context_style); // Resolve 'context-xxx' in children.
         }
     }
 }
@@ -290,12 +307,12 @@ sp_shape_update_marker_view(SPShape *shape, Inkscape::DrawingItem *ai)
             if ( shape->_marker[i] ) {
                 Geom::Affine m_auto = m;
                 // Reverse start marker if necessary.
-                if (SP_MARKER(shape->_marker[i])->orient_mode == MARKER_ORIENT_AUTO_START_REVERSE) {
+                if (shape->_marker[i]->orient_mode == MARKER_ORIENT_AUTO_START_REVERSE) {
                     m_auto = Geom::Rotate::from_degrees( 180.0 ) * m;
                 }
-                sp_marker_show_instance ((SPMarker* ) shape->_marker[i], ai,
-                                         ai->key() + i, counter[i], m_auto,
-                                         shape->style->stroke_width.computed);
+                sp_marker_show_instance(shape->_marker[i], ai,
+                                        ai->key() + i, counter[i], m_auto,
+                                        shape->style->stroke_width.computed);
                  counter[i]++;
             }
         }
@@ -311,9 +328,9 @@ sp_shape_update_marker_view(SPShape *shape, Inkscape::DrawingItem *ai)
                 Geom::Affine const m (sp_shape_marker_get_transform_at_start(path_it->front()));
                 for (int i = 0; i < 3; i += 2) {  // SP_MARKER_LOC and SP_MARKER_LOC_MID
                     if ( shape->_marker[i] ) {
-                        sp_marker_show_instance ((SPMarker* ) shape->_marker[i], ai,
-                                                 ai->key() + i, counter[i], m,
-                                                 shape->style->stroke_width.computed);
+                        sp_marker_show_instance(shape->_marker[i], ai,
+                                                ai->key() + i, counter[i], m,
+                                                shape->style->stroke_width.computed);
                          counter[i]++;
                     }
                 }
@@ -331,9 +348,9 @@ sp_shape_update_marker_view(SPShape *shape, Inkscape::DrawingItem *ai)
                     Geom::Affine const m (sp_shape_marker_get_transform(*curve_it1, *curve_it2));
                     for (int i = 0; i < 3; i += 2) {  // SP_MARKER_LOC and SP_MARKER_LOC_MID
                         if (shape->_marker[i]) {
-                            sp_marker_show_instance ((SPMarker* ) shape->_marker[i], ai,
-                                                     ai->key() + i, counter[i], m,
-                                                     shape->style->stroke_width.computed);
+                            sp_marker_show_instance(shape->_marker[i], ai,
+                                                    ai->key() + i, counter[i], m,
+                                                    shape->style->stroke_width.computed);
                             counter[i]++;
                         }
                     }
@@ -348,9 +365,9 @@ sp_shape_update_marker_view(SPShape *shape, Inkscape::DrawingItem *ai)
                 Geom::Affine const m = sp_shape_marker_get_transform_at_end(lastcurve);
                 for (int i = 0; i < 3; i += 2) {  // SP_MARKER_LOC and SP_MARKER_LOC_MID
                     if (shape->_marker[i]) {
-                        sp_marker_show_instance ((SPMarker* ) shape->_marker[i], ai,
-                                                 ai->key() + i, counter[i], m,
-                                                 shape->style->stroke_width.computed);
+                        sp_marker_show_instance(shape->_marker[i], ai,
+                                                ai->key() + i, counter[i], m,
+                                                shape->style->stroke_width.computed);
                         counter[i]++;
                     }
                 }
@@ -372,9 +389,9 @@ sp_shape_update_marker_view(SPShape *shape, Inkscape::DrawingItem *ai)
 
         for (int i = 0; i < 4; i += 3) {  // SP_MARKER_LOC and SP_MARKER_LOC_END
             if (shape->_marker[i]) {
-                sp_marker_show_instance ((SPMarker* ) shape->_marker[i], ai,
-                                         ai->key() + i, counter[i], m,
-                                         shape->style->stroke_width.computed);
+                sp_marker_show_instance(shape->_marker[i], ai,
+                                        ai->key() + i, counter[i], m,
+                                        shape->style->stroke_width.computed);
                 counter[i]++;
             }
         }
@@ -382,12 +399,23 @@ sp_shape_update_marker_view(SPShape *shape, Inkscape::DrawingItem *ai)
 }
 
 void SPShape::modified(unsigned int flags) {
+    // std::cout << "SPShape::modified(): " << (getId()?getId():"null") << std::endl;
     SPLPEItem::modified(flags);
 
     if (flags & SP_OBJECT_STYLE_MODIFIED_FLAG) {
         for (SPItemView *v = this->display; v != NULL; v = v->next) {
             Inkscape::DrawingShape *sh = dynamic_cast<Inkscape::DrawingShape *>(v->arenaitem);
-            sh->setStyle(this->style);
+            if (hasMarkers()) {
+                this->context_style = this->style;
+                sh->setStyle(this->style, this->context_style);
+                // Note: marker selector preview does not trigger SP_OBJECT_STYLE_MODIFIED_FLAG so
+                // this is not called when marker previews are generated, however there is code in
+                // SPShape::update() that calls this routine so we don't worry about it here.
+                sh->setChildrenStyle(this->context_style); // Resolve 'context-xxx' in children.
+            } else if (this->parent) {
+                this->context_style = this->parent->context_style;
+                sh->setStyle(this->style, this->context_style);
+            }
         }
     }
 }
@@ -424,26 +452,25 @@ Geom::OptRect SPShape::bbox(Geom::Affine const &transform, SPItem::BBoxType bbox
             // START marker
             for (unsigned i = 0; i < 2; i++) { // SP_MARKER_LOC and SP_MARKER_LOC_START
                 if ( this->_marker[i] ) {
-                    SPMarker* marker = SP_MARKER (this->_marker[i]);
-                    SPItem* marker_item = sp_item_first_item_child( marker );
+                    SPItem* marker_item = sp_item_first_item_child( _marker[i] );
 
                     if (marker_item) {
                         Geom::Affine tr(sp_shape_marker_get_transform_at_start(pathv.begin()->front()));
 
-                        if (marker->orient_mode == MARKER_ORIENT_AUTO_START_REVERSE) {
+                        if (_marker[i]->orient_mode == MARKER_ORIENT_AUTO_START_REVERSE) {
                             // Reverse start marker if necessary
                             tr = Geom::Rotate::from_degrees( 180.0 ) * tr;
-                        } else if (marker->orient_mode == MARKER_ORIENT_ANGLE) {
+                        } else if (_marker[i]->orient_mode == MARKER_ORIENT_ANGLE) {
                             Geom::Point transl = tr.translation();
-                            tr = Geom::Rotate::from_degrees(marker->orient) * Geom::Translate(transl);
+                            tr = Geom::Rotate::from_degrees(_marker[i]->orient.computed) * Geom::Translate(transl);
                         }
 
-                        if (marker->markerUnits == SP_MARKER_UNITS_STROKEWIDTH) {
+                        if (_marker[i]->markerUnits == SP_MARKER_UNITS_STROKEWIDTH) {
                             tr = Geom::Scale(this->style->stroke_width.computed) * tr;
                         }
 
                         // total marker transform
-                        tr = marker_item->transform * marker->c2p * tr * transform;
+                        tr = marker_item->transform * _marker[i]->c2p * tr * transform;
 
                         // get bbox of the marker with that transform
                         bbox |= marker_item->visualBounds(tr);
@@ -457,7 +484,7 @@ Geom::OptRect SPShape::bbox(Geom::Affine const &transform, SPItem::BBoxType bbox
                 	continue;
                 }
 
-                SPMarker* marker = SP_MARKER (this->_marker[i]);
+                SPMarker* marker = _marker[i];
                 SPItem* marker_item = sp_item_first_item_child( marker );
 
                 if ( !marker_item ) {
@@ -473,7 +500,7 @@ Geom::OptRect SPShape::bbox(Geom::Affine const &transform, SPItem::BBoxType bbox
 
                         if (marker->orient_mode == MARKER_ORIENT_ANGLE) {
                             Geom::Point transl = tr.translation();
-                            tr = Geom::Rotate::from_degrees(marker->orient) * Geom::Translate(transl);
+                            tr = Geom::Rotate::from_degrees(marker->orient.computed) * Geom::Translate(transl);
                         }
 
                         if (marker->markerUnits == SP_MARKER_UNITS_STROKEWIDTH) {
@@ -495,7 +522,7 @@ Geom::OptRect SPShape::bbox(Geom::Affine const &transform, SPItem::BBoxType bbox
                              * Loop to end_default (so including closing segment), because when a path is closed,
                              * there should be a midpoint marker between last segment and closing straight line segment */
 
-                            SPMarker* marker = SP_MARKER (this->_marker[i]);
+                            SPMarker* marker = _marker[i];
                             SPItem* marker_item = sp_item_first_item_child( marker );
 
                             if (marker_item) {
@@ -503,7 +530,7 @@ Geom::OptRect SPShape::bbox(Geom::Affine const &transform, SPItem::BBoxType bbox
 
                                 if (marker->orient_mode == MARKER_ORIENT_ANGLE) {
                                     Geom::Point transl = tr.translation();
-                                    tr = Geom::Rotate::from_degrees(marker->orient) * Geom::Translate(transl);
+                                    tr = Geom::Rotate::from_degrees(marker->orient.computed) * Geom::Translate(transl);
                                 }
 
                                 if (marker->markerUnits == SP_MARKER_UNITS_STROKEWIDTH) {
@@ -526,7 +553,7 @@ Geom::OptRect SPShape::bbox(Geom::Affine const &transform, SPItem::BBoxType bbox
 
                         if (marker->orient_mode == MARKER_ORIENT_ANGLE) {
                             Geom::Point transl = tr.translation();
-                            tr = Geom::Rotate::from_degrees(marker->orient) * Geom::Translate(transl);
+                            tr = Geom::Rotate::from_degrees(marker->orient.computed) * Geom::Translate(transl);
                         }
 
                         if (marker->markerUnits == SP_MARKER_UNITS_STROKEWIDTH) {
@@ -541,8 +568,8 @@ Geom::OptRect SPShape::bbox(Geom::Affine const &transform, SPItem::BBoxType bbox
 
             // END marker
             for (unsigned i = 0; i < 4; i += 3) { // SP_MARKER_LOC and SP_MARKER_LOC_END
-                if ( this->_marker[i] ) {
-                    SPMarker* marker = SP_MARKER (this->_marker[i]);
+                if ( _marker[i] ) {
+                    SPMarker* marker = _marker[i];
                     SPItem* marker_item = sp_item_first_item_child( marker );
 
                     if (marker_item) {
@@ -561,7 +588,7 @@ Geom::OptRect SPShape::bbox(Geom::Affine const &transform, SPItem::BBoxType bbox
 
                         if (marker->orient_mode == MARKER_ORIENT_ANGLE) {
                             Geom::Point transl = tr.translation();
-                            tr = Geom::Rotate::from_degrees(marker->orient) * Geom::Translate(transl);
+                            tr = Geom::Rotate::from_degrees(marker->orient.computed) * Geom::Translate(transl);
                         }
 
                         if (marker->markerUnits == SP_MARKER_UNITS_STROKEWIDTH) {
@@ -719,8 +746,11 @@ void SPShape::print(SPPrintContext* ctx) {
 }
 
 Inkscape::DrawingItem* SPShape::show(Inkscape::Drawing &drawing, unsigned int /*key*/, unsigned int /*flags*/) {
+    // std::cout << "SPShape::show(): " << (getId()?getId():"null") << std::endl;
     Inkscape::DrawingShape *s = new Inkscape::DrawingShape(drawing);
-    s->setStyle(this->style);
+
+    bool has_markers = this->hasMarkers();
+
     s->setPath(this->_curve);
 
     /* This stanza checks that an object's marker style agrees with
@@ -732,24 +762,30 @@ Inkscape::DrawingItem* SPShape::show(Inkscape::Drawing &drawing, unsigned int /*
         sp_shape_set_marker (this, i, this->style->marker_ptrs[i]->value);
     }
 
-    if (this->hasMarkers ()) {
+    if (has_markers) {
         /* provide key and dimension the marker views */
         if (!s->key()) {
             s->setKey(SPItem::display_key_new (SP_MARKER_LOC_QTY));
         }
 
         for (int i = 0; i < SP_MARKER_LOC_QTY; i++) {
-            if (this->_marker[i]) {
-                sp_marker_show_dimension ((SPMarker *) this->_marker[i],
-                                          s->key() + i,
-                                          this->numberOfMarkers (i));
+            if (_marker[i]) {
+                sp_marker_show_dimension(_marker[i],
+                                         s->key() + i,
+                                         numberOfMarkers(i));
             }
         }
 
         /* Update marker views */
         sp_shape_update_marker_view (this, s);
-    }
 
+        this->context_style = this->style;
+        s->setStyle(this->style, this->context_style);
+        s->setChildrenStyle(this->context_style); // Resolve 'context-xxx' in children.
+    } else if (this->parent) {
+        this->context_style = this->parent->context_style;
+        s->setStyle(this->style, this->context_style);
+    }
     return s;
 }
 
@@ -757,17 +793,17 @@ Inkscape::DrawingItem* SPShape::show(Inkscape::Drawing &drawing, unsigned int /*
  * Sets style, path, and paintbox.  Updates marker views, including dimensions.
  */
 void SPShape::hide(unsigned int key) {
-	for (int i=0; i<SP_MARKER_LOC_QTY; i++) {
-		if (this->_marker[i]) {
-			for (SPItemView* v = this->display; v != NULL; v = v->next) {
-				if (key == v->key) {
-					sp_marker_hide ((SPMarker *) this->_marker[i], v->arenaitem->key() + i);
-				}
-			}
-		}
-	}
+    for (int i = 0; i < SP_MARKER_LOC_QTY; ++i) {
+        if (_marker[i]) {
+            for (SPItemView* v = display; v != NULL; v = v->next) {
+                if (key == v->key) {
+                    sp_marker_hide(_marker[i], v->arenaitem->key() + i);
+                }
+            }
+        }
+    }
 
-	//SPLPEItem::onHide(key);
+    //SPLPEItem::onHide(key);
 }
 
 /**
@@ -782,7 +818,7 @@ int SPShape::hasMarkers() const
 
     // Ignore markers for objects which are inside markers themselves.
     for (SPObject *parent = this->parent; parent != NULL; parent = parent->parent) {
-      if(SP_IS_MARKER(parent)) {
+      if (dynamic_cast<SPMarker *>(parent)) {
         return 0;
       }
     }
@@ -860,22 +896,20 @@ int SPShape::numberOfMarkers(int type) const {
 static void
 sp_shape_marker_release (SPObject *marker, SPShape *shape)
 {
-    SPItem *item;
-    int i;
+    SPItem *item = dynamic_cast<SPItem *>(shape);
+    g_return_if_fail(item != NULL);
 
-    item = (SPItem *) shape;
-
-    for (i = 0; i < SP_MARKER_LOC_QTY; i++) {
+    for (int i = 0; i < SP_MARKER_LOC_QTY; i++) {
         if (marker == shape->_marker[i]) {
             SPItemView *v;
             /* Hide marker */
             for (v = item->display; v != NULL; v = v->next) {
-              sp_marker_hide ((SPMarker *) (shape->_marker[i]), v->arenaitem->key() + i);
+                sp_marker_hide(shape->_marker[i], v->arenaitem->key() + i);
             }
             /* Detach marker */
             shape->_release_connect[i].disconnect();
             shape->_modified_connect[i].disconnect();
-            shape->_marker[i] = sp_object_hunref (shape->_marker[i], item);
+            shape->_marker[i] = static_cast<SPMarker *>(sp_object_hunref(shape->_marker[i], item));
         }
     }
 }
@@ -900,15 +934,16 @@ sp_shape_marker_modified (SPObject */*marker*/, guint /*flags*/, SPItem */*item*
 void
 sp_shape_set_marker (SPObject *object, unsigned int key, const gchar *value)
 {
-    SPItem *item = (SPItem *) object;
-    SPShape *shape = (SPShape *) object;
+    SPShape *shape = dynamic_cast<SPShape *>(object);
+    g_return_if_fail(shape != NULL);
 
     if (key > SP_MARKER_LOC_END) {
         return;
     }
 
     SPObject *mrk = sp_css_uri_reference_resolve(object->document, value);
-    if (mrk != shape->_marker[key]) {
+    SPMarker *marker = dynamic_cast<SPMarker *>(mrk);
+    if (marker != shape->_marker[key]) {
         if (shape->_marker[key]) {
             SPItemView *v;
 
@@ -917,18 +952,18 @@ sp_shape_set_marker (SPObject *object, unsigned int key, const gchar *value)
             shape->_modified_connect[key].disconnect();
 
             /* Hide marker */
-            for (v = item->display; v != NULL; v = v->next) {
-                sp_marker_hide ((SPMarker *) (shape->_marker[key]),
-                                v->arenaitem->key() + key);
+            for (v = shape->display; v != NULL; v = v->next) {
+                sp_marker_hide(shape->_marker[key],
+                               v->arenaitem->key() + key);
             }
 
             /* Unref marker */
-            shape->_marker[key] = sp_object_hunref (shape->_marker[key], object);
+            shape->_marker[key] = static_cast<SPMarker *>(sp_object_hunref(shape->_marker[key], object));
         }
-        if (SP_IS_MARKER (mrk)) {
-            shape->_marker[key] = sp_object_href (mrk, object);
-            shape->_release_connect[key] = mrk->connectRelease(sigc::bind<1>(sigc::ptr_fun(&sp_shape_marker_release), shape));
-            shape->_modified_connect[key] = mrk->connectModified(sigc::bind<2>(sigc::ptr_fun(&sp_shape_marker_modified), shape));
+        if (marker) {
+            shape->_marker[key] = static_cast<SPMarker *>(sp_object_href(marker, object));
+            shape->_release_connect[key] = marker->connectRelease(sigc::bind<1>(sigc::ptr_fun(&sp_shape_marker_release), shape));
+            shape->_modified_connect[key] = marker->connectModified(sigc::bind<2>(sigc::ptr_fun(&sp_shape_marker_modified), shape));
         }
     }
 }

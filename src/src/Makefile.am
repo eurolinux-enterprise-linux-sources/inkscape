@@ -28,22 +28,25 @@ noinst_LIBRARIES =	\
 	$(internal_GDL)			\
 	libuemf/libuemf.a   		\
 	libcola/libcola.a		\
+        inkgc/libinkgc.a		\
 	libvpsc/libvpsc.a		\
 	livarot/libvarot.a		\
 	2geom/lib2geom.a		\
 	libdepixelize/libdepixelize.a	\
+	util/libutil.a			\
 	libinkversion.a
+#       libinkscape.a
 
 all_libs =			\
 	$(noinst_LIBRARIES)	\
 	$(INKSCAPE_LIBS)	\
+	$(INKSCAPE_CXX_DEPS_LIBS) \
 	$(EXIF_LIBS)            \
 	$(GNOME_VFS_LIBS)	\
 	$(XFT_LIBS)		\
 	$(FREETYPE_LIBS)	\
 	$(kdeldadd)		\
 	$(win32ldflags)		\
-	$(CARBON_LDFLAGS)	\
 	$(LIBWPG_LIBS)		\
 	$(LIBVISIO_LIBS)		\
 	$(LIBCDR_LIBS)		\
@@ -62,6 +65,10 @@ inkview_SOURCES =
 BUILT_SOURCES =
 # Extra files to distribute
 EXTRA_DIST =
+
+# C++-specific flags defined here
+AM_CXXFLAGS = \
+	$(INKSCAPE_CXX_DEPS_CFLAGS)
 
 AM_CPPFLAGS =	\
 	-I$(top_srcdir)/cxxtest \
@@ -105,7 +112,6 @@ endif
 
 # Include all partial makefiles from subdirectories
 include Makefile_insert
-include dialogs/Makefile_insert
 include display/Makefile_insert
 include extension/Makefile_insert
 include extension/dbus/Makefile_insert
@@ -115,6 +121,7 @@ include filters/Makefile_insert
 include helper/Makefile_insert
 include io/Makefile_insert
 include libcroco/Makefile_insert
+include inkgc/Makefile_insert
 include libgdl/Makefile_insert
 include libnrtype/Makefile_insert
 include libavoid/Makefile_insert
@@ -144,7 +151,6 @@ include libdepixelize/Makefile_insert
 EXTRA_DIST +=	\
 	2geom/makefile.in	\
 	debug/makefile.in	\
-	dialogs/makefile.in	\
 	display/makefile.in	\
 	extension/implementation/makefile.in	\
 	extension/internal/makefile.in	\
@@ -204,7 +210,7 @@ inkscape_LDFLAGS = $(kdeldflags) $(mwindows)
 
 inkview_SOURCES += inkview.cpp $(ink_common_sources) $(win32_sources)
 inkview_LDADD = $(all_libs)
-inkview_LDFLAGS = $(mwindows) 
+inkview_LDFLAGS = $(mwindows)
 
 # ################################################
 #  VERSION REPORTING
@@ -220,11 +226,7 @@ endif
 # someone updates the BZR working directory.
 inkscape-version.cpp: $(inkscape_version_deps)
 	VER_PREFIX="$(VERSION)";\
-	VER_BZRREV=" r`bzr revno --tree`"; \
-	if test ! -z "`bzr status -S -V $(srcdir)`"; then \
-	    VER_CUSTOM=" custom"; \
-	fi; \
-	VERSION="$$VER_PREFIX$$VER_BZRREV$$VER_CUSTOM"; \
+	VERSION="$$VER_PREFIX 5c3e80d, 2017-08-06"; \
 	echo "namespace Inkscape { " \
 	     "char const *version_string = \"$$VERSION\"; " \
 	     "}" > inkscape-version.new.cpp; \
@@ -258,9 +260,7 @@ check-local:
 #        the XFAIL_TESTS build target should be removed.
 #        See the following Launchpad bugs:
 #
-#          LP #1202271 <cxxtest: preferences-test.h fails>
 #          LP #1208013 <cxxtest: curve-test.h fails>
-#          LP #1208002 <cxxtest: svg-length-test.h fails>
 #          LP #1208005 <cxxtest: svg-path-geom-test.h fails>
 #          LP #1207502 <cxxtest: svg-affine-test.h fails>
 

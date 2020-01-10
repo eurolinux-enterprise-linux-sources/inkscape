@@ -13,10 +13,6 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
 #include <string.h>
 
 #include "sp-filter.h"
@@ -29,16 +25,6 @@
 #include "display/nr-filter-primitive.h"
 #include "display/nr-filter-blend.h"
 #include "display/nr-filter-types.h"
-
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createBlend() {
-		return new SPFeBlend();
-	}
-
-	bool blendRegistered = SPFactory::instance().registerObject("svg:feBlend", createBlend);
-}
 
 SPFeBlend::SPFeBlend()
     : SPFilterPrimitive(), blend_mode(Inkscape::Filters::BLEND_NORMAL),
@@ -96,7 +82,7 @@ static Inkscape::Filters::FilterBlendMode sp_feBlend_readmode(gchar const *value
         case 's':
             if (strncmp(value, "screen", 6) == 0)
                 return Inkscape::Filters::BLEND_SCREEN;
-            if (strncmp(value, "saturation", 6) == 0)
+            if (strncmp(value, "saturation", 10) == 0)
                 return Inkscape::Filters::BLEND_SATURATION;
             break;
         case 'd':
@@ -124,7 +110,7 @@ static Inkscape::Filters::FilterBlendMode sp_feBlend_readmode(gchar const *value
                 return Inkscape::Filters::BLEND_COLOR;
             break;
         case 'h':
-            if (strncmp(value, "hard-light", 7) == 0)
+            if (strncmp(value, "hard-light", 10) == 0)
                 return Inkscape::Filters::BLEND_HARDLIGHT;
             if (strncmp(value, "hue", 3) == 0)
                 return Inkscape::Filters::BLEND_HUE;

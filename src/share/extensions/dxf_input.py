@@ -19,14 +19,13 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 
 import inkex, simplestyle, math
 from StringIO import StringIO
 from urllib import quote
 
-inkex.localize()
 
 def export_MTEXT():
     # mandatory group codes : (1 or 3, 10, 20) (text, x, y)
@@ -35,7 +34,7 @@ def export_MTEXT():
         y = vals[groups['20']][0]
         # optional group codes : (21, 40, 50) (direction, text height mm, text angle)
         size = 12                       # default fontsize in px
-        if vals[groups['40']]:
+        if vals[groups['40']] and vals[groups['40']][0]:
             size = scale*vals[groups['40']][0]
         attribs = {'x': '%f' % x, 'y': '%f' % y, 'style': 'font-size: %.1fpx; fill: %s; font-family: %s' % (size, color, options.font)}
         angle = 0                       # default angle in degrees
@@ -75,7 +74,7 @@ def export_POINT():
 def export_LINE():
     # mandatory group codes : (10, 11, 20, 21) (x1, x2, y1, y2)
     if vals[groups['10']] and vals[groups['11']] and vals[groups['20']] and vals[groups['21']]:
-        path = 'M %f,%f %f,%f' % (vals[groups['10']][0], vals[groups['20']][0], scale*(vals[groups['11']][0] - xmin), height - scale*(vals[groups['21']][0] - ymin))
+        path = 'M %f,%f %f,%f' % (vals[groups['10']][0], vals[groups['20']][0], scale*(extrude*vals[groups['11']][0] - xmin), height - scale*(vals[groups['21']][0] - ymin))
         attribs = {'d': path, 'style': style}
         inkex.etree.SubElement(layer, 'path', attribs)
 
@@ -230,7 +229,7 @@ def export_HATCH():
                         i40 += 1
                         i72 += 1
                     elif vals[groups['72']][i72] == 1:      # line
-                        path += 'L %f,%f ' % (scale*(vals[groups['11']][i11] - xmin), height - scale*(vals[groups['21']][i11] - ymin))
+                        path += 'L %f,%f ' % (scale*(extrude*vals[groups['11']][i11] - xmin), height - scale*(vals[groups['21']][i11] - ymin))
                         i11 += 1
                         i72 += 1
                     i10 += 1
@@ -259,7 +258,7 @@ def export_DIMENSION():
             return
         attribs = {'d': path, 'style': style + '; marker-start: url(#DistanceX); marker-end: url(#DistanceX); stroke-width: 0.25px'}
         inkex.etree.SubElement(layer, 'path', attribs)
-        x = scale*(vals[groups['11']][0] - xmin)
+        x = scale*(extrude*vals[groups['11']][0] - xmin)
         y = height - scale*(vals[groups['21']][0] - ymin)
         size = 12                   # default fontsize in px
         if vals[groups['3']]:
@@ -279,7 +278,11 @@ def export_INSERT():
     if vals[groups['2']] and vals[groups['10']] and vals[groups['20']]:
         x = vals[groups['10']][0] + scale*xmin
         y = vals[groups['20']][0] - scale*ymin - height
-        attribs = {'x': '%f' % x, 'y': '%f' % y, inkex.addNS('href','xlink'): '#' + quote(vals[groups['2']][0].replace(" ", "_").encode("utf-8"))}
+        attribs = {inkex.addNS('href','xlink'): '#' + quote(vals[groups['2']][0].replace(" ", "_").encode("utf-8"))}
+        tform = 'translate(%f, %f)' % (x, y)
+        if vals[groups['41']] and vals[groups['42']]:
+            tform += ' scale(%f, %f)' % (vals[groups['41']][0], vals[groups['42']][0])
+        attribs.update({'transform': tform})
         inkex.etree.SubElement(layer, 'use', attribs)
 
 def export_BLOCK():
@@ -338,13 +341,13 @@ def get_group(group):
 #   define DXF Entities and specify which Group Codes to monitor
 
 entities = {'MTEXT': export_MTEXT, 'TEXT': export_MTEXT, 'POINT': export_POINT, 'LINE': export_LINE, 'SPLINE': export_SPLINE, 'CIRCLE': export_CIRCLE, 'ARC': export_ARC, 'ELLIPSE': export_ELLIPSE, 'LEADER': export_LEADER, 'LWPOLYLINE': export_LWPOLYLINE, 'HATCH': export_HATCH, 'DIMENSION': export_DIMENSION, 'INSERT': export_INSERT, 'BLOCK': export_BLOCK, 'ENDBLK': export_ENDBLK, 'ATTDEF': export_ATTDEF, 'VIEWPORT': False, 'ENDSEC': False}
-groups = {'1': 0, '2': 1, '3': 2, '6': 3, '8': 4, '10': 5, '11': 6, '13': 7, '14': 8, '20': 9, '21': 10, '23': 11, '24': 12, '40': 13, '41': 14, '42': 15, '50': 16, '51': 17, '62': 18, '70': 19, '72': 20, '73': 21, '92': 22, '93': 23, '370': 24}
+groups = {'1': 0, '2': 1, '3': 2, '6': 3, '8': 4, '10': 5, '11': 6, '13': 7, '14': 8, '20': 9, '21': 10, '23': 11, '24': 12, '40': 13, '41': 14, '42': 15, '50': 16, '51': 17, '62': 18, '70': 19, '72': 20, '73': 21, '92': 22, '93': 23, '230': 24, '370': 25}
 colors = {  1: '#FF0000',   2: '#FFFF00',   3: '#00FF00',   4: '#00FFFF',   5: '#0000FF',
             6: '#FF00FF',   8: '#414141',   9: '#808080',  12: '#BD0000',  30: '#FF7F00',
           250: '#333333', 251: '#505050', 252: '#696969', 253: '#828282', 254: '#BEBEBE', 255: '#FFFFFF'}
 
 parser = inkex.optparse.OptionParser(usage="usage: %prog [options] SVGfile", option_class=inkex.InkOption)
-parser.add_option("--auto", action="store", type="inkbool", dest="auto", default=True)
+parser.add_option("--scalemethod", action="store", type="string", dest="scalemethod", default="manual")
 parser.add_option("--scale", action="store", type="string", dest="scale", default="1.0")
 parser.add_option("--xmin", action="store", type="string", dest="xmin", default="0.0")
 parser.add_option("--ymin", action="store", type="string", dest="ymin", default="0.0")
@@ -354,7 +357,7 @@ parser.add_option("--font", action="store", type="string", dest="font", default=
 parser.add_option("--tab", action="store", type="string", dest="tab", default="Options")
 parser.add_option("--inputhelp", action="store", type="string", dest="inputhelp", default="")
 (options, args) = parser.parse_args(inkex.sys.argv[1:])
-doc = inkex.etree.parse(StringIO('<svg xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" width="%s" height="%s"></svg>' % (210*90/25.4, 297*90/25.4)))
+doc = inkex.etree.parse(StringIO('<svg xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" width="%s" height="%s"></svg>' % (210*96/25.4, 297*96/25.4)))
 desc = inkex.etree.SubElement(doc.getroot(), 'desc', {})
 defs = inkex.etree.SubElement(doc.getroot(), 'defs', {})
 marker = inkex.etree.SubElement(defs, 'marker', {'id': 'DistanceX', 'orient': 'auto', 'refX': '0.0', 'refY': '0.0', 'style': 'overflow:visible'})
@@ -365,7 +368,8 @@ inkex.etree.SubElement(pattern, 'path', {'d': 'M6 2 l-4,4', 'stroke': '#000000',
 inkex.etree.SubElement(pattern, 'path', {'d': 'M4 0 l-4,4', 'stroke': '#000000', 'stroke-width': '0.25', 'linecap': 'square'})
 stream = open(args[0], 'r')
 xmax = xmin = ymin = 0.0
-height = 297.0*90.0/25.4                            # default A4 height in pixels
+height = 297.0*96.0/25.4                            # default A4 height in pixels
+measurement = 0                                     # default inches
 line = get_line()
 polylines = 0
 flag = 0                                            # (0, 1, 2, 3) = (none, LAYER, LTYPE, DIMTXT)
@@ -376,7 +380,10 @@ DIMTXT = {}                                         # store DIMENSION text sizes
 
 while line[0] and line[1] != 'BLOCKS':
     line = get_line()
-    if options.auto:
+    if options.scalemethod == 'file':
+        if line[1] == '$MEASUREMENT':
+            measurement = get_group('70')
+    elif options.scalemethod == 'auto':
         if line[1] == '$EXTMIN':
             xmin = get_group('10')
             ymin = get_group('20')
@@ -406,7 +413,11 @@ while line[0] and line[1] != 'BLOCKS':
     if line[0] == '0' and line[1] == 'ENDTAB':
         flag = 0
 
-if options.auto:
+if options.scalemethod == 'file':
+    scale = 25.4                                    # default inches
+    if measurement == 1.0:
+        scale = 1.0                                 # use mm
+elif options.scalemethod == 'auto':
     scale = 1.0
     if xmax > xmin:
         scale = 210.0/(xmax - xmin)                 # scale to A4 width
@@ -414,8 +425,8 @@ else:
     scale = float(options.scale)                    # manual scale factor
     xmin = float(options.xmin)
     ymin = float(options.ymin)
-desc.text = '%s - scale = %f, origin = (%f, %f), auto = %s' % (unicode(args[0], options.input_encode), scale, xmin, ymin, options.auto)
-scale *= 90.0/25.4                                  # convert from mm to pixels
+desc.text = '%s - scale = %f, origin = (%f, %f), method = %s' % (unicode(args[0], options.input_encode), scale, xmin, ymin, options.scalemethod)
+scale *= 96.0/25.4                                  # convert from mm to pixels
 
 if not layer_nodes.has_key('0'):
     attribs = {inkex.addNS('groupmode','inkscape'): 'layer', inkex.addNS('label','inkscape'): '0'}
@@ -460,10 +471,6 @@ while line[0] and (line[1] != 'ENDSEC' or not inENTITIES):
             val = val.decode('unicode_escape')
         elif line[0] == '62' or line[0] == '70' or line[0] == '92' or line[0] == '93':
             val = int(line[1])
-        elif line[0] == '10' or line[0] == '13' or line[0] == '14': # scaled float x value
-            val = scale*(float(line[1]) - xmin)
-        elif line[0] == '20' or line[0] == '23' or line[0] == '24': # scaled float y value
-            val = height - scale*(float(line[1]) - ymin)
         else:                                       # unscaled float value
             val = float(line[1])
         vals[groups[line[0]]].append(val)
@@ -474,6 +481,9 @@ while line[0] and (line[1] != 'ENDSEC' or not inENTITIES):
             elif vals[groups['8']]:                 # use Common Layer Name
                 if not vals[groups['8']][0]:
                     vals[groups['8']][0] = '0'      # use default name
+                if not layer_nodes.has_key(vals[groups['8']][0]):
+                    attribs = {inkex.addNS('groupmode','inkscape'): 'layer', inkex.addNS('label','inkscape'): '%s' % vals[groups['8']][0]}
+                    layer_nodes[vals[groups['8']][0]] = inkex.etree.SubElement(doc.getroot(), 'g', attribs)
                 layer = layer_nodes[vals[groups['8']][0]]
             color = '#000000'                       # default color
             if vals[groups['8']]:
@@ -487,17 +497,33 @@ while line[0] and (line[1] != 'ENDSEC' or not inENTITIES):
             w = 0.5                                 # default lineweight for POINT
             if vals[groups['370']]:                 # Common Lineweight
                 if vals[groups['370']][0] > 0:
-                    w = 90.0/25.4*vals[groups['370']][0]/100.0
+                    w = 96.0/25.4*vals[groups['370']][0]/100.0
                     if w < 0.5:
                         w = 0.5
                     style = simplestyle.formatStyle({'stroke': '%s' % color, 'fill': 'none', 'stroke-width': '%.1f' % w})
             if vals[groups['6']]:                   # Common Linetype
                 if linetypes.has_key(vals[groups['6']][0]):
                     style += ';' + linetypes[vals[groups['6']][0]]
+            extrude = 1.0
+            if vals[groups['230']]:
+                extrude = float(vals[groups['230']][0])
+            for xgrp in ['10', '13', '14']:         # scale/reflect x values
+                if vals[groups[xgrp]]:
+                    for i in range (0, len(vals[groups[xgrp]])):
+                        vals[groups[xgrp]][i] = scale*(extrude*vals[groups[xgrp]][i] - xmin)
+            for ygrp in ['20', '23', '24']:         # scale y values
+                if vals[groups[ygrp]]:
+                    for i in range (0, len(vals[groups[ygrp]])):
+                        vals[groups[ygrp]][i] = height - scale*(vals[groups[ygrp]][i] - ymin)
+            if (extrude == -1.0):                   # reflect angles
+                if vals[groups['50']] and vals[groups['51']]:
+                    temp = vals[groups['51']][0]
+                    vals[groups['51']][0] = 180.0 - vals[groups['50']][0]
+                    vals[groups['50']][0] = 180.0 - temp
             if entities[entity]:
                 entities[entity]()
         entity = line[1]
-        vals = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
+        vals = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
         seqs = []
 
 if polylines:

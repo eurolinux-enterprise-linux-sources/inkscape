@@ -14,18 +14,19 @@
 /** Mesh gradient. */
 class SPMeshGradient : public SPGradient {
 public:
-	SPMeshGradient();
-	virtual ~SPMeshGradient();
+    SPMeshGradient();
+    virtual ~SPMeshGradient();
 
-    SVGLength x;  // Upper left corner of mesh
+    SVGLength x;  // Upper left corner of meshgradient
     SVGLength y;  // Upper right corner of mesh
-
+    SPMeshType type;
+    bool type_set;
     virtual cairo_pattern_t* pattern_new(cairo_t *ct, Geom::OptRect const &bbox, double opacity);
 
 protected:
-	virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
-	virtual void set(unsigned key, gchar const *value);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags);
+    virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
+    virtual void set(unsigned key, char const *value);
+    virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
 };
 
 #endif /* !SP_MESH_GRADIENT_H */

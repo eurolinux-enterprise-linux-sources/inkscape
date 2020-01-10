@@ -13,6 +13,8 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include <glibmm/ustring.h>
+
 /* SPObject flags */
 
 class SPObject;
@@ -45,12 +47,14 @@ class SPObject;
 #define SP_OBJECT_WRITE_BUILD (1 << 0)
 #define SP_OBJECT_WRITE_EXT (1 << 1)
 #define SP_OBJECT_WRITE_ALL (1 << 2)
+#define SP_OBJECT_WRITE_NO_CHILDREN (1 << 3)
 
-#include <glib-object.h>
+#include <cassert>
 #include <stddef.h>
 #include <sigc++/connection.h>
 #include <sigc++/functors/slot.h>
 #include <sigc++/signal.h>
+#include <vector>
 
 #include "version.h"
 #include "util/forward-pointer-iterator.h"
@@ -65,6 +69,9 @@ struct Document;
 }
 }
 
+namespace Glib {
+    class ustring;
+}
 
 typedef enum {
     SP_NO_EXCEPTION,
@@ -109,8 +116,8 @@ class SPDocument;
 class SPIXmlSpace {
 public:    
     SPIXmlSpace(): set(0), value(SP_XML_SPACE_DEFAULT) {};
-    guint set : 1;
-    guint value : 1;
+    unsigned int set : 1;
+    unsigned int value : 1;
 };
 
 /*
@@ -152,7 +159,7 @@ SPObject *sp_object_unref(SPObject *object, SPObject *owner=NULL);
  * \pre object points to real object
  * @todo need to move this to be a member of SPObject.
  */
-SPObject *sp_object_href(SPObject *object, gpointer owner);
+SPObject *sp_object_href(SPObject *object, SPObject* owner);
 
 /**
  * Decrease weak refcount.
@@ -164,7 +171,7 @@ SPObject *sp_object_href(SPObject *object, gpointer owner);
  * \pre object points to real object and hrefcount>0
  * @todo need to move this to be a member of SPObject.
  */
-SPObject *sp_object_hunref(SPObject *object, gpointer owner);
+SPObject *sp_object_hunref(SPObject *object, SPObject* owner);
 
 /**
  * SPObject is an abstract base class of all of the document nodes at the
@@ -183,7 +190,7 @@ SPObject *sp_object_hunref(SPObject *object, gpointer owner);
  * provides document level functionality such as the undo stack,
  * dictionary and so on. Source: doc/architecture.txt
  */
-class SPObject { // : public GObject {
+class SPObject {
 public:
     enum CollectionPolicy {
         COLLECT_WITH_PARENT,
@@ -194,6 +201,7 @@ public:
     virtual ~SPObject();
 
     unsigned int cloned : 1;
+    SPObject *clone_original;
     unsigned int uflags : 8;
     unsigned int mflags : 8;
     SPIXmlSpace xml_space;
@@ -209,15 +217,16 @@ private:
     SPObject(const SPObject&);
     SPObject& operator=(const SPObject&);
 
-    gchar *id; /* Our very own unique id */
+    char *id; /* Our very own unique id */
     Inkscape::XML::Node *repr; /* Our xml representation */
 public:
     int refCount;
+    std::list<SPObject*> hrefList;
 
     /**
      * Returns the objects current ID string.
      */
-    gchar const* getId() const;
+    char const* getId() const;
 
     /**
      * Returns the XML representation of tree
@@ -262,6 +271,11 @@ public:
      */
     SPStyle *style;
 
+    /**
+     * Represents the style that should be used to resolve 'context-fill' and 'context-stroke'
+     */
+    SPStyle *context_style;
+
     /// Switch containing next() method.
     struct ParentIteratorStrategy {
         static SPObject const *next(SPObject const *object) {
@@ -281,7 +295,7 @@ public:
     typedef Inkscape::Util::ForwardPointerIterator<SPObject const, SiblingIteratorStrategy> ConstSiblingIterator;
 
     bool isSiblingOf(SPObject const *object) const {
-        g_return_val_if_fail(object != NULL, false);
+        if (object == NULL) return false;
         return this->parent && this->parent == object->parent;
     }
 
@@ -317,10 +331,10 @@ public:
     enum Action { ActionGeneral, ActionBBox, ActionUpdate, ActionShow };
 
     /**
-     * Retrieves the children as a GSList object, optionally ref'ing the children
+     * Retrieves the children as a std vector object, optionally ref'ing the children
      * in the process, if add_ref is specified.
      */
-    GSList *childList(bool add_ref, Action action = ActionGeneral);
+    std::vector<SPObject*> childList(bool add_ref, Action action = ActionGeneral);
 
     /**
      * Append repr as child of this object.
@@ -332,26 +346,26 @@ public:
      * Gets the author-visible label property for the object or a default if
      * no label is defined.
      */
-    gchar const *label() const;
+    char const *label() const;
 
     /**
      * Returns a default label property for this object.
      */
-    gchar const *defaultLabel() const;
+    char const *defaultLabel() const;
 
     /**
      * Sets the author-visible label for this object.
      *
      * @param label the new label.
      */
-    void setLabel(gchar const *label);
+    void setLabel(char const *label);
 
     /**
      * Returns the title of this object, or NULL if there is none.
      * The caller must free the returned string using g_free() - see comment
      * for getTitleOrDesc() below.
      */
-    gchar *title() const;
+    char *title() const;
 
     /**
      * Sets the title of this object.
@@ -359,14 +373,14 @@ public:
      * (if any) should be deleted.
      * The second argument is optional - @see setTitleOrDesc() below for details.
      */
-    bool setTitle(gchar const *title, bool verbatim = false);
+    bool setTitle(char const *title, bool verbatim = false);
 
     /**
      * Returns the description of this object, or NULL if there is none.
      * The caller must free the returned string using g_free() - see comment
      * for getTitleOrDesc() below.
      */
-    gchar *desc() const;
+    char *desc() const;
 
     /**
      * Sets the description of this object.
@@ -374,7 +388,7 @@ public:
      * description (if any) should be deleted.
      * The second argument is optional - @see setTitleOrDesc() below for details.
      */
-    bool setDesc(gchar const *desc, bool verbatim=false);
+    bool setDesc(char const *desc, bool verbatim=false);
 
     /**
      * Set the policy under which this object will be orphan-collected.
@@ -501,9 +515,9 @@ public:
      * Indicates that another object supercedes this one.
      */
     void setSuccessor(SPObject *successor) {
-        g_assert(successor != NULL);
-        g_assert(_successor == NULL);
-        g_assert(successor->_successor == NULL);
+        assert(successor != NULL);
+        assert(_successor == NULL);
+        assert(successor->_successor == NULL);
         sp_object_ref(successor, NULL);
         _successor = successor;
     }
@@ -655,8 +669,8 @@ public:
     sigc::signal<void, SPObject *, unsigned int> _modified_signal;
     SPObject *_successor;
     CollectionPolicy _collection_policy;
-    gchar *_label;
-    mutable gchar *_default_label;
+    char *_label;
+    mutable char *_default_label;
 
     // WARNING:
     // Methods below should not be used outside of the SP tree,
@@ -690,7 +704,7 @@ public:
 
     unsigned getPosition();
 
-    gchar const * getAttribute(gchar const *name,SPException *ex=NULL) const;
+    char const * getAttribute(char const *name,SPException *ex=NULL) const;
 
     void appendChild(Inkscape::XML::Node *child);
 
@@ -699,18 +713,20 @@ public:
     /**
      * Call virtual set() function of object.
      */
-    void setKeyValue(unsigned int key, gchar const *value);
+    void setKeyValue(unsigned int key, char const *value);
 
-    void setAttribute(gchar const *key, gchar const *value, SPException *ex=NULL);
+    void setAttribute(         char const *key,          char const *value, SPException *ex=NULL);
+    void setAttribute(         char const *key, Glib::ustring const &value, SPException *ex=NULL);
+    void setAttribute(Glib::ustring const &key, Glib::ustring const &value, SPException *ex=NULL);
 
     /**
      * Read value of key attribute from XML node into object.
      */
-    void readAttr(gchar const *key);
+    void readAttr(char const *key);
 
-    gchar const *getTagName(SPException *ex) const;
+    char const *getTagName(SPException *ex) const;
 
-    void removeAttribute(gchar const *key, SPException *ex=NULL);
+    void removeAttribute(char const *key, SPException *ex=NULL);
 
     /**
      * Returns an object style property.
@@ -740,13 +756,13 @@ public:
      * <use> element instead), we should probably make the caller
      * responsible for ascending the repr tree as necessary.
      */
-    gchar const *getStyleProperty(gchar const *key, gchar const *def) const;
+    char const *getStyleProperty(char const *key, char const *def) const;
 
-    void setCSS(SPCSSAttr *css, gchar const *attr);
+    void setCSS(SPCSSAttr *css, char const *attr);
 
-    void changeCSS(SPCSSAttr *css, gchar const *attr);
+    void changeCSS(SPCSSAttr *css, char const *attr);
 
-    bool storeAsDouble( gchar const *key, double *val ) const;
+    bool storeAsDouble( char const *key, double *val ) const;
 
 private:
     // Private member functions used in the definitions of setTitle(),
@@ -769,7 +785,7 @@ private:
      * The return value is true if a change was made to the title/description,
      * and usually false otherwise.
      */
-    bool setTitleOrDesc(gchar const *value, gchar const *svg_tagname, bool verbatim);
+    bool setTitleOrDesc(char const *value, char const *svg_tagname, bool verbatim);
 
     /**
      * Returns the title or description of this object, or NULL if there is none.
@@ -781,20 +797,20 @@ private:
      * Consequently, the return value is a newly allocated string (or NULL), and
      * must be freed (using g_free()) by the caller.
      */
-    gchar * getTitleOrDesc(gchar const *svg_tagname) const;
+    char * getTitleOrDesc(char const *svg_tagname) const;
 
     /**
      * Find the first child of this object with a given tag name,
      * and return it.  Returns NULL if there is no matching child.
      */
-    SPObject * findFirstChild(gchar const *tagname) const;
+    SPObject * findFirstChild(char const *tagname) const;
 
     /**
      * Return the full textual content of an element (typically all the
      * content except the tags).
      * Must not be used on anything except elements.
      */
-    GString * textualContent() const;
+    char * textualContent() const;
 
     /* Real handlers of repr signals */
 
@@ -802,17 +818,17 @@ public:
     /**
      * Callback for attr_changed node event.
      */
-    static void repr_attr_changed(Inkscape::XML::Node *repr, gchar const *key, gchar const *oldval, gchar const *newval, bool is_interactive, gpointer data);
+    static void repr_attr_changed(Inkscape::XML::Node *repr, char const *key, char const *oldval, char const *newval, bool is_interactive, void* data);
 
     /**
      * Callback for content_changed node event.
      */
-    static void repr_content_changed(Inkscape::XML::Node *repr, gchar const *oldcontent, gchar const *newcontent, gpointer data);
+    static void repr_content_changed(Inkscape::XML::Node *repr, char const *oldcontent, char const *newcontent, void* data);
 
     /**
      * Callback for child_added node event.
      */
-    static void repr_child_added(Inkscape::XML::Node *repr, Inkscape::XML::Node *child, Inkscape::XML::Node *ref, gpointer data);
+    static void repr_child_added(Inkscape::XML::Node *repr, Inkscape::XML::Node *child, Inkscape::XML::Node *ref, void* data);
 
     /**
      * Callback for remove_child node event.
@@ -824,7 +840,7 @@ public:
      *
      * \todo fixme:
      */
-    static void repr_order_changed(Inkscape::XML::Node *repr, Inkscape::XML::Node *child, Inkscape::XML::Node *old, Inkscape::XML::Node *newer, gpointer data);
+    static void repr_order_changed(Inkscape::XML::Node *repr, Inkscape::XML::Node *child, Inkscape::XML::Node *old, Inkscape::XML::Node *newer, void* data);
 
 
     friend class SPObjectImpl;
@@ -838,15 +854,19 @@ protected:
 
 	virtual void order_changed(Inkscape::XML::Node* child, Inkscape::XML::Node* old_repr, Inkscape::XML::Node* new_repr);
 
-	virtual void set(unsigned int key, const gchar* value);
+	virtual void set(unsigned int key, const char* value);
 
 	virtual void update(SPCtx* ctx, unsigned int flags);
 	virtual void modified(unsigned int flags);
 
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
 
 public:
 	virtual void read_content();
+
+    void recursivePrintTree(unsigned level = 0);  // For debugging
+    static unsigned indent_level;
+    void objectTrace( std::string, bool in=true, unsigned flags=0 );
 };
 
 
@@ -860,7 +880,8 @@ public:
  *   -1    first object's position is less than the second   \endverbatim
  */
 int sp_object_compare_position(SPObject const *first, SPObject const *second);
-
+bool sp_object_compare_position_bool(SPObject const *first, SPObject const *second);
+gchar * sp_object_get_unique_id(SPObject    *object, gchar const *defid);
 
 #endif // SP_OBJECT_H_SEEN
 

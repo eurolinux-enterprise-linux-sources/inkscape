@@ -279,9 +279,11 @@ SBasis multiply_add(SBasis const &a, SBasis const &b, SBasis c) {
 
 */
 SBasis multiply(SBasis const &a, SBasis const &b) {
-    SBasis c(a.size() + b.size(), Linear(0,0));
-    if(a.isZero() || b.isZero())
+    if(a.isZero() || b.isZero()) {
+        SBasis c(1, Linear(0,0));
         return c;
+    }
+    SBasis c(a.size() + b.size(), Linear(0,0));
     return multiply_add(a, b, c);
 }
 #endif 
@@ -328,9 +330,9 @@ SBasis derivative(SBasis const &a) {
     }
     int k = a.size()-1;
     double d = (2*k+1)*(a[k][1] - a[k][0]);
-    if(d == 0)
+    if (d == 0 && k > 0) {
         c.pop_back();
-    else {
+    } else {
         c[k][0] = d;
         c[k][1] = d;
     }
@@ -351,9 +353,9 @@ void SBasis::derive() { // in place version
     }
     int k = size()-1;
     double d = (2*k+1)*((*this)[k][1] - (*this)[k][0]);
-    if(d == 0)
+    if (d == 0 && k > 0) {
         pop_back();
-    else {
+    } else {
         (*this)[k][0] = d;
         (*this)[k][1] = d;
     }
@@ -464,6 +466,15 @@ SBasis compose(SBasis const &a, SBasis const &b, unsigned k) {
     }
     r.truncate(k);
     return r;
+}
+
+SBasis portion(const SBasis &t, double from, double to) {
+    double fv = t.valueAt(from);
+    double tv = t.valueAt(to);
+    SBasis ret = compose(t, Linear(from, to));
+    ret.at0() = fv;
+    ret.at1() = tv;
+    return ret;
 }
 
 /*
@@ -632,7 +643,6 @@ SBasis compose_inverse(SBasis const &f, SBasis const &g, unsigned order, double 
 
         //TODO: handle det~0!!
         if (fabs(det)<zero){
-            det = zero;
             a=b=0;
         }else{
             a=( q01*r10-q10*r01)/det;

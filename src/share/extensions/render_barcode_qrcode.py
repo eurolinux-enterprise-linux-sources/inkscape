@@ -2,8 +2,7 @@
 
 import math, sys
 import inkex
-
-inkex.localize()
+from simpletransform import computePointInNode
 
 #QRCode for Python
 #
@@ -1057,7 +1056,7 @@ class QRCodeInkscape(inkex.Effect):
             #INKSCAPE GROUP TO CONTAIN EVERYTHING
             
             so.TEXT = unicode(so.TEXT, so.input_encode)
-            centre = self.view_center   #Put in in the centre of the current view
+            centre = tuple(computePointInNode(list(self.view_center), self.current_layer))   #Put in in the centre of the current view
             grp_transform = 'translate' + str( centre ) + ' scale(%f)' % scale
             grp_name = 'QR Code: '+so.TEXT
             grp_attribs = {inkex.addNS('label','inkscape'):grp_name,

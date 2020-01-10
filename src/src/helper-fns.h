@@ -10,7 +10,7 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <string.h>
+#include <cstring>
 #include <vector>
 #include <sstream>
 
@@ -63,34 +63,6 @@ inline bool helperfns_read_bool(gchar const *value, bool default_value){
  * the function can only be used to convert numbers as given by gui elements that use localized representation
  * numbers are delimeted by space
  * @param value ascii representation of the number
- * @param size number of elements in string
- * @return the vector of the converted numbers
- */
-/*
-inline std::vector<gdouble> helperfns_read_vector(const gchar* value, int size){
-        std::vector<gdouble> v(size, (gdouble) 0);
-        std::istringstream is(value);
-        for(int i = 0; i < size; i++){
-        	std::string str;
-            is >> str;
-            char *end;
-
-            double ret = g_ascii_strtod(str.c_str(), &end);
-            if (*end) {
-                g_warning("helper-fns::helperfns_read_vector() Unable to convert \"%s\" to number", str.c_str());
-                // We could leave this out, too. If strtod can't convert
-                // anything, it will return zero.
-                ret = 0;
-            }
-            v[i] = ret;
-        };
-        return v;
-}
-*/
-/* convert ascii representation to double
- * the function can only be used to convert numbers as given by gui elements that use localized representation
- * numbers are delimeted by space
- * @param value ascii representation of the number
  * @return the vector of the converted numbers
  */
 inline std::vector<gdouble> helperfns_read_vector(const gchar* value){
@@ -106,7 +78,7 @@ inline std::vector<gdouble> helperfns_read_vector(const gchar* value){
                 g_warning("helper-fns::helperfns_read_vector() Unable to convert \"%s\" to number", beg);
                 // We could leave this out, too. If strtod can't convert
                 // anything, it will return zero.
-                ret = 0;
+                // ret = 0;
                 break;
             }
             v.push_back(ret);

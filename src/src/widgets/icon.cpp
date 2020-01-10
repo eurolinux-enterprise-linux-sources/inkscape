@@ -16,10 +16,6 @@
 # include "config.h"
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/icontheme.h>
 #include <cstring>
 #include <glib.h>
@@ -236,6 +232,7 @@ void IconImpl::sizeAllocate(GtkWidget *widget, GtkAllocation *allocation)
     }
 }
 
+// GTK3 Only, Doesn't actually seem to be used.
 gboolean IconImpl::draw(GtkWidget *widget, cairo_t* cr)
 {
     SPIcon *icon = SP_ICON(widget);
@@ -247,24 +244,38 @@ gboolean IconImpl::draw(GtkWidget *widget, cairo_t* cr)
     bool unref_image = false;
 
     /* copied from the expose function of GtkImage */
+#if GTK_CHECK_VERSION(3,0,0)
+    if (gtk_widget_get_state_flags (GTK_WIDGET(icon)) != GTK_STATE_FLAG_NORMAL && image) {
+#else
     if (gtk_widget_get_state (GTK_WIDGET(icon)) != GTK_STATE_NORMAL && image) {
+        std::cerr << "IconImpl::draw: Ooops! It is called in GTK2" << std::endl;
+#endif
+        std::cerr << "IconImpl::draw: No image, creating fallback" << std::endl;
+
+#if GTK_CHECK_VERSION(3,0,0)
+        // image = gtk_render_icon_pixbuf(gtk_widget_get_style_context(widget), 
+        //                                source, 
+        //                                (GtkIconSize)-1);
+
+        // gtk_render_icon_pixbuf deprecated, replaced by:
+        GtkIconTheme *icon_theme = gtk_icon_theme_get_default();
+        image = gtk_icon_theme_load_icon (icon_theme,
+                                          "gtk-image",
+                                          32,
+                                          (GtkIconLookupFlags)0,
+                                          NULL);
+#else
         GtkIconSource *source = gtk_icon_source_new();
         gtk_icon_source_set_pixbuf(source, icon->pb);
         gtk_icon_source_set_size(source, GTK_ICON_SIZE_SMALL_TOOLBAR); // note: this is boilerplate and not used
         gtk_icon_source_set_size_wildcarded(source, FALSE);
-
-#if GTK_CHECK_VERSION(3,0,0)
-        image = gtk_render_icon_pixbuf(gtk_widget_get_style_context(widget), 
-                                       source, 
-                                       (GtkIconSize)-1);
-#else
         image = gtk_style_render_icon(gtk_widget_get_style(widget), source, 
 			gtk_widget_get_direction(widget),
 			(GtkStateType) gtk_widget_get_state(widget), 
 			(GtkIconSize)-1, widget, "gtk-image");
+        gtk_icon_source_free(source);
 #endif
 
-        gtk_icon_source_free(source);
         unref_image = true;
     }
 
@@ -272,7 +283,13 @@ gboolean IconImpl::draw(GtkWidget *widget, cairo_t* cr)
         GtkAllocation allocation;
 	GtkRequisition requisition;
 	gtk_widget_get_allocation(widget, &allocation);
+
+#if GTK_CHECK_VERSION(3,0,0)
+        gtk_widget_get_preferred_size(widget, &requisition, NULL);
+#else
 	gtk_widget_get_requisition(widget, &requisition);
+#endif
+
         int x = floor(allocation.x + ((allocation.width - requisition.width) * 0.5));
         int y = floor(allocation.y + ((allocation.height - requisition.height) * 0.5));
         int width = gdk_pixbuf_get_width(image);
@@ -685,6 +702,7 @@ void IconImpl::setupLegacyNaming() {
     legacyNames["draw-star"] ="star_angled";
     legacyNames["path-mode-bezier"] ="bezier_mode";
     legacyNames["path-mode-spiro"] ="spiro_splines_mode";
+    legacyNames["path-mode-bspline"] ="bspline_mode";
     legacyNames["path-mode-polyline"] ="polylines_mode";
     legacyNames["path-mode-polyline-paraxial"] ="paraxial_lines_mode";
     legacyNames["draw-use-tilt"] ="guse_tilt";
@@ -786,6 +804,10 @@ GtkWidget *IconImpl::newFull( Inkscape::IconSize lsize, gchar const *name )
 
     GtkWidget *widget = NULL;
     gint trySize = CLAMP( static_cast<gint>(lsize), 0, static_cast<gint>(G_N_ELEMENTS(iconSizeLookup) - 1) );
+    if (trySize != lsize ) {
+        std::cerr << "GtkWidget *IconImple::newFull(): lsize != trySize: lsize: " << lsize
+                  << " try Size: " << trySize << " " << (name?name:"NULL") << std::endl;
+    }
     if ( !sizeMapDone ) {
         injectCustomSize();
     }
@@ -813,6 +835,7 @@ GtkWidget *IconImpl::newFull( Inkscape::IconSize lsize, gchar const *name )
 
             if ( Inkscape::Preferences::get()->getBool("/options/iconrender/named_nodelay") ) {
                 int psize = getPhysSize(lsize);
+                // std::cout << "  name: " << name << " size: " << psize << std::endl;
                 prerenderIcon(name, mappedSize, psize);
             } else {
                 addPreRender( mappedSize, name );
@@ -985,8 +1008,6 @@ int IconImpl::getPhysSize(int size)
             "inkscape-decoration"
         };
 
-        GtkWidget *icon = GTK_WIDGET(g_object_new(SP_TYPE_ICON, NULL));
-
         for (unsigned i = 0; i < G_N_ELEMENTS(gtkSizes); ++i) {
             guint const val_ix = (gtkSizes[i] <= GTK_ICON_SIZE_DIALOG) ? (guint)gtkSizes[i] : (guint)Inkscape::ICON_SIZE_DECORATION;
 
@@ -1011,7 +1032,12 @@ int IconImpl::getPhysSize(int size)
             //   gtk_icon_size_lookup(), because themes are free to render the pixbuf however
             //   they like, including changing the usual size."
             gchar const *id = INKSCAPE_ICON("document-open");
-            GdkPixbuf *pb = gtk_widget_render_icon( icon, id, gtkSizes[i], NULL);
+            GtkIconTheme *icon_theme = gtk_icon_theme_get_default();
+            GdkPixbuf *pb = gtk_icon_theme_load_icon (icon_theme,
+                                                      id,
+                                                      vals[val_ix],
+                                                      (GtkIconLookupFlags)0,
+                                                      NULL);
             if (pb) {
                 width = gdk_pixbuf_get_width(pb);
                 height = gdk_pixbuf_get_height(pb);
@@ -1027,7 +1053,6 @@ int IconImpl::getPhysSize(int size)
                 g_object_unref(G_OBJECT(pb));
             }
         }
-        //g_object_unref(icon);
         init = true;
     }
 
@@ -1256,7 +1281,7 @@ std::list<gchar*> &IconImpl::icons_svg_paths()
     static bool initialized = false;
     if (!initialized) {
         // Fall back from user prefs dir into system locations.
-        gchar *userdir = profile_path("icons");
+        gchar *userdir = Inkscape::Application::profile_path("icons");
         sources.push_back(g_build_filename(userdir,"icons.svg", NULL));
         sources.push_back(g_build_filename(INKSCAPE_PIXMAPDIR, "icons.svg", NULL));
         g_free(userdir);
@@ -1567,7 +1592,7 @@ void IconImpl::addPreRender( GtkIconSize lsize, gchar const *name )
 }
 
 gboolean IconImpl::prerenderTask(gpointer /*data*/) {
-    if ( inkscapeIsCrashing() ) {
+    if ( Inkscape::Application::isCrashing() ) {
         // stop
     } else if (!pendingRenders.empty()) {
         bool workDone = false;
@@ -1579,7 +1604,7 @@ gboolean IconImpl::prerenderTask(gpointer /*data*/) {
         } while (!pendingRenders.empty() && !workDone);
     }
 
-    if (!inkscapeIsCrashing() && !pendingRenders.empty()) {
+    if (!Inkscape::Application::isCrashing() && !pendingRenders.empty()) {
         return TRUE;
     } else {
         callbackHooked = false;

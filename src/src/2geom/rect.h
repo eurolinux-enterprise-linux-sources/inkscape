@@ -47,6 +47,43 @@
 
 namespace Geom {
 
+/** Values for the <align> parameter of preserveAspectRatio.
+ * See: http://www.w3.org/TR/SVG/coords.html#PreserveAspectRatioAttribute */
+enum Align {
+    ALIGN_NONE,
+    ALIGN_XMIN_YMIN,
+    ALIGN_XMID_YMIN,
+    ALIGN_XMAX_YMIN,
+    ALIGN_XMIN_YMID,
+    ALIGN_XMID_YMID,
+    ALIGN_XMAX_YMID,
+    ALIGN_XMIN_YMAX,
+    ALIGN_XMID_YMAX,
+    ALIGN_XMAX_YMAX
+};
+
+/** Values for the <meetOrSlice> parameter of preserveAspectRatio.
+ * See: http://www.w3.org/TR/SVG/coords.html#PreserveAspectRatioAttribute */
+enum Expansion {
+    EXPANSION_MEET,
+    EXPANSION_SLICE
+};
+
+/// Convert an align specification to coordinate fractions.
+Point align_factors(Align align);
+
+/** @brief Structure that specifies placement of within a viewport.
+ * Use this to create transformations that preserve aspect. */
+struct Aspect {
+    Align align;
+    Expansion expansion;
+    bool deferred; ///< for SVG compatibility
+
+    Aspect(Align a = ALIGN_NONE, Expansion ex = EXPANSION_MEET)
+        : align(a), expansion(ex), deferred(false)
+    {}
+};
+
 /**
  * @brief Axis aligned, non-empty rectangle.
  * @ingroup Primitives
@@ -75,6 +112,10 @@ public:
      * @param eps Maximum value of the area to consider empty
      * @return True if rectangle has an area smaller than tolerance, false otherwise */
     bool hasZeroArea(Coord eps = EPSILON) const { return (area() <= eps); }
+    /// Check whether the rectangle has finite area
+    bool isFinite() const { return (*this)[X].isFinite() && (*this)[Y].isFinite(); }
+    /// Calculate the diameter of the smallest circle that would contain the rectangle.
+    Coord diameter() const { return distance(corner(0), corner(2)); }
     /// @}
 
     /// @name Test other rectangles and points for inclusion.
@@ -109,6 +150,16 @@ public:
     }
     /// @}
 
+    /// @name SVG viewbox functionality.
+    /// @{
+    /** @brief Transform contents to viewport.
+     * Computes an affine that transforms the contents of this rectangle
+     * to the specified viewport. The aspect parameter specifies how to
+     * to the transformation (whether the aspect ratio of content
+     * should be kept and where it should be placed in the viewport). */
+    Affine transformTo(Rect const &viewport, Aspect const &aspect = Aspect()) const;
+    /// @}
+
     /// @name Operators
     /// @{
     Rect &operator*=(Affine const &m);
@@ -141,8 +192,14 @@ public:
     OptRect(OptIntRect const &r) : Base() {
         if (r) *this = Rect(*r);
     }
-    // actually, the only reason we have this class, instead of typedefing
-    // to GenericOptRect<Coord>, are the above constructors
+
+    Affine transformTo(Rect const &viewport, Aspect const &aspect = Aspect()) {
+        Affine ret = Affine::identity();
+        if (empty()) return ret;
+        ret = (*this)->transformTo(viewport, aspect);
+        return ret;
+    }
+
     bool operator==(OptRect const &other) const {
         return Base::operator==(other);
     }
@@ -153,6 +210,10 @@ public:
 
 Coord distanceSq(Point const &p, Rect const &rect);
 Coord distance(Point const &p, Rect const &rect);
+/// Minimum square of distance to rectangle, or infinity if empty.
+Coord distanceSq(Point const &p, OptRect const &rect);
+/// Minimum distance to rectangle, or infinity if empty.
+Coord distance(Point const &p, OptRect const &rect);
 
 inline bool Rect::interiorContains(OptRect const &r) const {
     return !r || interiorContains(static_cast<Rect const &>(*r));

@@ -24,16 +24,6 @@
 #include "svg/css-ostringstream.h"
 #include "xml/repr.h"
 
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createStop() {
-		return new SPStop();
-	}
-
-	bool stopRegistered = SPFactory::instance().registerObject("svg:stop", createStop);
-}
-
 SPStop::SPStop() : SPObject() {
 	this->path_string = NULL;
 
@@ -125,6 +115,7 @@ void SPStop::set(unsigned int key, const gchar* value) {
                     // std::cout << "Got Curve" << std::endl;
                     //curve->unref();
                 //}
+                this->requestModified(SP_OBJECT_MODIFIED_FLAG);
             }
             break;
         }
@@ -210,15 +201,13 @@ SPStop* SPStop::getPrevStop() {
 
 SPColor SPStop::readStopColor(Glib::ustring const &styleStr, guint32 dfl) {
     SPColor color(dfl);
-    SPStyle* style = sp_style_new(0);
     SPIPaint paint;
-    paint.read( styleStr.c_str(), *style );
+
+    paint.read( styleStr.c_str() );
 
     if ( paint.isColor() ) {
         color = paint.value.color;
     }
-
-    sp_style_unref(style);
 
     return color;
 }

@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * Copyright (C) 2012 Kris De Gussem <Kris.DeGussem@gmail.com>
- * c++ version based on former C-version (GPL v2) with authors:
+ * c++ version based on former C-version (GPL v2+) with authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
  *   bulia byak <buliabyak@users.sf.net>
  *   Johan Engelen <goejendaagh@zonnet.nl>
@@ -28,7 +28,7 @@
 
 #include "object-properties.h"
 #include "widgets/sp-attribute-widget.h"
-#include "desktop-handles.h"
+
 #include "document.h"
 #include "document-undo.h"
 #include "verbs.h"
@@ -353,7 +353,7 @@ void ObjectProperties::update()
         return;
     }
 
-    Inkscape::Selection *selection = sp_desktop_selection(SP_ACTIVE_DESKTOP);
+    Inkscape::Selection *selection = SP_ACTIVE_DESKTOP->getSelection();
     Gtk::Box *contents = _getContents();
 
     if (!selection->singleItem()) {
@@ -458,7 +458,7 @@ void ObjectProperties::_labelChanged()
         return;
     }
     
-    SPItem *item = sp_desktop_selection(SP_ACTIVE_DESKTOP)->singleItem();
+    SPItem *item = SP_ACTIVE_DESKTOP->getSelection()->singleItem();
     g_return_if_fail (item != NULL);
 
     _blocked = true;
@@ -467,14 +467,14 @@ void ObjectProperties::_labelChanged()
     gchar *id = g_strdup(_entry_id.get_text().c_str());
     g_strcanon(id, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.:", '_');
     if (strcmp(id, item->getId()) == 0) {
-        _label_id.set_markup_with_mnemonic(_("_ID:"));
+        _label_id.set_markup_with_mnemonic(_("_ID:") + Glib::ustring(" "));
     } else if (!*id || !isalnum (*id)) {
         _label_id.set_text(_("Id invalid! "));
     } else if (SP_ACTIVE_DOCUMENT->getObjectById(id) != NULL) {
         _label_id.set_text(_("Id exists! "));
     } else {
         SPException ex;
-        _label_id.set_markup_with_mnemonic(_("_ID:"));
+        _label_id.set_markup_with_mnemonic(_("_ID:") + Glib::ustring(" "));
         SP_EXCEPTION_INIT(&ex);
         item->setAttribute("id", id, &ex);
         DocumentUndo::done(SP_ACTIVE_DOCUMENT, SP_VERB_DIALOG_ITEM, _("Set object ID"));
@@ -518,7 +518,7 @@ void ObjectProperties::_imageRenderingChanged()
         return;
     }
     
-    SPItem *item = sp_desktop_selection(SP_ACTIVE_DESKTOP)->singleItem();
+    SPItem *item = SP_ACTIVE_DESKTOP->getSelection()->singleItem();
     g_return_if_fail (item != NULL);
 
     _blocked = true;
@@ -529,10 +529,12 @@ void ObjectProperties::_imageRenderingChanged()
     SPCSSAttr *css = sp_repr_css_attr_new();
     sp_repr_css_set_property(css, "image-rendering", scale.c_str());
     Inkscape::XML::Node *image_node = item->getRepr();
-    if( image_node ) {
+    if (image_node) {
         sp_repr_css_change(image_node, css, "style");
+        DocumentUndo::done(SP_ACTIVE_DOCUMENT, SP_VERB_DIALOG_ITEM,
+                _("Set image rendering option"));
     }
-    sp_repr_css_attr_unref( css );
+    sp_repr_css_attr_unref(css);
         
     _blocked = false;
 }
@@ -543,7 +545,7 @@ void ObjectProperties::_sensitivityToggled()
         return;
     }
 
-    SPItem *item = sp_desktop_selection(SP_ACTIVE_DESKTOP)->singleItem();
+    SPItem *item = SP_ACTIVE_DESKTOP->getSelection()->singleItem();
     g_return_if_fail(item != NULL);
 
     _blocked = true;
@@ -559,7 +561,7 @@ void ObjectProperties::_hiddenToggled()
         return;
     }
 
-    SPItem *item = sp_desktop_selection(SP_ACTIVE_DESKTOP)->singleItem();
+    SPItem *item = SP_ACTIVE_DESKTOP->getSelection()->singleItem();
     g_return_if_fail(item != NULL);
 
     _blocked = true;

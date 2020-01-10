@@ -25,7 +25,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 
 # Inspired by hello_world turorial by Blackhex and Rubikcube
@@ -53,9 +53,6 @@ from math import sqrt
 # We will use the inkex module with the predefined Effect base class.
 import inkex
 from simplestyle import *
-
-# for localized debugging output
-inkex.localize()
 
 from xml.etree import ElementTree as ET
 
@@ -297,8 +294,8 @@ class Guides_Creator(inkex.Effect):
                 svg = self.document.getroot()
 
                 # getting the width and height attributes of the canvas
-                width  = self.unittouu(svg.get('width'))/self.unittouu('1px')
-                height = self.unittouu(svg.get('height'))/self.unittouu('1px')
+                width  = self.unittouu(svg.get('width'))
+                height = self.unittouu(svg.get('height'))
 
                 # getting edges coordinates
                 h_orientation = '0,' + str(round(width,4))

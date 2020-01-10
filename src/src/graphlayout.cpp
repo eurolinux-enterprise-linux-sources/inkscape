@@ -25,7 +25,6 @@
 #include "desktop.h"
 #include "inkscape.h"
 #include "sp-namedview.h"
-#include "util/glib-list-iterators.h"
 #include "graphlayout.h"
 #include "sp-path.h"
 #include "sp-item.h"
@@ -88,9 +87,9 @@ struct CheckProgress : TestConvergence {
  * Scans the items list and places those items that are
  * not connectors in filtered
  */
-void filterConnectors(GSList const *const items, list<SPItem *> &filtered) {
-    for(GSList *i=(GSList *)items; i!=NULL; i=i->next) {
-        SPItem *item=SP_ITEM(i->data);
+void filterConnectors(std::vector<SPItem*> const &items, list<SPItem *> &filtered) {
+    for(std::vector<SPItem*>::const_iterator i = items.begin();i !=items.end(); ++i){
+        SPItem *item = *i;
         if(!isConnector(item)) {
             filtered.push_back(item);
         }
@@ -101,12 +100,11 @@ void filterConnectors(GSList const *const items, list<SPItem *> &filtered) {
 * connectors between them, and uses graph layout techniques to find
 * a nice layout
 */
-void graphlayout(GSList const *const items) {
-    if(!items) {
+void graphlayout(std::vector<SPItem*> const &items) {
+    if(items.empty()) {
         return;
     }
 
-    using Inkscape::Util::GSListIterator;
     list<SPItem *> selected;
     filterConnectors(items,selected);
     if (selected.empty()) return;
@@ -117,7 +115,7 @@ void graphlayout(GSList const *const items) {
 
     // add the connector spacing to the size of node bounding boxes
     // so that connectors can always be routed between shapes
-    SPDesktop* desktop = inkscape_active_desktop();
+    SPDesktop* desktop = SP_ACTIVE_DESKTOP;
     double spacing = 0;
     if(desktop) spacing = desktop->namedview->connector_spacing+0.1;
 
@@ -164,10 +162,11 @@ void graphlayout(GSList const *const items) {
             continue;
         }
         unsigned u=i_iter->second;
-        GSList *nlist=iu->avoidRef->getAttachedConnectors(Avoid::runningFrom);
+        std::vector<SPItem *> nlist=iu->avoidRef->getAttachedConnectors(Avoid::runningFrom);
         list<SPItem *> connectors;
 
-        connectors.insert<GSListIterator<SPItem *> >(connectors.end(),nlist,NULL);
+        connectors.insert(connectors.end(), nlist.begin(), nlist.end());
+
         for (list<SPItem *>::iterator j(connectors.begin());
                 j != connectors.end();
                 ++j) {
@@ -202,9 +201,6 @@ void graphlayout(GSList const *const items) {
                     }
                 }
             }
-        }
-        if(nlist) {
-            g_slist_free(nlist);
         }
     }
     const unsigned E = es.size();

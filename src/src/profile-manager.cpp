@@ -34,11 +34,8 @@ void ProfileManager::_resourcesChanged()
 {
     std::vector<SPObject*> newList;
     if (_doc) {
-        const GSList *current = _doc->getResourceList( "iccprofile" );
-        while ( current ) {
-            newList.push_back(SP_OBJECT(current->data));
-            current = g_slist_next(current);
-        }
+        std::vector<SPObject *> current = _doc->getResourceList( "iccprofile" );
+        newList = current;
     }
     sort( newList.begin(), newList.end() );
 

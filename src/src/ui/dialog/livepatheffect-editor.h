@@ -69,7 +69,7 @@ private:
     void showText(Glib::ustring const &str);
     void selectInList(LivePathEffect::Effect* effect);
 
-   // void add_entry(const char* name );
+    // void add_entry(const char* name );
     void effect_list_reload(SPLPEItem *lpeitem);
 
     // callback methods for buttons on grids page.

@@ -14,10 +14,6 @@
 # include <config.h>
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include "gtkmm/messagedialog.h"
 
 #include "execution-env.h"
@@ -31,10 +27,8 @@
 #include "desktop.h"
 #include "ui/view/view.h"
 #include "sp-namedview.h"
-#include "desktop-handles.h"
-#include "display/sp-canvas.h"
 
-#include "util/glib-list-iterators.h"
+#include "display/sp-canvas.h"
 
 namespace Inkscape {
 namespace Extension {
@@ -64,14 +58,12 @@ ExecutionEnv::ExecutionEnv (Effect * effect, Inkscape::UI::View::View * doc, Imp
     sp_namedview_document_from_window(desktop);
 
     if (desktop != NULL) {
-        Inkscape::Util::GSListConstIterator<SPItem *> selected =
-             sp_desktop_selection(desktop)->itemList();
-        while ( selected != NULL ) {
+    	std::vector<SPItem*> selected = desktop->getSelection()->itemList();
+        for(std::vector<SPItem*>::const_iterator x = selected.begin(); x != selected.end(); ++x){
             Glib::ustring selected_id;
-            selected_id = (*selected)->getId();
+            selected_id = (*x)->getId();
             _selected.insert(_selected.end(), selected_id);
             //std::cout << "Selected: " << selected_id << std::endl;
-            ++selected;
         }
     }
 
@@ -136,7 +128,7 @@ ExecutionEnv::createWorkingDialog (void) {
     }
 
     SPDesktop *desktop = (SPDesktop *)_doc;
-    GtkWidget *toplevel = gtk_widget_get_toplevel(&(desktop->canvas->widget));
+    GtkWidget *toplevel = gtk_widget_get_toplevel(GTK_WIDGET(desktop->canvas));
     if (!toplevel || !gtk_widget_is_toplevel (toplevel))
         return;
     Gtk::Window *window = Glib::wrap(GTK_WINDOW(toplevel), false);
@@ -200,7 +192,7 @@ ExecutionEnv::reselect (void) {
 
     if (desktop == NULL) { return; }
 
-    Inkscape::Selection * selection = sp_desktop_selection(desktop);
+    Inkscape::Selection * selection = desktop->getSelection();
 
     for (std::list<Glib::ustring>::iterator i = _selected.begin(); i != _selected.end(); ++i) {
         SPObject * obj = doc->getObjectById(i->c_str());

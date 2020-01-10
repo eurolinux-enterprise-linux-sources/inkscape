@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 import inkex, cubicsuperpath, simplepath, cspsubdiv
 
@@ -40,7 +40,7 @@ class MyEffect(inkex.Effect):
                             cmd = 'M'
                         first = False
                         np.append([cmd,[csp[1][0],csp[1][1]]])
-                        node.set('d',simplepath.formatPath(np))
+                node.set('d',simplepath.formatPath(np))
 
 if __name__ == '__main__':
     e = MyEffect()

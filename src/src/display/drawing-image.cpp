@@ -10,27 +10,24 @@
  */
 
 #include <2geom/bezier-curve.h>
-#include "display/cairo-utils.h"
+
 #include "display/drawing.h"
 #include "display/drawing-context.h"
 #include "display/drawing-image.h"
 #include "preferences.h"
 #include "style.h"
 
+#include "display/cairo-utils.h"
+
 namespace Inkscape {
 
 DrawingImage::DrawingImage(Drawing &drawing)
     : DrawingItem(drawing)
     , _pixbuf(NULL)
-    , _style(NULL)
 {}
 
 DrawingImage::~DrawingImage()
 {
-    if (_style) {
-        sp_style_unref(_style);
-    }
-
     // _pixbuf is owned by SPImage - do not delete it
 }
 
@@ -40,12 +37,6 @@ DrawingImage::setPixbuf(Inkscape::Pixbuf *pb)
     _pixbuf = pb;
 
     _markForUpdate(STATE_ALL, false);
-}
-
-void
-DrawingImage::setStyle(SPStyle *style)
-{
-    _setStyleCommon(_style, style);
 }
 
 void
@@ -125,23 +116,29 @@ unsigned DrawingImage::_renderItem(DrawingContext &dc, Geom::IntRect const &/*ar
         if (_style) {
             // See: http://www.w3.org/TR/SVG/painting.html#ImageRenderingProperty
             //      http://www.w3.org/TR/css4-images/#the-image-rendering
+            //      It's back in CSS Images 3 now. 
             //      style.h/style.cpp
             switch (_style->image_rendering.computed) {
-                case SP_CSS_COLOR_RENDERING_AUTO:
-                    // Do nothing
-                    break;
-                case SP_CSS_COLOR_RENDERING_OPTIMIZEQUALITY:
+                case SP_CSS_IMAGE_RENDERING_AUTO:
+                case SP_CSS_IMAGE_RENDERING_OPTIMIZEQUALITY:
+                case SP_CSS_IMAGE_RENDERING_CRISPEDGES:
+                    // CSS 3 defines:
+                    //   'auto' to use smoothing
+                    //   'optimize-quality' as alias for auto
+                    //   We don't have special rendering for 'crisp-edges' yet
+                    //   so follow what browsers do.
                     // In recent Cairo, BEST used Lanczos3, which is prohibitively slow
                     dc.patternSetFilter( CAIRO_FILTER_GOOD );
                     break;
-                case SP_CSS_COLOR_RENDERING_OPTIMIZESPEED:
+                case SP_CSS_IMAGE_RENDERING_OPTIMIZESPEED:
+                case SP_CSS_IMAGE_RENDERING_PIXELATED:
                 default:
                     dc.patternSetFilter( CAIRO_FILTER_NEAREST );
                     break;
             }
         }
 
-        dc.paint(_opacity);
+        dc.paint(1);
 
     } else { // outline; draw a rect instead
 
@@ -181,7 +178,7 @@ static double
 distance_to_segment (Geom::Point const &p, Geom::Point const &a1, Geom::Point const &a2)
 {
     Geom::LineSegment l(a1, a2);
-    Geom::Point np = l.pointAt(l.nearestPoint(p));
+    Geom::Point np = l.pointAt(l.nearestTime(p));
     return Geom::distance(np, p);
 }
 

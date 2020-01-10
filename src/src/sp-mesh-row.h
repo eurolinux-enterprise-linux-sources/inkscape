@@ -2,7 +2,7 @@
 #define SEEN_SP_MESHROW_H
 
 /** \file
- * SPMeshRow: SVG <meshRow> implementation.
+ * SPMeshrow: SVG <meshrow> implementation.
  */
 /*
  * Authors: Tavmjong Bah
@@ -11,25 +11,25 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glib.h>
 #include "sp-object.h"
 
-#define SP_MESHROW(obj) (dynamic_cast<SPMeshRow*>((SPObject*)obj))
-#define SP_IS_MESHROW(obj) (dynamic_cast<const SPMeshRow*>((SPObject*)obj) != NULL)
+#define SP_MESHROW(obj) (dynamic_cast<SPMeshrow*>((SPObject*)obj))
+#define SP_IS_MESHROW(obj) (dynamic_cast<const SPMeshrow*>((SPObject*)obj) != NULL)
 
-/** Gradient MeshRow. */
-class SPMeshRow : public SPObject {
+/** Gradient Meshrow. */
+class SPMeshrow : public SPObject {
 public:
-	SPMeshRow();
-	virtual ~SPMeshRow();
+    SPMeshrow();
+    virtual ~SPMeshrow();
 
-    SPMeshRow* getNextMeshRow();
-    SPMeshRow* getPrevMeshRow();
+    SPMeshrow* getNextMeshrow();
+    SPMeshrow* getPrevMeshrow();
 
 protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void set(unsigned int key, const gchar* value);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
+    virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
+    virtual void set(unsigned int key, const char* value);
+    virtual void modified(unsigned int flags);
+    virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
 };
 
 #endif /* !SEEN_SP_MESHROW_H */

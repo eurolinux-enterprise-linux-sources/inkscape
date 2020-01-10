@@ -1,5 +1,5 @@
-#ifndef __SP_LIVAROT_H__
-#define __SP_LIVAROT_H__
+#ifndef SEEN_SP_LIVAROT_H
+#define SEEN_SP_LIVAROT_H
 
 /*
  * boolops and outlines
@@ -7,9 +7,10 @@
  * public domain
  */
 
-#include "livarot/Path.h"
 #include <2geom/forward.h>
 #include <2geom/path.h>
+#include "livarot/Path.h"
+
 class SPCurve;
 class SPDesktop;
 class SPItem;
@@ -32,6 +33,7 @@ void sp_selected_path_diff (Inkscape::Selection *selection, SPDesktop *desktop);
 void sp_selected_path_diff_skip_undo (Inkscape::Selection *selection, SPDesktop *desktop);
 void sp_selected_path_symdiff (Inkscape::Selection *selection, SPDesktop *desktop);
 void sp_selected_path_cut (Inkscape::Selection *selection, SPDesktop *desktop);
+void sp_selected_path_cut_skip_undo (Inkscape::Selection *selection, SPDesktop *desktop);
 void sp_selected_path_slice (Inkscape::Selection *selection, SPDesktop *desktop);
 
 // offset/inset of a curve

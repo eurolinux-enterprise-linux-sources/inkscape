@@ -37,7 +37,7 @@
 #include "color.h"
 #include "desktop-events.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "desktop-style.h"
 #include "device-manager.h"
 #include "display/canvas-arena.h"
@@ -55,8 +55,7 @@
 #include "document-undo.h"
 #include "event-log.h"
 #include "helper/action-context.h"
-#include "interface.h"
-#include "inkscape-private.h"
+#include "ui/interface.h"
 #include "layer-fns.h"
 #include "layer-manager.h"
 #include "layer-model.h"
@@ -72,7 +71,7 @@
 #include "sp-namedview.h"
 #include "sp-root.h"
 #include "sp-defs.h"
-#include "tool-factory.h"
+#include "ui/tool-factory.h"
 #include "widgets/desktop-widget.h"
 #include "xml/repr.h"
 #include "helper/action.h" //sp_action_perform
@@ -94,28 +93,28 @@ static void _reconstruction_finish(SPDesktop * desktop);
 static void _namedview_modified (SPObject *obj, guint flags, SPDesktop *desktop);
 
 SPDesktop::SPDesktop() :
-    _dlg_mgr( 0 ),
-    namedview( 0 ),
-    canvas( 0 ),
-    layers( 0 ),
-    selection( 0 ),
-    event_context( 0 ),
-    layer_manager( 0 ),
-    event_log( 0 ),
-    temporary_item_list( 0 ),
-    snapindicator( 0 ),
-    acetate( 0 ),
-    main( 0 ),
-    gridgroup( 0 ),
-    guides( 0 ),
-    drawing( 0 ),
-    sketch( 0 ),
-    controls( 0 ),
-    tempgroup ( 0 ),
-    table( 0 ),
-    page( 0 ),
-    page_border( 0 ),
-    current( 0 ),
+    _dlg_mgr( NULL ),
+    namedview( NULL ),
+    canvas( NULL ),
+    layers( NULL ),
+    selection( NULL ),
+    event_context( NULL ),
+    layer_manager( NULL ),
+    event_log( NULL ),
+    temporary_item_list( NULL ),
+    snapindicator( NULL ),
+    acetate( NULL ),
+    main( NULL ),
+    gridgroup( NULL ),
+    guides( NULL ),
+    drawing( NULL ),
+    sketch( NULL ),
+    controls( NULL ),
+    tempgroup ( NULL ),
+    table( NULL ),
+    page( NULL ),
+    page_border( NULL ),
+    current( NULL ),
     _focusMode(false),
     dkey( 0 ),
     number( 0 ),
@@ -124,16 +123,15 @@ SPDesktop::SPDesktop() :
     waiting_cursor( false ),
     showing_dialogs ( false ),
     guides_active( false ),
-    gr_item( 0 ),
+    gr_item( NULL ),
     gr_point_type( POINT_LG_BEGIN ),
     gr_point_i( 0 ),
     gr_fill_or_stroke( Inkscape::FOR_FILL ),
     _reconstruction_old_layer_id(), // an id attribute is not allowed to be the empty string
     _display_mode(Inkscape::RENDERMODE_NORMAL),
     _display_color_mode(Inkscape::COLORMODE_NORMAL),
-    _widget( 0 ),
-    _inkscape( 0 ),
-    _guides_message_context( 0 ),
+    _widget( NULL ),
+    _guides_message_context( NULL ),
     _active( false ),
     _w2d(),
     _d2w(),
@@ -212,9 +210,11 @@ SPDesktop::init (SPNamedView *nv, SPCanvas *aCanvas, Inkscape::UI::View::EditWid
     main = (SPCanvasGroup *) sp_canvas_item_new (root, SP_TYPE_CANVAS_GROUP, NULL);
     g_signal_connect (G_OBJECT (main), "event", G_CALLBACK (sp_desktop_root_handler), this);
 
+    /* This is the background the page sits on. */
     table = sp_canvas_item_new (main, SP_TYPE_CTRLRECT, NULL);
     SP_CTRLRECT(table)->setRectangle(Geom::Rect(Geom::Point(-80000, -80000), Geom::Point(80000, 80000)));
     SP_CTRLRECT(table)->setColor(0x00000000, true, 0x00000000);
+    SP_CTRLRECT(table)->setCheckerboard( false );
     sp_canvas_item_move_to_z (table, 0);
 
     page = sp_canvas_item_new (main, SP_TYPE_CTRLRECT, NULL);
@@ -299,7 +299,6 @@ SPDesktop::init (SPNamedView *nv, SPCanvas *aCanvas, Inkscape::UI::View::EditWid
 
     // ?
     // sp_active_desktop_set (desktop);
-    _inkscape = INKSCAPE;
 
     _activate_connection = _activate_signal.connect(
         sigc::bind(
@@ -383,10 +382,6 @@ void SPDesktop::destroy()
     if (layer_manager) {
         delete layer_manager;
         layer_manager = NULL;
-    }
-
-    if (_inkscape) {
-        _inkscape = NULL;
     }
 
     if (drawing) {
@@ -506,12 +501,11 @@ void SPDesktop::redrawDesktop() {
 
 void SPDesktop::_setDisplayMode(Inkscape::RenderMode mode) {
     SP_CANVAS_ARENA (drawing)->drawing.setRenderMode(mode);
-    canvas->rendermode = mode;
+    canvas->_rendermode = mode;
     _display_mode = mode;
     redrawDesktop();
-    _widget->setTitle( sp_desktop_document(this)->getName() );
+    _widget->setTitle( this->getDocument()->getName() );
 }
-
 void SPDesktop::_setDisplayColorMode(Inkscape::ColorMode mode) {
     // reload grayscale matrix from prefs
     if (mode == Inkscape::COLORMODE_GRAYSCALE) {
@@ -523,15 +517,15 @@ void SPDesktop::_setDisplayColorMode(Inkscape::ColorMode mode) {
                                                r, g, b, 0, 0,
                                                r, g, b, 0, 0,
                                                0, 0, 0, 1, 0 };
-        //g_message("%g",grayscale_value_matrix[0]);
+        g_message("%g",grayscale_value_matrix[0]);
         SP_CANVAS_ARENA (drawing)->drawing.setGrayscaleMatrix(grayscale_value_matrix);
     }
 
     SP_CANVAS_ARENA (drawing)->drawing.setColorMode(mode);
-    canvas->colorrendermode = mode;
+    canvas->_colorrendermode = mode;
     _display_color_mode = mode;
     redrawDesktop();
-    _widget->setTitle( sp_desktop_document(this)->getName() );
+    _widget->setTitle( this->getDocument()->getName() );
 }
 
 void SPDesktop::displayModeToggle() {
@@ -695,7 +689,7 @@ void SPDesktop::set_event_context2(const std::string& toolName)
         }
     }
     
-    Inkscape::UI::Tools::ToolBase* new_tool = ToolFactory::instance().createObject(toolName);
+    Inkscape::UI::Tools::ToolBase* new_tool = ToolFactory::createObject(toolName);
     new_tool->desktop = this;
     new_tool->message_context = new Inkscape::MessageContext(this->messageStack());
     event_context = new_tool;
@@ -724,7 +718,7 @@ Inkscape::UI::Widget::Dock* SPDesktop::getDock() {
 /**
  * \see SPDocument::getItemFromListAtPointBottom()
  */
-SPItem *SPDesktop::getItemFromListAtPointBottom(const GSList *list, Geom::Point const &p) const
+SPItem *SPDesktop::getItemFromListAtPointBottom(const std::vector<SPItem*> &list, Geom::Point const &p) const
 {
     g_return_val_if_fail (doc() != NULL, NULL);
     return SPDocument::getItemFromListAtPointBottom(dkey, doc()->getRoot(), list, p);
@@ -955,7 +949,6 @@ void SPDesktop::zoom_quick(bool enable)
 
         if (!zoomed) {
             zoom_relative(_quick_zoom_stored_area.midpoint()[Geom::X], _quick_zoom_stored_area.midpoint()[Geom::Y], 2.0);
-            zoomed = true;
         }
     } else {
         set_display_area(_quick_zoom_stored_area, false);
@@ -1432,7 +1425,7 @@ void
 SPDesktop::emitToolSubselectionChanged(gpointer data)
 {
     _tool_subselection_changed.emit(data);
-    inkscape_subselection_changed (this);
+    INKSCAPE.subselection_changed (this);
 }
 
 void SPDesktop::updateNow()
@@ -1453,8 +1446,9 @@ void SPDesktop::disableInteraction()
 
 void SPDesktop::setWaitingCursor()
 {
-    GdkCursor *waiting = gdk_cursor_new(GDK_WATCH);
-    gdk_window_set_cursor(gtk_widget_get_window(GTK_WIDGET(sp_desktop_canvas(this))), waiting);
+    GdkDisplay *display = gdk_display_get_default();
+    GdkCursor  *waiting = gdk_cursor_new_for_display(display, GDK_WATCH);
+    gdk_window_set_cursor(gtk_widget_get_window(GTK_WIDGET(getCanvas())), waiting);
 #if GTK_CHECK_VERSION(3,0,0)
     g_object_unref(waiting);
 #else
@@ -1476,6 +1470,11 @@ void SPDesktop::toggleColorProfAdjust()
     _widget->toggleColorProfAdjust();
 }
 
+void SPDesktop::toggleGuidesLock()
+{
+    _widget->toggleGuidesLock();
+}
+
 bool SPDesktop::colorProfAdjustEnabled()
 {
     return _widget->colorProfAdjustEnabled();
@@ -1483,13 +1482,13 @@ bool SPDesktop::colorProfAdjustEnabled()
 
 void SPDesktop::toggleGrids()
 {
-    if (namedview->grids) {
+    if (! namedview->grids.empty()) {
         if(gridgroup) {
             showGrids(!grids_visible);
         }
     } else {
         //there is no grid present at the moment. add a rectangular grid and make it visible
-        namedview->writeNewGrid(sp_desktop_document(this), Inkscape::GRID_RECTANGULAR);
+        namedview->writeNewGrid(this->getDocument(), Inkscape::GRID_RECTANGULAR);
         showGrids(true);
     }
 }
@@ -1552,12 +1551,16 @@ SPDesktop::setDocument (SPDocument *doc)
 
     layers->setDocument(doc);
 
-	// remove old EventLog if it exists (see also: bug #1071082)
-	if (event_log) {
-		doc->removeUndoObserver(*event_log);
-		delete event_log;
-		event_log = 0;
-	}
+    if (event_log) {
+        // Remove it from the replaced document. This prevents Inkscape from
+        // crashing since we access it in the replaced document's destructor
+        // which results in an undefined behavior. (See also: bug #1670688)
+        if (this->doc()) {
+            this->doc()->removeUndoObserver(*event_log);
+        }
+        delete event_log;
+        event_log = 0;
+    }
 
     /* setup EventLog */
     event_log = new Inkscape::EventLog(doc);
@@ -1708,12 +1711,6 @@ static void _reconstruction_start(SPDesktop * desktop)
     desktop->_reconstruction_old_layer_id = desktop->currentLayer()->getId() ? desktop->currentLayer()->getId() : "";
     desktop->layers->reset();
 
-    /*
-    GSList const * selection_objs = desktop->selection->list();
-    for (; selection_objs != NULL; selection_objs = selection_objs->next) {
-
-    }
-    */
     desktop->selection->clear();
 }
 
@@ -1741,14 +1738,16 @@ static void _namedview_modified (SPObject *obj, guint flags, SPDesktop *desktop)
 
     if (flags & SP_OBJECT_MODIFIED_FLAG) {
 
-        /* Show/hide page background */
-        if (nv->pagecolor | (0xff != 0xffffffff)) {
-            sp_canvas_item_show (desktop->table);
-            ((CtrlRect *) desktop->table)->setColor(0x00000000, true, nv->pagecolor | 0xff);
-            sp_canvas_item_move_to_z (desktop->table, 0);
+        /* Set page background */
+        sp_canvas_item_show (desktop->table);
+        if (nv->pagecheckerboard) {
+            ((CtrlRect *) desktop->table)->setCheckerboard( true );
+            ((CtrlRect *) desktop->table)->setColor(0x00000000, true, nv->pagecolor ); // | 0xff);
         } else {
-            sp_canvas_item_hide (desktop->table);
+            ((CtrlRect *) desktop->table)->setCheckerboard( false );
+            ((CtrlRect *) desktop->table)->setColor(0x00000000, true, nv->pagecolor | 0xff);
         }
+        sp_canvas_item_move_to_z (desktop->table, 0);
 
         /* Show/hide page border */
         if (nv->showborder) {
@@ -1885,6 +1884,8 @@ SPDesktop::show_dialogs()
     mapVerbPreference.insert(std::make_pair ("ObjectProperties", "/dialogs/object") );
     mapVerbPreference.insert(std::make_pair ("SpellCheck", "/dialogs/spellcheck") );
     mapVerbPreference.insert(std::make_pair ("Symbols", "/dialogs/symbols") );
+    mapVerbPreference.insert(std::make_pair ("ObjectsPanel", "/dialogs/objects") );
+    mapVerbPreference.insert(std::make_pair ("TagsPanel", "/dialogs/tags") );
 
     for (std::map<Glib::ustring, Glib::ustring>::const_iterator iter = mapVerbPreference.begin(); iter != mapVerbPreference.end(); ++iter) {
         Glib::ustring pref = iter->second;

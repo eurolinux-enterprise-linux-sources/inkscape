@@ -23,10 +23,6 @@
  *
  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
 #include <2geom/affine.h>
 #include <libnrtype/FontFactory.h>
 #include <libnrtype/font-instance.h>
@@ -38,7 +34,7 @@
 #include "attributes.h"
 #include "document.h"
 #include "preferences.h"
-#include "desktop-handles.h"
+#include "desktop.h"
 #include "sp-namedview.h"
 #include "style.h"
 #include "inkscape.h"
@@ -55,15 +51,11 @@
 
 #include "text-editing.h"
 
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createText() {
-		return new SPText();
-	}
-
-	bool textRegistered = SPFactory::instance().registerObject("svg:text", createText);
-}
+// For SVG 2 text flow
+#include "livarot/Path.h"
+#include "livarot/Shape.h"
+#include "sp-shape.h"
+#include "display/curve.h"
 
 /*#####################################################
 #  SPTEXT
@@ -81,6 +73,14 @@ void SPText::build(SPDocument *doc, Inkscape::XML::Node *repr) {
     this->readAttr( "dy" );
     this->readAttr( "rotate" );
 
+    // textLength and friends
+    this->readAttr( "textLength" );
+    this->readAttr( "lengthAdjust" );
+
+    // SVG 2 Auto wrapped text
+    this->readAttr( "width" );
+    this->readAttr( "height" );
+
     SPItem::build(doc, repr);
 
     this->readAttr( "sodipodi:linespacing" );    // has to happen after the styles are read
@@ -91,21 +91,41 @@ void SPText::release() {
 }
 
 void SPText::set(unsigned int key, const gchar* value) {
-    if (this->attributes.readSingleAttribute(key, value)) {
+    //std::cout << "SPText::set: " << sp_attribute_name( key ) << ": " << (value?value:"Null") << std::endl;
+
+    if (this->attributes.readSingleAttribute(key, value, style, &viewport)) {
         this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
     } else {
         switch (key) {
             case SP_ATTR_SODIPODI_LINESPACING:
-                // convert deprecated tag to css
-                if (value) {
+                // convert deprecated tag to css... but only if 'line-height' missing.
+                if (value && !this->style->line_height.set) {
                     this->style->line_height.set = TRUE;
                     this->style->line_height.inherit = FALSE;
                     this->style->line_height.normal = FALSE;
                     this->style->line_height.unit = SP_CSS_UNIT_PERCENT;
                     this->style->line_height.value = this->style->line_height.computed = sp_svg_read_percentage (value, 1.0);
                 }
+                // Remove deprecated attribute
+                this->getRepr()->setAttribute("sodipodi:linespacing", NULL);
 
                 this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG | SP_TEXT_LAYOUT_MODIFIED_FLAG);
+                break;
+
+            case SP_ATTR_WIDTH:
+                if (!this->width.read(value) || this->width.value < 0.0) {
+                    this->width.unset();
+                }
+
+                this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
+                break;
+
+            case SP_ATTR_HEIGHT:
+                if (!this->height.read(value) || this->height.value < 0.0) {
+                    this->height.unset();
+                }
+
+                this->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
                 break;
 
             default:
@@ -131,7 +151,7 @@ void SPText::remove_child(Inkscape::XML::Node *rch) {
 void SPText::update(SPCtx *ctx, guint flags) {
     unsigned childflags = (flags & SP_OBJECT_MODIFIED_CASCADE);
     if (flags & SP_OBJECT_MODIFIED_FLAG) {
-    	childflags |= SP_OBJECT_PARENT_MODIFIED_FLAG;
+        childflags |= SP_OBJECT_PARENT_MODIFIED_FLAG;
     }
 
     // Create temporary list of children
@@ -163,6 +183,16 @@ void SPText::update(SPCtx *ctx, guint flags) {
                   SP_OBJECT_CHILD_MODIFIED_FLAG |
                   SP_TEXT_LAYOUT_MODIFIED_FLAG   ) )
     {
+
+        SPItemCtx const *ictx = reinterpret_cast<SPItemCtx const *>(ctx);
+
+        double const w = ictx->viewport.width();
+        double const h = ictx->viewport.height();
+        double const em = style->font_size.computed;
+        double const ex = 0.5 * em;  // fixme: get x height from pango or libnrtype.
+
+        attributes.update( em, ex, w, h );
+
         /* fixme: It is not nice to have it here, but otherwise children content changes does not work */
         /* fixme: Even now it may not work, as we are delayed */
         /* fixme: So check modification flag everywhere immediate state is used */
@@ -173,7 +203,7 @@ void SPText::update(SPCtx *ctx, guint flags) {
         for (SPItemView* v = this->display; v != NULL; v = v->next) {
             Inkscape::DrawingGroup *g = dynamic_cast<Inkscape::DrawingGroup *>(v->arenaitem);
             this->_clearFlow(g);
-            g->setStyle(this->style);
+            g->setStyle(this->style, this->parent->style);
             // pass the bbox of the this this as paintbox (used for paintserver fills)
             this->layout.show(g, paintbox);
         }
@@ -199,7 +229,7 @@ void SPText::modified(guint flags) {
         for (SPItemView* v = this->display; v != NULL; v = v->next) {
             Inkscape::DrawingGroup *g = dynamic_cast<Inkscape::DrawingGroup *>(v->arenaitem);
             this->_clearFlow(g);
-            g->setStyle(this->style);
+            g->setStyle(this->style, this->parent->style);
             this->layout.show(g, paintbox);
         }
     }
@@ -274,13 +304,12 @@ Inkscape::XML::Node *SPText::write(Inkscape::XML::Document *xml_doc, Inkscape::X
     this->attributes.writeTo(repr);
     this->rebuildLayout();  // copied from update(), see LP Bug 1339305
 
-    // deprecated attribute, but keep it around for backwards compatibility
-    if (this->style->line_height.set && !this->style->line_height.inherit && !this->style->line_height.normal && this->style->line_height.unit == SP_CSS_UNIT_PERCENT) {
-        Inkscape::SVGOStringStream os;
-        os << (this->style->line_height.value * 100.0) << "%";
-        this->getRepr()->setAttribute("sodipodi:linespacing", os.str().c_str());
-    } else {
-        this->getRepr()->setAttribute("sodipodi:linespacing", NULL);
+    // SVG 2 Auto-wrapped text
+    if( this->width.computed > 0.0 ) {
+        sp_repr_set_svg_double(repr, "width", this->width.computed);
+    }
+    if( this->height.computed > 0.0 ) {
+        sp_repr_set_svg_double(repr, "height", this->height.computed);
     }
 
     SPItem::write(xml_doc, repr, flags);
@@ -303,7 +332,7 @@ Geom::OptRect SPText::bbox(Geom::Affine const &transform, SPItem::BBoxType type)
 Inkscape::DrawingItem* SPText::show(Inkscape::Drawing &drawing, unsigned /*key*/, unsigned /*flags*/) {
     Inkscape::DrawingGroup *flowed = new Inkscape::DrawingGroup(drawing);
     flowed->setPickChildren(false);
-    flowed->setStyle(this->style);
+    flowed->setStyle(this->style, this->parent->style);
 
     // pass the bbox of the text object as paintbox (used for paintserver fills)
     this->layout.show(flowed, this->geometricBounds());
@@ -331,8 +360,11 @@ gchar* SPText::description() const {
 
     char *n = xml_quote_strdup( style->font_family.value );
 
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    int unit = prefs->getInt("/options/font/unitType", SP_CSS_UNIT_PT);
     Inkscape::Util::Quantity q = Inkscape::Util::Quantity(style->font_size.computed, "px");
-    GString *xs = g_string_new(q.string(sp_desktop_namedview(SP_ACTIVE_DESKTOP)->display_units).c_str());
+    q.quantity *= this->i2doc_affine().descrim();
+    GString *xs = g_string_new(q.string(sp_style_get_css_unit_string(unit)).c_str());
 
     char const *trunc = "";
     Inkscape::Text::Layout const *layout = te_get_layout((SPItem *) this);
@@ -372,6 +404,10 @@ Geom::Affine SPText::set_transform(Geom::Affine const &xform) {
             this->_optimizeTextpathText = false;
         }
     }
+
+    // we cannot optimize text with textLength because it may show different size than specified
+    if (this->attributes.getTextLength()->_set)
+        return xform;
 
     /* This function takes care of scaling & translation only, we return whatever parts we can't
        handle. */
@@ -434,8 +470,92 @@ unsigned SPText::_buildLayoutInput(SPObject *root, Inkscape::Text::Layout::Optio
     int child_attrs_offset = 0;
     Inkscape::Text::Layout::OptionalTextTagAttrs optional_attrs;
 
+    // Test SVG 2 text in shape implementation
+    // To do: follow SPItem clip_ref/mask_ref code
+    if (style->shape_inside.set ) {
+
+        // Extract out id
+        Glib::ustring shape_url = style->shape_inside.value;
+        if ( shape_url.compare(0,5,"url(#") != 0 || shape_url.compare(shape_url.size()-1,1,")") != 0 ){
+            std::cerr << "SPText::_buildLayoutInput(): Invalid shape-inside value: " << shape_url << std::endl;
+        } else {
+            shape_url.erase(0,5);
+            shape_url.erase(shape_url.size()-1,1);
+            // std::cout << "SPText::_buildLayoutInput(): shape-inside: " << shape_url << std::endl;
+            SPShape *shape = dynamic_cast<SPShape *>(document->getObjectById( shape_url ));
+            if ( shape ) {
+
+                // This code adapted from sp-flowregion.cpp: GetDest()
+                if (!(shape->_curve)) {
+                    shape->set_shape();
+                }
+                SPCurve *curve = shape->getCurve();
+
+                if ( curve ) {
+                    Path *temp = new Path;
+                    Path *padded = new Path;
+                    temp->LoadPathVector( curve->get_pathvector(), shape->transform, true );
+                    if( style->shape_padding.set ) {
+                        // std::cout << "  padding: " << style->shape_padding.computed << std::endl;
+                        temp->OutsideOutline ( padded, style->shape_padding.computed, join_round, butt_straight, 20.0 );
+                    } else {
+                        // std::cout << "  no padding" << std::endl;
+                        padded->Copy( temp );
+                    }
+                    padded->Convert( 0.25 );  // Convert to polyline
+                    Shape* sh = new Shape;
+                    padded->Fill( sh, 0 );
+                    // for( unsigned i = 0; i < temp->pts.size(); ++i ) {
+                    //   std::cout << " ........ " << temp->pts[i].p << std::endl;
+                    // }
+                    // std::cout << " ...... shape: " << sh->numberOfPoints() << std::endl;
+                    Shape *uncross = new Shape;
+                    uncross->ConvertToShape( sh );
+                    layout.appendWrapShape( uncross );
+
+                    delete temp;
+                    delete padded;
+                    delete sh;
+                    // delete uncross;
+                } else {
+                    std::cerr << "SPText::_buildLayoutInput(): Failed to get curve." << std::endl;
+                }
+            } else {
+                std::cerr << "SPText::_buildLayoutInput(): Failed to find shape." << std::endl;
+            }
+        }
+    }
+
     if (SP_IS_TEXT(root)) {
         SP_TEXT(root)->attributes.mergeInto(&optional_attrs, parent_optional_attrs, parent_attrs_offset, true, true);
+
+        layout.strut.reset();
+        if (style) {
+            font_instance *font = font_factory::Default()->FaceFromStyle( style );
+            if (font) {
+                font->FontMetrics(layout.strut.ascent, layout.strut.descent, layout.strut.xheight);
+                font->Unref();
+            }
+            layout.strut *= style->font_size.computed;
+            if (style->line_height.normal ) {
+                layout.strut.computeEffective( Inkscape::Text::Layout::LINE_HEIGHT_NORMAL ); 
+            } else if (style->line_height.unit == SP_CSS_UNIT_NONE) {
+                layout.strut.computeEffective( style->line_height.computed );
+            } else {
+                if( style->font_size.computed > 0.0 ) {
+                    layout.strut.computeEffective( style->line_height.computed/style->font_size.computed );
+                }
+            }
+        }
+
+        // set textLength on the entire layout, see note in TNG-Layout.h
+        if (SP_TEXT(root)->attributes.getTextLength()->_set) {
+            layout.textLength._set = true;
+            layout.textLength.value = SP_TEXT(root)->attributes.getTextLength()->value;
+            layout.textLength.computed = SP_TEXT(root)->attributes.getTextLength()->computed;
+            layout.textLength.unit = SP_TEXT(root)->attributes.getTextLength()->unit;
+            layout.lengthAdjust = (Inkscape::Text::Layout::LengthAdjust) SP_TEXT(root)->attributes.getLengthAdjust();
+        }
     }
     else if (SP_IS_TSPAN(root)) {
         SPTSpan *tspan = SP_TSPAN(root);
@@ -458,7 +578,7 @@ unsigned SPText::_buildLayoutInput(SPObject *root, Inkscape::Text::Layout::Optio
         child_attrs_offset = parent_attrs_offset;
     }
 
-    if (SP_IS_TSPAN(root))
+    if (SP_IS_TSPAN(root)) {
         if (SP_TSPAN(root)->role != SP_TSPAN_ROLE_UNSPECIFIED) {
             // we need to allow the first line not to have role=line, but still set the source_cookie to the right value
             SPObject *prev_object = root->getPrev();
@@ -477,13 +597,17 @@ unsigned SPText::_buildLayoutInput(SPObject *root, Inkscape::Text::Layout::Optio
                           // start position. Very confusing.
             child_attrs_offset--;
         }
+    }
 
     for (SPObject *child = root->firstChild() ; child ; child = child->getNext() ) {
-        if (SP_IS_STRING(child)) {
-            Glib::ustring const &string = SP_STRING(child)->string;
+        SPString *str = dynamic_cast<SPString *>(child);
+        if (str) {
+            Glib::ustring const &string = str->string;
+            // std::cout << "  Appending: >" << string << "<" << std::endl;
             layout.appendText(string, root->style, child, &optional_attrs, child_attrs_offset + length);
             length += string.length();
-        } /*XML Tree being directly used here while it shouldn't be.*/ else if (!sp_repr_is_meta_element(child->getRepr())) {
+        } else if (!sp_repr_is_meta_element(child->getRepr())) {
+            /*      ^^^^ XML Tree being directly used here while it shouldn't be.*/
             length += _buildLayoutInput(child, optional_attrs, child_attrs_offset + length, in_textpath);
         }
     }
@@ -535,6 +659,13 @@ void SPText::_adjustFontsizeRecursive(SPItem *item, double ex, bool is_root)
         style->font_size.computed *= ex;
         style->letter_spacing.computed *= ex;
         style->word_spacing.computed *= ex;
+        if (style->line_height.unit != SP_CSS_UNIT_NONE &&
+            style->line_height.unit != SP_CSS_UNIT_PERCENT &&
+            style->line_height.unit != SP_CSS_UNIT_EM &&
+            style->line_height.unit != SP_CSS_UNIT_EX) {
+            // No unit on 'line-height' property has special behavior.
+            style->line_height.computed *= ex;
+        }
         item->updateRepr();
     }
 
@@ -574,54 +705,116 @@ void SPText::_clearFlow(Inkscape::DrawingGroup *in_arena)
  * TextTagAttributes implementation
  */
 
-void TextTagAttributes::readFrom(Inkscape::XML::Node const *node)
-{
-    readSingleAttribute(SP_ATTR_X, node->attribute("x"));
-    readSingleAttribute(SP_ATTR_Y, node->attribute("y"));
-    readSingleAttribute(SP_ATTR_DX, node->attribute("dx"));
-    readSingleAttribute(SP_ATTR_DY, node->attribute("dy"));
-    readSingleAttribute(SP_ATTR_ROTATE, node->attribute("rotate"));
-}
+// Not used.
+// void TextTagAttributes::readFrom(Inkscape::XML::Node const *node)
+// {
+//     readSingleAttribute(SP_ATTR_X, node->attribute("x"));
+//     readSingleAttribute(SP_ATTR_Y, node->attribute("y"));
+//     readSingleAttribute(SP_ATTR_DX, node->attribute("dx"));
+//     readSingleAttribute(SP_ATTR_DY, node->attribute("dy"));
+//     readSingleAttribute(SP_ATTR_ROTATE, node->attribute("rotate"));
+//     readSingleAttribute(SP_ATTR_TEXTLENGTH, node->attribute("textLength"));
+//     readSingleAttribute(SP_ATTR_LENGTHADJUST, node->attribute("lengthAdjust"));
+// }
 
-bool TextTagAttributes::readSingleAttribute(unsigned key, gchar const *value)
+bool TextTagAttributes::readSingleAttribute(unsigned key, gchar const *value, SPStyle const *style, Geom::Rect const *viewport)
 {
+    // std::cout << "TextTagAttributes::readSingleAttribute: key: " << key
+    //           << "  value: " << (value?value:"Null") << std::endl;
     std::vector<SVGLength> *attr_vector;
+    bool update_x = false;
+    bool update_y = false;
     switch (key) {
-        case SP_ATTR_X:      attr_vector = &attributes.x; break;
-        case SP_ATTR_Y:      attr_vector = &attributes.y; break;
-        case SP_ATTR_DX:     attr_vector = &attributes.dx; break;
-        case SP_ATTR_DY:     attr_vector = &attributes.dy; break;
+        case SP_ATTR_X:      attr_vector = &attributes.x;  update_x = true; break;
+        case SP_ATTR_Y:      attr_vector = &attributes.y;  update_y = true; break;
+        case SP_ATTR_DX:     attr_vector = &attributes.dx; update_x = true; break;
+        case SP_ATTR_DY:     attr_vector = &attributes.dy; update_y = true; break;
         case SP_ATTR_ROTATE: attr_vector = &attributes.rotate; break;
+        case SP_ATTR_TEXTLENGTH:
+            attributes.textLength.readOrUnset(value);
+            return true;
+            break;
+        case SP_ATTR_LENGTHADJUST:
+            attributes.lengthAdjust = (value && !strcmp(value, "spacingAndGlyphs")?
+                                        Inkscape::Text::Layout::LENGTHADJUST_SPACINGANDGLYPHS :
+                                        Inkscape::Text::Layout::LENGTHADJUST_SPACING); // default is "spacing"
+            return true;
+            break;
         default: return false;
     }
 
     // FIXME: sp_svg_length_list_read() amalgamates repeated separators. This prevents unset values.
     *attr_vector = sp_svg_length_list_read(value);
+
+    if( (update_x || update_y) && style != NULL && viewport != NULL ) {
+        double const w = viewport->width();
+        double const h = viewport->height();
+        double const em = style->font_size.computed;
+        double const ex = em * 0.5;
+        for(std::vector<SVGLength>::iterator it = attr_vector->begin(); it != attr_vector->end(); ++it) {
+            if( update_x )
+                it->update( em, ex, w );
+            if( update_y )
+                it->update( em, ex, h );
+        }
+    }
     return true;
 }
 
 void TextTagAttributes::writeTo(Inkscape::XML::Node *node) const
 {
-    writeSingleAttribute(node, "x", attributes.x);
-    writeSingleAttribute(node, "y", attributes.y);
-    writeSingleAttribute(node, "dx", attributes.dx);
-    writeSingleAttribute(node, "dy", attributes.dy);
-    writeSingleAttribute(node, "rotate", attributes.rotate);
+    writeSingleAttributeVector(node, "x", attributes.x);
+    writeSingleAttributeVector(node, "y", attributes.y);
+    writeSingleAttributeVector(node, "dx", attributes.dx);
+    writeSingleAttributeVector(node, "dy", attributes.dy);
+    writeSingleAttributeVector(node, "rotate", attributes.rotate);
+
+    writeSingleAttributeLength(node, "textLength", attributes.textLength);
+
+    if (attributes.textLength._set) {
+        if (attributes.lengthAdjust == Inkscape::Text::Layout::LENGTHADJUST_SPACING) {
+            node->setAttribute("lengthAdjust", "spacing");
+        } else if (attributes.lengthAdjust == Inkscape::Text::Layout::LENGTHADJUST_SPACINGANDGLYPHS) {
+            node->setAttribute("lengthAdjust", "spacingAndGlyphs");
+        }
+    }
 }
 
-void TextTagAttributes::writeSingleAttribute(Inkscape::XML::Node *node, gchar const *key, std::vector<SVGLength> const &attr_vector)
+void TextTagAttributes::update( double em, double ex, double w, double h )
+{
+    for(std::vector<SVGLength>::iterator it = attributes.x.begin(); it != attributes.x.end(); ++it) {
+        it->update( em, ex, w );
+    }
+    for(std::vector<SVGLength>::iterator it = attributes.y.begin(); it != attributes.y.end(); ++it) {
+        it->update( em, ex, h );
+    }
+    for(std::vector<SVGLength>::iterator it = attributes.dx.begin(); it != attributes.dx.end(); ++it) {
+        it->update( em, ex, w );
+    }
+    for(std::vector<SVGLength>::iterator it = attributes.dy.begin(); it != attributes.dy.end(); ++it) {
+        it->update( em, ex, h );
+    }
+}
+
+void TextTagAttributes::writeSingleAttributeLength(Inkscape::XML::Node *node, gchar const *key, const SVGLength &length)
+{
+    if (length._set) {
+        node->setAttribute(key, length.write().c_str());
+    } else
+        node->setAttribute(key, NULL);
+}
+
+void TextTagAttributes::writeSingleAttributeVector(Inkscape::XML::Node *node, gchar const *key, std::vector<SVGLength> const &attr_vector)
 {
     if (attr_vector.empty())
         node->setAttribute(key, NULL);
     else {
         Glib::ustring string;
-        gchar single_value_string[32];
 
         // FIXME: this has no concept of unset values because sp_svg_length_list_read() can't read them back in
         for (std::vector<SVGLength>::const_iterator it = attr_vector.begin() ; it != attr_vector.end() ; ++it) {
-            g_ascii_formatd(single_value_string, sizeof (single_value_string), "%.8g", it->computed);
             if (!string.empty()) string += ' ';
-            string += single_value_string;
+            string += it->write();
         }
         node->setAttribute(key, string.c_str());
     }
@@ -656,8 +849,8 @@ void TextTagAttributes::setFirstXY(Geom::Point &point)
         attributes.x.resize(1, zero_length);
     if (attributes.y.empty())
         attributes.y.resize(1, zero_length);
-    attributes.x[0].computed = point[Geom::X];
-    attributes.y[0].computed = point[Geom::Y];
+    attributes.x[0] = point[Geom::X];
+    attributes.y[0] = point[Geom::Y];
 }
 
 void TextTagAttributes::mergeInto(Inkscape::Text::Layout::OptionalTextTagAttrs *output, Inkscape::Text::Layout::OptionalTextTagAttrs const &parent_attrs, unsigned parent_attrs_offset, bool copy_xy, bool copy_dxdyrotate) const
@@ -667,6 +860,13 @@ void TextTagAttributes::mergeInto(Inkscape::Text::Layout::OptionalTextTagAttrs *
     mergeSingleAttribute(&output->dx,     parent_attrs.dx,     parent_attrs_offset, copy_dxdyrotate ? &attributes.dx : NULL);
     mergeSingleAttribute(&output->dy,     parent_attrs.dy,     parent_attrs_offset, copy_dxdyrotate ? &attributes.dy : NULL);
     mergeSingleAttribute(&output->rotate, parent_attrs.rotate, parent_attrs_offset, copy_dxdyrotate ? &attributes.rotate : NULL);
+    if (attributes.textLength._set) { // only from current node, this is not inherited from parent
+        output->textLength.value = attributes.textLength.value;
+        output->textLength.computed = attributes.textLength.computed;
+        output->textLength.unit = attributes.textLength.unit;
+        output->textLength._set = attributes.textLength._set;
+        output->lengthAdjust = attributes.lengthAdjust;
+    }
 }
 
 void TextTagAttributes::mergeSingleAttribute(std::vector<SVGLength> *output_list, std::vector<SVGLength> const &parent_list, unsigned parent_offset, std::vector<SVGLength> const *overlay_list)

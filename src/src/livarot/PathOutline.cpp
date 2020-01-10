@@ -471,8 +471,13 @@ void Path::SubContractOutline(int off, int num_pd,
 			// test de nullité du segment
 			if (IsNulCurve (descr_cmd, curD, curX))
 			{
-				stTgt = dest->descr_cmd.size() ? Geom::Point(1, 0) : Geom::Point(-1, 0); // reverse direction
-				enTgt = stTgt;
+                if (descr_cmd.size() == 2) {  // single point, see LP Bug 1006666
+                    stTgt = dest->descr_cmd.size() ? Geom::Point(1, 0) : Geom::Point(-1, 0); // reverse direction
+                    enTgt = stTgt;
+                } else {
+                    curP++;
+                    continue;
+                }
 			}
 			stNor=stTgt.cw();
 			enNor=enTgt.cw();
@@ -1108,7 +1113,7 @@ Path::TangentOnCubAt (double at, Geom::Point const &iS, PathDescrCubicTo const &
 			}
 			return;
 		}
-		rad = -l * (dot(dder,dder)) / (cross(ddder,dder));
+		rad = -l * (dot(dder,dder)) / (cross(dder, ddder));
 		tgt = dder / l;
 		if (before) {
 			tgt = -tgt;
@@ -1117,7 +1122,7 @@ Path::TangentOnCubAt (double at, Geom::Point const &iS, PathDescrCubicTo const &
 	}
 	len = l;
 
-	rad = -l * (dot(der,der)) / (cross(dder,der));
+	rad = -l * (dot(der,der)) / (cross(der, dder));
 
 	tgt = der / l;
 }
@@ -1156,7 +1161,7 @@ Path::TangentOnBezAt (double at, Geom::Point const &iS,
 		return;
 	}
 	len = l;
-	rad = -l * (dot(der,der)) / (cross(dder,der));
+	rad = -l * (dot(der,der)) / (cross(der, dder));
 
 	tgt = der / l;
 }
@@ -1180,7 +1185,7 @@ Path::OutlineJoin (Path * dest, Geom::Point pos, Geom::Point stNor, Geom::Point 
     TurnInside ^= PrevPos == pos;
     PrevPos = pos;
 
-	const double angSi = cross (enNor,stNor);
+	const double angSi = cross (stNor, enNor);
 	const double angCo = dot (stNor, enNor);
 
     if ((fabs(angSi) < .0000001) && angCo > 0) { // The join is straight -> nothing to do.
@@ -1190,7 +1195,7 @@ Path::OutlineJoin (Path * dest, Geom::Point pos, Geom::Point stNor, Geom::Point 
             if ((dest->descr_cmd[dest->descr_cmd.size() - 1]->getType() == descr_lineto) && (nType == descr_lineto)) {
                 Geom::Point const biss = unit_vector(Geom::rot90( stNor - enNor ));
                 double c2 = Geom::dot (biss, enNor);
-                if (fabs(c2) > 0.707107) {    // apply only to obtuse angles
+                if (fabs(c2) > M_SQRT1_2) {    // apply only to obtuse angles
                     double l = width / c2;
                     PathDescrLineTo* nLine = dynamic_cast<PathDescrLineTo*>(dest->descr_cmd[dest->descr_cmd.size() - 1]);
                     nLine->p = pos + l*biss;  // relocate to bisector

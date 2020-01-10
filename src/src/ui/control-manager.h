@@ -63,6 +63,8 @@ public:
 
     bool setControlType(SPCanvasItem *item, ControlType type);
 
+    bool setControlResize(SPCanvasItem *item, int ctrlResize);
+
     bool isActive(SPCanvasItem *item) const;
     void setActive(SPCanvasItem *item, bool active);
 
@@ -74,9 +76,11 @@ public:
 
 private:
     ControlManager();
-
+#if __cplusplus <= 199711L
     std::auto_ptr<ControlManagerImpl> _impl;
-
+#else
+    std::unique_ptr<ControlManagerImpl> _impl;
+#endif
     friend class ControlManagerImpl;
 };
 

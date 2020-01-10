@@ -14,6 +14,7 @@
 
 #include <string>
 #include <cstring>
+#include <glibmm.h>
 
 #include "desktop.h"
 #include "color-rgba.h"
@@ -47,6 +48,24 @@
 #include "svg/svg-icc-color.h"
 #include "box3d-side.h"
 #include <2geom/math-utils.h>
+
+namespace {
+
+bool isTextualItem(SPObject const *obj)
+{
+    bool isTextual = dynamic_cast<SPText const *>(obj) //
+        || dynamic_cast<SPFlowtext const *>(obj) //
+        || dynamic_cast<SPTSpan const *>(obj) //
+        || dynamic_cast<SPTRef const *>(obj) //
+        || dynamic_cast<SPTextPath const *>(obj) //
+        || dynamic_cast<SPFlowdiv const *>(obj) //
+        || dynamic_cast<SPFlowpara const *>(obj) //
+        || dynamic_cast<SPFlowtspan const *>(obj);
+
+    return isTextual;
+}
+
+} // namespace
 
 /**
  * Set color on selection on desktop.
@@ -88,8 +107,10 @@ void
 sp_desktop_apply_css_recursive(SPObject *o, SPCSSAttr *css, bool skip_lines)
 {
     // non-items should not have style
-    if (!SP_IS_ITEM(o))
+    SPItem *item = dynamic_cast<SPItem *>(o);
+    if (!item) {
         return;
+    }
 
     // 1. tspans with role=line are not regular objects in that they are not supposed to have style of their own,
     // but must always inherit from the parent text. Same for textPath.
@@ -99,22 +120,24 @@ sp_desktop_apply_css_recursive(SPObject *o, SPCSSAttr *css, bool skip_lines)
     // it, be it clone or not; it's just styleless shape (because that's how Inkscape does
     // flowtext).
 
+    SPTSpan *tspan = dynamic_cast<SPTSpan *>(o);
+
     if (!(skip_lines
-          && ((SP_IS_TSPAN(o) && SP_TSPAN(o)->role == SP_TSPAN_ROLE_LINE)
-              || SP_IS_FLOWDIV(o)
-              || SP_IS_FLOWPARA(o)
-              || SP_IS_TEXTPATH(o))
+          && ((tspan && tspan->role == SP_TSPAN_ROLE_LINE)
+              || dynamic_cast<SPFlowdiv *>(o)
+              || dynamic_cast<SPFlowpara *>(o)
+              || dynamic_cast<SPTextPath *>(o))
           &&  !o->getAttribute("style"))
         &&
-        !(SP_IS_FLOWREGION(o) ||
-          SP_IS_FLOWREGIONEXCLUDE(o) ||
-          (SP_IS_USE(o) &&
+        !(dynamic_cast<SPFlowregionbreak *>(o) ||
+          dynamic_cast<SPFlowregionExclude *>(o) ||
+          (dynamic_cast<SPUse *>(o) &&
            o->parent &&
-           (SP_IS_FLOWREGION(o->parent) ||
-            SP_IS_FLOWREGIONEXCLUDE(o->parent)
-           )
-          )
-         )
+           (dynamic_cast<SPFlowregion *>(o->parent) ||
+            dynamic_cast<SPFlowregionExclude *>(o->parent)
+               )
+              )
+            )
         ) {
 
         SPCSSAttr *css_set = sp_repr_css_attr_new();
@@ -122,7 +145,7 @@ sp_desktop_apply_css_recursive(SPObject *o, SPCSSAttr *css, bool skip_lines)
 
         // Scale the style by the inverse of the accumulated parent transform in the paste context.
         {
-            Geom::Affine const local(SP_ITEM(o)->i2doc_affine());
+            Geom::Affine const local(item->i2doc_affine());
             double const ex(local.descrim());
             if ( ( ex != 0. )
                  && ( ex != 1. ) ) {
@@ -136,8 +159,9 @@ sp_desktop_apply_css_recursive(SPObject *o, SPCSSAttr *css, bool skip_lines)
     }
 
     // setting style on child of clone spills into the clone original (via shared repr), don't do it!
-    if (SP_IS_USE(o))
+    if (dynamic_cast<SPUse *>(o)) {
         return;
+    }
 
     for ( SPObject *child = o->firstChild() ; child ; child = child->getNext() ) {
         if (sp_repr_css_property(css, "opacity", NULL) != NULL) {
@@ -170,10 +194,10 @@ sp_desktop_set_style(SPDesktop *desktop, SPCSSAttr *css, bool change, bool write
         sp_repr_css_merge(css_write, css);
         sp_css_attr_unset_uris(css_write);
         prefs->mergeStyle("/desktop/style", css_write);
-
-        for (const GSList *i = desktop->selection->itemList(); i != NULL; i = i->next) {
+        std::vector<SPItem*> const itemlist = desktop->selection->itemList();
+        for (std::vector<SPItem*>::const_iterator i = itemlist.begin(); i!= itemlist.end(); ++i) {
             /* last used styles for 3D box faces are stored separately */
-            SPObject *obj = reinterpret_cast<SPObject *>(i->data); // TODO unsafe until Selection is refactored.
+            SPObject *obj = *i;
             Box3DSide *side = dynamic_cast<Box3DSide *>(obj);
             if (side) {
                 const char * descr  = box3d_side_axes_string(side);
@@ -188,7 +212,7 @@ sp_desktop_set_style(SPDesktop *desktop, SPCSSAttr *css, bool change, bool write
     if (!change)
         return;
 
-// 2. Emit signal
+// 2. Emit signal... See desktop->connectSetStyle in text-tool, tweak-tool, and gradient-drag.
     bool intercepted = desktop->_set_style_signal.emit(css);
 
 /** \todo
@@ -210,12 +234,12 @@ sp_desktop_set_style(SPDesktop *desktop, SPCSSAttr *css, bool change, bool write
         sp_repr_css_merge(css_no_text, css);
         css_no_text = sp_css_attr_unset_text(css_no_text);
 
-        for (GSList const *i = desktop->selection->itemList(); i != NULL; i = i->next) {
+        std::vector<SPItem*> const itemlist = desktop->selection->itemList();
+        for (std::vector<SPItem*>::const_iterator i = itemlist.begin(); i!= itemlist.end(); ++i) {
+            SPItem *item = *i;
 
             // If not text, don't apply text attributes (can a group have text attributes? Yes! FIXME)
-            if ( SP_IS_TEXT(i->data) || SP_IS_FLOWTEXT(i->data)
-                || SP_IS_TSPAN(i->data) || SP_IS_TREF(i->data) || SP_IS_TEXTPATH(i->data)
-                || SP_IS_FLOWDIV(i->data) || SP_IS_FLOWPARA(i->data) || SP_IS_FLOWTSPAN(i->data)) {
+            if (isTextualItem(item)) {
 
                 // If any font property has changed, then we have written out the font
                 // properties in longhand and we need to remove the 'font' shorthand.
@@ -223,11 +247,11 @@ sp_desktop_set_style(SPDesktop *desktop, SPCSSAttr *css, bool change, bool write
                     sp_repr_css_unset_property(css, "font");
                 }
 
-                sp_desktop_apply_css_recursive(SP_OBJECT(i->data), css, true);
+                sp_desktop_apply_css_recursive(item, css, true);
 
             } else {
 
-                sp_desktop_apply_css_recursive(SP_OBJECT(i->data), css_no_text, true);
+                sp_desktop_apply_css_recursive(item, css_no_text, true);
 
             }
         }
@@ -405,10 +429,9 @@ sp_desktop_get_font_size_tool(SPDesktop *desktop)
 
     double ret = 12;
     if (!style_str.empty()) {
-        SPStyle *style = sp_style_new(SP_ACTIVE_DOCUMENT);
-        sp_style_merge_from_style_string(style, style_str.data());
-        ret = style->font_size.computed;
-        sp_style_unref(style);
+        SPStyle style(SP_ACTIVE_DOCUMENT);
+        style.mergeString(style_str.data());
+        ret = style.font_size.computed;
     }
     return ret;
 }
@@ -416,26 +439,25 @@ sp_desktop_get_font_size_tool(SPDesktop *desktop)
 /** Determine average stroke width, simple method */
 // see TODO in dialogs/stroke-style.cpp on how to get rid of this eventually
 gdouble
-stroke_average_width (GSList const *objects)
+stroke_average_width (const std::vector<SPItem*> &objects)
 {
-    if (g_slist_length ((GSList *) objects) == 0)
+    if (objects.empty())
         return Geom::infinity();
 
     gdouble avgwidth = 0.0;
     bool notstroked = true;
     int n_notstroked = 0;
-
-    for (GSList const *l = objects; l != NULL; l = l->next) {
-        if (!SP_IS_ITEM (l->data))
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPItem *item = *i;
+        if (!item) {
             continue;
+        }
 
-        Geom::Affine i2dt = SP_ITEM(l->data)->i2dt_affine();
+        Geom::Affine i2dt = item->i2dt_affine();
 
-        SPObject *object = SP_OBJECT(l->data);
+        double width = item->style->stroke_width.computed * i2dt.descrim();
 
-        double width = object->style->stroke_width.computed * i2dt.descrim();
-
-        if ( object->style->stroke.isNone() || IS_NAN(width)) {
+        if ( item->style->stroke.isNone() || IS_NAN(width)) {
             ++n_notstroked;   // do not count nonstroked objects
             continue;
         } else {
@@ -448,7 +470,7 @@ stroke_average_width (GSList const *objects)
     if (notstroked)
         return Geom::infinity();
 
-    return avgwidth / (g_slist_length ((GSList *) objects) - n_notstroked);
+    return avgwidth / (objects.size() - n_notstroked);
 }
 
 static bool vectorsClose( std::vector<double> const &lhs, std::vector<double> const &rhs )
@@ -469,16 +491,16 @@ static bool vectorsClose( std::vector<double> const &lhs, std::vector<double> co
  * Write to style_res the average fill or stroke of list of objects, if applicable.
  */
 int
-objects_query_fillstroke (GSList *objects, SPStyle *style_res, bool const isfill)
+objects_query_fillstroke (const std::vector<SPItem*> &objects, SPStyle *style_res, bool const isfill)
 {
-    if (g_slist_length(objects) == 0) {
+    if (objects.empty()) {
         /* No objects, set empty */
         return QUERY_STYLE_NOTHING;
     }
 
     SPIPaint *paint_res = isfill? &style_res->fill : &style_res->stroke;
     bool paintImpossible = true;
-    paint_res->set = TRUE;
+    paint_res->set = true;
 
     SVGICCColor* iccColor = 0;
 
@@ -491,8 +513,11 @@ objects_query_fillstroke (GSList *objects, SPStyle *style_res, bool const isfill
     prev[0] = prev[1] = prev[2] = 0.0;
     bool same_color = true;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
+        for (std::vector<SPItem*>::const_iterator i = objects.begin(); i!= objects.end(); ++i) {
+        SPObject *obj = *i;
+        if (!obj) {
+            continue;
+        }
         SPStyle *style = obj->style;
         if (!style) {
             continue;
@@ -503,9 +528,9 @@ objects_query_fillstroke (GSList *objects, SPStyle *style_res, bool const isfill
         // We consider paint "effectively set" for anything within text hierarchy
         SPObject *parent = obj->parent;
         bool paint_effectively_set =
-            paint->set || (SP_IS_TEXT(parent) || SP_IS_TEXTPATH(parent) || SP_IS_TSPAN(parent)
-            || SP_IS_FLOWTEXT(parent) || SP_IS_FLOWDIV(parent) || SP_IS_FLOWPARA(parent)
-            || SP_IS_FLOWTSPAN(parent) || SP_IS_FLOWLINE(parent));
+            paint->set || (dynamic_cast<SPText *>(parent) || dynamic_cast<SPTextPath *>(parent) || dynamic_cast<SPTSpan *>(parent)
+            || dynamic_cast<SPFlowtext *>(parent) || dynamic_cast<SPFlowdiv *>(parent) || dynamic_cast<SPFlowpara *>(parent)
+            || dynamic_cast<SPFlowtspan *>(parent) || dynamic_cast<SPFlowline*>(parent));
 
         // 1. Bail out with QUERY_STYLE_MULTIPLE_DIFFERENT if necessary
         
@@ -517,38 +542,45 @@ objects_query_fillstroke (GSList *objects, SPStyle *style_res, bool const isfill
         if (paint_res->set && paint->set && paint_res->isPaintserver()) {
             // both previous paint and this paint were a server, see if the servers are compatible
 
-            SPPaintServer *server_res = isfill? SP_STYLE_FILL_SERVER (style_res) : SP_STYLE_STROKE_SERVER (style_res);
-            SPPaintServer *server = isfill? SP_STYLE_FILL_SERVER (style) : SP_STYLE_STROKE_SERVER (style);
+            SPPaintServer *server_res = isfill ? style_res->getFillPaintServer() : style_res->getStrokePaintServer();
+            SPPaintServer *server = isfill ? style->getFillPaintServer() : style->getStrokePaintServer();
 
-            if (SP_IS_LINEARGRADIENT (server_res)) {
-
-                if (!SP_IS_LINEARGRADIENT(server))
+            SPLinearGradient *linear_res = dynamic_cast<SPLinearGradient *>(server_res);
+            SPRadialGradient *radial_res = linear_res ? NULL : dynamic_cast<SPRadialGradient *>(server_res);
+            SPPattern *pattern_res = (linear_res || radial_res) ? NULL : dynamic_cast<SPPattern *>(server_res);
+            if (linear_res) {
+                SPLinearGradient *linear = dynamic_cast<SPLinearGradient *>(server);
+                if (!linear) {
                    return QUERY_STYLE_MULTIPLE_DIFFERENT;  // different kind of server
+                }
 
-                SPGradient *vector = SP_GRADIENT(server)->getVector();
-                SPGradient *vector_res = SP_GRADIENT(server_res)->getVector();
-                if (vector_res != vector)
+                SPGradient *vector = linear->getVector();
+                SPGradient *vector_res = linear_res->getVector();
+                if (vector_res != vector) {
                    return QUERY_STYLE_MULTIPLE_DIFFERENT;  // different gradient vectors
-
-            } else if (SP_IS_RADIALGRADIENT (server_res)) {
-
-                if (!SP_IS_RADIALGRADIENT(server))
+                }
+            } else if (radial_res) {
+                SPRadialGradient *radial = dynamic_cast<SPRadialGradient *>(server);
+                if (!radial) {
                    return QUERY_STYLE_MULTIPLE_DIFFERENT;  // different kind of server
+                }
 
-                SPGradient *vector = SP_GRADIENT(server)->getVector();
-                SPGradient *vector_res = SP_GRADIENT(server_res)->getVector();
-                if (vector_res != vector)
+                SPGradient *vector = radial->getVector();
+                SPGradient *vector_res = radial_res->getVector();
+                if (vector_res != vector) {
                    return QUERY_STYLE_MULTIPLE_DIFFERENT;  // different gradient vectors
-
-            } else if (SP_IS_PATTERN (server_res)) {
-
-                if (!SP_IS_PATTERN(server))
+                }
+            } else if (pattern_res) {
+                SPPattern *pattern = dynamic_cast<SPPattern *>(server);
+                if (!pattern) {
                    return QUERY_STYLE_MULTIPLE_DIFFERENT;  // different kind of server
+                }
 
-                SPPattern *pat = pattern_getroot (SP_PATTERN (server));
-                SPPattern *pat_res = pattern_getroot (SP_PATTERN (server_res));
-                if (pat_res != pat)
+                SPPattern *pat = SP_PATTERN (server)->rootPattern();
+                SPPattern *pat_res = SP_PATTERN (server_res)->rootPattern();
+                if (pat_res != pat) {
                    return QUERY_STYLE_MULTIPLE_DIFFERENT;  // different pattern roots
+                }
             }
         }
 
@@ -592,7 +624,7 @@ objects_query_fillstroke (GSList *objects, SPStyle *style_res, bool const isfill
 
        paintImpossible = false;
        paint_res->colorSet = paint->colorSet;
-       paint_res->currentcolor = paint->currentcolor;
+       paint_res->paintOrigin = paint->paintOrigin;
        if (paint_res->set && paint_effectively_set && paint->isPaintserver()) { // copy the server
            gchar const *string = NULL; // memory leak results if style->get* called inside sp_style_set_to_uri_string.
            if (isfill) {
@@ -641,7 +673,7 @@ objects_query_fillstroke (GSList *objects, SPStyle *style_res, bool const isfill
     }
 
     // Not color
-    if (g_slist_length(objects) > 1) {
+    if (objects.size() > 1) {
         return QUERY_STYLE_MULTIPLE_SAME;
     } else {
         return QUERY_STYLE_SINGLE;
@@ -652,9 +684,9 @@ objects_query_fillstroke (GSList *objects, SPStyle *style_res, bool const isfill
  * Write to style_res the average opacity of a list of objects.
  */
 int
-objects_query_opacity (GSList *objects, SPStyle *style_res)
+objects_query_opacity (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
-    if (g_slist_length(objects) == 0) {
+    if (objects.empty()) {
         /* No objects, set empty */
         return QUERY_STYLE_NOTHING;
     }
@@ -665,8 +697,11 @@ objects_query_opacity (GSList *objects, SPStyle *style_res)
     guint opacity_items = 0;
 
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+        if (!obj) {
+            continue;
+        }
         SPStyle *style = obj->style;
         if (!style) {
             continue;
@@ -703,9 +738,9 @@ objects_query_opacity (GSList *objects, SPStyle *style_res)
  * Write to style_res the average stroke width of a list of objects.
  */
 int
-objects_query_strokewidth (GSList *objects, SPStyle *style_res)
+objects_query_strokewidth (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
-    if (g_slist_length(objects) == 0) {
+    if (objects.empty()) {
         /* No objects, set empty */
         return QUERY_STYLE_NOTHING;
     }
@@ -718,9 +753,13 @@ objects_query_strokewidth (GSList *objects, SPStyle *style_res)
 
     int n_stroked = 0;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
-        if (!SP_IS_ITEM(obj)) {
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+        if (!obj) {
+            continue;
+        }
+        SPItem *item = dynamic_cast<SPItem *>(obj);
+        if (!item) {
             continue;
         }
         SPStyle *style = obj->style;
@@ -739,7 +778,7 @@ objects_query_strokewidth (GSList *objects, SPStyle *style_res)
 
         noneSet &= style->stroke.isNone();
 
-        Geom::Affine i2d = SP_ITEM(obj)->i2dt_affine();
+        Geom::Affine i2d = item->i2dt_affine();
         double sw = style->stroke_width.computed * i2d.descrim();
 
         if (!IS_NAN(sw)) {
@@ -775,9 +814,9 @@ objects_query_strokewidth (GSList *objects, SPStyle *style_res)
  * Write to style_res the average miter limit of a list of objects.
  */
 int
-objects_query_miterlimit (GSList *objects, SPStyle *style_res)
+objects_query_miterlimit (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
-    if (g_slist_length(objects) == 0) {
+    if (objects.empty()) {
         /* No objects, set empty */
         return QUERY_STYLE_NOTHING;
     }
@@ -788,9 +827,9 @@ objects_query_miterlimit (GSList *objects, SPStyle *style_res)
     gdouble prev_ml = -1;
     bool same_ml = true;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
-        if (!SP_IS_ITEM(obj)) {
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+        if (!dynamic_cast<SPItem *>(obj)) {
             continue;
         }
         SPStyle *style = obj->style;
@@ -835,21 +874,20 @@ objects_query_miterlimit (GSList *objects, SPStyle *style_res)
  * Write to style_res the stroke cap of a list of objects.
  */
 int
-objects_query_strokecap (GSList *objects, SPStyle *style_res)
+objects_query_strokecap (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
-    if (g_slist_length(objects) == 0) {
+    if (objects.empty()) {
         /* No objects, set empty */
         return QUERY_STYLE_NOTHING;
     }
 
-    int cap = -1;
-    gdouble prev_cap = -1;
+    int prev_cap = -1;
     bool same_cap = true;
     int n_stroked = 0;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
-        if (!SP_IS_ITEM(obj)) {
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+        if (!dynamic_cast<SPItem *>(obj)) {
             continue;
         }
         SPStyle *style = obj->style;
@@ -866,11 +904,9 @@ objects_query_strokecap (GSList *objects, SPStyle *style_res)
         if (prev_cap != -1 && style->stroke_linecap.value != prev_cap)
             same_cap = false;
         prev_cap = style->stroke_linecap.value;
-
-        cap = style->stroke_linecap.value;
     }
 
-    style_res->stroke_linecap.value = cap;
+    style_res->stroke_linecap.value = prev_cap;
     style_res->stroke_linecap.set = true;
 
     if (n_stroked == 0) {
@@ -889,21 +925,20 @@ objects_query_strokecap (GSList *objects, SPStyle *style_res)
  * Write to style_res the stroke join of a list of objects.
  */
 int
-objects_query_strokejoin (GSList *objects, SPStyle *style_res)
+objects_query_strokejoin (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
-    if (g_slist_length(objects) == 0) {
+    if (objects.empty()) {
         /* No objects, set empty */
         return QUERY_STYLE_NOTHING;
     }
 
-    int join = -1;
-    gdouble prev_join = -1;
+    int prev_join = -1;
     bool same_join = true;
     int n_stroked = 0;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
-        if (!SP_IS_ITEM(obj)) {
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+        if (!dynamic_cast<SPItem *>(obj)) {
             continue;
         }
         SPStyle *style = obj->style;
@@ -921,11 +956,9 @@ objects_query_strokejoin (GSList *objects, SPStyle *style_res)
             same_join = false;
         }
         prev_join = style->stroke_linejoin.value;
-
-        join = style->stroke_linejoin.value;
     }
 
-    style_res->stroke_linejoin.value = join;
+    style_res->stroke_linejoin.value = prev_join;
     style_res->stroke_linejoin.set = true;
 
     if (n_stroked == 0) {
@@ -941,35 +974,95 @@ objects_query_strokejoin (GSList *objects, SPStyle *style_res)
 }
 
 /**
+ * Write to style_res the paint order of a list of objects.
+ */
+int
+objects_query_paintorder (const std::vector<SPItem*> &objects, SPStyle *style_res)
+{
+    if (objects.empty()) {
+        /* No objects, set empty */
+        return QUERY_STYLE_NOTHING;
+    }
+
+    std::string prev_order;
+    bool same_order = true;
+    int n_order = 0;
+
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+        if (!dynamic_cast<SPItem *>(obj)) {
+            continue;
+        }
+        SPStyle *style = obj->style;
+        if (!style) {
+            continue;
+        }
+
+        if ( style->stroke.isNone() ) {
+            continue;
+        }
+
+        n_order ++;
+
+        if (style->paint_order.set) {
+            if (!prev_order.empty() && prev_order.compare( style->paint_order.value ) != 0) {
+                same_order = false;
+            }
+            prev_order = style->paint_order.value;
+        }
+    }
+
+    
+    g_free( style_res->paint_order.value );
+    style_res->paint_order.value= g_strdup( prev_order.c_str() );
+    style_res->paint_order.set = true;
+
+    if (n_order == 0) {
+        return QUERY_STYLE_NOTHING;
+    } else if (n_order == 1) {
+        return QUERY_STYLE_SINGLE;
+    } else {
+        if (same_order)
+            return QUERY_STYLE_MULTIPLE_SAME;
+        else
+            return QUERY_STYLE_MULTIPLE_DIFFERENT;
+    }
+}
+
+/**
  * Write to style_res the average font size and spacing of objects.
  */
 int
-objects_query_fontnumbers (GSList *objects, SPStyle *style_res)
+objects_query_fontnumbers (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
     bool different = false;
+    bool different_lineheight = false;
+    bool different_lineheight_unit = false;
 
     double size = 0;
     double letterspacing = 0;
     double wordspacing = 0;
-    double linespacing = 0;
+    double lineheight = 0;
     bool letterspacing_normal = false;
     bool wordspacing_normal = false;
-    bool linespacing_normal = false;
+    bool lineheight_normal = false;
+    bool lineheight_unit_proportional = false;
+    bool lineheight_unit_absolute = false;
+    bool lineheight_set = false; // Set true if any object has lineheight set.
 
     double size_prev = 0;
     double letterspacing_prev = 0;
     double wordspacing_prev = 0;
-    double linespacing_prev = 0;
+    double lineheight_prev = 0;
+    int  lineheight_unit_prev = -1;
 
     int texts = 0;
     int no_size = 0;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
 
-        if (!SP_IS_TEXT(obj) && !SP_IS_FLOWTEXT(obj)
-            && !SP_IS_TSPAN(obj) && !SP_IS_TREF(obj) && !SP_IS_TEXTPATH(obj)
-            && !SP_IS_FLOWDIV(obj) && !SP_IS_FLOWPARA(obj) && !SP_IS_FLOWTSPAN(obj)) {
+        if (!isTextualItem(obj)) {
             continue;
         }
 
@@ -979,7 +1072,14 @@ objects_query_fontnumbers (GSList *objects, SPStyle *style_res)
         }
 
         texts ++;
-        double dummy = style->font_size.computed * Geom::Affine(SP_ITEM(obj)->i2dt_affine()).descrim();
+        SPItem *item = dynamic_cast<SPItem *>(obj);
+        g_assert(item != NULL);
+
+        // Quick way of getting document scale. Should be same as:
+        // item->document->getDocumentScale().Affine().descrim()
+        double doc_scale = Geom::Affine(item->i2dt_affine()).descrim();
+        
+        double dummy = style->font_size.computed * doc_scale; 
         if (!IS_NAN(dummy)) {
             size += dummy; /// \todo FIXME: we assume non-% units here
         } else {
@@ -991,7 +1091,7 @@ objects_query_fontnumbers (GSList *objects, SPStyle *style_res)
                 letterspacing_normal = true;
             }
         } else {
-            letterspacing += style->letter_spacing.computed; /// \todo FIXME: we assume non-% units here
+            letterspacing += style->letter_spacing.computed * doc_scale;; /// \todo FIXME: we assume non-% units here
             letterspacing_normal = false;
         }
 
@@ -1000,35 +1100,63 @@ objects_query_fontnumbers (GSList *objects, SPStyle *style_res)
                 wordspacing_normal = true;
             }
         } else {
-            wordspacing += style->word_spacing.computed; /// \todo FIXME: we assume non-% units here
+            wordspacing += style->word_spacing.computed * doc_scale; /// \todo FIXME: we assume non-% units here
             wordspacing_normal = false;
         }
 
-        double linespacing_current;
+        // If all line spacing units the same, use that (average line spacing).
+        // Else if all line spacings absolute, use 'px' (average line spacing).
+        // Else if all line spacings proportional, use % (average line spacing).
+        // Else use default.
+        double lineheight_current;
+        int    lineheight_unit_current;
         if (style->line_height.normal) {
-            linespacing_current = Inkscape::Text::Layout::LINE_HEIGHT_NORMAL;
-            if (!different && (linespacing_prev == 0 || linespacing_prev == linespacing_current))
-                linespacing_normal = true;
-        } else if (style->line_height.unit == SP_CSS_UNIT_PERCENT || style->font_size.computed == 0) {
-            linespacing_current = style->line_height.value;
-            linespacing_normal = false;
+            lineheight_current = Inkscape::Text::Layout::LINE_HEIGHT_NORMAL;
+            lineheight_unit_current = SP_CSS_UNIT_NONE;
+            if (!different_lineheight &&
+                (lineheight_prev == 0 || lineheight_prev == lineheight_current))
+                lineheight_normal = true;
+        } else if (style->line_height.unit == SP_CSS_UNIT_NONE ||
+                   style->line_height.unit == SP_CSS_UNIT_PERCENT ||
+                   style->line_height.unit == SP_CSS_UNIT_EM ||
+                   style->line_height.unit == SP_CSS_UNIT_EX ||
+                   style->font_size.computed == 0) {
+            lineheight_current = style->line_height.value;
+            lineheight_unit_current = style->line_height.unit;
+            lineheight_unit_proportional = true;
+            lineheight_normal = false;
+            lineheight += lineheight_current;
         } else {
-            linespacing_current = style->line_height.computed;
-            linespacing_normal = false;
+            // Always 'px' internally
+            lineheight_current = style->line_height.computed;
+            lineheight_unit_current = style->line_height.unit;
+            lineheight_unit_absolute = true;
+            lineheight_normal = false;
+            lineheight += lineheight_current * doc_scale;
         }
-        linespacing += linespacing_current;
+        if (style->line_height.set) {
+            lineheight_set = true;
+        }
 
         if ((size_prev != 0 && style->font_size.computed != size_prev) ||
             (letterspacing_prev != 0 && style->letter_spacing.computed != letterspacing_prev) ||
-            (wordspacing_prev != 0 && style->word_spacing.computed != wordspacing_prev) ||
-            (linespacing_prev != 0 && linespacing_current != linespacing_prev)) {
+            (wordspacing_prev != 0 && style->word_spacing.computed != wordspacing_prev)) {
             different = true;
+        }
+
+        if (lineheight_prev != 0 && lineheight_current != lineheight_prev) {
+            different_lineheight = true;
+        }
+
+        if (lineheight_unit_prev != -1 && lineheight_unit_current != lineheight_unit_prev) {
+            different_lineheight_unit = true;
         }
 
         size_prev = style->font_size.computed;
         letterspacing_prev = style->letter_spacing.computed;
         wordspacing_prev = style->word_spacing.computed;
-        linespacing_prev = linespacing_current;
+        lineheight_prev = lineheight_current;
+        lineheight_unit_prev = lineheight_unit_current;
 
         // FIXME: we must detect MULTIPLE_DIFFERENT for these too
         style_res->text_anchor.computed = style->text_anchor.computed;
@@ -1044,7 +1172,7 @@ objects_query_fontnumbers (GSList *objects, SPStyle *style_res)
         }
         letterspacing /= texts;
         wordspacing /= texts;
-        linespacing /= texts;
+        lineheight /= texts;
     }
 
     style_res->font_size.computed = size;
@@ -1056,13 +1184,39 @@ objects_query_fontnumbers (GSList *objects, SPStyle *style_res)
     style_res->word_spacing.normal = wordspacing_normal;
     style_res->word_spacing.computed = wordspacing;
 
-    style_res->line_height.normal = linespacing_normal;
-    style_res->line_height.computed = linespacing;
-    style_res->line_height.value = linespacing;
-    style_res->line_height.unit = SP_CSS_UNIT_PERCENT;
+    style_res->line_height.normal = lineheight_normal;
+    style_res->line_height.computed = lineheight;
+    style_res->line_height.value = lineheight;
+    if (different_lineheight_unit) {
+        if (lineheight_unit_absolute && !lineheight_unit_proportional) {
+            // Mixture of absolute units
+            style_res->line_height.unit = SP_CSS_UNIT_PX;
+        } else {
+            // Mixture of relative units
+            style_res->line_height.unit = SP_CSS_UNIT_PERCENT;
+        }
+        if (lineheight_unit_absolute && lineheight_unit_proportional) {
+            // Mixed types of units, fallback to default
+            style_res->line_height.computed = Inkscape::Text::Layout::LINE_HEIGHT_NORMAL * 100.0;
+            style_res->line_height.value    = Inkscape::Text::Layout::LINE_HEIGHT_NORMAL * 100.0;
+        }
+    } else {
+        // Same units.
+        if (lineheight_unit_prev != -1) {
+            style_res->line_height.unit = lineheight_unit_prev;
+        } else {
+            // No text object... use default.
+            style_res->line_height.unit = SP_CSS_UNIT_NONE;
+            style_res->line_height.computed = Inkscape::Text::Layout::LINE_HEIGHT_NORMAL;
+            style_res->line_height.value    = Inkscape::Text::Layout::LINE_HEIGHT_NORMAL;
+        }
+    }
+
+    // Used by text toolbar unset 'line-height' 
+    style_res->line_height.set = lineheight_set;
 
     if (texts > 1) {
-        if (different) {
+        if (different || different_lineheight) {
             return QUERY_STYLE_MULTIPLE_AVERAGED;
         } else {
             return QUERY_STYLE_MULTIPLE_SAME;
@@ -1076,20 +1230,19 @@ objects_query_fontnumbers (GSList *objects, SPStyle *style_res)
  * Write to style_res the average font style of objects.
  */
 int
-objects_query_fontstyle (GSList *objects, SPStyle *style_res)
+objects_query_fontstyle (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
     bool different = false;
     bool set = false;
 
     int texts = 0;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
 
-        if (!SP_IS_TEXT(obj) && !SP_IS_FLOWTEXT(obj)
-            && !SP_IS_TSPAN(obj) && !SP_IS_TREF(obj) && !SP_IS_TEXTPATH(obj)
-            && !SP_IS_FLOWDIV(obj) && !SP_IS_FLOWPARA(obj) && !SP_IS_FLOWTSPAN(obj))
+        if (!isTextualItem(obj)) {
             continue;
+        }
 
         SPStyle *style = obj->style;
         if (!style) {
@@ -1106,7 +1259,7 @@ objects_query_fontstyle (GSList *objects, SPStyle *style_res)
             different = true;  // different styles
         }
 
-        set = TRUE;
+        set = true;
         style_res->font_weight.value = style_res->font_weight.computed = style->font_weight.computed;
         style_res->font_style.value = style_res->font_style.computed = style->font_style.computed;
         style_res->font_stretch.value = style_res->font_stretch.computed = style->font_stretch.computed;
@@ -1130,11 +1283,206 @@ objects_query_fontstyle (GSList *objects, SPStyle *style_res)
     }
 }
 
+int
+objects_query_fontvariants (const std::vector<SPItem*> &objects, SPStyle *style_res)
+{
+    bool set = false;
+
+    int texts = 0;
+
+    SPILigatures* ligatures_res = &(style_res->font_variant_ligatures);
+    SPIEnum* position_res       = &(style_res->font_variant_position);
+    SPIEnum* caps_res           = &(style_res->font_variant_caps);
+    SPINumeric* numeric_res     = &(style_res->font_variant_numeric);
+
+    // Stores 'and' of all values
+    ligatures_res->computed = SP_CSS_FONT_VARIANT_LIGATURES_NORMAL;
+    position_res->computed  = SP_CSS_FONT_VARIANT_POSITION_NORMAL;
+    caps_res->computed      = SP_CSS_FONT_VARIANT_CAPS_NORMAL;
+    numeric_res->computed   = SP_CSS_FONT_VARIANT_NUMERIC_NORMAL;
+
+    // Stores only differences
+    ligatures_res->value = 0;
+    position_res->value  = 0;
+    caps_res->value      = 0;
+    numeric_res->value   = 0;
+    
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+
+        if (!isTextualItem(obj)) {
+            continue;
+        }
+
+        SPStyle *style = obj->style;
+        if (!style) {
+            continue;
+        }
+
+        texts ++;
+
+        SPILigatures* ligatures_in = &(style->font_variant_ligatures);
+        SPIEnum*      position_in  = &(style->font_variant_position);
+        SPIEnum*      caps_in      = &(style->font_variant_caps);
+        SPINumeric*   numeric_in   = &(style->font_variant_numeric);
+        // computed stores which bits are on/off, only valid if same between all selected objects.
+        // value stores which bits are different between objects. This is a bit of an abuse of
+        // the values but then we don't need to add new variables to class.
+        if (set) {
+            ligatures_res->value  |= (ligatures_res->computed ^ ligatures_in->computed );
+            ligatures_res->computed &= ligatures_in->computed;
+
+            position_res->value  |= (position_res->computed ^ position_in->computed );
+            position_res->computed &= position_in->computed;
+
+            caps_res->value  |= (caps_res->computed ^ caps_in->computed );
+            caps_res->computed &= caps_in->computed;
+
+            numeric_res->value  |= (numeric_res->computed ^ numeric_in->computed );
+            numeric_res->computed &= numeric_in->computed;
+
+        } else {
+            ligatures_res->computed  = ligatures_in->computed;
+            position_res->computed   = position_in->computed;
+            caps_res->computed       = caps_in->computed;
+            numeric_res->computed    = numeric_in->computed;
+        }
+
+        set = true;
+    }
+
+    bool different = (style_res->font_variant_ligatures.value != 0 || 
+                      style_res->font_variant_position.value  != 0 ||
+                      style_res->font_variant_caps.value      != 0 ||
+                      style_res->font_variant_numeric.value   != 0 );
+
+    if (texts == 0 || !set)
+        return QUERY_STYLE_NOTHING;
+
+    if (texts > 1) {
+        if (different) {
+            return QUERY_STYLE_MULTIPLE_DIFFERENT;
+        } else {
+            return QUERY_STYLE_MULTIPLE_SAME;
+        }
+    } else {
+        return QUERY_STYLE_SINGLE;
+    }
+}
+
+
+/**
+ * Write to style_res the average writing modes style of objects.
+ */
+int
+objects_query_writing_modes (const std::vector<SPItem*> &objects, SPStyle *style_res)
+{
+    bool different = false;
+    bool set = false;
+
+    int texts = 0;
+
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+
+        if (!isTextualItem(obj)) {
+            continue;
+        }
+
+        SPStyle *style = obj->style;
+        if (!style) {
+            continue;
+        }
+
+        texts ++;
+
+        if (set &&
+            ( ( style_res->writing_mode.computed     != style->writing_mode.computed ) ||
+              ( style_res->text_orientation.computed != style->text_orientation.computed ) ) ) {
+            different = true;  // different styles
+        }
+
+        set = true;
+        style_res->writing_mode.computed = style->writing_mode.computed;
+        style_res->text_orientation.computed = style->text_orientation.computed;
+    }
+
+    if (texts == 0 || !set)
+        return QUERY_STYLE_NOTHING;
+
+    if (texts > 1) {
+        if (different) {
+            return QUERY_STYLE_MULTIPLE_DIFFERENT;
+        } else {
+            return QUERY_STYLE_MULTIPLE_SAME;
+        }
+    } else {
+        return QUERY_STYLE_SINGLE;
+    }
+}
+
+int
+objects_query_fontfeaturesettings (const std::vector<SPItem*> &objects, SPStyle *style_res)
+{
+    bool different = false;
+    int texts = 0;
+
+    if (style_res->font_feature_settings.value) {
+        g_free(style_res->font_feature_settings.value);
+        style_res->font_feature_settings.value = NULL;
+    }
+    style_res->font_feature_settings.set = FALSE;
+
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+
+        // std::cout << "  " << reinterpret_cast<SPObject*>(i->data)->getId() << std::endl;
+        if (!isTextualItem(obj)) {
+            continue;
+        }
+
+        SPStyle *style = obj->style;
+        if (!style) {
+            continue;
+        }
+
+        texts ++;
+
+        if (style_res->font_feature_settings.value && style->font_feature_settings.value &&
+            strcmp (style_res->font_feature_settings.value, style->font_feature_settings.value)) {
+            different = true;  // different fonts
+        }
+
+        if (style_res->font_feature_settings.value) {
+            g_free(style_res->font_feature_settings.value);
+            style_res->font_feature_settings.value = NULL;
+        }
+
+        style_res->font_feature_settings.set = true;
+        style_res->font_feature_settings.value = g_strdup(style->font_feature_settings.value);
+    }
+
+    if (texts == 0 || !style_res->font_feature_settings.set) {
+        return QUERY_STYLE_NOTHING;
+    }
+
+    if (texts > 1) {
+        if (different) {
+            return QUERY_STYLE_MULTIPLE_DIFFERENT;
+        } else {
+            return QUERY_STYLE_MULTIPLE_SAME;
+        }
+    } else {
+        return QUERY_STYLE_SINGLE;
+    }
+}
+
+
 /**
  * Write to style_res the baseline numbers.
  */
 static int
-objects_query_baselines (GSList *objects, SPStyle *style_res)
+objects_query_baselines (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
     bool different = false;
 
@@ -1153,12 +1501,10 @@ objects_query_baselines (GSList *objects, SPStyle *style_res)
 
     int texts = 0;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
 
-        if (!SP_IS_TEXT(obj) && !SP_IS_FLOWTEXT(obj)
-            && !SP_IS_TSPAN(obj) && !SP_IS_TREF(obj) && !SP_IS_TEXTPATH(obj)
-            && !SP_IS_FLOWDIV(obj) && !SP_IS_FLOWPARA(obj) && !SP_IS_FLOWTSPAN(obj)) {
+        if (!isTextualItem(obj)) {
             continue;
         }
 
@@ -1232,7 +1578,7 @@ objects_query_baselines (GSList *objects, SPStyle *style_res)
  * Write to style_res the average font family of objects.
  */
 int
-objects_query_fontfamily (GSList *objects, SPStyle *style_res)
+objects_query_fontfamily (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
     bool different = false;
     int texts = 0;
@@ -1243,13 +1589,11 @@ objects_query_fontfamily (GSList *objects, SPStyle *style_res)
     }
     style_res->font_family.set = FALSE;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
 
         // std::cout << "  " << reinterpret_cast<SPObject*>(i->data)->getId() << std::endl;
-        if (!SP_IS_TEXT(obj) && !SP_IS_FLOWTEXT(obj)
-            && !SP_IS_TSPAN(obj) && !SP_IS_TREF(obj) && !SP_IS_TEXTPATH(obj)
-            && !SP_IS_FLOWDIV(obj) && !SP_IS_FLOWPARA(obj) && !SP_IS_FLOWTSPAN(obj)) {
+        if (!isTextualItem(obj)) {
             continue;
         }
 
@@ -1270,7 +1614,7 @@ objects_query_fontfamily (GSList *objects, SPStyle *style_res)
             style_res->font_family.value = NULL;
         }
 
-        style_res->font_family.set = TRUE;
+        style_res->font_family.set = true;
         style_res->font_family.value = g_strdup(style->font_family.value);
     }
 
@@ -1290,7 +1634,7 @@ objects_query_fontfamily (GSList *objects, SPStyle *style_res)
 }
 
 static int
-objects_query_fontspecification (GSList *objects, SPStyle *style_res)
+objects_query_fontspecification (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
     bool different = false;
     int texts = 0;
@@ -1301,13 +1645,11 @@ objects_query_fontspecification (GSList *objects, SPStyle *style_res)
     }
     style_res->font_specification.set = FALSE;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
 
         // std::cout << "  " << reinterpret_cast<SPObject*>(i->data)->getId() << std::endl;
-        if (!SP_IS_TEXT(obj) && !SP_IS_FLOWTEXT(obj)
-            && !SP_IS_TSPAN(obj) && !SP_IS_TREF(obj) && !SP_IS_TEXTPATH(obj)
-            && !SP_IS_FLOWDIV(obj) && !SP_IS_FLOWPARA(obj) && !SP_IS_FLOWTSPAN(obj)) {
+        if (!isTextualItem(obj)) {
             continue;
         }
 
@@ -1331,7 +1673,7 @@ objects_query_fontspecification (GSList *objects, SPStyle *style_res)
                 style_res->font_specification.value = NULL;
             }
 
-            style_res->font_specification.set = TRUE;
+            style_res->font_specification.set = true;
             style_res->font_specification.value = g_strdup(style->font_specification.value);
         }
     }
@@ -1352,7 +1694,7 @@ objects_query_fontspecification (GSList *objects, SPStyle *style_res)
 }
 
 static int
-objects_query_blend (GSList *objects, SPStyle *style_res)
+objects_query_blend (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
     const int empty_prev = -2;
     const int complex_filter = 5;
@@ -1361,10 +1703,13 @@ objects_query_blend (GSList *objects, SPStyle *style_res)
     bool same_blend = true;
     guint items = 0;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+        if (!obj) {
+            continue;
+        }
         SPStyle *style = obj->style;
-        if (!style || !SP_IS_ITEM(obj)) {
+        if (!style || !dynamic_cast<SPItem *>(obj)) {
             continue;
         }
 
@@ -1377,14 +1722,14 @@ objects_query_blend (GSList *objects, SPStyle *style_res)
 
             // determine whether filter is simple (blend and/or blur) or complex
             for(SPObject *primitive_obj = style->getFilter()->children;
-                primitive_obj && SP_IS_FILTER_PRIMITIVE(primitive_obj);
+                primitive_obj && dynamic_cast<SPFilterPrimitive *>(primitive_obj);
                 primitive_obj = primitive_obj->next) {
-                SPFilterPrimitive *primitive = SP_FILTER_PRIMITIVE(primitive_obj);
-                if(SP_IS_FEBLEND(primitive))
+                SPFilterPrimitive *primitive = dynamic_cast<SPFilterPrimitive *>(primitive_obj);
+                if (dynamic_cast<SPFeBlend *>(primitive)) {
                     ++blendcount;
-                else if(SP_IS_GAUSSIANBLUR(primitive))
+                } else if (dynamic_cast<SPGaussianBlur *>(primitive)) {
                     ++blurcount;
-                else {
+                } else {
                     blurcount = complex_filter;
                     break;
                 }
@@ -1393,10 +1738,10 @@ objects_query_blend (GSList *objects, SPStyle *style_res)
             // simple filter
             if(blurcount == 1 || blendcount == 1) {
                 for(SPObject *primitive_obj = style->getFilter()->children;
-                    primitive_obj && SP_IS_FILTER_PRIMITIVE(primitive_obj);
+                    primitive_obj && dynamic_cast<SPFilterPrimitive *>(primitive_obj);
                     primitive_obj = primitive_obj->next) {
-                    if(SP_IS_FEBLEND(primitive_obj)) {
-                        SPFeBlend *spblend = SP_FEBLEND(primitive_obj);
+                    SPFeBlend *spblend = dynamic_cast<SPFeBlend *>(primitive_obj);
+                    if (spblend) {
                         blend = spblend->blend_mode;
                     }
                 }
@@ -1435,9 +1780,9 @@ objects_query_blend (GSList *objects, SPStyle *style_res)
  * Write to style_res the average blurring of a list of objects.
  */
 int
-objects_query_blur (GSList *objects, SPStyle *style_res)
+objects_query_blur (const std::vector<SPItem*> &objects, SPStyle *style_res)
 {
-   if (g_slist_length(objects) == 0) {
+   if (objects.empty()) {
         /* No objects, set empty */
         return QUERY_STYLE_NOTHING;
     }
@@ -1448,17 +1793,21 @@ objects_query_blur (GSList *objects, SPStyle *style_res)
     guint blur_items = 0;
     guint items = 0;
 
-    for (GSList const *i = objects; i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
+    for (std::vector<SPItem*>::const_iterator i = objects.begin(); i != objects.end(); ++i) {
+        SPObject *obj = *i;
+        if (!obj) {
+            continue;
+        }
         SPStyle *style = obj->style;
         if (!style) {
             continue;
         }
-        if (!SP_IS_ITEM(obj)) {
+        SPItem *item = dynamic_cast<SPItem *>(obj);
+        if (!item) {
             continue;
         }
 
-        Geom::Affine i2d = SP_ITEM(obj)->i2dt_affine();
+        Geom::Affine i2d = item->i2dt_affine();
 
         items ++;
 
@@ -1467,12 +1816,12 @@ objects_query_blur (GSList *objects, SPStyle *style_res)
             //cycle through filter primitives
             SPObject *primitive_obj = style->getFilter()->children;
             while (primitive_obj) {
-                if (SP_IS_FILTER_PRIMITIVE(primitive_obj)) {
-                    SPFilterPrimitive *primitive = SP_FILTER_PRIMITIVE(primitive_obj);
+                SPFilterPrimitive *primitive = dynamic_cast<SPFilterPrimitive *>(primitive_obj);
+                if (primitive) {
 
                     //if primitive is gaussianblur
-                    if(SP_IS_GAUSSIANBLUR(primitive)) {
-                        SPGaussianBlur * spblur = SP_GAUSSIANBLUR(primitive);
+                    SPGaussianBlur * spblur = dynamic_cast<SPGaussianBlur *>(primitive);
+                    if (spblur) {
                         float num = spblur->stdDeviation.getNumber();
                         float dummy = num * i2d.descrim();
                         if (!IS_NAN(dummy)) {
@@ -1513,7 +1862,7 @@ objects_query_blur (GSList *objects, SPStyle *style_res)
  * the result to style, return appropriate flag.
  */
 int
-sp_desktop_query_style_from_list (GSList *list, SPStyle *style, int property)
+sp_desktop_query_style_from_list (const std::vector<SPItem*> &list, SPStyle *style, int property)
 {
     if (property == QUERY_STYLE_PROPERTY_FILL) {
         return objects_query_fillstroke (list, style, true);
@@ -1529,6 +1878,8 @@ sp_desktop_query_style_from_list (GSList *list, SPStyle *style, int property)
     } else if (property == QUERY_STYLE_PROPERTY_STROKEJOIN) {
         return objects_query_strokejoin (list, style);
 
+    } else if (property == QUERY_STYLE_PROPERTY_PAINTORDER) {
+        return objects_query_paintorder (list, style);
     } else if (property == QUERY_STYLE_PROPERTY_MASTEROPACITY) {
         return objects_query_opacity (list, style);
 
@@ -1538,8 +1889,14 @@ sp_desktop_query_style_from_list (GSList *list, SPStyle *style, int property)
         return objects_query_fontfamily (list, style);
     } else if (property == QUERY_STYLE_PROPERTY_FONTSTYLE) {
         return objects_query_fontstyle (list, style);
+    } else if (property == QUERY_STYLE_PROPERTY_FONTVARIANTS) {
+        return objects_query_fontvariants (list, style);
+    } else if (property == QUERY_STYLE_PROPERTY_FONTFEATURESETTINGS) {
+        return objects_query_fontfeaturesettings (list, style);
     } else if (property == QUERY_STYLE_PROPERTY_FONTNUMBERS) {
         return objects_query_fontnumbers (list, style);
+    } else if (property == QUERY_STYLE_PROPERTY_WRITINGMODES) {
+        return objects_query_writing_modes (list, style);
     } else if (property == QUERY_STYLE_PROPERTY_BASELINES) {
         return objects_query_baselines (list, style);
 
@@ -1559,6 +1916,7 @@ sp_desktop_query_style_from_list (GSList *list, SPStyle *style, int property)
 int
 sp_desktop_query_style(SPDesktop *desktop, SPStyle *style, int property)
 {
+    // Used by text tool and in gradient dragging. See connectQueryStyle.
     int ret = desktop->_query_style_signal.emit(style, property);
 
     if (ret != QUERY_STYLE_NOTHING)
@@ -1566,7 +1924,7 @@ sp_desktop_query_style(SPDesktop *desktop, SPStyle *style, int property)
 
     // otherwise, do querying and averaging over selection
     if (desktop->selection != NULL) {
-        return sp_desktop_query_style_from_list ((GSList *) desktop->selection->itemList(), style, property);
+        return sp_desktop_query_style_from_list (desktop->selection->itemList(), style, property);
     }
 
     return QUERY_STYLE_NOTHING;
@@ -1588,6 +1946,9 @@ sp_desktop_query_style_all (SPDesktop *desktop, SPStyle *query)
         int result_strokemiterlimit = sp_desktop_query_style (desktop, query, QUERY_STYLE_PROPERTY_STROKEMITERLIMIT);
         int result_strokecap = sp_desktop_query_style (desktop, query, QUERY_STYLE_PROPERTY_STROKECAP);
         int result_strokejoin = sp_desktop_query_style (desktop, query, QUERY_STYLE_PROPERTY_STROKEJOIN);
+
+        int result_paintorder = sp_desktop_query_style (desktop, query, QUERY_STYLE_PROPERTY_PAINTORDER);
+
         int result_opacity = sp_desktop_query_style (desktop, query, QUERY_STYLE_PROPERTY_MASTEROPACITY);
         int result_blur = sp_desktop_query_style (desktop, query, QUERY_STYLE_PROPERTY_BLUR);
 
@@ -1601,6 +1962,7 @@ sp_desktop_query_style_all (SPDesktop *desktop, SPStyle *query)
                 result_strokemiterlimit != QUERY_STYLE_NOTHING ||
                 result_strokecap != QUERY_STYLE_NOTHING ||
                 result_strokejoin != QUERY_STYLE_NOTHING ||
+                result_paintorder != QUERY_STYLE_NOTHING ||
                 result_blur != QUERY_STYLE_NOTHING);
 }
 

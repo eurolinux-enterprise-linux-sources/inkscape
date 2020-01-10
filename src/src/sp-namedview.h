@@ -21,6 +21,7 @@
 #include "snap.h"
 #include "document.h"
 #include "util/units.h"
+#include <vector>
 
 namespace Inkscape {
     class CanvasGrid;
@@ -28,6 +29,9 @@ namespace Inkscape {
         class Unit;
     }
 }
+
+typedef unsigned int guint32;
+typedef guint32 GQuark;
 
 enum {
     SP_BORDER_LAYER_BOTTOM,
@@ -41,6 +45,8 @@ public:
 
     unsigned int editable : 1;
     unsigned int showguides : 1;
+    unsigned int lockguides : 1;
+    unsigned int pagecheckerboard : 1;
     unsigned int showborder : 1;
     unsigned int showpageshadow : 1;
     unsigned int borderlayer : 2;
@@ -48,17 +54,16 @@ public:
     double zoom;
     double cx;
     double cy;
-    gint window_width;
-    gint window_height;
-    gint window_x;
-    gint window_y;
-    gint window_maximized;
+    int window_width;
+    int window_height;
+    int window_x;
+    int window_y;
+    int window_maximized;
 
     SnapManager snap_manager;
-    GSList * grids;
+    std::vector<Inkscape::CanvasGrid *> grids;
     bool grids_visible;
 
-    Inkscape::Util::Unit const *svg_units;   // Units used for the values in SVG
     Inkscape::Util::Unit const *display_units;   // Units used for the UI (*not* the same as units of SVG coordinates)
     Inkscape::Util::Unit const *page_size_units; // Only used in "Custom size" part of Document Properties dialog 
     
@@ -72,19 +77,18 @@ public:
     guint32 pagecolor;
     guint32 pageshadow;
 
-    GSList *guides;
-    GSList *views;
+    std::vector<SPGuide *> guides;
+    std::vector<SPDesktop *> views;
 
-    gint viewcount;
+    int viewcount;
 
     void show(SPDesktop *desktop);
     void hide(SPDesktop const *desktop);
-    void activateGuides(gpointer desktop, gboolean active);
-    gchar const *getName() const;
-    guint getViewCount();
-    GSList const *getViewList() const;
-    Inkscape::Util::Unit const * getDefaultUnit() const;
-    Inkscape::Util::Unit const & getSVGUnit() const;
+    void activateGuides(void* desktop, bool active);
+    char const *getName() const;
+    unsigned int getViewCount();
+    std::vector<SPDesktop *> const getViewList() const;
+    Inkscape::Util::Unit const * getDisplayUnit() const;
 
     void translateGuides(Geom::Translate const &translation);
     void translateGrids(Geom::Translate const &translation);
@@ -102,23 +106,24 @@ private:
 protected:
 	virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
 	virtual void release();
-	virtual void set(unsigned int key, gchar const* value);
+	virtual void set(unsigned int key, char const* value);
 
 	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
 	virtual void remove_child(Inkscape::XML::Node* child);
 
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags);
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
 };
 
 
-SPNamedView *sp_document_namedview(SPDocument *document, gchar const *name);
-SPNamedView const *sp_document_namedview(SPDocument const *document, gchar const *name);
+SPNamedView *sp_document_namedview(SPDocument *document, char const *name);
+SPNamedView const *sp_document_namedview(SPDocument const *document, char const *name);
 
 void sp_namedview_window_from_document(SPDesktop *desktop);
 void sp_namedview_document_from_window(SPDesktop *desktop);
 void sp_namedview_update_layers_from_document (SPDesktop *desktop);
 
 void sp_namedview_toggle_guides(SPDocument *doc, Inkscape::XML::Node *repr);
+void sp_namedview_guides_toggle_lock(SPDocument *doc, Inkscape::XML::Node *repr);
 void sp_namedview_show_grids(SPNamedView *namedview, bool show, bool dirty_document);
 Inkscape::CanvasGrid * sp_namedview_get_first_enabled_grid(SPNamedView *namedview);
 

@@ -15,6 +15,7 @@
 
 #include "macros.h"
 #include "document.h"
+#include "inkscape.h"
 #include "sp-widget.h"
 #include "helper/sp-marshal.h"
 
@@ -36,8 +37,6 @@ public:
     SPWidgetImpl(SPWidget &target);
     ~SPWidgetImpl();
 
-    static void classInit(SPWidgetClass *klass);
-    static void init(SPWidget *widget);
     static void dispose(GObject *object);
     static void show(GtkWidget *widget);
     static void hide(GtkWidget *widget);
@@ -57,67 +56,30 @@ public:
 #endif
 
     static void sizeAllocate(GtkWidget *widget, GtkAllocation *allocation);
-    static void modifySelectionCB(Application *inkscape, Selection *selection, guint flags, SPWidget *spw);
-    static void changeSelectionCB(Application *inkscape, Selection *selection, SPWidget *spw);
-    static void setSelectionCB(Application *inkscape, Selection *selection, SPWidget *spw);
+    static void modifySelectionCB(Selection *selection, guint flags, SPWidget *spw);
+    static void changeSelectionCB(Selection *selection, SPWidget *spw);
+    static void setSelectionCB(Selection *selection, SPWidget *spw);
 
-    static GtkWidget *constructGlobal(SPWidget *spw, Inkscape::Application *inkscape);
+    static GtkWidget *constructGlobal(SPWidget *spw);
 
-    void modifySelection(Application *inkscape, Selection *selection, guint flags);
-    void changeSelection(Application *inkscape, Selection *selection);
-    void setSelection(Application *inkscape, Selection *selection);
+    void modifySelection(Selection *selection, guint flags);
+    void changeSelection(Selection *selection);
+    void setSelection(Selection *selection);
 
 private:
-    static GtkBinClass *parentClass;
-    static guint signals[LAST_SIGNAL];
-
     SPWidget &_target;
 };
-
-GtkBinClass *SPWidgetImpl::parentClass = 0;
-guint SPWidgetImpl::signals[LAST_SIGNAL] = {0};
-
 } // namespace Inkscape
 
-GType SPWidget::getType()
-{
-    static GType type = 0;
-    if (!type) {
-        static GTypeInfo const info = {
-            sizeof(SPWidgetClass),
-            NULL, NULL,
-            reinterpret_cast<GClassInitFunc>(SPWidgetImpl::classInit),
-            NULL, NULL,
-            sizeof(SPWidget),
-            0,
-            reinterpret_cast<GInstanceInitFunc>(SPWidgetImpl::init),
-            NULL
-        };
-        type = g_type_register_static(GTK_TYPE_BIN,
-                                      "SPWidget",
-                                      &info,
-                                      static_cast<GTypeFlags>(0));
-    }
-    return type;
-}
+G_DEFINE_TYPE(SPWidget, sp_widget, GTK_TYPE_BIN);
 
-namespace Inkscape {
+static guint signals[LAST_SIGNAL] = {0};
 
-SPWidgetImpl::SPWidgetImpl(SPWidget &target) :
-    _target(target)
-{
-}
-
-SPWidgetImpl::~SPWidgetImpl()
-{
-}
-
-void SPWidgetImpl::classInit(SPWidgetClass *klass)
+static void
+sp_widget_class_init(SPWidgetClass *klass)
 {
     GObjectClass *object_class = reinterpret_cast<GObjectClass *>(klass);
     GtkWidgetClass *widget_class = reinterpret_cast<GtkWidgetClass *>(klass);
-
-    parentClass = reinterpret_cast<GtkBinClass *>(g_type_class_peek_parent(klass));
 
     object_class->dispose = SPWidgetImpl::dispose;
 
@@ -169,33 +131,38 @@ void SPWidgetImpl::classInit(SPWidgetClass *klass)
     widget_class->size_allocate = SPWidgetImpl::sizeAllocate;
 }
 
-void SPWidgetImpl::init(SPWidget *spw)
+static void sp_widget_init(SPWidget *spw)
 {
-    spw->inkscape = NULL;
-
     spw->_impl = new SPWidgetImpl(*spw); // ctor invoked after all other init
+}
+
+namespace Inkscape {
+
+SPWidgetImpl::SPWidgetImpl(SPWidget &target) :
+    _target(target)
+{
+}
+
+SPWidgetImpl::~SPWidgetImpl()
+{
 }
 
 void SPWidgetImpl::dispose(GObject *object)
 {
     SPWidget *spw = reinterpret_cast<SPWidget *>(object);
 
-    if (spw->inkscape) {
-        // Disconnect signals
-
-        // the checks are necessary because when destroy is caused by the program shutting down,
-        // the inkscape object may already be (partly?) invalid --bb
-        if (G_IS_OBJECT(spw->inkscape) && G_OBJECT_GET_CLASS(spw->inkscape)) {
-            sp_signal_disconnect_by_data(spw->inkscape, spw);
-        }
-        spw->inkscape = NULL;
-    }
+    // Disconnect signals
+    if (Application::exists()) {
+        spw->selModified.disconnect();
+        spw->selChanged.disconnect();
+        spw->selSet.disconnect();
+    }            
 
     delete spw->_impl;
     spw->_impl = 0;
 
-    if (reinterpret_cast<GObjectClass *>(parentClass)->dispose) {
-        (*reinterpret_cast<GObjectClass *>(parentClass)->dispose)(object);
+    if (G_OBJECT_CLASS(sp_widget_parent_class)->dispose) {
+        G_OBJECT_CLASS(sp_widget_parent_class)->dispose(object);
     }
 }
 
@@ -203,15 +170,24 @@ void SPWidgetImpl::show(GtkWidget *widget)
 {
     SPWidget *spw = SP_WIDGET(widget);
 
-    if (spw->inkscape) {
+    if (Application::exists()) {
         // Connect signals
-        g_signal_connect(spw->inkscape, "modify_selection", G_CALLBACK(SPWidgetImpl::modifySelectionCB), spw);
-        g_signal_connect(spw->inkscape, "change_selection", G_CALLBACK(SPWidgetImpl::changeSelectionCB), spw);
-        g_signal_connect(spw->inkscape, "set_selection", G_CALLBACK(SPWidgetImpl::setSelectionCB), spw);
+        spw->selModified = INKSCAPE.signal_selection_modified.connect(
+                sigc::bind(
+                sigc::ptr_fun(SPWidgetImpl::modifySelectionCB), spw)
+        );
+        spw->selChanged = INKSCAPE.signal_selection_changed.connect(
+                sigc::bind(
+                sigc::ptr_fun(SPWidgetImpl::changeSelectionCB), spw)
+        );
+        spw->selSet = INKSCAPE.signal_selection_set.connect(
+                sigc::bind(
+                sigc::ptr_fun(SPWidgetImpl::setSelectionCB), spw)
+        );
     }
 
-    if (reinterpret_cast<GtkWidgetClass *>(parentClass)->show) {
-        (*reinterpret_cast<GtkWidgetClass *>(parentClass)->show)(widget);
+    if (GTK_WIDGET_CLASS(sp_widget_parent_class)->show) {
+        GTK_WIDGET_CLASS(sp_widget_parent_class)->show(widget);
     }
 }
 
@@ -219,13 +195,15 @@ void SPWidgetImpl::hide(GtkWidget *widget)
 {
     SPWidget *spw = SP_WIDGET (widget);
 
-    if (spw->inkscape) {
+    if (Application::exists()) {
         // Disconnect signals
-        sp_signal_disconnect_by_data(spw->inkscape, spw);
+        spw->selModified.disconnect();
+        spw->selChanged.disconnect();
+        spw->selSet.disconnect();
     }
 
-    if (reinterpret_cast<GtkWidgetClass *>(parentClass)->hide) {
-        (*reinterpret_cast<GtkWidgetClass *>(parentClass)->hide)(widget);
+    if (GTK_WIDGET_CLASS(sp_widget_parent_class)->hide) {
+        GTK_WIDGET_CLASS(sp_widget_parent_class)->hide(widget);
     }
 }
 
@@ -293,15 +271,21 @@ void SPWidgetImpl::sizeAllocate(GtkWidget *widget, GtkAllocation *allocation)
     }
 }
 
-GtkWidget *SPWidgetImpl::constructGlobal(SPWidget *spw, Inkscape::Application *inkscape)
+GtkWidget *SPWidgetImpl::constructGlobal(SPWidget *spw)
 {
-    g_return_val_if_fail(!spw->inkscape, NULL);
-
-    spw->inkscape = inkscape;
     if (gtk_widget_get_visible(GTK_WIDGET(spw))) {
-        g_signal_connect(inkscape, "modify_selection", G_CALLBACK(SPWidgetImpl::modifySelectionCB), spw);
-        g_signal_connect(inkscape, "change_selection", G_CALLBACK(SPWidgetImpl::changeSelectionCB), spw);
-        g_signal_connect(inkscape, "set_selection", G_CALLBACK(SPWidgetImpl::setSelectionCB), spw);
+        spw->selModified = INKSCAPE.signal_selection_modified.connect(
+                sigc::bind(
+                sigc::ptr_fun(SPWidgetImpl::modifySelectionCB), spw)
+        );
+        spw->selChanged = INKSCAPE.signal_selection_changed.connect(
+                sigc::bind(
+                sigc::ptr_fun(SPWidgetImpl::changeSelectionCB), spw)
+        );
+        spw->selSet = INKSCAPE.signal_selection_set.connect(
+                sigc::bind(
+                sigc::ptr_fun(SPWidgetImpl::setSelectionCB), spw)
+        );
     }
 
     g_signal_emit(spw, signals[CONSTRUCT], 0);
@@ -309,32 +293,32 @@ GtkWidget *SPWidgetImpl::constructGlobal(SPWidget *spw, Inkscape::Application *i
     return GTK_WIDGET(spw);
 }
 
-void SPWidgetImpl::modifySelectionCB(Application *inkscape, Selection *selection, guint flags, SPWidget *spw)
+void SPWidgetImpl::modifySelectionCB(Selection *selection, guint flags, SPWidget *spw)
 {
-    spw->_impl->modifySelection(inkscape, selection, flags);
+    spw->_impl->modifySelection(selection, flags);
 }
 
-void SPWidgetImpl::changeSelectionCB(Application *inkscape, Selection *selection, SPWidget *spw)
+void SPWidgetImpl::changeSelectionCB(Selection *selection, SPWidget *spw)
 {
-    spw->_impl->changeSelection(inkscape, selection);
+    spw->_impl->changeSelection(selection);
 }
 
-void SPWidgetImpl::setSelectionCB(Application *inkscape, Selection *selection, SPWidget *spw)
+void SPWidgetImpl::setSelectionCB(Selection *selection, SPWidget *spw)
 {
-    spw->_impl->setSelection(inkscape, selection);
+    spw->_impl->setSelection(selection);
 }
 
-void SPWidgetImpl::modifySelection(Application * /*inkscape*/, Selection *selection, guint flags)
+void SPWidgetImpl::modifySelection(Selection *selection, guint flags)
 {
     g_signal_emit(&_target, signals[MODIFY_SELECTION], 0, selection, flags);
 }
 
-void SPWidgetImpl::changeSelection(Application * /*inkscape*/, Selection *selection)
+void SPWidgetImpl::changeSelection(Selection *selection)
 {
     g_signal_emit(&_target, signals[CHANGE_SELECTION], 0, selection);
 }
 
-void SPWidgetImpl::setSelection(Application * /*inkscape*/, Selection *selection)
+void SPWidgetImpl::setSelection(Selection *selection)
 {
     // Emit "set_selection" signal
     g_signal_emit(&_target, signals[SET_SELECTION], 0, selection);
@@ -345,11 +329,11 @@ void SPWidgetImpl::setSelection(Application * /*inkscape*/, Selection *selection
 
 // Methods
 
-GtkWidget *sp_widget_new_global(Inkscape::Application *inkscape)
+GtkWidget *sp_widget_new_global()
 {
     SPWidget *spw = reinterpret_cast<SPWidget*>(g_object_new(SP_TYPE_WIDGET, NULL));
 
-    if (!SPWidgetImpl::constructGlobal(spw, inkscape)) {
+    if (!SPWidgetImpl::constructGlobal(spw)) {
         g_object_unref(spw);
         spw = 0;
     }

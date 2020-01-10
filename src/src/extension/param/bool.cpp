@@ -10,10 +10,6 @@
 # include "config.h"
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/spinbutton.h>
@@ -23,7 +19,6 @@
 #include "../extension.h"
 #include "bool.h"
 #include "preferences.h"
-#include <glibmm/i18n.h>
 
 namespace Inkscape {
 namespace Extension {
@@ -141,7 +136,7 @@ Gtk::Widget *ParamBool::get_widget(SPDocument * doc, Inkscape::XML::Node * node,
     Gtk::HBox * hbox = Gtk::manage(new Gtk::HBox(false, 4));
 #endif
 
-    Gtk::Label * label = Gtk::manage(new Gtk::Label(_(_text), Gtk::ALIGN_START));
+    Gtk::Label * label = Gtk::manage(new Gtk::Label(_text, Gtk::ALIGN_START));
     label->show();
     hbox->pack_end(*label, true, true);
 

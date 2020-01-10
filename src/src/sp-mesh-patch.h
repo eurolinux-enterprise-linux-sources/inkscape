@@ -2,7 +2,7 @@
 #define SEEN_SP_MESHPATCH_H
 
 /** \file
- * SPMeshPatch: SVG <meshpatch> implementation.
+ * SPMeshpatch: SVG <meshpatch> implementation.
  */
 /*
  * Authors: Tavmjong Bah
@@ -12,30 +12,29 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glib.h>
 #include <glibmm/ustring.h>
-//#include "svg/svg-length.h"
 #include "sp-object.h"
 
-#define SP_MESHPATCH(obj) (dynamic_cast<SPMeshPatch*>((SPObject*)obj))
-#define SP_IS_MESHPATCH(obj) (dynamic_cast<const SPMeshPatch*>((SPObject*)obj) != NULL)
+#define SP_MESHPATCH(obj) (dynamic_cast<SPMeshpatch*>((SPObject*)obj))
+#define SP_IS_MESHPATCH(obj) (dynamic_cast<const SPMeshpatch*>((SPObject*)obj) != NULL)
 
-/** Gradient MeshPatch. */
-class SPMeshPatch : public SPObject {
+/** Gradient Meshpatch. */
+class SPMeshpatch : public SPObject {
 public:
-	SPMeshPatch();
-	virtual ~SPMeshPatch();
+    SPMeshpatch();
+    virtual ~SPMeshpatch();
 
-    SPMeshPatch* getNextMeshPatch();
-    SPMeshPatch* getPrevMeshPatch();
+    SPMeshpatch* getNextMeshpatch();
+    SPMeshpatch* getPrevMeshpatch();
     Glib::ustring * tensor_string;
     //SVGLength tx[4];  // Tensor points
     //SVGLength ty[4];  // Tensor points
 
 protected:
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void set(unsigned int key, const gchar* value);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
+    virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
+    virtual void set(unsigned int key, const char* value);
+    virtual void modified(unsigned int flags);
+    virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
 };
 
 #endif /* !SEEN_SP_MESHPATCH_H */

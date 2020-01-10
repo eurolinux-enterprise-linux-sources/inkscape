@@ -26,7 +26,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 TODOs
 - fix bug: not saving existing .zip after a Collect for Output is run
@@ -51,7 +51,7 @@ import inkex
 import simplestyle
 
 locale.setlocale(locale.LC_ALL, '')
-inkex.localize()
+inkex.localize()  # TODO: test if it's still needed now that localize is called from inkex.
 
 class CompressedMediaOutput(inkex.Effect):
     def __init__(self):
@@ -111,7 +111,7 @@ class CompressedMediaOutput(inkex.Effect):
                 url = urlparse.urlparse(xlink)
                 href = urllib.url2pathname(url.path)
                 
-                if (href != None):
+                if (href != None and os.path.isfile(href)):
                     absref = os.path.realpath(href)
 
                 absref = unicode(absref, "utf-8")

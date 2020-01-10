@@ -8,6 +8,7 @@
  *   Felipe C. da S. Sanches <juca@members.fsf.org>
  *   Jon A. Cruz <jon@joncruz.org>
  *   Abhishek Sharma
+ *   insaner
  *
  * Copyright (C) 2007 Authors
  *
@@ -33,7 +34,7 @@
 #include <glibmm/stringutils.h>
 
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "dir-util.h"
 #include "document.h"
 #include "document-undo.h"
@@ -211,7 +212,7 @@ private:
     ComboBoxEnum<T>* combo;
 };
 
-// Contains an arbitrary number of spin buttons that use seperate attributes
+// Contains an arbitrary number of spin buttons that use separate attributes
 class MultiSpinButton : public Gtk::HBox
 {
 public:
@@ -688,9 +689,9 @@ public:
 
 private:
     void select_svg_element(){
-        Inkscape::Selection* sel = sp_desktop_selection(_desktop);
+        Inkscape::Selection* sel = _desktop->getSelection();
         if (sel->isEmpty()) return;
-        Inkscape::XML::Node* node = (Inkscape::XML::Node*) g_slist_nth_data((GSList *)sel->reprList(), 0);
+        Inkscape::XML::Node* node = sel->reprList()[0];
         if (!node || !node->matchAttributeName("id")) return;
 
         std::ostringstream xlikhref;
@@ -1360,8 +1361,16 @@ FilterEffectsDialog::FilterModifier::FilterModifier(FilterEffectsDialog& d)
     ((Gtk::CellRendererText*)_list.get_column(1)->get_first_cell())->
         signal_edited().connect(sigc::mem_fun(*this, &FilterEffectsDialog::FilterModifier::on_name_edited));
 
+    _list.append_column("#", _columns.count);
+    _list.get_column(2)->set_sizing(Gtk::TREE_VIEW_COLUMN_AUTOSIZE);
+    _list.get_column(2)->set_expand(false);
+    _list.get_column(2)->set_reorderable(true);
+
     sw->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
     _list.get_column(1)->set_resizable(true);
+    _list.get_column(1)->set_sizing(Gtk::TREE_VIEW_COLUMN_AUTOSIZE);
+    _list.get_column(1)->set_expand(true);
+    
     _list.set_reorderable(true);
     _list.enable_model_drag_dest (Gdk::ACTION_MOVE);
 
@@ -1416,7 +1425,7 @@ void FilterEffectsDialog::FilterModifier::setTargetDesktop(SPDesktop *desktop)
                 _selectModifiedConn = desktop->selection->connectModified(sigc::hide<0>(sigc::mem_fun(*this, &FilterModifier::on_modified_selection)));
             }
             _doc_replaced = desktop->connectDocumentReplaced( sigc::mem_fun(*this, &FilterModifier::on_document_replaced));
-            _resource_changed = sp_desktop_document(desktop)->connectResourcesChanged("filter",sigc::mem_fun(*this, &FilterModifier::update_filters));
+            _resource_changed = desktop->getDocument()->connectResourcesChanged("filter",sigc::mem_fun(*this, &FilterModifier::update_filters));
             _dialog.setDesktop(desktop);
 
             update_filters();
@@ -1441,7 +1450,7 @@ void FilterEffectsDialog::FilterModifier::on_document_replaced(SPDesktop * /*des
 // When the selection changes, show the active filter(s) in the dialog
 void FilterEffectsDialog::FilterModifier::on_change_selection()
 {
-    Inkscape::Selection *selection = sp_desktop_selection (SP_ACTIVE_DESKTOP);
+    Inkscape::Selection *selection = SP_ACTIVE_DESKTOP->getSelection();
     update_selection(selection);
 }
 
@@ -1465,9 +1474,9 @@ void FilterEffectsDialog::FilterModifier::update_selection(Selection *sel)
     }
 
     std::set<SPObject*> used;
-
-    for (GSList const *i = sel->itemList(); i != NULL; i = i->next) {
-        SPObject *obj = SP_OBJECT (i->data);
+    std::vector<SPItem*> itemlist=sel->itemList();
+    for(std::vector<SPItem*>::const_iterator i=itemlist.begin(); itemlist.end() != i; ++i) {
+        SPObject *obj = *i;
         SPStyle *style = obj->style;
         if (!style || !SP_IS_ITEM(obj)) {
             continue;
@@ -1494,6 +1503,7 @@ void FilterEffectsDialog::FilterModifier::update_selection(Selection *sel)
             (*iter)[_columns.sel] = 0;
         }
     }
+    update_counts();
 }
 
 void FilterEffectsDialog::FilterModifier::on_filter_selection_changed()
@@ -1537,18 +1547,17 @@ void FilterEffectsDialog::FilterModifier::on_selection_toggled(const Glib::ustri
 
     if(iter) {
         SPDesktop *desktop = _dialog.getDesktop();
-        SPDocument *doc = sp_desktop_document(desktop);
+        SPDocument *doc = desktop->getDocument();
         SPFilter* filter = (*iter)[_columns.filter];
-        Inkscape::Selection *sel = sp_desktop_selection(desktop);
+        Inkscape::Selection *sel = desktop->getSelection();
 
         /* If this filter is the only one used in the selection, unset it */
         if((*iter)[_columns.sel] == 1)
             filter = 0;
 
-        GSList const *items = sel->itemList();
-
-        for (GSList const *i = items; i != NULL; i = i->next) {
-            SPItem * item = SP_ITEM(i->data);
+        std::vector<SPItem*> itemlist=sel->itemList();
+        for(std::vector<SPItem*>::const_iterator i=itemlist.begin(); itemlist.end() != i; ++i) {
+            SPItem * item = *i;
             SPStyle *style = item->style;
             g_assert(style != NULL);
 
@@ -1566,19 +1575,29 @@ void FilterEffectsDialog::FilterModifier::on_selection_toggled(const Glib::ustri
     }
 }
 
+
+void FilterEffectsDialog::FilterModifier::update_counts()
+{    
+    for(Gtk::TreeModel::iterator i = _model->children().begin(); i != _model->children().end(); ++i) {
+        SPFilter* f = SP_FILTER((*i)[_columns.filter]);
+        (*i)[_columns.count] = f->getRefCount();
+        }
+}
+
 /* Add all filters in the document to the combobox.
    Keeps the same selection if possible, otherwise selects the first element */
 void FilterEffectsDialog::FilterModifier::update_filters()
 {
     SPDesktop* desktop = _dialog.getDesktop();
-    SPDocument* document = sp_desktop_document(desktop);
-    const GSList* filters = document->getResourceList("filter");
+    SPDocument* document = desktop->getDocument();
+
+    std::vector<SPObject *> filters = document->getResourceList( "filter" );
 
     _model->clear();
 
-    for(const GSList *l = filters; l; l = l->next) {
+    for (std::vector<SPObject *>::const_iterator it = filters.begin(); it != filters.end(); ++it) {
         Gtk::TreeModel::Row row = *_model->append();
-        SPFilter* f = SP_FILTER(l->data);
+        SPFilter* f = SP_FILTER(*it);
         row[_columns.filter] = f;
         const gchar* lbl = f->label();
         const gchar* id = f->getId();
@@ -1627,7 +1646,7 @@ void FilterEffectsDialog::FilterModifier::filter_list_button_release(GdkEventBut
 
 void FilterEffectsDialog::FilterModifier::add_filter()
 {
-    SPDocument* doc = sp_desktop_document(_dialog.getDesktop());
+    SPDocument* doc = _dialog.getDesktop()->getDocument();
     SPFilter* filter = new_filter(doc);
 
     const int count = _model->children().size();
@@ -1650,12 +1669,13 @@ void FilterEffectsDialog::FilterModifier::remove_filter()
         SPDocument* doc = filter->document;
 
         // Delete all references to this filter
-        GSList *all = get_all_items(NULL, _desktop->currentRoot(), _desktop, false, false, true, NULL);
-        for (GSList *i = all; i != NULL; i = i->next) {
-            if (!SP_IS_ITEM(i->data)) {
+        std::vector<SPItem*> x,y;
+        std::vector<SPItem*> all = get_all_items(x, _desktop->currentRoot(), _desktop, false, false, true, y);
+        for(std::vector<SPItem*>::const_iterator i=all.begin(); all.end() != i; ++i) {
+            if (!SP_IS_ITEM(*i)) {
                 continue;
             }
-            SPItem *item = SP_ITEM(i->data);
+            SPItem *item = *i;
             if (!item->style) {
                 continue;
             }
@@ -1667,9 +1687,6 @@ void FilterEffectsDialog::FilterModifier::remove_filter()
                     ::remove_filter(item, false);
                 }
             }
-        }
-        if (all) {
-            g_slist_free(all);
         }
 
         //XML Tree being used directly here while it shouldn't be.
@@ -1852,7 +1869,7 @@ void FilterEffectsDialog::PrimitiveList::update()
 
     if(f) {
         bool active_found = false;
-        _dialog._primitive_box.set_sensitive(true);
+        _dialog._primitive_box->set_sensitive(true);
         _dialog.update_filter_general_settings_view();
         for(SPObject *prim_obj = f->children;
                 prim_obj && SP_IS_FILTER_PRIMITIVE(prim_obj);
@@ -1897,7 +1914,7 @@ void FilterEffectsDialog::PrimitiveList::update()
         }
     }
     else {
-        _dialog._primitive_box.set_sensitive(false);
+        _dialog._primitive_box->set_sensitive(false);
         set_size_request(-1, -1);
     }
 }
@@ -1937,7 +1954,7 @@ void FilterEffectsDialog::PrimitiveList::remove_selected()
         //XML Tree being used directly here while it shouldn't be.
         sp_repr_unparent(prim->getRepr());
 
-        DocumentUndo::done(sp_desktop_document(_dialog.getDesktop()), SP_VERB_DIALOG_FILTER_EFFECTS,
+        DocumentUndo::done(_dialog.getDesktop()->getDocument(), SP_VERB_DIALOG_FILTER_EFFECTS,
                            _("Remove filter primitive"));
 
         update();
@@ -2422,7 +2439,7 @@ bool FilterEffectsDialog::PrimitiveList::on_motion_notify_event(GdkEventMotion* 
     get_visible_rect(vis);
     int vis_x, vis_y;
     
-    int vis_x2, vis_y2;  // NOTE:  insaner added -- necessary to get the scrolling while dragging to work
+    int vis_x2, vis_y2;
     convert_widget_to_tree_coords(vis.get_x(), vis.get_y(), vis_x2, vis_y2);
     
     convert_tree_to_widget_coords(vis.get_x(), vis.get_y(), vis_x, vis_y);
@@ -2442,7 +2459,6 @@ bool FilterEffectsDialog::PrimitiveList::on_motion_notify_event(GdkEventMotion* 
     else
         _autoscroll_y = 0;
 
-	    // NOTE:  insaner added -- necessary to get the scrolling while dragging to work
     double e2 = ( e->x - vis_x2/2);
     // horizontal scrolling 
     if(e2 < vis_x)
@@ -2742,40 +2758,64 @@ FilterEffectsDialog::FilterEffectsDialog()
     _sizegroup = Gtk::SizeGroup::create(Gtk::SIZE_GROUP_HORIZONTAL);
     _sizegroup->set_ignore_hidden();
 
-    _add_primitive_type.remove_row(NR_FILTER_TILE);
-
     // Initialize widget hierarchy
 #if WITH_GTKMM_3_0
     Gtk::Paned* hpaned = Gtk::manage(new Gtk::Paned);
+    _primitive_box = Gtk::manage(new Gtk::Paned);
 #else
     Gtk::HPaned* hpaned = Gtk::manage(new Gtk::HPaned);
+    _primitive_box = Gtk::manage(new Gtk::VPaned);
 #endif
 
+    _sw_infobox = Gtk::manage(new Gtk::ScrolledWindow);
     Gtk::ScrolledWindow* sw_prims = Gtk::manage(new Gtk::ScrolledWindow);
-    Gtk::ScrolledWindow* sw_infobox = Gtk::manage(new Gtk::ScrolledWindow);
     Gtk::HBox* infobox = Gtk::manage(new Gtk::HBox(/*homogeneous:*/false, /*spacing:*/4));
     Gtk::HBox* hb_prims = Gtk::manage(new Gtk::HBox);
+    Gtk::VBox* vb_prims = Gtk::manage(new Gtk::VBox);
+    Gtk::VBox* vb_desc = Gtk::manage(new Gtk::VBox);
+    
+    Gtk::VBox* prim_vbox_p = Gtk::manage(new Gtk::VBox);
+    Gtk::VBox* prim_vbox_i = Gtk::manage(new Gtk::VBox);
 
-    _getContents()->add(*hpaned);
-    hpaned->pack1(_filter_modifier);
-    hpaned->pack2(_primitive_box);
-    _primitive_box.pack_start(*sw_prims);
-    _primitive_box.pack_start(*hb_prims, false, false);
-    _primitive_box.pack_start(*sw_infobox, false, false);
     sw_prims->add(_primitive_list);
-    sw_infobox->add(*infobox);
-    infobox->pack_start(_infobox_icon, false, false);
-    infobox->pack_start(_infobox_desc, false, false);
+    
+    prim_vbox_p->pack_start(*sw_prims, true, true);
+    prim_vbox_i->pack_start(*vb_prims, true, true);
+    
+    _primitive_box->pack1(*prim_vbox_p);
+    _primitive_box->pack2(*prim_vbox_i, false, false);
+    
+    hpaned->pack1(_filter_modifier);
+    hpaned->pack2(*_primitive_box);
+    _getContents()->add(*hpaned);
+    
+    _infobox_icon.set_alignment(0, 0);
+    _infobox_desc.set_alignment(0, 0);
+    _infobox_desc.set_justify(Gtk::JUSTIFY_LEFT);
     _infobox_desc.set_line_wrap(true);
     _infobox_desc.set_size_request(200, -1);
-
-
-    hb_prims->pack_start(_add_primitive, false, false);
-    hb_prims->pack_start(_add_primitive_type, false, false);
+    
+    vb_desc->pack_start(_infobox_desc, true, true);
+    
+    infobox->pack_start(_infobox_icon, false, false);
+    infobox->pack_start(*vb_desc, true, true);
+    
+    //_sw_infobox->set_size_request(-1, -1);
+    _sw_infobox->set_size_request(200, -1);
+    _sw_infobox->add(*infobox);
+    
+    //vb_prims->set_size_request(-1, 50);
+    vb_prims->pack_start(*hb_prims, false, false);
+    vb_prims->pack_start(*_sw_infobox, true, true);
+    
+    hb_prims->pack_start(_add_primitive, false, false);    
+    hb_prims->pack_start(_add_primitive_type, true, true);
     _getContents()->pack_start(_settings_tabs, false, false);
     _settings_tabs.append_page(_settings_tab1, _("Effect parameters"));
     _settings_tabs.append_page(_settings_tab2, _("Filter General Settings"));
 
+    
+    
     _primitive_list.signal_primitive_changed().connect(
         sigc::mem_fun(*this, &FilterEffectsDialog::update_settings_view));
     _filter_modifier.signal_filter_changed().connect(
@@ -2784,9 +2824,9 @@ FilterEffectsDialog::FilterEffectsDialog()
     _add_primitive_type.signal_changed().connect(
         sigc::mem_fun(*this, &FilterEffectsDialog::update_primitive_infobox));
 
-    sw_prims->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);  /* NOTE: insaner -- SCROLL the connections panel thing!!! */
+    sw_prims->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
     sw_prims->set_shadow_type(Gtk::SHADOW_IN);
-    sw_infobox->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_NEVER);
+    _sw_infobox->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
     
 //    al_settings->set_padding(0, 0, 12, 0);
 //    fr_settings->set_shadow_type(Gtk::SHADOW_NONE);
@@ -2884,7 +2924,7 @@ void FilterEffectsDialog::init_settings_widgets()
     _settings->add_spinscale(1, SP_PROP_FLOOD_OPACITY, _("Opacity:"), 0, 1, 0.1, 0.01, 2);
 
     _settings->type(NR_FILTER_GAUSSIANBLUR);
-    _settings->add_dualspinscale(SP_ATTR_STDDEVIATION, _("Standard Deviation:"), 0.01, 100, 1, 0.01, 1, _("The standard deviation for the blur operation."));
+    _settings->add_dualspinscale(SP_ATTR_STDDEVIATION, _("Standard Deviation:"), 0.01, 100, 1, 0.01, 2, _("The standard deviation for the blur operation."));
 
     _settings->type(NR_FILTER_MERGE);
     _settings->add_no_params();
@@ -2909,7 +2949,7 @@ void FilterEffectsDialog::init_settings_widgets()
     _settings->add_lightsource();
 
     _settings->type(NR_FILTER_TILE);
-    _settings->add_notimplemented();
+    _settings->add_no_params();
 
     _settings->type(NR_FILTER_TURBULENCE);
 //    _settings->add_checkbutton(false, SP_ATTR_STITCHTILES, _("Stitch Tiles"), "stitch", "noStitch");
@@ -2936,11 +2976,9 @@ void FilterEffectsDialog::update_primitive_infobox()
 {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     if (prefs->getBool("/options/showfiltersinfobox/value", true)){
-        _infobox_icon.show();
-        _infobox_desc.show();
+        _sw_infobox->show();
     } else {
-        _infobox_icon.hide();
-        _infobox_desc.hide();
+        _sw_infobox->hide();
     }
     switch(_add_primitive_type.get_active_data()->id){
         case(NR_FILTER_BLEND):
@@ -3001,7 +3039,7 @@ void FilterEffectsDialog::update_primitive_infobox()
             break;
         case(NR_FILTER_TILE):
             _infobox_icon.set_from_icon_name("feTile-icon", Gtk::ICON_SIZE_DIALOG);
-            _infobox_desc.set_markup(_("The <b>feTile</b> filter primitive tiles a region with its input graphic"));
+            _infobox_desc.set_markup(_("The <b>feTile</b> filter primitive tiles a region with an input graphic. The source tile is defined by the filter primitive subregion of the input."));
             break;
         case(NR_FILTER_TURBULENCE):
             _infobox_icon.set_from_icon_name("feTurbulence-icon", Gtk::ICON_SIZE_DIALOG);
@@ -3011,7 +3049,8 @@ void FilterEffectsDialog::update_primitive_infobox()
             g_assert(false);
             break;
     }
-    _infobox_icon.set_pixel_size(96);
+    //_infobox_icon.set_pixel_size(96);
+    _infobox_icon.set_pixel_size(64);
 }
 
 void FilterEffectsDialog::duplicate_primitive()
@@ -3123,11 +3162,9 @@ void FilterEffectsDialog::update_settings_view()
 
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     if (prefs->getBool("/options/showfiltersinfobox/value", true)){
-        _infobox_icon.show();
-        _infobox_desc.show();
+        _sw_infobox->show();
     } else {
-        _infobox_icon.hide();
-        _infobox_desc.hide();
+        _sw_infobox->hide();
     }
 
     SPFilterPrimitive* prim = _primitive_list.get_selected();

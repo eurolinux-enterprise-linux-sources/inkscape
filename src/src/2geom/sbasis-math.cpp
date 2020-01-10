@@ -34,9 +34,8 @@
 //TODO: define a truncated compose(sb,sb, order) and extend it to pw<sb>.
 //TODO: in all these functions, compute 'order' according to 'tol'.
 
+#include <2geom/d2.h>
 #include <2geom/sbasis-math.h>
-
-#include <2geom/d2-sbasis.h>
 #include <stdio.h>
 #include <math.h>
 //#define ZERO 1e-3
@@ -297,11 +296,11 @@ Piecewise<SBasis> reciprocalOnDomain(Interval range, double tol){
     if (a<=tol){
         reciprocal_fn.push_cut(0);
         int i0=(int) floor(std::log(tol)/std::log(R));
-        a=pow(R,i0);
+        a = std::pow(R,i0);
         reciprocal_fn.push(Linear(1/a),a);
     }else{
         int i0=(int) floor(std::log(a)/std::log(R));
-        a=pow(R,i0);
+        a = std::pow(R,i0);
         reciprocal_fn.cuts.push_back(a);
     }  
 

@@ -17,10 +17,6 @@
 # include <config.h>
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/box.h>
 #include <gtkmm/arrow.h>
 #include <gtkmm/button.h>
@@ -45,9 +41,10 @@ namespace Gtk {
 	class MenuItem;
 }
 
+struct InkscapeApplication;
+
 namespace Inkscape {
 
-struct Application;
 class Selection;
 
 namespace UI {
@@ -67,7 +64,11 @@ namespace Widget {
  * @see UI::Dialog::DesktopTracker to handle desktop change, selection change and selected object modifications.
  * @see UI::Dialog::DialogManager manages the dialogs within inkscape.
  */
+#if WITH_GTKMM_3_0
+class Panel : public Gtk::Box {
+#else
 class Panel : public Gtk::VBox {
+#endif
 
 public:
     static void prep();
@@ -116,8 +117,8 @@ public:
     void setResponseSensitive(int response_id, bool setting);
 
     virtual sigc::signal<void, SPDesktop *, SPDocument *> &signalDocumentReplaced();
-    virtual sigc::signal<void, Inkscape::Application *, SPDesktop *> &signalActivateDesktop();
-    virtual sigc::signal<void, Inkscape::Application *, SPDesktop *> &signalDeactiveDesktop();
+    virtual sigc::signal<void, SPDesktop *> &signalActivateDesktop();
+    virtual sigc::signal<void, SPDesktop *> &signalDeactiveDesktop();
 
 protected:
     /**
@@ -147,8 +148,8 @@ protected:
     sigc::signal<void, int> _signal_response;
     sigc::signal<void>      _signal_present;
     sigc::signal<void, SPDesktop *, SPDocument *> _signal_document_replaced;
-    sigc::signal<void, Inkscape::Application *, SPDesktop *> _signal_activate_desktop;
-    sigc::signal<void, Inkscape::Application *, SPDesktop *> _signal_deactive_desktop;
+    sigc::signal<void, SPDesktop *> _signal_activate_desktop;
+    sigc::signal<void, SPDesktop *> _signal_deactive_desktop;
 
 private:
     void _init();

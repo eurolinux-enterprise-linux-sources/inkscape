@@ -5,6 +5,7 @@ It adds text to the selected path containing the length in a given unit.
 Area and Center of Mass calculated using Green's Theorem:
 http://mathworld.wolfram.com/GreensTheorem.html
 
+Copyright (C) 2015 ~suv <suv-sf@users.sf.net>
 Copyright (C) 2010 Alvin Penner
 Copyright (C) 2006 Georg Wiora
 Copyright (C) 2006 Nathan Hurst
@@ -22,7 +23,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 TODO:
  * should use the standard attributes for text
@@ -33,6 +34,7 @@ TODO:
 '''
 # standard library
 import locale
+import re
 # local library
 import inkex
 import simplestyle
@@ -40,8 +42,17 @@ import simpletransform
 import cubicsuperpath
 import bezmisc
 
-inkex.localize()
-locale.setlocale(locale.LC_ALL, '')
+
+# On darwin, fall back to C in cases of 
+# - incorrect locale IDs (see comments in bug #406662)
+# - https://bugs.python.org/issue18378
+try:
+    locale.setlocale(locale.LC_ALL, '')
+except locale.Error:
+    locale.setlocale(locale.LC_ALL, 'C')
+
+# Initialize gettext for messages outside an inkex derived class
+inkex.localize() 
 
 # third party
 try:
@@ -130,17 +141,37 @@ class Length(inkex.Effect):
     def __init__(self):
         inkex.Effect.__init__(self)
         self.OptionParser.add_option("--type",
-                        action="store", type="string", 
-                        dest="type", default="length",
+                        action="store", type="string",
+                        dest="mtype", default="length",
                         help="Type of measurement")
         self.OptionParser.add_option("--format",
-                        action="store", type="string", 
-                        dest="format", default="textonpath",
+                        action="store", type="string",
+                        dest="mformat", default="textonpath",
                         help="Text Orientation")
+        self.OptionParser.add_option("--presetFormat",
+                        action="store", type="string",
+                        dest="presetFormat", default="TaP_start",
+                        help="Preset text layout")
+        self.OptionParser.add_option("--startOffset",
+                        action="store", type="string",
+                        dest="startOffset", default="custom",
+                        help="Text Offset along Path")
+        self.OptionParser.add_option("--startOffsetCustom",
+                        action="store", type="int",
+                        dest="startOffsetCustom", default=50,
+                        help="Text Offset along Path")
+        self.OptionParser.add_option("--anchor",
+                        action="store", type="string",
+                        dest="anchor", default="start",
+                        help="Text Anchor")
+        self.OptionParser.add_option("--position",
+                        action="store", type="string",
+                        dest="position", default="start",
+                        help="Text Position")
         self.OptionParser.add_option("--angle",
-                        action="store", type="float", 
+                        action="store", type="float",
                         dest="angle", default=0,
-                        help="Angle")             
+                        help="Angle")
         self.OptionParser.add_option("-f", "--fontsize",
                         action="store", type="int", 
                         dest="fontsize", default=20,
@@ -175,6 +206,8 @@ class Length(inkex.Effect):
                         help="dummy")
 
     def effect(self):
+        if self.options.mformat == '"presets"':
+            self.setPreset()
         # get number of digits
         prec = int(self.options.precision)
         scale = self.unittouu('1px')    # convert to document units
@@ -182,24 +215,24 @@ class Length(inkex.Effect):
         factor = 1.0
         doc = self.document.getroot()
         if doc.get('viewBox'):
-            [viewx, viewy, vieww, viewh] = doc.get('viewBox').split(' ')
+            (viewx, viewy, vieww, viewh) = re.sub(' +|, +|,',' ',doc.get('viewBox')).strip().split(' ', 4)
             factor = self.unittouu(doc.get('width'))/float(vieww)
             if self.unittouu(doc.get('height'))/float(viewh) < factor:
                 factor = self.unittouu(doc.get('height'))/float(viewh)
             factor /= self.unittouu('1px')
             self.options.fontsize /= factor
+        factor *= scale/self.unittouu('1'+self.options.unit)
         # loop over all selected paths
         for id, node in self.selected.iteritems():
             if node.tag == inkex.addNS('path','svg'):
                 mat = simpletransform.composeParents(node, [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
                 p = cubicsuperpath.parsePath(node.get('d'))
                 simpletransform.applyTransformToPath(mat, p)
-                factor *= scale/self.unittouu('1'+self.options.unit)
-                if self.options.type == "length":
+                if self.options.mtype == "length":
                     slengths, stotal = csplength(p)
                     self.group = inkex.etree.SubElement(node.getparent(),inkex.addNS('text','svg'))
-                elif self.options.type == "area":
-                    stotal = csparea(p)*factor*self.options.scale
+                elif self.options.mtype == "area":
+                    stotal = abs(csparea(p)*factor*self.options.scale)
                     self.group = inkex.etree.SubElement(node.getparent(),inkex.addNS('text','svg'))
                 else:
                     xc, yc = cspcofm(p)
@@ -209,16 +242,57 @@ class Length(inkex.Effect):
                     continue
                 # Format the length as string
                 lenstr = locale.format("%(len)25."+str(prec)+"f",{'len':round(stotal*factor*self.options.scale,prec)}).strip()
-                if self.options.format == 'textonpath':
-                    if self.options.type == "length":
-                        self.addTextOnPath(self.group, 0, 0, lenstr+' '+self.options.unit, id, 'start', '50%', self.options.offset)
+                if self.options.mformat == '"textonpath"':
+                    startOffset = self.options.startOffset
+                    if startOffset == "custom":
+                        startOffset = str(self.options.startOffsetCustom) + '%'
+                    if self.options.mtype == "length":
+                        self.addTextOnPath(self.group, 0, 0, lenstr+' '+self.options.unit, id, self.options.anchor, startOffset, self.options.offset)
                     else:
-                        self.addTextOnPath(self.group, 0, 0, lenstr+' '+self.options.unit+'^2', id, 'start', '0%', self.options.offset)
+                        self.addTextOnPath(self.group, 0, 0, lenstr+' '+self.options.unit+'^2', id, self.options.anchor, startOffset, self.options.offset)
+                elif self.options.mformat == '"fixedtext"':
+                    if self.options.position == "mass":
+                        tx, ty = cspcofm(p)
+                        anchor = 'middle'
+                    elif self.options.position == "center":
+                        bbox = simpletransform.computeBBox([node])
+                        tx = bbox[0] + (bbox[1] - bbox[0])/2.0
+                        ty = bbox[2] + (bbox[3] - bbox[2])/2.0
+                        anchor = 'middle'
+                    else:  # default
+                        tx = p[0][0][1][0]
+                        ty = p[0][0][1][1]
+                        anchor = 'start'
+                    if self.options.mtype == "length":
+                        self.addTextWithTspan(self.group, tx, ty, lenstr+' '+self.options.unit, id, anchor, -int(self.options.angle), self.options.offset + self.options.fontsize/2)
+                    else:
+                        self.addTextWithTspan(self.group, tx, ty, lenstr+' '+self.options.unit+'^2', id, anchor, -int(self.options.angle), -self.options.offset + self.options.fontsize/2)
                 else:
-                    if self.options.type == "length":
-                        self.addTextWithTspan(self.group, p[0][0][1][0], p[0][0][1][1], lenstr+' '+self.options.unit, id, 'start', -int(self.options.angle), self.options.offset + self.options.fontsize/2)
-                    else:
-                        self.addTextWithTspan(self.group, p[0][0][1][0], p[0][0][1][1], lenstr+' '+self.options.unit+'^2', id, 'start', -int(self.options.angle), -self.options.offset + self.options.fontsize/2)
+                    # center of mass, no text
+                    pass
+
+    def setPreset(self):
+        # keep dict in sync with enum in INX file:
+        preset_dict = {
+            'default_length': ['"textonpath"', "50%", "start", None, None],
+            'default_area': ['"fixedtext"', None, None, "start", 0.0],
+            'default_cofm': [None, None, None, None, None],
+            'TaP_start': ['"textonpath"', "0%", "start", None, None],
+            'TaP_middle': ['"textonpath"', "50%", "middle", None, None],
+            'TaP_end': ['"textonpath"', "100%", "end", None, None],
+            'FT_start': ['"fixedtext"', None, None, "start", 0.0],
+            'FT_bbox': ['"fixedtext"', None, None, "center", 0.0],
+            'FT_mass': ['"fixedtext"', None, None, "mass", 0.0],
+        }
+        if self.options.presetFormat == "default":
+            current_preset = 'default_' + self.options.mtype
+        else:
+            current_preset = self.options.presetFormat
+        self.options.mformat = preset_dict[current_preset][0]
+        self.options.startOffset = preset_dict[current_preset][1]
+        self.options.anchor = preset_dict[current_preset][2]
+        self.options.position = preset_dict[current_preset][3]
+        self.options.angle = preset_dict[current_preset][4]
 
     def addCross(self, node, x, y, scale):
         l = 3*scale         # 3 pixels in document units

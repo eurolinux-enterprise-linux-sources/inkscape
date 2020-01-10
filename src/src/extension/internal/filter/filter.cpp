@@ -11,7 +11,6 @@
 #include "selection.h"
 #include "document-private.h"
 #include "sp-item.h"
-#include "util/glib-list-iterators.h"
 #include "extension/extension.h"
 #include "extension/effect.h"
 #include "extension/system.h"
@@ -125,15 +124,13 @@ void Filter::effect(Inkscape::Extension::Effect *module, Inkscape::UI::View::Vie
 	//printf("Calling filter effect\n");
     Inkscape::Selection * selection = ((SPDesktop *)document)->selection;
 
-    using Inkscape::Util::GSListConstIterator;
     // TODO need to properly refcount the items, at least
-    std::list<SPItem *> items;
-    items.insert<GSListConstIterator<SPItem *> >(items.end(), selection->itemList(), NULL);
+    std::vector<SPItem*> items(selection->itemList());
 
 	Inkscape::XML::Document * xmldoc = document->doc()->getReprDoc();
 	Inkscape::XML::Node * defsrepr = document->doc()->getDefs()->getRepr();
 
-    for(std::list<SPItem *>::iterator item = items.begin();
+    for(std::vector<SPItem*>::iterator item = items.begin();
             item != items.end(); ++item) {
         SPItem * spitem = *item;
 	Inkscape::XML::Node * node = spitem->getRepr();
@@ -146,6 +143,7 @@ void Filter::effect(Inkscape::Extension::Effect *module, Inkscape::UI::View::Vie
 			Inkscape::XML::Node * newfilterroot = xmldoc->createElement("svg:filter");
 			merge_filters(newfilterroot, filterdoc->root(), xmldoc);
 			defsrepr->appendChild(newfilterroot);
+                        document->doc()->priv->resources_changed_signals[g_quark_from_string("filter")].emit();
 
 			Glib::ustring url = "url(#"; url += newfilterroot->attribute("id"); url += ")";
 

@@ -20,13 +20,11 @@
 
 class SPItem;
 
-#define SP_TYPE_CTRLLINE (SPCtrlLine::getType())
+#define SP_TYPE_CTRLLINE (sp_ctrlline_get_type())
 #define SP_CTRLLINE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SP_TYPE_CTRLLINE, SPCtrlLine))
 #define SP_IS_CTRLLINE(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), SP_TYPE_CTRLLINE))
 
 struct SPCtrlLine : public SPCanvasItem {
-    static GType getType();
-
     void setRgba32(guint32 rgba);
 
     void setCoords(gdouble x0, gdouble y0, gdouble x1, gdouble y1);
@@ -35,11 +33,15 @@ struct SPCtrlLine : public SPCanvasItem {
 
 
     SPItem *item;  // the item to which this line belongs in some sense; may be NULL for some users
+    bool is_fill;  // fill or stroke... used with meshes.
+
     guint32 rgba;
     Geom::Point s;
     Geom::Point e;
     Geom::Affine affine;
 };
+
+GType sp_ctrlline_get_type();
 
 struct SPCtrlLineClass : public SPCanvasItemClass{};
 

@@ -1,21 +1,20 @@
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
+#include <gdk-pixbuf/gdk-pixbuf.h>
+
 #include <boost/scoped_ptr.hpp>
 #include <glib/gprintf.h>
 #include <glibmm/i18n.h>
+#include "dir-util.h"
+#include "display/cairo-utils.h"
 #include "document-private.h"
-#include <dir-util.h>
+#include "document-undo.h"
 #include "extension/input.h"
 #include "extension/system.h"
+#include "image-resolution.h"
 #include "gdkpixbuf-input.h"
 #include "preferences.h"
 #include "selection-chemistry.h"
 #include "sp-image.h"
-#include "document-undo.h"
 #include "util/units.h"
-#include "image-resolution.h"
-#include "display/cairo-utils.h"
 #include <set>
 
 namespace Inkscape {
@@ -87,11 +86,16 @@ GdkpixbufInput::open(Inkscape::Extension::Input *mod, char const *uri)
             ir = new ImageResolution(uri);
         }
         if (ir && ir->ok()) {
-            xscale = 900.0 / floor(10.*ir->x() + .5);  // round-off to 0.1 dpi
-            yscale = 900.0 / floor(10.*ir->y() + .5);
+            xscale = 960.0 / round(10.*ir->x());  // round-off to 0.1 dpi
+            yscale = 960.0 / round(10.*ir->y());
+            // prevent crash on image with too small dpi (bug 1479193)
+            if (ir->x() <= .05)
+                xscale = 960.0;
+            if (ir->y() <= .05)
+                yscale = 960.0;
         } else {
-            xscale = 90.0 / defaultxdpi;
-            yscale = 90.0 / defaultxdpi;
+            xscale = 96.0 / defaultxdpi;
+            yscale = 96.0 / defaultxdpi;
         }
 
         width *= xscale;
@@ -133,13 +137,13 @@ GdkpixbufInput::open(Inkscape::Extension::Input *mod, char const *uri)
         doc->getRoot()->appendChildRepr(image_node);
         Inkscape::GC::release(image_node);
         fit_canvas_to_drawing(doc);
-
+        
         // Set viewBox if it doesn't exist
         if (!doc->getRoot()->viewBox_set) {
-            //std::cout << "Viewbox not set, setting" << std::endl;
-            doc->setViewBox(Geom::Rect::from_xywh(0, 0, doc->getWidth().value(doc->getDefaultUnit()), doc->getHeight().value(doc->getDefaultUnit())));
+            // std::cerr << "Viewbox not set, setting" << std::endl;
+            doc->setViewBox(Geom::Rect::from_xywh(0, 0, doc->getWidth().value(doc->getDisplayUnit()), doc->getHeight().value(doc->getDisplayUnit())));
         }
-
+        
         // restore undo, as now this document may be shown to the user if a bitmap was opened
         DocumentUndo::setUndoSensitive(doc, saved);
     } else {
@@ -204,7 +208,7 @@ GdkpixbufInput::init(void)
                     "<_option value='optimizeSpeed' >" N_("Blocky (optimizeSpeed)") "</_option>\n"
                   "</param>\n"
 
-                  "<param name=\"do_not_ask\" _gui-description='" N_("Hide the dialog next time and always apply the same actions.") "' gui-text=\"" N_("Don't ask again") "\" type=\"boolean\" >false</param>\n"
+                  "<param name=\"do_not_ask\" _gui-description='" N_("Hide the dialog next time and always apply the same actions.") "' _gui-text=\"" N_("Don't ask again") "\" type=\"boolean\" >false</param>\n"
                   "<input>\n"
                     "<extension>.%s</extension>\n"
                     "<mimetype>%s</mimetype>\n"

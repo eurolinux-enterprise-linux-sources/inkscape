@@ -17,10 +17,6 @@
 # include "config.h"
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
 
@@ -36,7 +32,7 @@
 
 #include "ui/widget/registered-widget.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "display/cairo-utils.h"
 #include "display/canvas-grid.h"
 #include "display/sp-canvas-util.h"
@@ -50,7 +46,7 @@
 #include "svg/svg-color.h"
 #include "2geom/line.h"
 #include "2geom/angle.h"
-#include "util/mathfns.h"
+#include "helper/mathfns.h"
 #include "round.h"
 #include "util/units.h"
 
@@ -176,9 +172,9 @@ CanvasAxonomGrid::CanvasAxonomGrid (SPNamedView * nv, Inkscape::XML::Node * in_r
     angle_deg[Z] = prefs->getDouble("/options/grids/axonom/angle_z", 30.0);
     angle_deg[Y] = 0;
 
-    angle_rad[X] = Geom::deg_to_rad(angle_deg[X]);
+    angle_rad[X] = Geom::rad_from_deg(angle_deg[X]);
     tan_angle[X] = tan(angle_rad[X]);
-    angle_rad[Z] = Geom::deg_to_rad(angle_deg[Z]);
+    angle_rad[Z] = Geom::rad_from_deg(angle_deg[Z]);
     tan_angle[Z] = tan(angle_rad[Z]);
 
     snapper = new CanvasAxonomGridSnapper(this, &namedview->snap_manager, 0);
@@ -220,6 +216,14 @@ CanvasAxonomGrid::readRepr()
     if( root->viewBox_set ) {
         scale_x = root->width.computed  / root->viewBox.width();
         scale_y = root->height.computed / root->viewBox.height();
+        if (Geom::are_near(scale_x / scale_y, 1.0, Geom::EPSILON)) {
+            // scaling is uniform, try to reduce numerical error
+            scale_x = (scale_x + scale_y)/2.0;
+            double scale_none = Inkscape::Util::Quantity::convert(1, doc->getDisplayUnit(), "px");
+            if (Geom::are_near(scale_x / scale_none, 1.0, Geom::EPSILON))
+                scale_x = scale_none; // objects are same size, reduce numerical error
+            scale_y = scale_x;
+        }
     }
 
     gchar const *value;
@@ -268,7 +272,7 @@ CanvasAxonomGrid::readRepr()
         angle_deg[X] = g_ascii_strtod(value, NULL);
         if (angle_deg[X] < 0.) angle_deg[X] = 0.;
         if (angle_deg[X] > 89.0) angle_deg[X] = 89.0;
-        angle_rad[X] = Geom::deg_to_rad(angle_deg[X]);
+        angle_rad[X] = Geom::rad_from_deg(angle_deg[X]);
         tan_angle[X] = tan(angle_rad[X]);
     }
 
@@ -276,7 +280,7 @@ CanvasAxonomGrid::readRepr()
         angle_deg[Z] = g_ascii_strtod(value, NULL);
         if (angle_deg[Z] < 0.) angle_deg[Z] = 0.;
         if (angle_deg[Z] > 89.0) angle_deg[Z] = 89.0;
-        angle_rad[Z] = Geom::deg_to_rad(angle_deg[Z]);
+        angle_rad[Z] = Geom::rad_from_deg(angle_deg[Z]);
         tan_angle[Z] = tan(angle_rad[Z]);
     }
 

@@ -22,7 +22,8 @@
 #include "svg/stringstream.h"
 #include "xml/document.h"
 #include "xml/node-event-vector.h"
-#include "desktop-handles.h"
+#include "desktop.h"
+
 #include <glibmm/i18n.h>
 #include "verbs.h"
 #include "util/units.h"
@@ -33,22 +34,12 @@ static void persp3d_on_repr_attr_changed (Inkscape::XML::Node * repr, const gcha
 
 static int global_counter = 0;
 
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createPersp3D() {
-		return new Persp3D();
-	}
-
-	bool persp3DRegistered = SPFactory::instance().registerObject("inkscape:persp3d", createPersp3D);
-}
-
 /* Constructor/destructor for the internal class */
 
-Persp3DImpl::Persp3DImpl() {
-    tmat = Proj::TransfMat3x4 ();
-    document = NULL;
-
+Persp3DImpl::Persp3DImpl() :
+    tmat (Proj::TransfMat3x4 ()),
+    document (NULL)
+{
     my_counter = global_counter++;
 }
 
@@ -150,7 +141,7 @@ void Persp3D::set(unsigned key, gchar const *value) {
     }
 
     // FIXME: Is this the right place for resetting the draggers?
-    Inkscape::UI::Tools::ToolBase *ec = inkscape_active_event_context();
+    Inkscape::UI::Tools::ToolBase *ec = INKSCAPE.active_event_context();
     if (SP_IS_BOX3D_CONTEXT(ec)) {
         Inkscape::UI::Tools::Box3dTool *bc = SP_BOX3D_CONTEXT(ec);
         bc->_vpdrag->updateDraggers();
@@ -328,7 +319,7 @@ persp3d_toggle_VP (Persp3D *persp, Proj::Axis axis, bool set_undo) {
     persp3d_update_box_reprs (persp);
     persp->updateRepr(SP_OBJECT_WRITE_EXT);
     if (set_undo) {
-        DocumentUndo::done(sp_desktop_document(inkscape_active_desktop()), SP_VERB_CONTEXT_3DBOX,
+        DocumentUndo::done(SP_ACTIVE_DESKTOP->getDocument(), SP_VERB_CONTEXT_3DBOX,
                            _("Toggle vanishing point"));
     }
 }
@@ -339,7 +330,7 @@ persp3d_toggle_VPs (std::list<Persp3D *> p, Proj::Axis axis) {
     for (std::list<Persp3D *>::iterator i = p.begin(); i != p.end(); ++i) {
         persp3d_toggle_VP((*i), axis, false);
     }
-    DocumentUndo::done(sp_desktop_document(inkscape_active_desktop()), SP_VERB_CONTEXT_3DBOX,
+    DocumentUndo::done(SP_ACTIVE_DESKTOP->getDocument(), SP_VERB_CONTEXT_3DBOX,
                        _("Toggle multiple vanishing points"));
 }
 
@@ -555,7 +546,7 @@ persp3d_print_all_selected() {
     g_print ("\n======================================\n");
     g_print ("Selected perspectives and their boxes:\n");
 
-    std::list<Persp3D *> sel_persps = sp_desktop_selection(inkscape_active_desktop())->perspList();
+    std::list<Persp3D *> sel_persps = SP_ACTIVE_DESKTOP->getSelection()->perspList();
 
     for (std::list<Persp3D *>::iterator j = sel_persps.begin(); j != sel_persps.end(); ++j) {
         Persp3D *persp = SP_PERSP3D(*j);

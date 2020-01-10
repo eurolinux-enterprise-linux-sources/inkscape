@@ -8,6 +8,7 @@
  * Authors:
  *   Maximilian Albert
  *   Johan Engelen
+ *   Jabiertxof
  *
  * Copyright (C) Johan Engelen 2007 <j.b.c.engelen@utwente.nl>
  * Copyright (C) Maximilin Albert 2008 <maximilian.albert@gmail.com>
@@ -19,22 +20,43 @@
 #include "live_effects/parameter/parameter.h"
 #include "live_effects/parameter/point.h"
 #include "live_effects/parameter/path.h"
+#include "live_effects/parameter/enum.h"
+#include "live_effects/lpegroupbbox.h"
 
 namespace Inkscape {
 namespace LivePathEffect {
 
-class LPEMirrorSymmetry : public Effect {
+enum ModeType {
+    MT_V,
+    MT_H,
+    MT_FREE,
+    MT_X,
+    MT_Y,
+    MT_END
+};
+
+class LPEMirrorSymmetry : public Effect, GroupBBoxEffect {
 public:
     LPEMirrorSymmetry(LivePathEffectObject *lpeobject);
     virtual ~LPEMirrorSymmetry();
-
     virtual void doOnApply (SPLPEItem const* lpeitem);
+    virtual void doBeforeEffect (SPLPEItem const* lpeitem);
+    virtual void transform_multiply(Geom::Affine const& postmul, bool set);
+    virtual Geom::PathVector doEffect_path (Geom::PathVector const & path_in);
+    virtual Gtk::Widget * newWidget();
 
-    virtual std::vector<Geom::Path> doEffect_path (std::vector<Geom::Path> const & path_in);
+protected:
+    virtual void addCanvasIndicators(SPLPEItem const *lpeitem, std::vector<Geom::PathVector> &hp_vec);
 
 private:
+    EnumParam<ModeType> mode;
     BoolParam discard_orig_path;
-    PathParam reflection_line;
+    BoolParam fuse_paths;
+    BoolParam oposite_fuse;
+    PointParam start_point;
+    PointParam end_point;
+    PointParam center_point;
+    Geom::Point previous_center;
 
     LPEMirrorSymmetry(const LPEMirrorSymmetry&);
     LPEMirrorSymmetry& operator=(const LPEMirrorSymmetry&);

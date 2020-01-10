@@ -12,14 +12,6 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/box.h>
 #include <gtkmm/combobox.h>
 
@@ -53,11 +45,13 @@ public:
     double get_blur_value() const;
     void set_blur_value(const double);
     void set_blur_sensitive(const bool);
+    Gtk::Label *get_blur_label() { return &_lb_blur; };
 
 private:
     int _flags;
     Gtk::HBox _hb_blend;
-    Gtk::Label _lb_blend;
+    Gtk::HBox _hb_blur;
+    Gtk::Label _lb_blend, _lb_blur, _lb_blur_unit;
 
     ComboBoxEnum<Inkscape::Filters::FilterBlendMode> _blend;
     SpinScale _blur;

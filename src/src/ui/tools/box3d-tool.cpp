@@ -26,7 +26,7 @@
 #include "sp-namedview.h"
 #include "selection.h"
 #include "selection-chemistry.h"
-#include "desktop-handles.h"
+
 #include "snap.h"
 #include "display/curve.h"
 #include "display/sp-canvas-item.h"
@@ -47,24 +47,14 @@
 #include "box3d-side.h"
 #include "document-private.h"
 #include "line-geometry.h"
-#include "shape-editor.h"
+#include "ui/shape-editor.h"
 #include "verbs.h"
 
 using Inkscape::DocumentUndo;
 
-#include "tool-factory.h"
-
 namespace Inkscape {
 namespace UI {
 namespace Tools {
-
-namespace {
-	ToolBase* createBox3dTool() {
-		return new Box3dTool();
-	}
-
-	bool Box3dToolRegistered = ToolFactory::instance().registerObject("/tools/shapes/3dbox", createBox3dTool);
-}
 
 const std::string& Box3dTool::getPrefsPath() {
 	return Box3dTool::prefsPath;
@@ -112,8 +102,8 @@ Box3dTool::~Box3dTool() {
  * destroys old and creates new knotholder.
  */
 void Box3dTool::selection_changed(Inkscape::Selection* selection) {
-    this->shape_editor->unset_item(SH_KNOTHOLDER);
-    this->shape_editor->set_item(selection->singleItem(), SH_KNOTHOLDER);
+    this->shape_editor->unset_item();
+    this->shape_editor->set_item(selection->singleItem());
 
     if (selection->perspList().size() == 1) {
         // selecting a single box changes the current perspective
@@ -145,17 +135,17 @@ void Box3dTool::setup() {
 
     this->shape_editor = new ShapeEditor(this->desktop);
 
-    SPItem *item = sp_desktop_selection(this->desktop)->singleItem();
+    SPItem *item = this->desktop->getSelection()->singleItem();
     if (item) {
-        this->shape_editor->set_item(item, SH_KNOTHOLDER);
+        this->shape_editor->set_item(item);
     }
 
     this->sel_changed_connection.disconnect();
-    this->sel_changed_connection = sp_desktop_selection(this->desktop)->connectChanged(
+    this->sel_changed_connection = this->desktop->getSelection()->connectChanged(
     	sigc::mem_fun(this, &Box3dTool::selection_changed)
     );
 
-    this->_vpdrag = new Box3D::VPDrag(sp_desktop_document(this->desktop));
+    this->_vpdrag = new Box3D::VPDrag(this->desktop->getDocument());
 
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
 
@@ -175,7 +165,7 @@ bool Box3dTool::item_handler(SPItem* item, GdkEvent* event) {
     case GDK_BUTTON_PRESS:
         if ( event->button.button == 1 && !this->space_panning) {
             Inkscape::setup_for_drag_start(desktop, this, event);
-            ret = TRUE;
+            //ret = TRUE;
         }
         break;
         // motion and release are always on root (why?)
@@ -195,8 +185,8 @@ bool Box3dTool::item_handler(SPItem* item, GdkEvent* event) {
 bool Box3dTool::root_handler(GdkEvent* event) {
     static bool dragging;
 
-    SPDocument *document = sp_desktop_document (desktop);
-    Inkscape::Selection *selection = sp_desktop_selection (desktop);
+    SPDocument *document = desktop->getDocument();
+    Inkscape::Selection *selection = desktop->getSelection();
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     int const snaps = prefs->getInt("/options/rotationsnapsperpi/value", 12);
 
@@ -466,7 +456,7 @@ bool Box3dTool::root_handler(GdkEvent* event) {
             break;
 
         case GDK_KEY_Escape:
-            sp_desktop_selection(desktop)->clear();
+            desktop->getSelection()->clear();
             //TODO: make dragging escapable by Esc
             break;
 
@@ -589,7 +579,7 @@ void Box3dTool::finishItem() {
     this->extruded = false;
 
     if (this->box3d != NULL) {
-        SPDocument *doc = sp_desktop_document(this->desktop);
+        SPDocument *doc = this->desktop->getDocument();
 
         if (!doc || !doc->getCurrentPersp3D()) {
             return;
@@ -604,8 +594,8 @@ void Box3dTool::finishItem() {
 
         desktop->canvas->endForcedFullRedraws();
 
-        sp_desktop_selection(desktop)->set(this->box3d);
-        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_3DBOX,
+        desktop->getSelection()->set(this->box3d);
+        DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_3DBOX,
                          _("Create 3D box"));
 
         this->box3d = NULL;

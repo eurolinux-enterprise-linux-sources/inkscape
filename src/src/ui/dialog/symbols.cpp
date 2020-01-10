@@ -18,10 +18,6 @@
 #include <functional>
 #include <sstream>
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/buttonbox.h>
 #include <gtkmm/label.h>
 
@@ -38,6 +34,7 @@
 #include <gtkmm/liststore.h>
 #include <gtkmm/treemodelcolumn.h>
 #include <gtkmm/clipboard.h>
+#include <glibmm/regex.h>
 #include <glibmm/stringutils.h>
 #include <glibmm/markup.h>
 #include <glibmm/i18n.h>
@@ -52,7 +49,7 @@
 
 #include "selection.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "document.h"
 #include "inkscape.h"
 #include "sp-root.h"
@@ -158,7 +155,7 @@ SymbolsDialog::SymbolsDialog( gchar const* prefsPath ) :
   sigc::connection connSet = symbolSet->signal_changed().connect(
           sigc::mem_fun(*this, &SymbolsDialog::rebuild));
   instanceConns.push_back(connSet);
-  
+
   ++row;
 
   /********************* Icon View **************************/
@@ -287,8 +284,8 @@ SymbolsDialog::SymbolsDialog( gchar const* prefsPath ) :
   ++row;
 
   /**********************************************************/
-  currentDesktop  = inkscape_active_desktop();
-  currentDocument = sp_desktop_document(currentDesktop);
+  currentDesktop  = SP_ACTIVE_DESKTOP;
+  currentDocument = currentDesktop->getDocument();
 
   previewDocument = symbols_preview_doc(); /* Template to render symbols in */
   previewDocument->ensureUpToDate(); /* Necessary? */
@@ -298,8 +295,7 @@ SymbolsDialog::SymbolsDialog( gchar const* prefsPath ) :
 
   // This might need to be a global variable so setTargetDesktop can modify it
   SPDefs *defs = currentDocument->getDefs();
-  sigc::connection defsModifiedConn = (SP_OBJECT(defs))->connectModified(
-          sigc::mem_fun(*this, &SymbolsDialog::defsModified));
+  sigc::connection defsModifiedConn = defs->connectModified(sigc::mem_fun(*this, &SymbolsDialog::defsModified));
   instanceConns.push_back(defsModifiedConn);
 
   sigc::connection selectionChangedConn = currentDesktop->selection->connectChanged(
@@ -383,7 +379,7 @@ void SymbolsDialog::rebuild() {
     addSymbol->set_sensitive( true );
     removeSymbol->set_sensitive( true );
   } else {
-    addSymbol->set_sensitive( false );                                              
+    addSymbol->set_sensitive( false );
     removeSymbol->set_sensitive( false );
   }
   add_symbols( symbolDocument );
@@ -499,15 +495,26 @@ void SymbolsDialog::iconChanged() {
     }
 
     ClipboardManager *cm = ClipboardManager::get();
-    cm->copySymbol(symbol->getRepr(), style);
+    cm->copySymbol(symbol->getRepr(), style, symbolDocument == currentDocument);
   }
 }
 
 #ifdef WITH_LIBVISIO
 // Read Visio stencil files
-SPDocument* read_vss( gchar* fullname, gchar* filename ) {
+SPDocument* read_vss( gchar* fullname, Glib::ustring name ) {
+
+  #ifdef WIN32
+    // RVNGFileStream uses fopen() internally which unfortunately only uses ANSI encoding on Windows
+    // therefore attempt to convert uri to the system codepage
+    // even if this is not possible the alternate short (8.3) file name will be used if available
+    fullname = g_win32_locale_filename_from_utf8(fullname);
+  #endif
 
   RVNGFileStream input(fullname);
+
+  #ifdef WIN32
+    g_free(fullname);
+  #endif
 
   if (!libvisio::VisioDocument::isSupported(&input)) {
     return NULL;
@@ -528,6 +535,12 @@ SPDocument* read_vss( gchar* fullname, gchar* filename ) {
     return NULL;
   }
 
+  // prepare a valid title for the symbol file
+  Glib::ustring title = Glib::Markup::escape_text(name);
+  // prepare a valid id prefix for the symbols (unfortunately libvisio doesn't give us a name)
+  Glib::RefPtr<Glib::Regex> regex1 = Glib::Regex::create("[^a-zA-Z0-9_-]");
+  Glib::ustring id = regex1->replace(name, 0, "_", Glib::REGEX_MATCH_PARTIAL);
+
   Glib::ustring tmpSVGOutput;
   tmpSVGOutput += "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
   tmpSVGOutput += "<svg\n";
@@ -537,16 +550,9 @@ SPDocument* read_vss( gchar* fullname, gchar* filename ) {
   tmpSVGOutput += "  version=\"1.1\"\n";
   tmpSVGOutput += "  style=\"fill:none;stroke:#000000;stroke-width:2\">\n";
   tmpSVGOutput += "  <title>";
-  tmpSVGOutput += filename;
+  tmpSVGOutput += title;
   tmpSVGOutput += "</title>\n";
   tmpSVGOutput += "  <defs>\n";
-
-  // Create a string we can use for the symbol id (libvisio doesn't give us a name)
-  std::string sanitized( filename );
-  sanitized.erase( sanitized.find_last_of(".vss")-3 );
-  sanitized.erase( std::remove_if( sanitized.begin(), sanitized.end(), ispunct ), sanitized.end() );
-  std::replace( sanitized.begin(), sanitized.end(), ' ', '_' );
-  // std::cout << filename << "   |" << sanitized << "|" << std::endl;
 
   // Each "symbol" is in it's own SVG file, we wrap with <symbol> and merge into one file.
   for (unsigned i=0; i<output.size(); ++i) {
@@ -555,7 +561,7 @@ SPDocument* read_vss( gchar* fullname, gchar* filename ) {
     ss << i;
 
     tmpSVGOutput += "    <symbol id=\"";
-    tmpSVGOutput += sanitized;
+    tmpSVGOutput += id;
     tmpSVGOutput += "_";
     tmpSVGOutput += ss.str();
     tmpSVGOutput += "\">\n";
@@ -575,24 +581,26 @@ SPDocument* read_vss( gchar* fullname, gchar* filename ) {
 
   tmpSVGOutput += "  </defs>\n";
   tmpSVGOutput += "</svg>\n";
-        
+
   return SPDocument::createNewDocFromMem( tmpSVGOutput.c_str(), strlen( tmpSVGOutput.c_str()), 0 );
 
 }
 #endif
-                        
+
 /* Hunts preference directories for symbol files */
 void SymbolsDialog::get_symbols() {
 
   std::list<Glib::ustring> directories;
 
+// \TODO optimize this
+
   if( Inkscape::IO::file_test( INKSCAPE_SYMBOLSDIR, G_FILE_TEST_EXISTS ) &&
       Inkscape::IO::file_test( INKSCAPE_SYMBOLSDIR, G_FILE_TEST_IS_DIR ) ) {
     directories.push_back( INKSCAPE_SYMBOLSDIR );
   }
-  if( Inkscape::IO::file_test( profile_path("symbols"), G_FILE_TEST_EXISTS ) &&
-      Inkscape::IO::file_test( profile_path("symbols"), G_FILE_TEST_IS_DIR ) ) {
-    directories.push_back( profile_path("symbols") );
+  if( Inkscape::IO::file_test( Inkscape::Application::profile_path("symbols"), G_FILE_TEST_EXISTS ) &&
+      Inkscape::IO::file_test( Inkscape::Application::profile_path("symbols"), G_FILE_TEST_IS_DIR ) ) {
+    directories.push_back( Inkscape::Application::profile_path("symbols") );
   }
 
   std::list<Glib::ustring>::iterator it;
@@ -617,11 +625,14 @@ void SymbolsDialog::get_symbols() {
 
 #ifdef WITH_LIBVISIO
           if( tag.compare( "vss" ) == 0 ) {
+            // strip extension from filename and use it as name for the symbol set
+            Glib::ustring name = Glib::ustring(filename);
+            name = name.erase(name.rfind('.'));
 
-            symbol_doc = read_vss( fullname, filename );
+            symbol_doc = read_vss( fullname, name );
             if( symbol_doc ) {
-              symbolSets[Glib::ustring(filename)]= symbol_doc;
-              symbolSet->append(filename);
+              symbolSets[name]= symbol_doc;
+              symbolSet->append(name);
             }
           }
 #endif
@@ -658,11 +669,11 @@ GSList* SymbolsDialog::symbols_in_doc_recursive (SPObject *r, GSList *l)
   g_return_val_if_fail(r != NULL, l);
 
   // Stop multiple counting of same symbol
-  if( SP_IS_USE(r) ) {
+  if ( dynamic_cast<SPUse *>(r) ) {
     return l;
   }
 
-  if( SP_IS_SYMBOL(r) ) {
+  if ( dynamic_cast<SPSymbol *>(r) ) {
     l = g_slist_prepend (l, r);
   }
 
@@ -682,9 +693,9 @@ GSList* SymbolsDialog::symbols_in_doc( SPDocument* symbolDocument ) {
 }
 
 GSList* SymbolsDialog::use_in_doc_recursive (SPObject *r, GSList *l)
-{ 
+{
 
-  if( SP_IS_USE(r) ) {
+  if ( dynamic_cast<SPUse *>(r) ) {
     l = g_slist_prepend (l, r);
   }
 
@@ -709,8 +720,9 @@ gchar const* SymbolsDialog::style_from_use( gchar const* id, SPDocument* documen
   gchar const* style = 0;
   GSList* l = use_in_doc( document );
   for( ; l != NULL; l = l->next ) {
-    SPObject* use = SP_OBJECT(l->data);
-    if( SP_IS_USE( use ) ) {
+    SPObject *obj = reinterpret_cast<SPObject *>(l->data);
+    SPUse *use = dynamic_cast<SPUse *>(obj);
+    if ( use ) {
       gchar const *href = use->getRepr()->attribute("xlink:href");
       if( href ) {
         Glib::ustring href2(href);
@@ -730,8 +742,9 @@ void SymbolsDialog::add_symbols( SPDocument* symbolDocument ) {
 
   GSList* l = symbols_in_doc( symbolDocument );
   for( ; l != NULL; l = l->next ) {
-    SPObject* symbol = SP_OBJECT(l->data);
-    if (SP_IS_SYMBOL(symbol)) {
+    SPObject *obj = reinterpret_cast<SPObject *>(l->data);
+    SPSymbol *symbol = dynamic_cast<SPSymbol *>(obj);
+    if (symbol) {
       add_symbol( symbol );
     }
   }
@@ -820,7 +833,8 @@ SymbolsDialog::draw_symbol(SPObject *symbol)
   previewDocument->getRoot()->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG);
   previewDocument->ensureUpToDate();
 
-  SPItem *item = SP_ITEM(object_temp);
+  SPItem *item = dynamic_cast<SPItem *>(object_temp);
+  g_assert(item != NULL);
   unsigned psize = SYMBOL_ICON_SIZES[pack_size];
 
   Glib::RefPtr<Gdk::Pixbuf> pixbuf(NULL);
@@ -865,7 +879,7 @@ SPDocument* SymbolsDialog::symbols_preview_doc()
 "     xmlns:sodipodi=\"http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd\""
 "     xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\""
 "     xmlns:xlink=\"http://www.w3.org/1999/xlink\">"
-"  <defs id=\"defs\">"  
+"  <defs id=\"defs\">"
 "    <symbol id=\"the_symbol\"/>"
 "  </defs>"
 "  <use id=\"the_use\" xlink:href=\"#the_symbol\"/>"

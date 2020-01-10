@@ -86,7 +86,7 @@ class InkscapeActionGroup(object):
 
     def select_id(self, object_id):
         """Select object with given id"""
-        self.command += "--select='%s' " % (object_id)
+        self.command += "--select=%s " % (object_id)
         if not self.has_selection:
             self.has_selection = True
 
@@ -457,17 +457,17 @@ def get_dimension(s="1024"):
     elif s[-2:] == "px":
         return float(s[:-2])
     elif s[-2:] == "pt":
-        return float(s[:-2])*1.25
+        return float(s[:-2])*1.333
     elif s[-2:] == "em":
         return float(s[:-2])*16
     elif s[-2:] == "mm":
-        return float(s[:-2])*3.54
+        return float(s[:-2])*3.779
     elif s[-2:] == "pc":
-        return float(s[:-2])*15
+        return float(s[:-2])*16
     elif s[-2:] == "cm":
-        return float(s[:-2])*35.43
+        return float(s[:-2])*37.79
     elif s[-2:] == "in":
-        return float(s[:-2])*90
+        return float(s[:-2])*96
     else:
         return 1024
 

@@ -26,44 +26,18 @@
  * Corner coords can be in any order - i.e. x1 < x0 is allowed
  */
 
-static void sp_ctrlrect_class_init(SPCtrlRectClass *c);
-static void sp_ctrlrect_init(CtrlRect *ctrlrect);
 static void sp_ctrlrect_destroy(SPCanvasItem *object);
 
 static void sp_ctrlrect_update(SPCanvasItem *item, Geom::Affine const &affine, unsigned int flags);
 static void sp_ctrlrect_render(SPCanvasItem *item, SPCanvasBuf *buf);
 
-static SPCanvasItemClass *parent_class;
-
 static const guint DASH_LENGTH = 4;
 
-GType sp_ctrlrect_get_type()
-{
-    static GType type = 0;
+G_DEFINE_TYPE(CtrlRect, sp_ctrlrect, SP_TYPE_CANVAS_ITEM);
 
-    if (!type) {
-        GTypeInfo info = {
-            sizeof(SPCtrlRectClass),
-            0, // base_init
-            0, // base_finalize
-            (GClassInitFunc)sp_ctrlrect_class_init,
-            0, // class_finalize
-            0, // class_data
-            sizeof(CtrlRect),
-            0, // n_preallocs
-            (GInstanceInitFunc)sp_ctrlrect_init,
-            0 // value_table
-        };
-        type = g_type_register_static(SP_TYPE_CANVAS_ITEM, "SPCtrlRect", &info, static_cast<GTypeFlags>(0));
-    }
-    return type;
-}
-
-static void sp_ctrlrect_class_init(SPCtrlRectClass *c)
+static void sp_ctrlrect_class_init(CtrlRectClass *c)
 {
     SPCanvasItemClass *item_class = SP_CANVAS_ITEM_CLASS(c);
-
-    parent_class = SP_CANVAS_ITEM_CLASS(g_type_class_peek_parent(c));
 
     item_class->destroy = sp_ctrlrect_destroy;
     item_class->update = sp_ctrlrect_update;
@@ -77,8 +51,8 @@ static void sp_ctrlrect_init(CtrlRect *cr)
 
 static void sp_ctrlrect_destroy(SPCanvasItem *object)
 {
-    if (SP_CANVAS_ITEM_CLASS(parent_class)->destroy) {
-        (* SP_CANVAS_ITEM_CLASS(parent_class)->destroy)(object);
+    if (SP_CANVAS_ITEM_CLASS(sp_ctrlrect_parent_class)->destroy) {
+        (* SP_CANVAS_ITEM_CLASS(sp_ctrlrect_parent_class)->destroy)(object);
     }
 }
 
@@ -100,6 +74,8 @@ void CtrlRect::init()
 {
     _has_fill = false;
     _dashed = false;
+    _checkerboard = false;
+
     _shadow = 0;
 
     _area = Geom::OptIntRect();
@@ -135,10 +111,17 @@ void CtrlRect::render(SPCanvasBuf *buf)
         cairo_rectangle(buf->ct, 0.5 + area[X].min(), 0.5 + area[Y].min(),
                                  area[X].max() - area[X].min(), area[Y].max() - area[Y].min());
 
+        if (_checkerboard) {
+            cairo_pattern_t *cb = ink_cairo_pattern_create_checkerboard();
+            cairo_set_source(buf->ct, cb);
+            cairo_pattern_destroy(cb);
+            cairo_fill_preserve(buf->ct);
+        }
         if (_has_fill) {
             ink_cairo_set_source_rgba32(buf->ct, _fill_color);
             cairo_fill_preserve(buf->ct);
         }
+
         ink_cairo_set_source_rgba32(buf->ct, _border_color);
         cairo_stroke(buf->ct);
 
@@ -171,8 +154,8 @@ void CtrlRect::update(Geom::Affine const &affine, unsigned int flags)
     using Geom::X;
     using Geom::Y;
 
-    if ((SP_CANVAS_ITEM_CLASS(parent_class))->update) {
-        (SP_CANVAS_ITEM_CLASS(parent_class))->update(this, affine, flags);
+    if ((SP_CANVAS_ITEM_CLASS(sp_ctrlrect_parent_class))->update) {
+        (SP_CANVAS_ITEM_CLASS(sp_ctrlrect_parent_class))->update(this, affine, flags);
     }
 
     sp_canvas_item_reset_bounds(this);
@@ -320,6 +303,12 @@ void CtrlRect::setRectangle(Geom::Rect const &r)
 void CtrlRect::setDashed(bool d)
 {
     _dashed = d;
+    _requestUpdate();
+}
+
+void CtrlRect::setCheckerboard(bool d)
+{
+    _checkerboard = d;
     _requestUpdate();
 }
 

@@ -1,5 +1,5 @@
-#ifndef __SP_SWITCH_H__
-#define __SP_SWITCH_H__
+#ifndef SEEN_SP_SWITCH_H
+#define SEEN_SP_SWITCH_H
 
 /*
  * SVG <switch> implementation
@@ -12,10 +12,11 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include <cstddef>
+#include <sigc++/connection.h>
+
 #include "sp-item-group.h"
 
-#include <stddef.h>
-#include <sigc++/connection.h>
 
 #define SP_SWITCH(obj) (dynamic_cast<SPSwitch*>((SPObject*)obj))
 #define SP_IS_SWITCH(obj) (dynamic_cast<const SPSwitch*>((SPObject*)obj) != NULL)
@@ -27,7 +28,7 @@ public:
 
     void resetChildEvaluated() { _reevaluate(); }
 
-    GSList *_childList(bool add_ref, SPObject::Action action);
+    std::vector<SPObject*> _childList(bool add_ref, SPObject::Action action);
     virtual void _showChildren (Inkscape::Drawing &drawing, Inkscape::DrawingItem *ai, unsigned int key, unsigned int flags);
 
     SPObject *_evaluateFirst();

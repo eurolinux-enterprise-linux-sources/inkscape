@@ -11,7 +11,7 @@
 
 #include "control-point.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "display/sodipodi-ctrlrect.h"
 #include "ui/tools/tool-base.h"
 #include "preferences.h"
@@ -37,8 +37,9 @@ public:
         _cancel(false)
     {
         setVisible(false);
-        _rubber = static_cast<CtrlRect*>(sp_canvas_item_new(sp_desktop_controls(_desktop),
+        _rubber = static_cast<CtrlRect*>(sp_canvas_item_new(_desktop->getControls(),
         SP_TYPE_CTRLRECT, NULL));
+        _rubber->setShadow(1, 0xffffffff);
         sp_canvas_item_hide(_rubber);
     }
 
@@ -100,7 +101,7 @@ private:
 
 Selector::Selector(SPDesktop *d)
     : Manipulator(d)
-    , _dragger(new SelectorPoint(d, sp_desktop_controls(d), this))
+    , _dragger(new SelectorPoint(d, d->getControls(), this))
 {
     _dragger->setVisible(false);
 }
@@ -127,6 +128,10 @@ bool Selector::event(Inkscape::UI::Tools::ToolBase *event_context, GdkEvent *eve
     default: break;
     }
     return false;
+}
+
+bool Selector::doubleClicked() {
+    return _dragger->doubleClicked();
 }
 
 } // namespace UI

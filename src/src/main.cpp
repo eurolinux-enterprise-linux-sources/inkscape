@@ -15,6 +15,7 @@
  * ... and various people who have worked with various projects
  *   Jon A. Cruz <jon@oncruz.org>
  *   Abhishek Sharma
+ +   Marc Jeanmougin
  *
  * Copyright (C) 1999-2004 authors
  * Copyright (C) 2001-2002 Ximian, Inc.
@@ -52,7 +53,12 @@
 #include <glib-object.h>
 #include <gtk/gtk.h>
 
-#include "gc-core.h"
+#if GTK_CHECK_VERSION(3,0,0)
+#include <gtkmm/cssprovider.h>
+#include <gdkmm/screen.h>
+#endif
+
+#include "inkgc/gc-core.h"
 
 #ifdef AND
 #undef AND
@@ -64,7 +70,7 @@
 #include "layer-model.h"
 #include "selection.h"
 #include "sp-object.h"
-#include "interface.h"
+#include "ui/interface.h"
 #include "print.h"
 #include "color.h"
 #include "sp-item.h"
@@ -74,7 +80,7 @@
 #include "svg/svg-color.h"
 #include "svg/stringstream.h"
 
-#include "inkscape-private.h"
+#include "inkscape.h"
 #include "inkscape-version.h"
 
 #include "sp-namedview.h"
@@ -172,6 +178,8 @@ enum {
     SP_ARG_SHELL,
     SP_ARG_VERSION,
     SP_ARG_VACUUM_DEFS,
+    SP_ARG_NO_CONVERT_TEXT_BASELINE_SPACING,
+    SP_ARG_CONVERT_DPI_METHOD,
 #ifdef WITH_DBUS
     SP_ARG_DBUS_LISTEN,
     SP_ARG_DBUS_NAME,
@@ -212,7 +220,7 @@ static gboolean sp_export_id_only = FALSE;
 static gchar *sp_export_svg = NULL;
 static gchar *sp_export_ps = NULL;
 static gchar *sp_export_eps = NULL;
-static gint sp_export_ps_level = 2;
+static gint sp_export_ps_level = 3;
 static gchar *sp_export_pdf = NULL;
 static gchar *sp_export_pdf_version = NULL;
 static gchar *sp_export_emf = NULL;
@@ -235,7 +243,6 @@ static gchar *sp_dbus_name = NULL;
 static gchar *sp_export_png_utf8 = NULL;
 static gchar *sp_export_svg_utf8 = NULL;
 static gchar *sp_global_printer_utf8 = NULL;
-
 
 /**
  *  Reset variables to default values.
@@ -260,7 +267,7 @@ static void resetCommandlineGlobals() {
         sp_export_svg = NULL;
         sp_export_ps = NULL;
         sp_export_eps = NULL;
-        sp_export_ps_level = 2;
+        sp_export_ps_level = 3;
         sp_export_pdf = NULL;
         sp_export_pdf_version = NULL;
         sp_export_emf = NULL;
@@ -275,6 +282,8 @@ static void resetCommandlineGlobals() {
         sp_query_all = FALSE;
         sp_query_id = NULL;
         sp_vacuum_defs = FALSE;
+        sp_no_convert_text_baseline_spacing = FALSE;
+        sp_file_convert_dpi_method_commandline = -1;
 #ifdef WITH_DBUS
         sp_dbus_listen = FALSE;
         sp_dbus_name = NULL;
@@ -322,7 +331,7 @@ struct poptOption options[] = {
 
     {"export-dpi", 'd',
      POPT_ARG_STRING, &sp_export_dpi, SP_ARG_EXPORT_DPI,
-     N_("Resolution for exporting to bitmap and for rasterization of filters in PS/EPS/PDF (default 90)"),
+     N_("Resolution for exporting to bitmap and for rasterization of filters in PS/EPS/PDF (default 96)"),
      N_("DPI")},
 
     {"export-area", 'a',
@@ -405,7 +414,7 @@ struct poptOption options[] = {
     {"export-ps-level", 0,
      POPT_ARG_INT, &sp_export_ps_level, SP_ARG_EXPORT_PS_LEVEL,
      N_("Choose the PostScript Level used to export. Possible choices are"
-        " 2 (the default) and 3"),
+        " 2 and 3 (the default)"),
      N_("PS Level")},
 
     {"export-pdf", 'A',
@@ -416,7 +425,7 @@ struct poptOption options[] = {
     {"export-pdf-version", 0,
      POPT_ARG_STRING, &sp_export_pdf_version, SP_ARG_EXPORT_PDF_VERSION,
      // TRANSLATORS: "--export-pdf-version" is an Inkscape command line option; see "inkscape --help"
-     N_("Export PDF to given version. (hint: make sure to input the exact string found in the PDF export dialog, e.g. \"PDF 1.4\" which is PDF-a conformant)"),
+     N_("Export PDF to given version. (hint: make sure to input the exact string found in the PDF export dialog, e.g. \"1.4\" which is PDF-a conformant)"),
      N_("PDF_VERSION")},
 
     {"export-latex", 0,
@@ -488,7 +497,7 @@ struct poptOption options[] = {
      POPT_ARG_NONE, &sp_vacuum_defs, SP_ARG_VACUUM_DEFS,
      N_("Remove unused definitions from the defs section(s) of the document"),
      NULL},
-     
+
 #ifdef WITH_DBUS
     {"dbus-listen", 0,
      POPT_ARG_NONE, &sp_dbus_listen, SP_ARG_DBUS_LISTEN,
@@ -521,6 +530,16 @@ struct poptOption options[] = {
      N_("Start Inkscape in interactive shell mode."),
      NULL},
 
+    {"no-convert-text-baseline-spacing", 0,
+    POPT_ARG_NONE, &sp_no_convert_text_baseline_spacing, SP_ARG_NO_CONVERT_TEXT_BASELINE_SPACING,
+    N_("Do not fix legacy (pre-0.92) files' text baseline spacing on opening."),
+    NULL},
+
+    {"convert-dpi-method", 0,
+     POPT_ARG_STRING, NULL, SP_ARG_CONVERT_DPI_METHOD,
+     N_("Method used to convert pre-.92 document dpi, if needed."),
+     "[none|scale-viewbox|scale-document]"},
+
     POPT_AUTOHELP POPT_TABLEEND
 };
 
@@ -546,7 +565,7 @@ static void _win32_set_inkscape_env(gchar const *exe)
     gchar *perl = g_build_filename(exe, "python", NULL);
     gchar *pythonlib = g_build_filename(exe, "python", "Lib", NULL);
     gchar *pythondll = g_build_filename(exe, "python", "DLLs", NULL);
-    
+
     // Python 2.x needs short paths in PYTHONPATH.
     // Otherwise it doesn't work when Inkscape is installed in Unicode directories.
     // g_win32_locale_filename_from_utf8 is the GLib wrapper for GetShortPathName.
@@ -597,14 +616,14 @@ static void _win32_set_inkscape_env(gchar const *exe)
     g_free(perl);
     g_free(pythonlib);
     g_free(pythondll);
-    
+
     g_free(python_s);
     g_free(pythonlib_s);
     g_free(pythondll_s);
 
     g_free(new_path);
     g_free(new_pythonpath);
-    
+
     g_free(localepath);
 }
 #endif
@@ -614,7 +633,7 @@ static void set_extensions_env()
     gchar const *pythonpath = g_getenv("PYTHONPATH");
     gchar *extdir;
     gchar *new_pythonpath;
-    
+
 #ifdef WIN32
     extdir = g_win32_locale_filename_from_utf8(INKSCAPE_EXTENSIONDIR);
 #else
@@ -900,7 +919,7 @@ static int sp_common_main( int argc, char const **argv, GSList **flDest )
         if ( sp_global_printer )
             sp_global_printer_utf8 = g_strdup( sp_global_printer );
     }
-    
+
 #ifdef WITH_DBUS
     // Before initializing extensions, we must set the DBus bus name if required
     if (sp_dbus_name != NULL) {
@@ -933,9 +952,9 @@ guint get_group0_keyval(GdkEventKey const* event);
 
 static void
 snooper(GdkEvent *event, gpointer /*data*/) {
-    if (inkscape_mapalt())  /* returns the map of the keyboard modifier to map to Alt, zero if no mapping */
+    if (INKSCAPE.mapalt())  /* returns the map of the keyboard modifier to map to Alt, zero if no mapping */
     {
-        GdkModifierType mapping=(GdkModifierType)inkscape_mapalt();
+        GdkModifierType mapping=(GdkModifierType)INKSCAPE.mapalt();
         switch (event->type) {
             case GDK_MOTION_NOTIFY:
                 if(event->motion.state & mapping) {
@@ -957,7 +976,7 @@ snooper(GdkEvent *event, gpointer /*data*/) {
         }
     }
 
-    if (inkscape_trackalt()) {
+    if (INKSCAPE.trackalt()) {
         // MacOS X with X11 has some problem with the default
         // xmodmapping.  A ~/.xmodmap solution does not work reliably due
         // to the way we package our executable in a .app that can launch
@@ -1042,10 +1061,74 @@ sp_main_gui(int argc, char const **argv)
     }
 
     // Add our icon directory to the search path for icon theme lookups.
-    gchar *usericondir = profile_path("icons");
+    gchar *usericondir = Inkscape::Application::profile_path("icons");
     gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), usericondir);
     gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), INKSCAPE_PIXMAPDIR);
+#ifdef INKSCAPE_THEMEDIR
+    gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), INKSCAPE_THEMEDIR);
+    gtk_icon_theme_rescan_if_needed (gtk_icon_theme_get_default());
+#endif
     g_free(usericondir);
+
+
+#if GTK_CHECK_VERSION(3,0,0)
+    // Add style sheet (GTK3)
+    Glib::RefPtr<Gdk::Screen> screen = Gdk::Screen::get_default();
+
+    Glib::ustring inkscape_style = INKSCAPE_UIDIR;
+    inkscape_style += "/style.css";
+    // std::cout << "CSS Stylesheet Inkscape: " << inkscape_style << std::endl;
+
+    if (g_file_test (inkscape_style.c_str(), G_FILE_TEST_EXISTS)) {
+      Glib::RefPtr<Gtk::CssProvider> provider = Gtk::CssProvider::create();
+
+      // From 3.16, throws an error which we must catch.
+      try {
+          provider->load_from_path (inkscape_style);
+      }
+#if GTK_CHECK_VERSION(3,16,0)
+      // Gtk::CssProviderError not defined until 3.16.
+      catch (const Gtk::CssProviderError& ex)
+      {
+          std::cerr << "CSSProviderError::load_from_path(): failed to load: " << inkscape_style
+                    << "\n  (" << ex.what() << ")" << std::endl;
+      }
+#else
+      catch (...)
+      {}
+#endif
+
+      Gtk::StyleContext::add_provider_for_screen (screen, provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    } else {
+        std::cerr << "sp_main_gui: Cannot find default style file:\n  (" << inkscape_style
+                  << ")" << std::endl;
+    }
+
+    Glib::ustring user_style = Inkscape::Application::profile_path("ui/style.css");
+    // std::cout << "CSS Stylesheet User: " << user_style << std::endl;
+
+    if (g_file_test (user_style.c_str(), G_FILE_TEST_EXISTS)) {
+      Glib::RefPtr<Gtk::CssProvider> provider2 = Gtk::CssProvider::create();
+
+      // From 3.16, throws an error which we must catch.
+      try {
+          provider2->load_from_path (user_style);
+      }
+#if GTK_CHECK_VERSION(3,16,0)
+      // Gtk::CssProviderError not defined until 3.16.
+      catch (const Gtk::CssProviderError& ex)
+      {
+        std::cerr << "CSSProviderError::load_from_path(): failed to load: " << user_style
+                  << "\n  (" << ex.what() << ")" << std::endl;
+      }
+#else
+      catch (...)
+      {}
+#endif
+
+      Gtk::StyleContext::add_provider_for_screen (screen, provider2, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    }
+#endif
 
     gdk_event_handler_set((GdkEventFunc)snooper, NULL, NULL);
     Inkscape::Debug::log_display_config();
@@ -1059,7 +1142,7 @@ sp_main_gui(int argc, char const **argv)
     gboolean create_new = TRUE;
 
     /// \todo FIXME BROKEN - non-UTF-8 sneaks in here.
-    inkscape_application_init(argv[0], true);
+    Inkscape::Application::create(argv[0], true);
 
     while (fl) {
         if (sp_file_open((gchar *)fl->data,NULL)) {
@@ -1125,14 +1208,14 @@ static int sp_process_file_list(GSList *fl)
             retVal++;
         } else {
 
-            inkscape_add_document(doc);
+            INKSCAPE.add_document(doc);
 
             if (sp_vacuum_defs) {
                 doc->vacuumDocument();
             }
-            
+
             // Execute command-line actions (selections and verbs) using our local models
-            bool has_performed_actions = Inkscape::CmdLineAction::doList(inkscape_active_action_context());
+            bool has_performed_actions = Inkscape::CmdLineAction::doList(INKSCAPE.active_action_context());
 
 #ifdef WITH_DBUS
             // If we've been asked to listen for D-Bus messages, enter a main loop here
@@ -1156,7 +1239,7 @@ static int sp_process_file_list(GSList *fl)
             }
             if (sp_export_svg) {
                 if (sp_export_text_to_path) {
-                    GSList *items = NULL;
+                	std::vector<SPItem*> items;
                     SPRoot *root = doc->getRoot();
                     doc->ensureUpToDate();
                     for ( SPObject *iter = root->firstChild(); iter ; iter = iter->getNext()) {
@@ -1166,17 +1249,14 @@ static int sp_process_file_list(GSList *fl)
                         }
 
                         te_update_layout_now_recursive(item);
-                        items = g_slist_append(items, item);
+                        items.push_back(item);
                     }
 
-                    GSList *selected = NULL;
-                    GSList *to_select = NULL;
+                    std::vector<SPItem*> selected;
+                    std::vector<Inkscape::XML::Node*> to_select;
 
-                    sp_item_list_to_curves(items, &selected, &to_select);
+                    sp_item_list_to_curves(items, selected, to_select);
 
-                    g_slist_free (items);
-                    g_slist_free (selected);
-                    g_slist_free (to_select);
                 }
                 if(sp_export_id) {
                     doc->ensureUpToDate();
@@ -1221,7 +1301,7 @@ static int sp_process_file_list(GSList *fl)
                 do_query_dimension (doc, false, sp_query_x? Geom::X : Geom::Y, sp_query_id);
             }
 
-            inkscape_remove_document(doc);
+            INKSCAPE.remove_document(doc);
 
             delete doc;
         }
@@ -1335,7 +1415,7 @@ int sp_main_console(int argc, char const **argv)
         exit(0);
     }
 
-    inkscape_application_init(argv[0], false);
+    Inkscape::Application::create(argv[0], false);
 
     if (sp_shell) {
         int retVal = sp_main_shell(argv[0]); // Run as interactive shell
@@ -1435,7 +1515,7 @@ static int sp_do_export_png(SPDocument *doc)
         g_warning ("--export-use-hints can only be used with --export-id or --export-area-drawing; ignored.");
     }
 
-    GSList *items = NULL;
+    std::vector<SPItem*> items;
 
     Geom::Rect area;
     if (sp_export_id || sp_export_area_drawing) {
@@ -1459,7 +1539,7 @@ static int sp_do_export_png(SPDocument *doc)
                 return 1;
             }
 
-            items = g_slist_prepend (items, SP_ITEM(o));
+            items.push_back(SP_ITEM(o));
 
             if (sp_export_id_only) {
                 g_print("Exporting only object with id=\"%s\"; all other objects hidden\n", sp_export_id);
@@ -1545,7 +1625,7 @@ static int sp_do_export_png(SPDocument *doc)
     }
 
     if (sp_export_area_snap) {
-        round_rectangle_outwards(area);
+        area = area.roundOutwards();
     }
 
     // default dpi
@@ -1645,9 +1725,11 @@ static int sp_do_export_png(SPDocument *doc)
 
         g_print("Area %g:%g:%g:%g exported to %lu x %lu pixels (%g dpi)\n", area[Geom::X][0], area[Geom::Y][0], area[Geom::X][1], area[Geom::Y][1], width, height, dpi);
 
+        reverse(items.begin(),items.end());
+
         if ((width >= 1) && (height >= 1) && (width <= PNG_UINT_31_MAX) && (height <= PNG_UINT_31_MAX)) {
             if( sp_export_png_file(doc, path.c_str(), area, width, height, dpi,
-              dpi, bgcolor, NULL, NULL, true, sp_export_id_only ? items : NULL) == 1 ) {
+              dpi, bgcolor, NULL, NULL, true, sp_export_id_only ? items : std::vector<SPItem*>()) == 1 ) {
                 g_print("Bitmap saved as: %s\n", filename.c_str());
             } else {
                 g_warning("Bitmap failed to save to: %s", filename.c_str());
@@ -1657,7 +1739,6 @@ static int sp_do_export_png(SPDocument *doc)
         }
     }
 
-    g_slist_free (items);
     return retcode;
 }
 
@@ -1722,15 +1803,11 @@ static int do_export_ps_pdf(SPDocument* doc, gchar const* uri, char const* mime)
     }
 
     if (sp_export_text_to_path) {
-        (*i)->set_param_bool("textToPath", TRUE);
+        (*i)->set_param_optiongroup("textToPath", "paths");
+    } else if (sp_export_latex) {
+        (*i)->set_param_optiongroup("textToPath", "LaTeX");
     } else {
-        (*i)->set_param_bool("textToPath", FALSE);
-    }
-
-    if (sp_export_latex) {
-        (*i)->set_param_bool("textToLaTeX", TRUE);
-    } else {
-        (*i)->set_param_bool("textToLaTeX", FALSE);
+        (*i)->set_param_optiongroup("textToPath", "embed");
     }
 
     if (sp_export_ignore_filters) {
@@ -1738,12 +1815,12 @@ static int do_export_ps_pdf(SPDocument* doc, gchar const* uri, char const* mime)
     } else {
         (*i)->set_param_bool("blurToBitmap", TRUE);
 
-        gdouble dpi = 90.0;
+        gdouble dpi = 96.0;
         if (sp_export_dpi) {
             dpi = atof(sp_export_dpi);
             if ((dpi < 1) || (dpi > 10000.0)) {
-                g_warning("DPI value %s out of range [1 - 10000]. Using 90 dpi instead.", sp_export_dpi);
-                dpi = 90;
+                g_warning("DPI value %s out of range [1 - 10000]. Using 96 dpi instead.", sp_export_dpi);
+                dpi = 96;
             }
         }
 
@@ -1819,7 +1896,7 @@ static int do_export_ps_pdf(SPDocument* doc, gchar const* uri, char const* mime)
 }
 
 /**
- *  Export a document to EMF or WMF 
+ *  Export a document to EMF or WMF
  *
  *  \param doc Document to export.
  *  \param uri URI to export to.
@@ -2178,7 +2255,7 @@ sp_process_args(poptContext ctx)
                 break;
             }
             case SP_ARG_VERSION: {
-                printf("Inkscape %s (%s)\n", Inkscape::version_string, __DATE__);
+                printf("Inkscape %s\n", Inkscape::version_string);
                 exit(0);
                 break;
             }
@@ -2203,6 +2280,21 @@ sp_process_args(poptContext ctx)
                 if (arg != NULL) {
                     // printf("Adding in: %s\n", arg);
                     new Inkscape::CmdLineAction((a == SP_ARG_VERB), arg);
+                }
+                break;
+            }
+            case SP_ARG_CONVERT_DPI_METHOD: {
+                gchar const *arg = poptGetOptArg(ctx);
+                if (arg != NULL) {
+                    if (!strcmp(arg,"none")) {
+                        sp_file_convert_dpi_method_commandline = FILE_DPI_UNCHANGED;
+                    } else if (!strcmp(arg,"scale-viewbox")) {
+                        sp_file_convert_dpi_method_commandline = FILE_DPI_VIEWBOX_SCALED;
+                    } else if (!strcmp(arg,"scale-document")) {
+                        sp_file_convert_dpi_method_commandline = FILE_DPI_DOCUMENT_SCALED;
+                    } else {
+                        g_warning("Invalid update option");
+                    }
                 }
                 break;
             }

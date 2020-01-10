@@ -32,16 +32,27 @@
  * Authors:
  *   Tavmjong Bah <tavmjong@free.fr>
  *
- * Copyrigt  (C) 2012 Tavmjong Bah
+ * Copyright  (C) 2012, 2015 Tavmjong Bah
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "sp-mesh-array.h"
+#include <glibmm.h>
+#include <set>
+
+// For color picking
+#include "display/drawing.h"
+#include "display/drawing-context.h"
+#include "display/cairo-utils.h"
+#include "document.h"
+#include "sp-root.h"
+
 #include "sp-mesh-gradient.h"
+#include "sp-mesh-array.h"
 #include "sp-mesh-row.h"
 #include "sp-mesh-patch.h"
 #include "sp-stop.h"
+#include "display/curve.h"
 
 // For new mesh creation
 #include "preferences.h"
@@ -50,13 +61,6 @@
 
 // For writing color/opacity to style
 #include "svg/css-ostringstream.h"
-
-// For color picking
-#include "display/drawing.h"
-#include "display/drawing-context.h"
-#include "display/cairo-utils.h"
-#include "document.h"
-#include "sp-root.h"
 
 // For default color
 #include "style.h"
@@ -287,7 +291,7 @@ bool SPMeshPatchI::tensorIsSet() {
 /**
    Return if tensor control point for "corner" i is set.
  */
-bool SPMeshPatchI::tensorIsSet( guint i ) {
+bool SPMeshPatchI::tensorIsSet( unsigned int i ) {
 
     assert( i < 4 );
 
@@ -311,7 +315,7 @@ bool SPMeshPatchI::tensorIsSet( guint i ) {
 
 /**
    Return tensor control point for "corner" i.
-   If not sest, returns calculated (Coons) point.
+   If not set, returns calculated (Coons) point.
  */
 Geom::Point SPMeshPatchI::getTensorPoint( guint k ) {
 
@@ -572,24 +576,146 @@ void SPMeshPatchI::setOpacity( guint i, gdouble opacity ) {
 };
 
 
+/**
+   Return stop pointer for corner of patch.
+*/
+SPStop* SPMeshPatchI::getStopPtr( guint i ) {
+
+    assert( i < 4 );
+
+    SPStop* stop = NULL;
+    switch ( i ) {
+        case 0:
+            stop = (*nodes)[ row   ][ col   ]->stop;
+            break;
+        case 1:
+            stop = (*nodes)[ row   ][ col+3 ]->stop;
+            break;
+        case 2:
+            stop = (*nodes)[ row+3 ][ col+3 ]->stop;
+            break;
+        case 3:
+            stop = (*nodes)[ row+3 ][ col   ]->stop;
+            break;
+    }
+
+    return stop;
+};
+
+
+/**
+   Set stop pointer for corner of patch.
+*/
+void SPMeshPatchI::setStopPtr( guint i, SPStop* stop ) {
+
+    assert( i < 4 );
+
+    switch ( i ) {
+        case 0:
+            (*nodes)[ row   ][ col   ]->stop = stop;
+            break;                         
+        case 1:                            
+            (*nodes)[ row   ][ col+3 ]->stop = stop;
+            break;                         
+        case 2:                            
+            (*nodes)[ row+3 ][ col+3 ]->stop = stop;
+            break;                         
+        case 3:                            
+            (*nodes)[ row+3 ][ col   ]->stop = stop;
+            break;
+
+    }
+
+};
+
+
 SPMeshNodeArray::SPMeshNodeArray( SPMeshGradient *mg ) {
 
     read( mg );
 
 };
 
-void SPMeshNodeArray::read( SPMeshGradient *mg_in ) {
+
+// Copy constructor
+SPMeshNodeArray::SPMeshNodeArray( const SPMeshNodeArray& rhs ) {
+
+    built = false;
+    mg = NULL;
+    draggers_valid = false;
+
+    nodes = rhs.nodes; // This only copies the pointers but it does size the vector of vectors.
+
+    for( unsigned i=0; i < nodes.size(); ++i ) {
+        for( unsigned j=0; j < nodes[i].size(); ++j ) {
+            nodes[i][j] = new SPMeshNode( *rhs.nodes[i][j] ); // Copy data.
+        }
+    }
+};
+
+
+// Copy assignment operator
+SPMeshNodeArray& SPMeshNodeArray::operator=( const SPMeshNodeArray& rhs ) {
+
+    if( this == &rhs ) return *this;
+
+    clear(); // Clear any existing array.
+
+    built = false;
+    mg = NULL;
+    draggers_valid = false;
+
+    nodes = rhs.nodes; // This only copies the pointers but it does size the vector of vectors.
+
+    for( unsigned i=0; i < nodes.size(); ++i ) {
+        for( unsigned j=0; j < nodes[i].size(); ++j ) {
+            nodes[i][j] = new SPMeshNode( *rhs.nodes[i][j] ); // Copy data.
+        }
+    }
+    
+    return *this;
+};
+
+// Fill array with data from mesh objects.
+// Returns true of array's dimensions unchanged.
+bool SPMeshNodeArray::read( SPMeshGradient *mg_in ) {
 
     mg = mg_in;
+    SPMeshGradient* mg_array = dynamic_cast<SPMeshGradient*>(mg->getArray());
+    if (!mg_array) {
+        std::cerr << "SPMeshNodeArray::read: No mesh array!" << std::endl;
+        return false;
+    }
+    // std::cout << "SPMeshNodeArray::read: " << mg_in << "  array: " << mg_array << std::endl;
 
-    clear();
+    // Count rows and columns, if unchanged reuse array to keep draggers valid.
+    unsigned cols = 0;
+    unsigned rows = 0;
+    for ( SPObject *ro = mg_array->firstChild() ; ro ; ro = ro->getNext() ) {
+        if (SP_IS_MESHROW(ro)) {
+            ++rows;
+            if (rows == 1 ) {
+            for ( SPObject *po = ro->firstChild() ; po ; po = po->getNext() ) {
+                if (SP_IS_MESHPATCH(po)) {
+                    ++cols;
+                    }
+            }
+            }
+        }
+    }
+    bool same_size = true;
+    if (cols != patch_columns() || rows != patch_rows() ) {
+        // Draggers will be invalidated.
+        same_size = false;
+        clear();
+        draggers_valid = false;
+    }
 
     Geom::Point current_p( mg->x.computed, mg->y.computed );
     // std::cout << "SPMeshNodeArray::read: p: " << current_p << std::endl;
 
     guint max_column = 0;
     guint irow = 0; // Corresponds to top of patch being read in.
-    for ( SPObject *ro = mg->firstChild() ; ro ; ro = ro->getNext() ) {
+    for ( SPObject *ro = mg_array->firstChild() ; ro ; ro = ro->getNext() ) {
 
         if (SP_IS_MESHROW(ro)) {
 
@@ -598,7 +724,7 @@ void SPMeshNodeArray::read( SPMeshGradient *mg_in ) {
 
                 if (SP_IS_MESHPATCH(po)) {
 
-                    SPMeshPatch *patch = SP_MESHPATCH(po);
+                    SPMeshpatch *patch = SP_MESHPATCH(po);
 
                     // std::cout << "SPMeshNodeArray::read: row size: " << nodes.size() << std::endl;
                     SPMeshPatchI new_patch( &nodes, irow, icolumn ); // Adds new nodes.
@@ -658,7 +784,7 @@ void SPMeshNodeArray::read( SPMeshGradient *mg_in ) {
                                             dp = Geom::Point( x, y ); 
                                             new_patch.setPoint( istop, 3, current_p + dp );
                                         } else {
-                                            std::cout << "Failed to read l" << std::endl;
+                                            std::cerr << "Failed to read l" << std::endl;
                                         }
                                     }
                                     // To facilitate some side operations, set handles to 1/3 and
@@ -680,7 +806,7 @@ void SPMeshNodeArray::read( SPMeshGradient *mg_in ) {
                                             p = Geom::Point( x, y );
                                             new_patch.setPoint( istop, 3, p );
                                         } else {
-                                            std::cout << "Failed to read L" << std::endl;
+                                            std::cerr << "Failed to read L" << std::endl;
                                         }
                                     }
                                     // To facilitate some side operations, set handles to 1/3 and
@@ -700,7 +826,7 @@ void SPMeshNodeArray::read( SPMeshGradient *mg_in ) {
                                             p += current_p;
                                             new_patch.setPoint( istop, i, p );
                                         } else {
-                                            std::cout << "Failed to read c: " << i << std::endl;
+                                            std::cerr << "Failed to read c: " << i << std::endl;
                                         }
                                     }
                                     break;
@@ -713,13 +839,13 @@ void SPMeshNodeArray::read( SPMeshGradient *mg_in ) {
                                             p = Geom::Point( x, y );
                                             new_patch.setPoint( istop, i, p );
                                         } else {
-                                            std::cout << "Failed to read C: " << i << std::endl;
-                                        }
+                                            std::cerr << "Failed to read C: " << i << std::endl;
+                                        } 
                                     }
                                     break;
                                 default:
                                     // should not reach
-                                    std::cout << "Path Error: unhandled path type: " << path_type << std::endl;
+                                    std::cerr << "Path Error: unhandled path type: " << path_type << std::endl;
                             }
                             current_p = new_patch.getPoint( istop, 3 );
 
@@ -731,6 +857,7 @@ void SPMeshNodeArray::read( SPMeshGradient *mg_in ) {
                                 double opacity  = stop->opacity;
                                 new_patch.setColor( istop, color );
                                 new_patch.setOpacity( istop, opacity );
+                                new_patch.setStopPtr( istop, stop );
                             }
 
                         }
@@ -754,7 +881,7 @@ void SPMeshNodeArray::read( SPMeshGradient *mg_in ) {
                             if( !os.fail() ) {
                                 new_patch.setTensorPoint( i, new_patch.getPoint( i, 0 ) + Geom::Point( x, y ) );
                             } else {
-                                std::cout << "Failed to read p: " << i << std::endl;
+                                std::cerr << "Failed to read p: " << i << std::endl;
                                 break;
                             }
                         }
@@ -787,9 +914,9 @@ void SPMeshNodeArray::read( SPMeshGradient *mg_in ) {
     // std::cout << "SPMeshNodeArray::Read: result:" << std::endl;
     // print();
 
-    drag_valid = false;
     built = true;
 
+    return same_size;
 };
 
 /**
@@ -802,10 +929,16 @@ void SPMeshNodeArray::write( SPMeshGradient *mg ) {
     using Geom::X;
     using Geom::Y;
 
+    SPMeshGradient* mg_array = dynamic_cast<SPMeshGradient*>(mg->getArray());
+    if (!mg_array) {
+        // std::cerr << "SPMeshNodeArray::write: missing patches!" << std::endl;
+        mg_array = mg;
+    }
+
     // First we must delete reprs for old mesh rows and patches.
     GSList *descendant_reprs = NULL;
     GSList *descendant_objects = NULL;
-    for ( SPObject *row = mg->firstChild(); row; row = row->getNext() ) {
+    for ( SPObject *row = mg_array->firstChild(); row; row = row->getNext() ) {
         descendant_reprs   = g_slist_prepend (descendant_reprs,   row->getRepr());
         descendant_objects = g_slist_prepend (descendant_objects, row           );
         for ( SPObject *patch = row->firstChild(); patch; patch = patch->getNext() ) {
@@ -831,8 +964,9 @@ void SPMeshNodeArray::write( SPMeshGradient *mg ) {
 
     // Now we build new reprs
     Inkscape::XML::Node *mesh = mg->getRepr();
+    Inkscape::XML::Node *mesh_array = mg_array->getRepr();
 
-    SPMeshNodeArray* array = &(mg->array);
+    SPMeshNodeArray* array = &(mg_array->array);
     SPMeshPatchI patch0( &(array->nodes), 0, 0 );
     Geom::Point current_p = patch0.getPoint( 0, 0 ); // Side 0, point 0
 
@@ -846,14 +980,14 @@ void SPMeshNodeArray::write( SPMeshGradient *mg ) {
     for( guint i = 0; i < rows; ++i ) {
 
         // Write row
-        Inkscape::XML::Node *row = xml_doc->createElement("svg:meshRow");
-        mesh->appendChild( row );  // No attributes
+        Inkscape::XML::Node *row = xml_doc->createElement("svg:meshrow");
+        mesh_array->appendChild( row );  // No attributes
 
         guint columns = array->patch_columns();
         for( guint j = 0; j < columns; ++j ) {
 
             // Write patch
-            Inkscape::XML::Node *patch = xml_doc->createElement("svg:meshPatch");
+            Inkscape::XML::Node *patch = xml_doc->createElement("svg:meshpatch");
 
             SPMeshPatchI patchi( &(array->nodes), i, j );
 
@@ -924,10 +1058,10 @@ void SPMeshNodeArray::write( SPMeshGradient *mg ) {
                         break;
                     case 'z':
                     case 'Z':
-                        std::cout << "sp_meshgradient_repr_write: bad path type" << path_type << std::endl;
+                        std::cerr << "SPMeshNodeArray::write(): bad path type" << path_type << std::endl;
                         break;
                     default:
-                        std::cout << "sp_meshgradient_repr_write: unhandled path type" << path_type << std::endl;
+                        std::cerr << "SPMeshNodeArray::write(): unhandled path type" << path_type << std::endl;
                 }
                 stop->setAttribute("path", is.str().c_str());
                 // std::cout << "SPMeshNodeArray::write: path:  " << is.str().c_str() << std::endl;
@@ -952,42 +1086,27 @@ void SPMeshNodeArray::write( SPMeshGradient *mg ) {
 }
 
 /**
-   Find default color based on color of first stop in "vector" gradient.
-   This should be rewritten if dependence on "vector" is removed.
-*/
+ * Find default color based on colors in existing fill.
+ */
 static SPColor default_color( SPItem *item ) {
 
-    // Set initial color to the color of the object before adding the mesh.
-    // This is a bit tricky as at the moment, a "vector" gradient is created
-    // before reaching here, replacing the original solid color. But the first
-    // stop will be that of the original object color.
     SPColor color( 0.5, 0.0, 0.5 );
+
     if ( item->style ) {
-        SPStyle const &style = *(item->style);
-        SPIPaint const &paint = ( style.fill ); // Could pick between style.fill/style.stroke
+        SPIPaint const &paint = ( item->style->fill ); // Could pick between style.fill/style.stroke
         if ( paint.isColor() ) {
             color = paint.value.color;
         } else if ( paint.isPaintserver() ) {
-            SPObject const *server = style.getFillPaintServer();
-            if ( SP_IS_GRADIENT(server) ) {
-                SPGradient *vector = SP_GRADIENT( server )->getVector();
-                SPStop *firstStop = (vector) ?
-                    vector->getFirstStop() : SP_GRADIENT( server )->getFirstStop();
+            SPObject const *server = item->style->getFillPaintServer();
+            if ( SP_IS_GRADIENT(server) && SP_GRADIENT(server)->getVector() ) {
+                SPStop *firstStop = SP_GRADIENT(server)->getVector()->getFirstStop();
                 if ( firstStop ) {
-                    if (firstStop->currentColor) {
-                        Glib::ustring str = firstStop->getStyleProperty("color", NULL);
-                        if( !str.empty() ) {
-                            guint32 rgb = sp_svg_read_color( str.c_str(), 0 );
-                            color = SPColor( rgb );
-                        }
-                    } else {
-                        color = firstStop->specified_color;
-                    }
+                    color = firstStop->getEffectiveColor();
                 }
             }
         }
     } else {
-        std::cout << " SPMeshNodeArray: No style" << std::endl;
+        std::cerr << " SPMeshNodeArray: default_color(): No style" << std::endl;
     }
 
     return color;
@@ -1002,12 +1121,13 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
 
     if( !bbox ) {
         // Set default size to bounding box if size not given.
-        std::cout << "SPMeshNodeArray::create(): bbox empty" << std::endl;
-        Geom::OptRect bbox = item->geometricBounds();
-    }
-    if( !bbox ) {
-        std::cout << "SPMeshNodeArray::create: ERROR: No bounding box!" << std::endl;
-        return;
+        std::cerr << "SPMeshNodeArray::create(): bbox empty" << std::endl;
+        bbox = item->geometricBounds();
+
+        if( !bbox ) {
+            std::cerr << "SPMeshNodeArray::create: ERROR: No bounding box!" << std::endl;
+            return;
+        }
     }
 
     Geom::Coord const width = bbox->dimensions()[Geom::X];
@@ -1015,29 +1135,40 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
     Geom::Point       center = bbox->midpoint();
 
     // Must keep repr and array in sync. We have two choices:
-    //  Build the repr first and the "read" it.
-    //  Construct the array and the "write" it.
+    //  Build the repr first and then "read" it.
+    //  Construct the array and then "write" it.
     // We'll do the second.
 
-    // Remove any existing mesh.  We could chose to simply scale an existing mesh...
+    // Remove any existing mesh.  We could choose to simply scale an existing mesh...
     //clear();
 
     // We get called twice when a new mesh is created...WHY?
     //  return if we've already constructed the mesh.
     if( !nodes.empty() ) return;
 
+    // Set 'gradientUnits'. Our calculations assume "userSpaceOnUse".
+    Inkscape::XML::Node *repr = mg->getRepr();
+    repr->setAttribute("gradientUnits", "userSpaceOnUse");
+
     // Get default color
     SPColor color = default_color( item );
- 
+
+    // Set some corners to white so we can see the mesh.
+    SPColor white( 1.0, 1.0, 1.0 );
+    if (color == white) {
+        // If default color is white, set other color to black.
+        white = SPColor( 0.0, 0.0, 0.0 );
+    }
+
     // Get preferences
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     guint prows = prefs->getInt("/tools/mesh/mesh_rows", 1);
     guint pcols = prefs->getInt("/tools/mesh/mesh_cols", 1);
 
-    SPGradientMeshType mesh_type =
-        (SPGradientMeshType) prefs->getInt("/tools/mesh/mesh_type", SP_GRADIENT_MESH_TYPE_NORMAL);
+    SPMeshGeometry mesh_type =
+        (SPMeshGeometry) prefs->getInt("/tools/mesh/mesh_geometry", SP_MESH_GEOMETRY_NORMAL);
 
-    if( mesh_type == SP_GRADIENT_MESH_TYPE_CONICAL ) {
+    if( mesh_type == SP_MESH_GEOMETRY_CONICAL ) {
 
         // Conical gradient.. for any shape/path using geometric bounding box.
 
@@ -1067,12 +1198,14 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
             ry = arc->ry.computed;
             start = arc->start;
             end   = arc->end;
+            if( end <= start ) {
+                end += 2.0 * M_PI;
+            }
         }
 
         // std::cout << " start: " << start << "  end: " << end << std::endl;
 
         // IS THIS NECESSARY?
-        Inkscape::XML::Node *repr = mg->getRepr();
         sp_repr_set_svg_double( repr, "x", center[Geom::X] + rx * cos(start) );
         sp_repr_set_svg_double( repr, "y", center[Geom::Y] + ry * sin(start) );
 
@@ -1114,7 +1247,7 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
 
             for( guint k = 0; k < 4; ++k ) {
                 patch.setPathType( k, 'l' );
-                patch.setColor( k, color );
+                patch.setColor( k, (i+k)%2 ? color : white );
                 patch.setOpacity( k, 1.0 );
             }
             patch.setPathType( 0, 'c' );
@@ -1142,7 +1275,6 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
 
             gdouble s = -3.0/2.0 * M_PI_2;
 
-            Inkscape::XML::Node *repr = mg->getRepr();
             sp_repr_set_svg_double( repr, "x", center[Geom::X] + rx * cos(s) );
             sp_repr_set_svg_double( repr, "y", center[Geom::Y] + ry * sin(s) );
 
@@ -1172,7 +1304,7 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
 
                 patch.setPathType( i, 'c' );
 
-                patch.setColor( i, color );
+                patch.setColor( i, i%2 ? color : white );
                 patch.setOpacity( i, 1.0 );
             }
 
@@ -1195,7 +1327,6 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
             // std::cout << "We've got ourselves an star! Sides: " << sides << std::endl;
 
             Geom::Point p0 = sp_star_get_xy( star, SP_STAR_POINT_KNOT1, 0 );
-            Inkscape::XML::Node *repr = mg->getRepr();
             sp_repr_set_svg_double( repr, "x", p0[Geom::X] );
             sp_repr_set_svg_double( repr, "y", p0[Geom::Y] );
 
@@ -1214,7 +1345,7 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
 
                     for( guint s = 0; s < 4; ++s ) {
                         patch.setPathType( s, 'l' );
-                        patch.setColor( s, color );
+                        patch.setColor( s, (i+s)%2 ? color : white );
                         patch.setOpacity( s, 1.0 );
                     }
 
@@ -1242,10 +1373,10 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
 
                     for( guint s = 0; s < 4; ++s ) {
                         patch0.setPathType( s, 'l' );
-                        patch0.setColor( s, color );
+                        patch0.setColor( s, s%2 ? color : white );
                         patch0.setOpacity( s, 1.0 );
                         patch1.setPathType( s, 'l' );
-                        patch1.setColor( s, color );
+                        patch1.setColor( s, s%2 ? white : color );
                         patch1.setOpacity( s, 1.0 );
                     }
 
@@ -1265,7 +1396,6 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
 
             // Generic
 
-            Inkscape::XML::Node *repr = mg->getRepr();
             sp_repr_set_svg_double(repr, "x", bbox->min()[Geom::X]);
             sp_repr_set_svg_double(repr, "y", bbox->min()[Geom::Y]);
 
@@ -1296,7 +1426,7 @@ void SPMeshNodeArray::create( SPMeshGradient *mg, SPItem *item, Geom::OptRect bb
                             // Corner
                             node->node_type = MG_NODE_TYPE_CORNER;
                             node->set = true;
-                            node->color = color;
+                            node->color = (i+j)%2 ? color : white;
                             node->opacity = 1.0;
 
                         } else {
@@ -1348,11 +1478,8 @@ void SPMeshNodeArray::clear() {
                 delete nodes[i][j];
             }
         }
-        for( guint i = 0; i < nodes.size(); ++i ) {
-            nodes[i].clear();
-        }
-        nodes.clear();
     }
+    nodes.clear();
 };
 
 
@@ -1371,6 +1498,7 @@ void SPMeshNodeArray::print() {
                           << "  Node edge: " << nodes[i][j]->node_edge
                           << "  Set: "  << nodes[i][j]->set
                           << "  Path type: " << nodes[i][j]->path_type
+                          << "  Stop: " << nodes[i][j]->stop
                           << std::endl;
             } else {
                 std::cout << "Error: missing mesh node." << std::endl;
@@ -1379,6 +1507,346 @@ void SPMeshNodeArray::print() {
     } // Loop over rows
 };
 
+
+
+/*
+double hermite( const double p0, const double p1, const double m0, const double m1, const double t ) {
+    double t2 = t*t;
+    double t3 = t2*t;
+
+    double result = (2.0*t3 - 3.0*t2 +1.0) * p0
+                  + (t3 - 2.0*t2 + t)      * m0
+                  + (-2.0*t3 + 3.0*t2)     * p1
+                  + (t3 -t2)               * m1;
+
+    return result;
+}
+*/
+
+class SPMeshSmoothCorner {
+
+    enum {
+        AMP,
+        DX_LEFT,
+        DX_RIGHT,
+        DY_TOP,
+        DY_BOTTOM,
+        DXY_LT,
+        DXY_RT,
+        DXY_LB,
+        DXY_RB
+    };
+        
+public:
+    SPMeshSmoothCorner() {
+        for( unsigned i = 0; i < 3; ++i ) {
+            for( unsigned j = 0; j < 4; ++j ) {
+                g[i][j] = 0;
+            }
+        }
+    }
+    
+    double g[3][8]; // 3 colors, 8 parameters: see enum.
+    Geom::Point p;  // Location of point
+};
+
+// Find slope at point 1 given values at previous and next points
+// Return value is slope in user space
+double find_slope1( const double &p0, const double &p1, const double &p2,
+                    const double &d01, const double &d12 ) {
+
+    double slope = 0;
+
+    if( d01 > 0 && d12 > 0 ) {
+        slope = 0.5 * ( (p1 - p0)/d01 + (p2 - p1)/d12 );
+
+        if( ( p0 > p1 && p1 < p2 ) ||
+            ( p0 < p1 && p1 > p2 ) ) {
+            // At minimum or maximum, use slope of zero
+            slope = 0;
+        } else {
+            // Ensure we don't overshoot
+            if( fabs(slope) > fabs(3*(p1-p0)/d01) ) {
+                slope = 3*(p1-p0)/d01;
+            }
+            if( fabs(slope) > fabs(3*(p2-p1)/d12) ) {
+                slope = 3*(p2-p1)/d12;
+            }
+        }
+    } else {
+        // Do something clever
+    }
+    return slope;
+};
+
+
+/*
+// Find slope at point 0 given values at previous and next points
+// TO DO: TAKE DISTANCE BETWEEN POINTS INTO ACCOUNT
+double find_slope2( double pmm, double ppm, double pmp, double ppp, double p0 ) {
+
+    // pmm == d[i-1][j-1], ...  'm' is minus, 'p' is plus
+    double slope = (ppp - ppm - pmp + pmm)/2.0;
+    if( (ppp > p0 && ppm > p0 && pmp > p0 && pmm > 0) ||
+        (ppp < p0 && ppm < p0 && pmp < p0 && pmm < 0) ) {
+        // At minimum or maximum, use slope of zero
+        slope = 0;
+    } else {
+        // Don't really know what to do here
+        if( fabs(slope) > fabs(3*(ppp-p0)) ) {
+            slope = 3*(ppp-p0);
+        }
+        if( fabs(slope) > fabs(3*(pmp-p0)) ) {
+            slope = 3*(pmp-p0);
+        }
+        if( fabs(slope) > fabs(3*(ppm-p0)) ) {
+            slope = 3*(ppm-p0);
+        }
+        if( fabs(slope) > fabs(3*(pmm-p0)) ) {
+            slope = 3*(pmm-p0);
+        }
+    }
+    return slope;
+}
+*/
+
+// https://en.wikipedia.org/wiki/Bicubic_interpolation
+void invert( const double v[16], double alpha[16] ) {
+
+    const double  A[16][16] = {
+
+        { 1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0 },
+        { 0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0 },
+        {-3, 3, 0, 0, -2,-1, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0 },
+        { 2,-2, 0, 0,  1, 1, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0 },
+        { 0, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0 },
+        { 0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 0 },
+        { 0, 0, 0, 0,  0, 0, 0, 0, -3, 3, 0, 0, -2,-1, 0, 0 },
+        { 0, 0, 0, 0,  0, 0, 0, 0,  2,-2, 0, 0,  1, 1, 0, 0 },
+        {-3, 0, 3, 0,  0, 0, 0, 0, -2, 0,-1, 0,  0, 0, 0, 0 },
+        { 0, 0, 0, 0, -3, 0, 3, 0,  0, 0, 0, 0, -2, 0,-1, 0 },
+        { 9,-9,-9, 9,  6, 3,-6,-3,  6,-6, 3,-3,  4, 2, 2, 1 },
+        {-6, 6, 6,-6, -3,-3, 3, 3, -4, 4,-2, 2, -2,-2,-1,-1 },
+        { 2, 0,-2, 0,  0, 0, 0, 0,  1, 0, 1, 0,  0, 0, 0, 0 },
+        { 0, 0, 0, 0,  2, 0,-2, 0,  0, 0, 0, 0,  1, 0, 1, 0 },
+        {-6, 6, 6,-6, -4,-2, 4, 2, -3, 3,-3, 3, -2,-1,-2,-1 },
+        { 4,-4,-4, 4,  2, 2,-2,-2,  2,-2, 2,-2,  1, 1, 1, 1 }
+    };
+
+    for( unsigned i = 0; i < 16; ++i ) {
+        alpha[i] = 0;
+        for( unsigned j = 0; j < 16; ++j ) {
+            alpha[i] += A[i][j]*v[j];
+        }
+    }
+}
+
+double sum( const double alpha[16], const double& x, const double& y ) {
+
+    double result = 0;
+    
+    double xx = x*x;
+    double xxx = xx * x;
+    double yy = y*y;
+    double yyy = yy * y;
+
+    result += alpha[  0 ];
+    result += alpha[  1 ] * x;
+    result += alpha[  2 ] * xx;
+    result += alpha[  3 ] * xxx;
+    result += alpha[  4 ] * y;
+    result += alpha[  5 ] * y * x;
+    result += alpha[  6 ] * y * xx;
+    result += alpha[  7 ] * y * xxx;
+    result += alpha[  8 ] * yy;
+    result += alpha[  9 ] * yy * x;
+    result += alpha[ 10 ] * yy * xx;
+    result += alpha[ 11 ] * yy * xxx;
+    result += alpha[ 12 ] * yyy;
+    result += alpha[ 13 ] * yyy * x;
+    result += alpha[ 14 ] * yyy * xx;
+    result += alpha[ 15 ] * yyy * xxx;
+    
+    return result;
+}
+
+/**
+   Fill 'smooth' with a smoothed version of the array by subdividing each patch into smaller patches.
+*/
+void SPMeshNodeArray::bicubic( SPMeshNodeArray* smooth, SPMeshType type ) {
+
+    
+    *smooth = *this;  // Deep copy via copy assignment constructor, smooth cleared before copy
+    // std::cout << "SPMeshNodeArray::smooth2(): " << this->patch_rows() << " " << smooth->patch_columns() << std::endl;
+    // std::cout << "  " << smooth << " " << this << std::endl;
+
+    // Find derivatives at corners
+
+    // Create array of corner points
+    std::vector< std::vector <SPMeshSmoothCorner> > d; 
+    d.resize( smooth->patch_rows() + 1 );
+    for( unsigned i = 0; i < d.size(); ++i ) {
+        d[i].resize( smooth->patch_columns() + 1 );
+        for( unsigned j = 0; j < d[i].size(); ++j ) {
+            float rgb_color[3];
+            sp_color_get_rgb_floatv( &this->nodes[ i*3 ][ j*3 ]->color, rgb_color );
+            d[i][j].g[0][0] =  rgb_color[ 0 ];
+            d[i][j].g[1][0] =  rgb_color[ 1 ];
+            d[i][j].g[2][0] =  rgb_color[ 2 ];
+            d[i][j].p = this->nodes[ i*3 ][ j*3 ]->p;
+        }
+    }
+
+    // Calculate interior derivatives
+    for( unsigned i = 0; i < d.size(); ++i ) {
+        for( unsigned j = 0; j < d[i].size(); ++j ) {
+            for( unsigned k = 0; k < 3; ++k ) { // Loop over colors
+
+                // dx
+
+                if( i != 0 && i != d.size()-1 ) {
+                    double lm = Geom::distance(  d[i-1][j].p, d[i][j].p );
+                    double lp = Geom::distance(  d[i+1][j].p, d[i][j].p );
+                    d[i][j].g[k][1] = find_slope1( d[i-1][j].g[k][0], d[i][j].g[k][0], d[i+1][j].g[k][0], lm, lp );
+                }
+
+                // dy
+                if( j != 0 && j != d[i].size()-1 ) {
+                    double lm = Geom::distance(  d[i][j-1].p, d[i][j].p );
+                    double lp = Geom::distance(  d[i][j+1].p, d[i][j].p );
+                    d[i][j].g[k][2] = find_slope1( d[i][j-1].g[k][0], d[i][j].g[k][0], d[i][j+1].g[k][0], lm, lp );
+                }
+
+                // dxdy  if needed, need to take lengths into account
+                // if( i != 0 && i != d.size()-1 && j != 0 && j != d[i].size()-1 ) {
+                //     d[i][j].g[k][3] = find_slope2( d[i-1][j-1].g[k][0], d[i+1][j-1].g[k][0],
+                //                                    d[i-1][j+1].g[k][0], d[i-1][j-1].g[k][0],
+                //                                    d[i][j].g[k][0] );
+                // }
+
+            }
+        }
+    }
+    
+    // Calculate exterior derivatives
+    // We need to do this after calculating interior derivatives as we need to already
+    // have the non-exterior derivative calculated for finding the parabola.
+    for( unsigned j = 0; j< d[0].size(); ++j ) {
+        for( unsigned k = 0; k < 3; ++k ) { // Loop over colors
+
+            // Parabolic
+            double d0 = Geom::distance( d[1][j].p, d[0  ][j].p );
+            if( d0 > 0 ) {
+                d[0][j].g[k][1] = 2.0*(d[1][j].g[k][0] - d[0  ][j].g[k][0])/d0 - d[1][j].g[k][1];
+            } else {
+                d[0][j].g[k][1] = 0;
+            }
+
+            unsigned z = d.size()-1;
+            double dz = Geom::distance( d[z][j].p, d[z-1][j].p );
+            if( dz > 0 ) {
+                d[z][j].g[k][1] = 2.0*(d[z][j].g[k][0] - d[z-1][j].g[k][0])/dz - d[z-1][j].g[k][1];
+            } else {
+                d[z][j].g[k][1] = 0;
+            }
+        }
+    }
+
+    for( unsigned i = 0; i< d.size(); ++i ) {
+        for( unsigned k = 0; k < 3; ++k ) { // Loop over colors
+
+            // Parabolic
+            double d0 = Geom::distance( d[i][1].p, d[i][0  ].p );
+            if( d0 > 0 ) {
+                d[i][0].g[k][2] = 2.0*(d[i][1].g[k][0] - d[i][0  ].g[k][0])/d0 - d[i][1].g[k][2];
+            } else {
+                d[i][0].g[k][2] = 0;
+            }
+
+            unsigned z = d[0].size()-1;
+            double dz = Geom::distance( d[i][z].p, d[i][z-1].p );
+            if( dz > 0 ) {
+                d[i][z].g[k][2] = 2.0*(d[i][z].g[k][0] - d[i][z-1].g[k][0])/dz - d[i][z-1].g[k][2];
+            } else {
+                d[i][z].g[k][2] = 0;
+            }
+        }
+    }
+
+    // Leave outside corner cross-derivatives at zero.
+    
+    // Next split each patch into 8x8 smaller patches.
+    
+    // Split each row into eight rows.
+    // Must do it from end so inserted rows don't mess up indexing 
+    for( int i = smooth->patch_rows() - 1; i >= 0; --i ) {
+        smooth->split_row( i, unsigned(8) );
+    }
+
+    // Split each column into eight columns.
+    // Must do it from end so inserted columns don't mess up indexing 
+    for( int i = smooth->patch_columns() - 1; i >= 0; --i ) {
+        smooth->split_column( i, (unsigned)8 );
+    }
+
+    // Fill new patches
+    for( unsigned i = 0; i < this->patch_rows(); ++i ) {
+        for( unsigned j = 0; j < this->patch_columns(); ++j ) {
+
+            double dx0 = Geom::distance( d[i  ][j  ].p, d[i+1][j  ].p );
+            double dx1 = Geom::distance( d[i  ][j+1].p, d[i+1][j+1].p );
+            double dy0 = Geom::distance( d[i  ][j  ].p, d[i  ][j+1].p );
+            double dy1 = Geom::distance( d[i+1][j  ].p, d[i+1][j+1].p );
+
+            // Temp loop over 0..8 to get last column/row edges
+            float r[3][9][9]; // result
+            for( unsigned m = 0; m < 3; ++m ) {
+
+                double v[16];
+                v[ 0] = d[i  ][j  ].g[m][0];
+                v[ 1] = d[i+1][j  ].g[m][0];
+                v[ 2] = d[i  ][j+1].g[m][0];
+                v[ 3] = d[i+1][j+1].g[m][0];
+                v[ 4] = d[i  ][j  ].g[m][1]*dx0;
+                v[ 5] = d[i+1][j  ].g[m][1]*dx0;
+                v[ 6] = d[i  ][j+1].g[m][1]*dx1;
+                v[ 7] = d[i+1][j+1].g[m][1]*dx1;
+                v[ 8] = d[i  ][j  ].g[m][2]*dy0;
+                v[ 9] = d[i+1][j  ].g[m][2]*dy1;
+                v[10] = d[i  ][j+1].g[m][2]*dy0;
+                v[11] = d[i+1][j+1].g[m][2]*dy1;
+                v[12] = d[i  ][j  ].g[m][3];
+                v[13] = d[i+1][j  ].g[m][3];
+                v[14] = d[i  ][j+1].g[m][3];
+                v[15] = d[i+1][j+1].g[m][3];
+
+                double alpha[16];
+                invert( v, alpha );
+                
+                for( unsigned k = 0; k < 9; ++k ) {
+                    for( unsigned l = 0; l < 9; ++l ) {
+                        double x = k/8.0;
+                        double y = l/8.0;
+                        r[m][k][l] = sum( alpha, x, y );
+                        // Clamp to allowed values
+                        if( r[m][k][l] > 1.0 )
+                            r[m][k][l] = 1.0;
+                        if( r[m][k][l] < 0.0 )
+                            r[m][k][l] = 0.0;
+                    }
+                }
+
+            } // Loop over colors
+
+            for( unsigned k = 0; k < 9; ++k ) {
+                for( unsigned l = 0; l < 9; ++l ) {
+                    // Every third node is a corner node
+                    smooth->nodes[ (i*8+k)*3 ][(j*8+l)*3 ]->color.set( r[0][k][l], r[1][k][l], r[2][k][l] );
+                }
+            }
+        }
+    }
+}
 
 /**
    Number of patch rows.
@@ -1392,7 +1860,9 @@ guint SPMeshNodeArray::patch_rows() {
    Number of patch columns.
 */
 guint SPMeshNodeArray::patch_columns() {
-
+    if (nodes.empty()) {
+        return 0;
+    }
     return nodes[0].size()/3;
 }
 
@@ -1556,7 +2026,7 @@ guint SPMeshNodeArray::side_arc( std::vector<guint> corners ) {
                 {
                     case 'L':
                     case 'l':
-                        std::cout << "SPMeshNodeArray::arc_sides: Can't convert straight lines to arcs.";
+                        std::cerr << "SPMeshNodeArray::side_arc: Can't convert straight lines to arcs." << std::endl;
                         break;
 
                     case 'C':
@@ -1582,15 +2052,15 @@ guint SPMeshNodeArray::side_arc( std::vector<guint> corners ) {
                                 ++arced;
 
                             } else {
-                                std::cout << "SPMeshNodeArray::arc_sides: No crossing, can't turn into arc." << std::endl;
+                                std::cerr << "SPMeshNodeArray::side_arc: No crossing, can't turn into arc." << std::endl;
                             }
                         } else {
-                            std::cout << "SPMeshNodeArray::arc_sides: Handles parallel, can't turn into arc." << std::endl;
+                            std::cerr << "SPMeshNodeArray::side_arc: Handles parallel, can't turn into arc." << std::endl;
                         }
                         break;
                     }
                     default:
-                        std::cout << "SPMeshNodeArray::arc_sides: Invalid path type: " << n[1]->path_type << std::endl;
+                        std::cerr << "SPMeshNodeArray::side_arc: Invalid path type: " << n[1]->path_type << std::endl;
                 }
             }
         }
@@ -1882,10 +2352,12 @@ guint SPMeshNodeArray::color_pick( std::vector<guint> icorners, SPItem* item ) {
 
         // Region to average over
         Geom::Point p = n->p;
-        // std::cout << " p: " << p << std::endl;
+        // std::cout << " before transform: p: " << p << std::endl;
         p *= gr->gradientTransform;
-        // std::cout << " p: " << p << std::endl;
-
+        // std::cout << " after transform:  p: " << p << std::endl;
+        p *= item->i2doc_affine();
+        // std::cout << " after transform:  p: " << p << std::endl;
+        
         // If on edge, move inward
         guint cols = patch_columns()+1;
         guint rows = patch_rows()+1;
@@ -1894,7 +2366,7 @@ guint SPMeshNodeArray::color_pick( std::vector<guint> icorners, SPItem* item ) {
         guint ncol  = col * 3;
         guint nrow  = row * 3;
 
-        double size = 3.0;
+        const double size = 3.0;
 
         // Top edge
         if( row == 0 ) {
@@ -1945,8 +2417,71 @@ guint SPMeshNodeArray::color_pick( std::vector<guint> icorners, SPItem* item ) {
     pick_doc->getRoot()->invoke_hide(pick_visionkey);
     delete pick_drawing;
 
+    picked = 1; // Picking always happens
     if( picked > 0 ) built = false;
     return picked;
+}
+
+/**
+   Splits selected rows and/or columns in half (according to the path 't' parameter).
+   Input is a list of selected corner draggable indices.
+*/
+guint SPMeshNodeArray::insert( std::vector<guint> corners ) {
+
+    guint inserted = 0;
+
+    if( corners.size() < 2 ) return 0;
+
+    std::set<guint> columns;
+    std::set<guint> rows;
+
+    for( guint i = 0; i < corners.size()-1; ++i ) {
+        for( guint j = i+1; j < corners.size(); ++j ) {
+
+            // This works as all corners have indices and they
+            // are numbered in order by row and column (and
+            // the node array is rectangular).
+
+            guint c1 = corners[i];
+            guint c2 = corners[j];
+            if (c2 < c1) {
+                c1 = corners[j];
+                c2 = corners[i];
+            }
+
+            // Number of corners in a row of patches.
+            guint ncorners = patch_columns() + 1;
+
+            guint crow1 = c1 / ncorners;
+            guint crow2 = c2 / ncorners;
+            guint ccol1 = c1 % ncorners;
+            guint ccol2 = c2 % ncorners;
+
+            // Check for horizontal neighbors
+            if ( crow1 == crow2 && (ccol2 - ccol1) == 1 ) {
+                columns.insert( ccol1 );
+            }
+        
+            // Check for vertical neighbors
+            if ( ccol1 == ccol2 && (crow2 - crow1) == 1 ) {
+                rows.insert( crow1 );
+            }
+        }
+    }
+
+    // Iterate backwards so column/row numbers are not invalidated.
+    std::set<guint>::reverse_iterator rit;
+    for (rit=columns.rbegin(); rit != columns.rend(); ++rit) {
+        split_column( *rit, 0.5);
+        ++inserted;
+    }
+    for (rit=rows.rbegin(); rit != rows.rend(); ++rit) {
+        split_row( *rit, 0.5);
+        ++inserted;
+    }
+
+    if( inserted > 0 ) built = false;
+    return inserted;
 }
 
 /**
@@ -1955,10 +2490,15 @@ guint SPMeshNodeArray::color_pick( std::vector<guint> icorners, SPItem* item ) {
    corner: the corner node moved (draggable index, i.e. point_i).
    selected: list of all corners selected (draggable indices).
    op: how other corners should be moved.
+   Corner node must already have been moved!
 */
 void SPMeshNodeArray::update_handles( guint corner, std::vector< guint > /*selected*/, Geom::Point p_old, MeshNodeOperation /*op*/ )
 {
-    assert( drag_valid );
+    if (!draggers_valid) {
+        std::cerr << "SPMeshNodeArray::update_handles: Draggers not valid!" << std::endl;
+        return;
+    }
+    // assert( draggers_valid );
 
     // std::cout << "SPMeshNodeArray::update_handles: "
     //           << "  corner: " << corner
@@ -2231,13 +2771,98 @@ void SPMeshNodeArray::update_handles( guint corner, std::vector< guint > /*selec
 }
 
 
+SPCurve * SPMeshNodeArray::outline_path() {
+
+    SPCurve *outline = new SPCurve();
+
+    if (nodes.empty() ) {
+        std::cerr << "SPMeshNodeArray::outline_path: empty array!" << std::endl;
+        return outline;
+    }
+
+    outline->moveto( nodes[0][0]->p );
+
+    int ncol = nodes[0].size();
+    int nrow = nodes.size();
+
+    // Top
+    for (int i = 1; i < ncol; i += 3 ) {
+        outline->curveto( nodes[0][i]->p, nodes[0][i+1]->p, nodes[0][i+2]->p);
+    }
+
+    // Right
+    for (int i = 1; i < nrow; i += 3 ) {
+        outline->curveto( nodes[i][ncol-1]->p, nodes[i+1][ncol-1]->p, nodes[i+2][ncol-1]->p);
+    }
+
+    // Bottom (right to left)
+    for (int i = 1; i < ncol; i += 3 ) {
+        outline->curveto( nodes[nrow-1][ncol-i-1]->p, nodes[nrow-1][ncol-i-2]->p, nodes[nrow-1][ncol-i-3]->p);
+    }
+
+    // Left (bottom to top)
+    for (int i = 1; i < nrow; i += 3 ) {
+        outline->curveto( nodes[nrow-i-1][0]->p, nodes[nrow-i-2][0]->p, nodes[nrow-i-3][0]->p);
+    }
+
+    outline->closepath();
+
+    return outline;
+}
+
+void SPMeshNodeArray::transform(Geom::Affine const &m) {
+
+    for (int i = 0; i < nodes[0].size(); ++i) {
+        for (int j = 0; j < nodes.size(); ++j) {
+            nodes[j][i]->p *= m;
+        }
+    }
+}
+
+// Transform mesh to fill box. Return true if mesh transformed.
+bool SPMeshNodeArray::fill_box(Geom::OptRect &box) {
+
+    // If gradientTransfor is set (as happens when an object is transformed
+    // with the "optimized" preferences set true), we need to remove it.
+    if (mg->gradientTransform_set) {
+        Geom::Affine gt = mg->gradientTransform;
+        transform( gt );
+        mg->gradientTransform_set = false;
+        mg->gradientTransform.setIdentity();
+    }
+
+    SPCurve *outline = outline_path();
+    Geom::OptRect mesh_bbox = outline->get_pathvector().boundsExact();
+    outline->unref();
+
+    if ((*mesh_bbox).width() == 0 || (*mesh_bbox).height() == 0) {
+        return false;
+    }            
+
+    double scale_x = (*box).width() /(*mesh_bbox).width() ;
+    double scale_y = (*box).height()/(*mesh_bbox).height();
+
+    Geom::Translate t1(-(*mesh_bbox).min());
+    Geom::Scale scale(scale_x,scale_y);
+    Geom::Translate t2((*box).min());
+    Geom::Affine trans = t1 * scale * t2;
+    if (!trans.isIdentity() ) {
+        transform(trans);
+        write( mg );
+        mg->requestModified(SP_OBJECT_MODIFIED_FLAG);
+        return true;
+    }
+
+    return false;
+}
+
 // Defined in gradient-chemistry.cpp
 guint32 average_color(guint32 c1, guint32 c2, gdouble p);
 
 /**
    Split a row into n equal parts.
 */
-void SPMeshNodeArray::split_row( guint row, guint n ) {
+void SPMeshNodeArray::split_row( unsigned int row, unsigned int n ) {
 
     double nn = n;
     if( n > 1 ) split_row( row, (nn-1)/nn );
@@ -2247,7 +2872,7 @@ void SPMeshNodeArray::split_row( guint row, guint n ) {
 /**
    Split a column into n equal parts.
 */
-void SPMeshNodeArray::split_column( guint col, guint n ) {
+void SPMeshNodeArray::split_column( unsigned int col, unsigned int n ) {
 
     double nn = n;
     if( n > 1 ) split_column( col, (nn-1)/nn );
@@ -2257,7 +2882,7 @@ void SPMeshNodeArray::split_column( guint col, guint n ) {
 /**
    Split a row into two rows at coord (fraction of row height).
 */
-void SPMeshNodeArray::split_row( guint row, double coord ) {
+void SPMeshNodeArray::split_row( unsigned int row, double coord ) {
 
     // std::cout << "Splitting row: " << row << " at " << coord << std::endl;
     // print();
@@ -2380,7 +3005,7 @@ void SPMeshNodeArray::split_row( guint row, double coord ) {
 /**
    Split a column into two columns at coord (fraction of column width).
 */
-void SPMeshNodeArray::split_column( guint col, double coord ) {
+void SPMeshNodeArray::split_column( unsigned int col, double coord ) {
 
     // std::cout << "Splitting column: " << col << " at " << coord << std::endl;
     // print();

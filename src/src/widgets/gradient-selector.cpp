@@ -16,18 +16,21 @@
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
+
+#include <gtkmm/treeview.h>
+
 #include "gradient-vector.h"
-#include <gtk/gtk.h>
 
 #include "document.h"
-#include "../document-undo.h"
-#include "../document-private.h"
-#include "../gradient-chemistry.h"
+#include "document-undo.h"
+#include "document-private.h"
+#include "gradient-chemistry.h"
 #include "inkscape.h"
 #include "verbs.h"
 #include "helper/action.h"
 #include "helper/action-context.h"
 #include "preferences.h"
+#include "widgets/icon.h"
 
 #include <glibmm/i18n.h>
 #include <xml/repr.h>
@@ -47,8 +50,6 @@ enum {
 };
 
 
-static void sp_gradient_selector_class_init (SPGradientSelectorClass *klass);
-static void sp_gradient_selector_init (SPGradientSelector *selector);
 static void sp_gradient_selector_dispose(GObject *object);
 
 /* Signal handlers */
@@ -57,40 +58,17 @@ static void sp_gradient_selector_edit_vector_clicked (GtkWidget *w, SPGradientSe
 static void sp_gradient_selector_add_vector_clicked (GtkWidget *w, SPGradientSelector *sel);
 static void sp_gradient_selector_delete_vector_clicked (GtkWidget *w, SPGradientSelector *sel);
 
-
-static GtkVBoxClass *parent_class;
 static guint signals[LAST_SIGNAL] = {0};
 
-GType sp_gradient_selector_get_type(void)
-{
-    static GType type = 0;
-    if (!type) {
-        static const GTypeInfo info = {
-            sizeof(SPGradientSelectorClass),
-            NULL, /* base_init */
-            NULL, /* base_finalize */
-            (GClassInitFunc) sp_gradient_selector_class_init,
-            NULL, /* class_finalize */
-            NULL, /* class_data */
-            sizeof(SPGradientSelector),
-            0,    /* n_preallocs */
-            (GInstanceInitFunc) sp_gradient_selector_init,
-            0,    /* value_table */
-        };
-
-        type = g_type_register_static( GTK_TYPE_VBOX,
-                                       "SPGradientSelector",
-                                       &info,
-                                       static_cast< GTypeFlags > (0) );
-    }
-    return type;
-}
+#if GTK_CHECK_VERSION(3,0,0)
+G_DEFINE_TYPE(SPGradientSelector, sp_gradient_selector, GTK_TYPE_BOX);
+#else
+G_DEFINE_TYPE(SPGradientSelector, sp_gradient_selector, GTK_TYPE_VBOX);
+#endif
 
 static void sp_gradient_selector_class_init(SPGradientSelectorClass *klass)
 {
     GObjectClass *object_class = G_OBJECT_CLASS(klass);
-
-    parent_class = GTK_VBOX_CLASS(g_type_class_peek_parent (klass));
 
     signals[GRABBED] =  g_signal_new ("grabbed",
                                         G_TYPE_FROM_CLASS(object_class),
@@ -124,10 +102,24 @@ static void sp_gradient_selector_class_init(SPGradientSelectorClass *klass)
     object_class->dispose = sp_gradient_selector_dispose;
 }
 
+static void gradsel_style_button(GtkWidget *gtkbtn, char const *iconName)
+{
+    Gtk::Button *btn = Glib::wrap(GTK_BUTTON(gtkbtn));
+    GtkWidget *child = sp_icon_new(Inkscape::ICON_SIZE_SMALL_TOOLBAR, iconName);
+    gtk_widget_show(child);
+    btn->add(*manage(Glib::wrap(child)));
+    btn->set_relief(Gtk::RELIEF_NONE);
+}
+
 static void sp_gradient_selector_init(SPGradientSelector *sel)
 {
     sel->safelyInit = true;
     sel->blocked = false;
+
+#if GTK_CHECK_VERSION(3,0,0)
+    gtk_orientable_set_orientation(GTK_ORIENTABLE(sel), GTK_ORIENTATION_VERTICAL);
+#endif
+
     new (&sel->nonsolid) std::vector<GtkWidget*>();
     new (&sel->swatch_widgets) std::vector<GtkWidget*>();
 
@@ -197,13 +189,8 @@ static void sp_gradient_selector_init(SPGradientSelector *sel)
     //sel->nonsolid.push_back(hb);
     gtk_box_pack_start( GTK_BOX(sel), hb, FALSE, FALSE, 0 );
 
-#if GTK_CHECK_VERSION(3,10,0)
-    sel->add = gtk_button_new_from_icon_name(INKSCAPE_ICON("list-add"), GTK_ICON_SIZE_SMALL_TOOLBAR);
-#else
-    sel->add = gtk_button_new ();
-    GtkWidget *img = gtk_image_new_from_icon_name(INKSCAPE_ICON("list-add"), GTK_ICON_SIZE_SMALL_TOOLBAR);
-    gtk_button_set_image(GTK_BUTTON(sel->add), img);
-#endif
+    sel->add = gtk_button_new();
+    gradsel_style_button(sel->add, INKSCAPE_ICON("list-add"));
 
     sel->nonsolid.push_back(sel->add);
     gtk_box_pack_start (GTK_BOX (hb), sel->add, FALSE, FALSE, 0);
@@ -214,13 +201,8 @@ static void sp_gradient_selector_init(SPGradientSelector *sel)
     gtk_widget_set_tooltip_text( sel->add, _("Create a duplicate gradient"));
 
     // FIXME: Probably better to either use something from the icon naming spec or ship our own "edit-gradient" icon
-#if GTK_CHECK_VERSION(3,10,0)
-    sel->edit = gtk_button_new_from_icon_name(INKSCAPE_ICON("gtk-edit"), GTK_ICON_SIZE_SMALL_TOOLBAR);
-#else
-    sel->edit = gtk_button_new ();
-    img = gtk_image_new_from_icon_name(INKSCAPE_ICON("gtk-edit"), GTK_ICON_SIZE_SMALL_TOOLBAR);
-    gtk_button_set_image(GTK_BUTTON(sel->edit), img);
-#endif
+    sel->edit = gtk_button_new();
+    gradsel_style_button(sel->edit, INKSCAPE_ICON("gtk-edit"));
 
     sel->nonsolid.push_back(sel->edit);
     gtk_box_pack_start (GTK_BOX (hb), sel->edit, FALSE, FALSE, 0);
@@ -229,13 +211,8 @@ static void sp_gradient_selector_init(SPGradientSelector *sel)
     gtk_button_set_relief(GTK_BUTTON(sel->edit), GTK_RELIEF_NONE);
     gtk_widget_set_tooltip_text( sel->edit, _("Edit gradient"));
 
-#if GTK_CHECK_VERSION(3,10,0)
-    sel->del = gtk_button_new_from_icon_name(INKSCAPE_ICON("list-remove"), GTK_ICON_SIZE_SMALL_TOOLBAR);
-#else
     sel->del = gtk_button_new ();
-    img = gtk_image_new_from_icon_name(INKSCAPE_ICON("list-remove"), GTK_ICON_SIZE_SMALL_TOOLBAR);
-    gtk_button_set_image(GTK_BUTTON(sel->del), img);
-#endif
+    gradsel_style_button(sel->del, INKSCAPE_ICON("list-remove"));
 
     sel->swatch_widgets.push_back(sel->del);
     gtk_box_pack_start (GTK_BOX (hb), sel->del, FALSE, FALSE, 0);
@@ -245,8 +222,6 @@ static void sp_gradient_selector_init(SPGradientSelector *sel)
     gtk_widget_set_tooltip_text( sel->del, _("Delete swatch"));
 
     gtk_widget_show_all(hb);
-
-
 }
 
 static void sp_gradient_selector_dispose(GObject *object)
@@ -269,8 +244,8 @@ static void sp_gradient_selector_dispose(GObject *object)
         sel->text_renderer = NULL;
     }
 
-    if ((G_OBJECT_CLASS(parent_class))->dispose) {
-        (* (G_OBJECT_CLASS(parent_class))->dispose) (object);
+    if ((G_OBJECT_CLASS(sp_gradient_selector_parent_class))->dispose) {
+        (G_OBJECT_CLASS(sp_gradient_selector_parent_class))->dispose(object);
     }
 }
 
@@ -576,6 +551,10 @@ sp_gradient_selector_add_vector_clicked (GtkWidget */*w*/, SPGradientSelector *s
 
     if (gr) {
         repr = gr->getRepr()->duplicate(xml_doc);
+        // Rename the new gradients id to be similar to the cloned gradients
+        Glib::ustring old_id = gr->getId();
+        rename_id(gr, old_id);
+        doc->getDefs()->getRepr()->addChild(repr, NULL);
     } else {
         repr = xml_doc->createElement("svg:linearGradient");
         Inkscape::XML::Node *stop = xml_doc->createElement("svg:stop");
@@ -588,17 +567,10 @@ sp_gradient_selector_add_vector_clicked (GtkWidget */*w*/, SPGradientSelector *s
         stop->setAttribute("style", "stop-color:#fff;stop-opacity:1;");
         repr->appendChild(stop);
         Inkscape::GC::release(stop);
+        doc->getDefs()->getRepr()->addChild(repr, NULL);
+        gr = SP_GRADIENT(doc->getObjectByRepr(repr));
     }
-
-    doc->getDefs()->getRepr()->addChild(repr, NULL);
-
-    Glib::ustring old_id = gr->getId();
-
-    gr = SP_GRADIENT(doc->getObjectByRepr(repr));
-
-    // Rename the new gradients id to be similar to the cloned gradients
-    rename_id(gr, old_id);
-
+    
     sp_gradient_vector_selector_set_gradient( SP_GRADIENT_VECTOR_SELECTOR (sel->vectors), doc, gr);
 
     sel->selectGradientInTree(gr);

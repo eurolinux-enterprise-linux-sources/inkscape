@@ -2,9 +2,9 @@
 SUBDIRS = \
 	alphabet_soup \
 	Barcode \
+	ink2canvas \
 	Poly3DObjects \
 	test \
-	ink2canvas \
 	xaml2svg
 
 extensiondir = $(datadir)/inkscape/extensions
@@ -28,6 +28,7 @@ otherstuff_DATA = \
 	aisvg.xslt \
 	colors.xml \
 	jessyInk_video.svg \
+	seamless_pattern.svg \
 	svg2fxg.xsl \
 	svg2xaml.xsl \
 	xaml2svg.xsl \

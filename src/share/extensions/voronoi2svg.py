@@ -36,8 +36,8 @@ import simplestyle
 import simplepath
 import simpletransform
 import voronoi
+import random
 
-inkex.localize()
 
 class Point:
   def __init__(self,x,y):
@@ -76,7 +76,13 @@ class Voronoi2svg(inkex.Effect):
       default = False,
       dest='showClipBox',
       help = 'Set this to true to write the bounding box')
-
+    self.OptionParser.add_option(
+      '--delaunay-fill-options',
+      action = 'store',
+      type = 'string',
+      default = "delaunay-no-fill",
+      dest='delaunayFillOptions',
+      help = 'Set the Delaunay triangles color options')
     #}}}
 
   #{{{ Clipping a line by a bounding box
@@ -171,23 +177,6 @@ class Voronoi2svg(inkex.Effect):
 
   #{{{ Transformation helpers
 
-  def invertTransform(self,mat):
-    det = mat[0][0]*mat[1][1] - mat[0][1]*mat[1][0]
-    if det !=0: #det is 0 only in case of 0 scaling
-      #invert the rotation/scaling part
-      a11 =  mat[1][1]/det
-      a12 = -mat[0][1]/det
-      a21 = -mat[1][0]/det
-      a22 =  mat[0][0]/det
-
-      #invert the translational part
-      a13 = -(a11*mat[0][2] + a12*mat[1][2])
-      a23 = -(a21*mat[0][2] + a22*mat[1][2])
-
-      return [[a11,a12,a13],[a21,a22,a23]]
-    else:
-      return[[0,0,-mat[0][2]],[0,0,-mat[1][2]]]
-
   def getGlobalTransform(self,node):
     parent = node.getparent()
     myTrans = simpletransform.parseTransform(node.get('transform'))
@@ -208,7 +197,8 @@ class Voronoi2svg(inkex.Effect):
   #}}}
 
   def effect(self):
-
+    #saveout = sys.stdout
+    #sys.stdout = sys.stderr
     #{{{ Check that elements have been selected
 
     if len(self.options.ids) == 0:
@@ -220,15 +210,19 @@ class Voronoi2svg(inkex.Effect):
     #{{{ Drawing styles
 
     linestyle = {
-        'stroke'       : '#000000',
-        'stroke-width' : str(self.unittouu('1px')),
-        'fill'         : 'none'
+        'stroke'          : '#000000',
+        'stroke-width'    : str(self.unittouu('1px')),
+        'fill'            : 'none',
+        'stroke-linecap'  : 'round',
+        'stroke-linejoin' : 'round'
         }
-
+    
     facestyle = {
-        'stroke'       : '#ff0000',
-        'stroke-width' : str(self.unittouu('1px')),
-        'fill'         : 'none'
+        'stroke'          : '#000000',
+        'stroke-width'    : str(self.unittouu('1px')),
+        'fill'            : 'none',
+        'stroke-linecap'  : 'round',
+        'stroke-linejoin' : 'round'
         }
 
     #}}}
@@ -239,7 +233,7 @@ class Voronoi2svg(inkex.Effect):
     trans = self.getGlobalTransform(parentGroup)
     invtrans = None
     if trans:
-      invtrans = self.invertTransform(trans)
+      invtrans = simpletransform.invertTransform(trans)
 
     #}}}
 
@@ -248,6 +242,7 @@ class Voronoi2svg(inkex.Effect):
     pts = []
     nodes = []
     seeds = []
+    fills = []
 
 
     for id in self.options.ids:
@@ -261,6 +256,20 @@ class Voronoi2svg(inkex.Effect):
         if trans:
           simpletransform.applyTransformToPoint(trans,pt)
         pts.append(Point(pt[0],pt[1]))
+        fill = 'none'
+        if self.options.delaunayFillOptions != "delaunay-no-fill":
+            if node.attrib.has_key('style'):
+                style = node.get('style') # fixme: this will break for presentation attributes!
+                if style:
+                    declarations = style.split(';')
+                    for i,decl in enumerate(declarations):
+                        parts = decl.split(':', 2)
+                        if len(parts) == 2:
+                            (prop, val) = parts
+                            prop = prop.strip().lower()
+                            if prop == 'fill':
+                                fill = val.strip()
+            fills.append(fill)
         seeds.append(Point(cx,cy))
 
     #}}}
@@ -344,6 +353,9 @@ class Voronoi2svg(inkex.Effect):
 
     if self.options.diagramType != 'Voronoi':
       triangles = voronoi.computeDelaunayTriangulation(seeds)
+      i = 0;
+      if self.options.delaunayFillOptions == "delaunay-fill":
+        random.seed("inkscape")
       for triangle in triangles:
         p1 = seeds[triangle[0]]
         p2 = seeds[triangle[1]]
@@ -352,11 +364,20 @@ class Voronoi2svg(inkex.Effect):
                 ['L',[p2.x,p2.y]],
                 ['L',[p3.x,p3.y]],
                 ['Z',[]]]
+        if self.options.delaunayFillOptions == "delaunay-fill" or self.options.delaunayFillOptions == "delaunay-fill-random":
+            facestyle = {
+                'stroke'          : fills[triangle[random.randrange(0, 2)]],
+                'stroke-width'    : str(self.unittouu('0.005px')),
+                'fill'            : fills[triangle[random.randrange(0, 2)]],
+                'stroke-linecap'  : 'round',
+                'stroke-linejoin' : 'round'
+                }
         path = inkex.etree.Element(inkex.addNS('path','svg'))
         path.set('d',simplepath.formatPath(cmds))
         path.set('style',simplestyle.formatStyle(facestyle))
         groupDelaunay.append(path)
-
+        i += 1;
+    #sys.stdout = saveout
     #}}}
 
 

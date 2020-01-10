@@ -13,7 +13,8 @@
 
 #include <string.h>
 
-#include "desktop-handles.h"
+#include "desktop.h"
+
 #include "selection.h"
 #include "display/sp-canvas-util.h"
 #include "display/sodipodi-ctrl.h"
@@ -40,7 +41,7 @@ Inkscape::SelCue::SelCue(SPDesktop *desktop)
     : _desktop(desktop),
       _bounding_box_prefs_observer(*this)
 {
-    _selection = sp_desktop_selection(_desktop);
+    _selection = _desktop->getSelection();
 
     _sel_changed_connection = _selection->connectChanged(
         sigc::hide(sigc::mem_fun(*this, &Inkscape::SelCue::_newItemBboxes))
@@ -95,15 +96,16 @@ void Inkscape::SelCue::_updateItemBboxes(Inkscape::Preferences *prefs)
 
 void Inkscape::SelCue::_updateItemBboxes(gint mode, int prefs_bbox)
 {
-    GSList const *items = _selection->itemList();
-    if (_item_bboxes.size() != g_slist_length((GSList *) items)) {
+    const std::vector<SPItem*> items = _selection->itemList();
+    if (_item_bboxes.size() != items.size()) {
         _newItemBboxes();
         return;
     }
 
     int bcount = 0;
-    for (GSList const *l = _selection->itemList(); l != NULL; l = l->next) {
-        SPItem *item = static_cast<SPItem *>(l->data);
+    std::vector<SPItem*> ll=_selection->itemList();
+    for (std::vector<SPItem*>::const_iterator l = ll.begin(); l != ll.end(); ++l) {
+        SPItem *item = *l;
         SPCanvasItem* box = _item_bboxes[bcount ++];
 
         if (box) {
@@ -144,8 +146,9 @@ void Inkscape::SelCue::_newItemBboxes()
 
     int prefs_bbox = prefs->getBool("/tools/bounding_box");
     
-    for (GSList const *l = _selection->itemList(); l != NULL; l = l->next) {
-        SPItem *item = static_cast<SPItem *>(l->data);
+    std::vector<SPItem*> ll=_selection->itemList();
+    for (std::vector<SPItem*>::const_iterator l = ll.begin(); l != ll.end(); ++l) {
+        SPItem *item = *l;
 
         Geom::OptRect const b = (prefs_bbox == 0) ?
             item->desktopVisualBounds() : item->desktopGeometricBounds();
@@ -154,7 +157,7 @@ void Inkscape::SelCue::_newItemBboxes()
 
         if (b) {
             if (mode == MARK) {
-                box = sp_canvas_item_new(sp_desktop_controls(_desktop),
+                box = sp_canvas_item_new(_desktop->getControls(),
                                          SP_TYPE_CTRL,
                                          "mode", SP_CTRL_MODE_XOR,
                                          "shape", SP_CTRL_SHAPE_DIAMOND,
@@ -170,7 +173,7 @@ void Inkscape::SelCue::_newItemBboxes()
                 sp_canvas_item_move_to_z(box, 0); // just low enough to not get in the way of other draggable knots
 
             } else if (mode == BBOX) {
-                box = sp_canvas_item_new(sp_desktop_controls(_desktop),
+                box = sp_canvas_item_new(_desktop->getControls(),
                                          SP_TYPE_CTRLRECT,
                                          NULL);
 
@@ -198,8 +201,9 @@ void Inkscape::SelCue::_newTextBaselines()
     }
     _text_baselines.clear();
 
-    for (GSList const *l = _selection->itemList(); l != NULL; l = l->next) {
-        SPItem *item = static_cast<SPItem *>(l->data);
+    std::vector<SPItem*> ll = _selection->itemList();
+    for (std::vector<SPItem*>::const_iterator l=ll.begin();l!=ll.end();++l) {
+        SPItem *item = *l;
 
         SPCanvasItem* baseline_point = NULL;
         if (SP_IS_TEXT(item) || SP_IS_FLOWTEXT(item)) { // visualize baseline
@@ -207,7 +211,7 @@ void Inkscape::SelCue::_newTextBaselines()
             if (layout != NULL && layout->outputExists()) {
                 boost::optional<Geom::Point> pt = layout->baselineAnchorPoint();
                 if (pt) {
-                    baseline_point = sp_canvas_item_new(sp_desktop_controls(_desktop), SP_TYPE_CTRL,
+                    baseline_point = sp_canvas_item_new(_desktop->getControls(), SP_TYPE_CTRL,
                         "mode", SP_CTRL_MODE_XOR,
                         "size", 4.0,
                         "filled", 0,

@@ -17,7 +17,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 Changes:
  * This program is a modified version of wavy.py by Aaron Spike.
@@ -34,8 +34,6 @@ import inkex
 import simplepath
 import simplestyle
 
-inkex.localize()
-
 def drawfunction(xstart, xend, ybottom, ytop, samples, width, height, left, bottom, 
     fx = "sin(x)", fpx = "cos(x)", fponum = True, times2pi = False, polar = False, isoscale = True, drawaxis = True, endpts = False):
 
@@ -45,7 +43,7 @@ def drawfunction(xstart, xend, ybottom, ytop, samples, width, height, left, bott
       
     # coords and scales based on the source rect
     if xstart == xend:
-        inkex.errormsg(_("x-interval cannot be zero. Please modify 'Start X' or 'End X'"))
+        inkex.errormsg(_("x-interval cannot be zero. Please modify 'Start X value' or 'End X value'"))
         return []
     scalex = width / (xend - xstart)
     xoff = left
@@ -57,7 +55,7 @@ def drawfunction(xstart, xend, ybottom, ytop, samples, width, height, left, bott
         coordx = lambda x: x * polar_scalex + centerx  #convert x-value to coordinate
 
     if ytop == ybottom:
-        inkex.errormsg(_("y-interval cannot be zero. Please modify 'Y top' or 'Y bottom'"))
+        inkex.errormsg(_("y-interval cannot be zero. Please modify 'Y value of rectangle's top' or 'Y value of rectangle's bottom'"))
         return []
     scaley = height / (ytop - ybottom)
     yoff = bottom

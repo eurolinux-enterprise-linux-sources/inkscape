@@ -158,9 +158,13 @@ bool ResourceManagerImpl::extractFilepath( Glib::ustring const &href, std::strin
             // TODO debug g_message("--- is a file URI                 [%s]", href.c_str());
 
             // throws Glib::ConvertError:
-            uri = Glib::filename_from_uri(href); // TODO see if we can get this to throw
-            // TODO debug g_message("                                  [%s]", uri.c_str());
-            isFile = true;
+            try {
+                uri = Glib::filename_from_uri(href);
+                // TODO debug g_message("                                  [%s]", uri.c_str());
+                isFile = true;
+            } catch(Glib::ConvertError e) {
+                g_warning("%s", e.what().c_str());
+            }
         }
     } else {
         // No scheme. Assuming it is a file path (absolute or relative).
@@ -179,9 +183,9 @@ std::vector<Glib::ustring> ResourceManagerImpl::findBrokenLinks( SPDocument *doc
     std::set<Glib::ustring> uniques;
 
     if ( doc ) {
-        GSList const *images = doc->getResourceList("image");
-        for (GSList const *it = images; it; it = it->next) {
-            Inkscape::XML::Node *ir = static_cast<SPObject *>(it->data)->getRepr();
+        std::vector<SPObject *> images = doc->getResourceList("image");
+        for (std::vector<SPObject *>::const_iterator it = images.begin(); it != images.end(); ++it) {
+            Inkscape::XML::Node *ir = (*it)->getRepr();
 
             gchar const *href = ir->attribute("xlink:href");
             if ( href &&  ( uniques.find(href) == uniques.end() ) ) {
@@ -222,11 +226,15 @@ std::map<Glib::ustring, Glib::ustring> ResourceManagerImpl::locateLinks(Glib::us
         Glib::ustring uri = (*it)->get_uri();
         std::string scheme = Glib::uri_parse_scheme(uri);
         if ( scheme == "file" ) {
-            std::string path = Glib::filename_from_uri(uri);
-            path = Glib::path_get_dirname(path);
-            if ( std::find(priorLocations.begin(), priorLocations.end(), path) == priorLocations.end() ) {
-                // TODO debug g_message("               ==>[%s]", path.c_str());
-                priorLocations.push_back(path);
+            try {
+                std::string path = Glib::filename_from_uri(uri);
+                path = Glib::path_get_dirname(path);
+                if ( std::find(priorLocations.begin(), priorLocations.end(), path) == priorLocations.end() ) {
+                    // TODO debug g_message("               ==>[%s]", path.c_str());
+                    priorLocations.push_back(path);
+                }
+            } catch (Glib::ConvertError e) {
+                g_warning("%s", e.what().c_str());
             }
         }
     }
@@ -301,10 +309,10 @@ bool ResourceManagerImpl::fixupBrokenLinks(SPDocument *doc)
 
         bool savedUndoState = DocumentUndo::getUndoSensitive(doc);
         DocumentUndo::setUndoSensitive(doc, true);
-
-        GSList const *images = doc->getResourceList("image");
-        for (GSList const *it = images; it; it = it->next) {
-            Inkscape::XML::Node *ir = static_cast<SPObject *>(it->data)->getRepr();
+        
+        std::vector<SPObject *> images = doc->getResourceList("image");
+        for (std::vector<SPObject *>::const_iterator it = images.begin(); it != images.end(); ++it) {
+            Inkscape::XML::Node *ir = (*it)->getRepr();
 
             gchar const *href = ir->attribute("xlink:href");
             if ( href ) {

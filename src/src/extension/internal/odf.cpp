@@ -55,8 +55,7 @@
 #include <style.h>
 #include "display/curve.h"
 #include <2geom/pathvector.h>
-#include <2geom/bezier-curve.h>
-#include <2geom/hvlinesegment.h>
+#include <2geom/curves.h>
 #include <2geom/transforms.h>
 #include <helper/geom.h>
 #include "helper/geom-curves.h"
@@ -874,11 +873,8 @@ int SingularValueDecomposition::rank()
 
 
 
-#define pi 3.14159
 //#define pxToCm  0.0275
 #define pxToCm  0.03
-#define piToRad 0.0174532925
-#define docHeightCm 22.86
 
 
 //########################################################################
@@ -1299,7 +1295,7 @@ writePath(Writer &outs, Geom::PathVector const &pathv,
                     outs.printf("L %.3f %.3f ",  destx, desty);
                 }
                 else if(Geom::CubicBezier const *cubic = dynamic_cast<Geom::CubicBezier const*>(&*cit)) {
-                    std::vector<Geom::Point> points = cubic->points();
+                    std::vector<Geom::Point> points = cubic->controlPoints();
                     for (unsigned i = 1; i <= 3; i++) {
                         if (fabs(points[i][X])<1.0) points[i][X] = 0.0;   // Why is this needed? Shouldn't we just round all numbers then?
                         if (fabs(points[i][Y])<1.0) points[i][Y] = 0.0;
@@ -1566,7 +1562,7 @@ bool OdfOutput::processGradient(SPItem *item,
         output += buf;
         //TODO: apply maths, to define begin of gradient, taking gradient begin and end, as well as object boundary into account
         double angle = (gi.y2-gi.y1);
-        angle = (angle != 0.) ? (atan((gi.x2-gi.x1)/(gi.y2-gi.y1))* 180. / pi) : 90;
+        angle = (angle != 0.) ? (atan((gi.x2-gi.x1)/(gi.y2-gi.y1))* 180. / M_PI) : 90;
         angle = (angle < 0)?(180+angle):angle;
         angle = angle * 10; //why do we need this: precision?????????????
         output += Glib::ustring::compose(" draw:start-intensity=\"%1\" draw:end-intensity=\"%2\" draw:angle=\"%3\"/>\n",

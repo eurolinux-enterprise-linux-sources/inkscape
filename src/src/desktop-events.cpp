@@ -17,15 +17,21 @@
 #endif
 #include <map>
 #include <string>
+
 #include "ui/dialog/guides.h"
+#include "desktop-events.h"
+
+#if WITH_GTKMM_3_0
+# include <gdkmm/devicemanager.h>
+#endif
+
 #include <2geom/line.h>
 #include <2geom/angle.h>
 #include <glibmm/i18n.h>
 
 #include "desktop.h"
-#include "desktop-events.h"
-#include "desktop-handles.h"
-#include "dialogs/dialog-events.h"
+
+#include "ui/dialog-events.h"
 #include "display/canvas-axonomgrid.h"
 #include "display/canvas-grid.h"
 #include "display/guideline.h"
@@ -41,9 +47,11 @@
 #include "sp-guide.h"
 #include "sp-namedview.h"
 #include "sp-root.h"
-#include "tools-switch.h"
+#include "ui/tools-switch.h"
 #include "verbs.h"
 #include "widgets/desktop-widget.h"
+#include "sp-cursor.h"
+#include "pixmaps/cursor-select.xpm"
 #include "xml/repr.h"
 
 using Inkscape::DocumentUndo;
@@ -232,7 +240,7 @@ static gint sp_dt_ruler_event(GtkWidget *widget, GdkEvent *event, SPDesktopWidge
                     sp_repr_set_point(repr, "orientation", normal);
                     desktop->namedview->appendChild(repr);
                     Inkscape::GC::release(repr);
-                    DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_NONE,
+                    DocumentUndo::done(desktop->getDocument(), SP_VERB_NONE,
                                      _("Create guide"));
                 }
                 desktop->set_coordinate_status(event_dt);
@@ -240,7 +248,7 @@ static gint sp_dt_ruler_event(GtkWidget *widget, GdkEvent *event, SPDesktopWidge
                 if (!dragged) {
                     // Ruler click (without drag) toggle the guide visibility on and off
                     Inkscape::XML::Node *repr = desktop->namedview->getRepr();
-                    sp_namedview_toggle_guides(sp_desktop_document(desktop), repr);
+                    sp_namedview_toggle_guides(desktop->getDocument(), repr);
                     
                 }
 
@@ -306,7 +314,7 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
                 // here must be exactly on the guide line though, otherwise
                 // small errors will occur once we snap, see
                 // https://bugs.launchpad.net/inkscape/+bug/333762
-                drag_origin = Geom::projection(event_dt, Geom::Line(guide->point_on_line, guide->angle()));
+                drag_origin = Geom::projection(event_dt, Geom::Line(guide->getPoint(), guide->angle()));
 
                 if (event->button.state & GDK_SHIFT_MASK) {
                     // with shift we rotate the guide
@@ -347,18 +355,23 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
                     // be forced to be on the guide. If we don't snap however, then
                     // the origin should still be constrained to the guide. So let's do
                     // that explicitly first:
-                    Geom::Line line(guide->point_on_line, guide->angle());
-                    Geom::Coord t = line.nearestPoint(motion_dt);
+                    Geom::Line line(guide->getPoint(), guide->angle());
+                    Geom::Coord t = line.nearestTime(motion_dt);
                     motion_dt = line.pointAt(t);
                     if (!(event->motion.state & GDK_SHIFT_MASK)) {
                         m.guideConstrainedSnap(motion_dt, *guide);
                     }
                 } else if (!((drag_type == SP_DRAG_ROTATE) && (event->motion.state & GDK_CONTROL_MASK))) {
                     // cannot use shift here to disable snapping, because we already use it for rotating the guide
+                    Geom::Point temp;
                     if (drag_type == SP_DRAG_ROTATE) {
-                        m.guideFreeSnap(motion_dt, guide->point_on_line, true, false);
+                        temp = guide->getPoint();
+                        m.guideFreeSnap(motion_dt, temp, true, false);
+                        guide->moveto(temp, false);
                     } else {
-                        m.guideFreeSnap(motion_dt, guide->normal_to_line, false, true);
+                        temp = guide->getNormal();
+                        m.guideFreeSnap(motion_dt, temp, false, true);
+                        guide->set_normal(temp, false);
                     }
                 }
                 m.unSetup();
@@ -366,12 +379,12 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
                 switch (drag_type) {
                     case SP_DRAG_TRANSLATE:
                     {
-                        sp_guide_moveto(*guide, motion_dt, false);
+                        guide->moveto(motion_dt, false);
                         break;
                     }
                     case SP_DRAG_ROTATE:
                     {
-                        Geom::Point pt = motion_dt - guide->point_on_line;
+                        Geom::Point pt = motion_dt - guide->getPoint();
                         Geom::Angle angle(pt);
                         if (event->motion.state & GDK_CONTROL_MASK) {
                             Inkscape::Preferences *prefs = Inkscape::Preferences::get();
@@ -379,7 +392,7 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
                             bool const relative_snaps = prefs->getBool("/options/relativeguiderotationsnap/value", false);
                             if (snaps) {
                                 if (relative_snaps) {
-                                    Geom::Angle orig_angle(guide->normal_to_line);
+                                    Geom::Angle orig_angle(guide->getNormal());
                                     Geom::Angle snap_angle = angle - orig_angle;
                                     double sections = floor(snap_angle.radians0() * snaps / M_PI + .5);
                                     angle = (M_PI / snaps) * sections + orig_angle.radians0();
@@ -389,16 +402,16 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
                                 }
                             }
                         }
-                        sp_guide_set_normal(*guide, Geom::Point::polar(angle).cw(), false);
+                        guide->set_normal(Geom::Point::polar(angle).cw(), false);
                         break;
                     }
                     case SP_DRAG_MOVE_ORIGIN:
                     {
-                        sp_guide_moveto(*guide, motion_dt, false);
+                        guide->moveto(motion_dt, false);
                         break;
                     }
                     case SP_DRAG_NONE:
-                        g_assert_not_reached();
+                        assert(false);
                         break;
                 }
                 moved = true;
@@ -423,18 +436,23 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
                         // be forced to be on the guide. If we don't snap however, then
                         // the origin should still be constrained to the guide. So let's
                         // do that explicitly first:
-                        Geom::Line line(guide->point_on_line, guide->angle());
-                        Geom::Coord t = line.nearestPoint(event_dt);
+                        Geom::Line line(guide->getPoint(), guide->angle());
+                        Geom::Coord t = line.nearestTime(event_dt);
                         event_dt = line.pointAt(t);
                         if (!(event->button.state & GDK_SHIFT_MASK)) {
                             m.guideConstrainedSnap(event_dt, *guide);
                         }
                     } else if (!((drag_type == SP_DRAG_ROTATE) && (event->motion.state & GDK_CONTROL_MASK))) {
                         // cannot use shift here to disable snapping, because we already use it for rotating the guide
+                        Geom::Point temp;
                         if (drag_type == SP_DRAG_ROTATE) {
-                            m.guideFreeSnap(event_dt, guide->point_on_line, true, false);
+                            temp = guide->getPoint();
+                            m.guideFreeSnap(event_dt, temp, true, false);
+                            guide->moveto(temp, false);
                         } else {
-                            m.guideFreeSnap(event_dt, guide->normal_to_line, false, true);
+                            temp = guide->getNormal();
+                            m.guideFreeSnap(event_dt, temp, false, true);
+                            guide->set_normal(temp, false);
                         }
                     }
                     m.unSetup();
@@ -443,12 +461,12 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
                         switch (drag_type) {
                             case SP_DRAG_TRANSLATE:
                             {
-                                sp_guide_moveto(*guide, event_dt, true);
+                                guide->moveto(event_dt, true);
                                 break;
                             }
                             case SP_DRAG_ROTATE:
                             {
-                                Geom::Point pt = event_dt - guide->point_on_line;
+                                Geom::Point pt = event_dt - guide->getPoint();
                                 Geom::Angle angle(pt);
                                 if (event->motion.state & GDK_CONTROL_MASK) {
                                     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
@@ -456,7 +474,7 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
                                     bool const relative_snaps = prefs->getBool("/options/relativeguiderotationsnap/value", false);
                                     if (snaps) {
                                         if (relative_snaps) {
-                                            Geom::Angle orig_angle(guide->normal_to_line);
+                                            Geom::Angle orig_angle(guide->getNormal());
                                             Geom::Angle snap_angle = angle - orig_angle;
                                             double sections = floor(snap_angle.radians0() * snaps / M_PI + .5);
                                             angle = (M_PI / snaps) * sections + orig_angle.radians0();
@@ -466,26 +484,26 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
                                         }
                                     }
                                 }
-                                sp_guide_set_normal(*guide, Geom::Point::polar(angle).cw(), true);
+                                guide->set_normal(Geom::Point::polar(angle).cw(), true);
                                 break;
                             }
                             case SP_DRAG_MOVE_ORIGIN:
                             {
-                                sp_guide_moveto(*guide, event_dt, true);
+                                guide->moveto(event_dt, true);
                                 break;
                             }
                             case SP_DRAG_NONE:
-                                g_assert_not_reached();
+                                assert(false);
                                 break;
                         }
-                        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_NONE,
+                        DocumentUndo::done(desktop->getDocument(), SP_VERB_NONE,
                                          _("Move guide"));
                     } else {
                         /* Undo movement of any attached shapes. */
-                        sp_guide_moveto(*guide, guide->point_on_line, false);
-                        sp_guide_set_normal(*guide, guide->normal_to_line, false);
+                        guide->moveto(guide->getPoint(), false);
+                        guide->set_normal(guide->getNormal(), false);
                         sp_guide_remove(guide);
-                        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_NONE,
+                        DocumentUndo::done(desktop->getDocument(), SP_VERB_NONE,
                                      _("Delete guide"));
                     }
                     moved = false;
@@ -498,41 +516,43 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
             break;
     case GDK_ENTER_NOTIFY:
     {
-            sp_guideline_set_color(SP_GUIDELINE(item), guide->hicolor);
+            if (!guide->getLocked()) {
+                sp_guideline_set_color(SP_GUIDELINE(item), guide->getHiColor());
+            }
 
             // set move or rotate cursor
             Geom::Point const event_w(event->crossing.x, event->crossing.y);
 
+            GdkDisplay *display = gdk_display_get_default();
+            GdkCursorType cursor_type;
+
             if ((event->crossing.state & GDK_SHIFT_MASK) && (drag_type != SP_DRAG_MOVE_ORIGIN)) {
-                GdkCursor *guide_cursor;
-                guide_cursor = gdk_cursor_new (GDK_EXCHANGE);
-                gdk_window_set_cursor(gtk_widget_get_window (GTK_WIDGET(sp_desktop_canvas(desktop))), guide_cursor);
-#if GTK_CHECK_VERSION(3,0,0)
-                g_object_unref(guide_cursor);
-#else
-                gdk_cursor_unref(guide_cursor);
-#endif
+                cursor_type = GDK_EXCHANGE;
             } else {
-                GdkCursor *guide_cursor;
-                guide_cursor = gdk_cursor_new (GDK_HAND1);
-                gdk_window_set_cursor(gtk_widget_get_window (GTK_WIDGET(sp_desktop_canvas(desktop))), guide_cursor);
-#if GTK_CHECK_VERSION(3,0,0)
-                g_object_unref(guide_cursor);
-#else
-                gdk_cursor_unref(guide_cursor);
-#endif
+                cursor_type = GDK_HAND1;
             }
 
-            char *guide_description = sp_guide_description(guide);
+            GdkCursor *guide_cursor = gdk_cursor_new_for_display(display, cursor_type);
+            if(guide->getLocked()){
+                guide_cursor = sp_cursor_new_from_xpm(cursor_select_xpm , 1, 1);
+            }
+            gdk_window_set_cursor(gtk_widget_get_window (GTK_WIDGET(desktop->getCanvas())), guide_cursor);
+#if GTK_CHECK_VERSION(3,0,0)
+            g_object_unref(guide_cursor);
+#else
+            gdk_cursor_unref(guide_cursor);
+#endif
+
+            char *guide_description = guide->description();
             desktop->guidesMessageContext()->setF(Inkscape::NORMAL_MESSAGE, _("<b>Guideline</b>: %s"), guide_description);
             g_free(guide_description);
             break;
     }
     case GDK_LEAVE_NOTIFY:
-            sp_guideline_set_color(SP_GUIDELINE(item), guide->color);
+            sp_guideline_set_color(SP_GUIDELINE(item), guide->getColor());
 
             // restore event context's cursor
-            gdk_window_set_cursor(gtk_widget_get_window (GTK_WIDGET(sp_desktop_canvas(desktop))), desktop->event_context->cursor);
+            gdk_window_set_cursor(gtk_widget_get_window (GTK_WIDGET(desktop->getCanvas())), desktop->event_context->cursor);
 
             desktop->guidesMessageContext()->clear();
             break;
@@ -552,11 +572,11 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
                 case GDK_KEY_Shift_L:
                 case GDK_KEY_Shift_R:
                     if (drag_type != SP_DRAG_MOVE_ORIGIN) {
-                        GdkCursor *guide_cursor;
-                        guide_cursor = gdk_cursor_new (GDK_EXCHANGE);
-                        gdk_window_set_cursor(gtk_widget_get_window (GTK_WIDGET(sp_desktop_canvas(desktop))), guide_cursor);
+                        GdkDisplay *display      = gdk_display_get_default();
+                        GdkCursor  *guide_cursor = gdk_cursor_new_for_display(display, GDK_EXCHANGE);
+                        gdk_window_set_cursor(gtk_widget_get_window (GTK_WIDGET(desktop->getCanvas())), guide_cursor);
 #if GTK_CHECK_VERSION(3,0,0)
-            g_object_unref(guide_cursor);
+                        g_object_unref(guide_cursor);
 #else
                         gdk_cursor_unref(guide_cursor);
 #endif
@@ -573,15 +593,17 @@ gint sp_dt_guide_event(SPCanvasItem *item, GdkEvent *event, gpointer data)
             switch (Inkscape::UI::Tools::get_group0_keyval (&event->key)) {
                 case GDK_KEY_Shift_L:
                 case GDK_KEY_Shift_R:
-                    GdkCursor *guide_cursor;
-                    guide_cursor = gdk_cursor_new (GDK_EXCHANGE);
-                    gdk_window_set_cursor(gtk_widget_get_window (GTK_WIDGET(sp_desktop_canvas(desktop))), guide_cursor);
+                {
+                    GdkDisplay *display      = gdk_display_get_default();
+                    GdkCursor  *guide_cursor = gdk_cursor_new_for_display(display, GDK_EXCHANGE);
+                    gdk_window_set_cursor(gtk_widget_get_window (GTK_WIDGET(desktop->getCanvas())), guide_cursor);
 #if GTK_CHECK_VERSION(3,0,0)
-            g_object_unref(guide_cursor);
+                    g_object_unref(guide_cursor);
 #else
                     gdk_cursor_unref(guide_cursor);
 #endif
                     break;
+                }
                 default:
                     // do nothing;
                     break;
@@ -601,36 +623,35 @@ static GdkInputSource lastType = GDK_SOURCE_MOUSE;
 
 static void init_extended()
 {
-    std::string avoidName = "pad";
+    Glib::ustring avoidName("pad");
+    Glib::RefPtr<Gdk::Display> display = Gdk::Display::get_default();
 
 #if GTK_CHECK_VERSION(3,0,0)
-    GdkDisplay *display = gdk_display_get_default();
-    GdkDeviceManager *dm = gdk_display_get_device_manager(display);
-    GList* devices = gdk_device_manager_list_devices(dm, GDK_DEVICE_TYPE_SLAVE);	
+    Glib::RefPtr<const Gdk::DeviceManager> dm = display->get_device_manager();
+    std::vector< Glib::RefPtr<const Gdk::Device> > devices = dm->list_devices(Gdk::DEVICE_TYPE_SLAVE);	
 #else
-    GList* devices = gdk_devices_list();
+    std::vector< Glib::RefPtr<const Gdk::Device> > devices = display->list_devices();
 #endif
     
-    if ( devices ) {
-        for ( GList* curr = devices; curr; curr = g_list_next(curr) ) {
-            GdkDevice* dev = reinterpret_cast<GdkDevice*>(curr->data);
-            gchar const *devName = gdk_device_get_name(dev);
-            GdkInputSource devSrc = gdk_device_get_source(dev);
+    if ( !devices.empty() ) {
+        for ( std::vector< Glib::RefPtr<const Gdk::Device> >::const_iterator dev = devices.begin(); dev != devices.end(); ++dev ) {
+            Glib::ustring const devName = (*dev)->get_name();
+            Gdk::InputSource devSrc = (*dev)->get_source();
             
-            if ( devName
+            if ( !devName.empty()
                  && (avoidName != devName)
-                 && (devSrc != GDK_SOURCE_MOUSE) ) {
+                 && (devSrc != Gdk::SOURCE_MOUSE) ) {
 //                 g_message("Adding '%s' as [%d]", devName, devSrc);
 
                 // Set the initial tool for the device
                 switch ( devSrc ) {
-                    case GDK_SOURCE_PEN:
+                    case Gdk::SOURCE_PEN:
                         toolToUse[devName] = TOOLS_CALLIGRAPHIC;
                         break;
-                    case GDK_SOURCE_ERASER:
+                    case Gdk::SOURCE_ERASER:
                         toolToUse[devName] = TOOLS_ERASER;
                         break;
-                    case GDK_SOURCE_CURSOR:
+                    case Gdk::SOURCE_CURSOR:
                         toolToUse[devName] = TOOLS_SELECT;
                         break;
                     default:
@@ -641,10 +662,6 @@ static void init_extended()
             }
         }
     }
-
-#if GTK_CHECK_VERSION(3,0,0)
-    g_list_free(devices);
-#endif
 }
 
 

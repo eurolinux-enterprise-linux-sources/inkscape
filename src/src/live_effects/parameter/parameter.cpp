@@ -54,17 +54,19 @@ void Parameter::write_to_SVG(void)
  */
 ScalarParam::ScalarParam( const Glib::ustring& label, const Glib::ustring& tip,
                       const Glib::ustring& key, Inkscape::UI::Widget::Registry* wr,
-                      Effect* effect, gdouble default_value)
+                      Effect* effect, gdouble default_value, bool no_widget)
     : Parameter(label, tip, key, wr, effect),
       value(default_value),
-      min(-G_MAXDOUBLE),
-      max(G_MAXDOUBLE),
+      min(-SCALARPARAM_G_MAXDOUBLE),
+      max(SCALARPARAM_G_MAXDOUBLE),
       integer(false),
       defvalue(default_value),
       digits(2),
       inc_step(0.1),
       inc_page(1),
-      add_slider(false)
+      add_slider(false),
+      overwrite_widget(false),
+      hide_widget(no_widget)
 {
 }
 
@@ -114,8 +116,22 @@ ScalarParam::param_set_value(gdouble val)
 void
 ScalarParam::param_set_range(gdouble min, gdouble max)
 {
-    this->min = min;
-    this->max = max;
+    // if you look at client code, you'll see that many effects
+    // has a tendency to set an upper range of Geom::infinity().
+    // Once again, in gtk2, this is not a problem. But in gtk3,
+    // widgets get allocated the amount of size they ask for,
+    // leading to excessively long widgets.
+
+    if (min >= -SCALARPARAM_G_MAXDOUBLE) {
+        this->min = min;
+    } else {
+        this->min = -SCALARPARAM_G_MAXDOUBLE;
+    }
+    if (max <= SCALARPARAM_G_MAXDOUBLE) {
+        this->max = max;
+    } else {
+	this->max = SCALARPARAM_G_MAXDOUBLE;
+    }
 
     param_set_value(value); // reset value to see whether it is in ranges
 }
@@ -129,24 +145,34 @@ ScalarParam::param_make_integer(bool yes)
     inc_page = 10;
 }
 
+void
+ScalarParam::param_overwrite_widget(bool overwrite_widget)
+{
+    this->overwrite_widget = overwrite_widget;
+}
+
 Gtk::Widget *
 ScalarParam::param_newWidget()
 {
-    Inkscape::UI::Widget::RegisteredScalar *rsu = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalar(
-        param_label, param_tooltip, param_key, *param_wr, param_effect->getRepr(), param_effect->getSPDoc() ) );
+    if(!hide_widget){
+        Inkscape::UI::Widget::RegisteredScalar *rsu = Gtk::manage( new Inkscape::UI::Widget::RegisteredScalar(
+            param_label, param_tooltip, param_key, *param_wr, param_effect->getRepr(), param_effect->getSPDoc() ) );
 
-    rsu->setValue(value);
-    rsu->setDigits(digits);
-    rsu->setIncrements(inc_step, inc_page);
-    rsu->setRange(min, max);
-    rsu->setProgrammatically = false;
-    if (add_slider) {
-        rsu->addSlider();
+        rsu->setValue(value);
+        rsu->setDigits(digits);
+        rsu->setIncrements(inc_step, inc_page);
+        rsu->setRange(min, max);
+        rsu->setProgrammatically = false;
+        if (add_slider) {
+            rsu->addSlider();
+        }
+        if(!overwrite_widget){
+            rsu->set_undo_parameters(SP_VERB_DIALOG_LIVE_PATH_EFFECT, _("Change scalar parameter"));
+        }
+        return dynamic_cast<Gtk::Widget *> (rsu);
+    } else {
+        return NULL;
     }
-
-    rsu->set_undo_parameters(SP_VERB_DIALOG_LIVE_PATH_EFFECT, _("Change scalar parameter"));
-
-    return dynamic_cast<Gtk::Widget *> (rsu);
 }
 
 void

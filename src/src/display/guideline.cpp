@@ -17,20 +17,11 @@
 #include <2geom/coord.h>
 #include <2geom/transforms.h>
 #include "sp-canvas-util.h"
-#include "sp-ctrlpoint.h"
 #include "guideline.h"
 #include "display/cairo-utils.h"
-
-#include "inkscape.h" // for inkscape_active_desktop()
-#include "desktop.h"
-#include "sp-namedview.h"
 #include "display/sp-canvas.h"
-#include "ui/control-manager.h"
+#include "display/sodipodi-ctrl.h"
 
-using Inkscape::ControlManager;
-
-static void sp_guideline_class_init(SPGuideLineClass *c);
-static void sp_guideline_init(SPGuideLine *guideline);
 static void sp_guideline_destroy(SPCanvasItem *object);
 
 static void sp_guideline_update(SPCanvasItem *item, Geom::Affine const &affine, unsigned int flags);
@@ -40,34 +31,10 @@ static double sp_guideline_point(SPCanvasItem *item, Geom::Point p, SPCanvasItem
 
 static void sp_guideline_drawline (SPCanvasBuf *buf, gint x0, gint y0, gint x1, gint y1, guint32 rgba);
 
-static SPCanvasItemClass *parent_class;
-
-GType sp_guideline_get_type()
-{
-    static GType guideline_type = 0;
-
-    if (!guideline_type) {
-        static GTypeInfo const guideline_info = {
-            sizeof (SPGuideLineClass),
-            NULL, NULL,
-            (GClassInitFunc) sp_guideline_class_init,
-            NULL, NULL,
-            sizeof (SPGuideLine),
-            16,
-            (GInstanceInitFunc) sp_guideline_init,
-            NULL,
-        };
-
-        guideline_type = g_type_register_static(SP_TYPE_CANVAS_ITEM, "SPGuideLine", &guideline_info, (GTypeFlags) 0);
-    }
-
-    return guideline_type;
-}
+G_DEFINE_TYPE(SPGuideLine, sp_guideline, SP_TYPE_CANVAS_ITEM);
 
 static void sp_guideline_class_init(SPGuideLineClass *c)
 {
-    parent_class = SP_CANVAS_ITEM_CLASS(g_type_class_peek_parent(c));
-
     SPCanvasItemClass *item_class = SP_CANVAS_ITEM_CLASS(c);
     item_class->destroy = sp_guideline_destroy;
     item_class->update = sp_guideline_update;
@@ -79,8 +46,9 @@ static void sp_guideline_init(SPGuideLine *gl)
 {
     gl->rgba = 0x0000ff7f;
 
+    gl->locked = false;
     gl->normal_to_line = Geom::Point(0,1);
-    gl->angle = 3.14159265358979323846/2;
+    gl->angle = M_PI_2;
     gl->point_on_line = Geom::Point(0,0);
     gl->sensitive = 0;
 
@@ -92,23 +60,18 @@ static void sp_guideline_destroy(SPCanvasItem *object)
 {
     g_return_if_fail (object != NULL);
     g_return_if_fail (SP_IS_GUIDELINE (object));
-    //g_return_if_fail (SP_GUIDELINE(object)->origin != NULL);
-    //g_return_if_fail (SP_IS_CTRLPOINT(SP_GUIDELINE(object)->origin));
 
     SPGuideLine *gl = SP_GUIDELINE(object);
 
-    if (gl->origin != NULL && SP_IS_CTRLPOINT(gl->origin)) {
-        sp_canvas_item_destroy(gl->origin);
-    } else {
-        // FIXME: This branch shouldn't be reached (although it seems to be harmless).
-        //g_error("Why can it be that gl->origin is not a valid SPCtrlPoint?\n");
+    if (gl->origin) {
+        sp_canvas_item_destroy(SP_CANVAS_ITEM(gl->origin));
     }
 
     if (gl->label) {
         g_free(gl->label);
     }
 
-    SP_CANVAS_ITEM_CLASS(parent_class)->destroy(object);
+    SP_CANVAS_ITEM_CLASS(sp_guideline_parent_class)->destroy(object);
 }
 
 static void sp_guideline_render(SPCanvasItem *item, SPCanvasBuf *buf)
@@ -197,16 +160,26 @@ static void sp_guideline_update(SPCanvasItem *item, Geom::Affine const &affine, 
 {
     SPGuideLine *gl = SP_GUIDELINE(item);
 
-    if ((SP_CANVAS_ITEM_CLASS(parent_class))->update) {
-        (SP_CANVAS_ITEM_CLASS(parent_class))->update(item, affine, flags);
+    if ((SP_CANVAS_ITEM_CLASS(sp_guideline_parent_class))->update) {
+        (SP_CANVAS_ITEM_CLASS(sp_guideline_parent_class))->update(item, affine, flags);
+    }
+
+    if (item->visible) {
+        if (gl->locked) {
+            g_object_set(G_OBJECT(gl->origin), "stroke_color", 0x0000ff88,
+                                               "shape", SP_CTRL_SHAPE_CROSS,
+                                               "size", 6., NULL);
+        } else {
+            g_object_set(G_OBJECT(gl->origin), "stroke_color", 0xff000088,
+                                               "shape", SP_CTRL_SHAPE_CIRCLE,
+                                               "size", 4., NULL);
+        }
+        gl->origin->moveto(gl->point_on_line);
+        sp_canvas_item_request_update(SP_CANVAS_ITEM(gl->origin));
     }
 
     gl->affine = affine;
-
-    sp_ctrlpoint_set_coords(gl->origin, gl->point_on_line);
-    sp_canvas_item_request_update(SP_CANVAS_ITEM (gl->origin));
-
-    Geom::Point pol_transformed = gl->point_on_line*affine;
+    Geom::Point pol_transformed = gl->point_on_line * affine;
     if (gl->is_horizontal()) {
         sp_canvas_update_bbox (item, -1000000, round(pol_transformed[Geom::Y] - 16), 1000000, round(pol_transformed[Geom::Y] + 1));
     } else if (gl->is_vertical()) {
@@ -236,20 +209,22 @@ static double sp_guideline_point(SPCanvasItem *item, Geom::Point p, SPCanvasItem
 SPCanvasItem *sp_guideline_new(SPCanvasGroup *parent, char* label, Geom::Point point_on_line, Geom::Point normal)
 {
     SPCanvasItem *item = sp_canvas_item_new(parent, SP_TYPE_GUIDELINE, NULL);
-    SPCanvasItem *origin = ControlManager::getManager().createControl(parent, Inkscape::CTRL_TYPE_ORIGIN);
-    ControlManager::getManager().track(origin);
-
     SPGuideLine *gl = SP_GUIDELINE(item);
-    SPCtrlPoint *cp = SP_CTRLPOINT(origin);
-    gl->origin = cp;
 
     normal.normalize();
     gl->label = label;
+    gl->locked = false;
     gl->normal_to_line = normal;
     gl->angle = tan( -gl->normal_to_line[Geom::X] / gl->normal_to_line[Geom::Y]);
     sp_guideline_set_position(gl, point_on_line);
 
-    sp_ctrlpoint_set_coords(cp, point_on_line);
+    gl->origin = (SPCtrl *) sp_canvas_item_new(parent, SP_TYPE_CTRL, 
+                                               "anchor", SP_ANCHOR_CENTER,
+                                               "mode", SP_CTRL_MODE_COLOR,
+                                               "filled", FALSE,
+                                               "stroked", TRUE,
+                                               "stroke_color", 0x01000000, NULL);
+    gl->origin->pickable = false;
 
     return item;
 }
@@ -261,6 +236,12 @@ void sp_guideline_set_label(SPGuideLine *gl, const char* label)
     }
     gl->label = g_strdup(label);
 
+    sp_canvas_item_request_update(SP_CANVAS_ITEM (gl));
+}
+
+void sp_guideline_set_locked(SPGuideLine *gl, const bool locked)
+{
+    gl->locked = locked;
     sp_canvas_item_request_update(SP_CANVAS_ITEM (gl));
 }
 
@@ -281,8 +262,7 @@ void sp_guideline_set_normal(SPGuideLine *gl, Geom::Point normal_to_line)
 void sp_guideline_set_color(SPGuideLine *gl, unsigned int rgba)
 {
     gl->rgba = rgba;
-    sp_ctrlpoint_set_color(gl->origin, rgba);
-
+    g_object_set(G_OBJECT(gl->origin), "stroke_color", rgba, NULL);
     sp_canvas_item_request_update(SP_CANVAS_ITEM(gl));
 }
 
@@ -293,7 +273,6 @@ void sp_guideline_set_sensitive(SPGuideLine *gl, int sensitive)
 
 void sp_guideline_delete(SPGuideLine *gl)
 {
-    //gtk_object_destroy(GTK_OBJECT(gl->origin));
     sp_canvas_item_destroy(SP_CANVAS_ITEM(gl));
 }
 

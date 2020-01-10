@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 # standard library
 import os
@@ -27,12 +27,14 @@ import tempfile
 # local library
 import inkex
 
-inkex.localize()
-
 # Define extension exceptions
 class GimpXCFError(Exception): pass
 
 class GimpXCFExpectedIOError(GimpXCFError): pass
+
+class GimpXCFInkscapeNotInstalled(GimpXCFError):
+    def __init__(self):
+        inkex.errormsg(_('Inkscape must be installed and set in your path variable.'))
 
 class GimpXCFGimpNotInstalled(GimpXCFError):
     def __init__(self):
@@ -63,7 +65,7 @@ class MyEffect(inkex.Effect):
                                      help="Add background color to each layer")
         self.OptionParser.add_option("-i", "--dpi",
                                      action="store", type="string",
-                                     dest="resolution", default="90",
+                                     dest="resolution", default="96",
                                      help="File resolution")
 
     def output(self):
@@ -166,11 +168,15 @@ class MyEffect(inkex.Effect):
                 f.close()
                 err.close()
                 stdin.close()
-                
+
+                if return_code != 0:
+                    self.clear_tmp()
+                    raise GimpXCFInkscapeNotInstalled
+
                 if os.name == 'nt':
                     filename = filename.replace("\\", "/")
                 pngs.append(filename)
-                names.append(name.encode('utf-8'))
+                names.append(name)
 
         if (self.valid == 0):
             self.clear_tmp()

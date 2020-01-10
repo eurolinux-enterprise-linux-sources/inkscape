@@ -36,6 +36,9 @@
 // for interruptability bug:
 #include "display/sp-canvas.h"
 
+#include "desktop.h"
+
+
 #include "sp-root.h"
 
 namespace Inkscape {
@@ -101,6 +104,57 @@ RegisteredCheckButton::on_toggled()
     _wr->setUpdating (false);
 }
 
+/*#########################################
+ * Registered TOGGLEBUTTON
+ */
+
+RegisteredToggleButton::~RegisteredToggleButton()
+{
+    _toggled_connection.disconnect();
+}
+
+RegisteredToggleButton::RegisteredToggleButton (const Glib::ustring& /*label*/, const Glib::ustring& tip, const Glib::ustring& key, Registry& wr, bool right, Inkscape::XML::Node* repr_in, SPDocument *doc_in, char const *icon_active, char const *icon_inactive)
+    : RegisteredWidget<Gtk::ToggleButton>()
+{
+    init_parent(key, wr, repr_in, doc_in);
+    setProgrammatically = false;
+    set_tooltip_text (tip);
+    set_alignment (right? 1.0 : 0.0, 0.5);
+    _toggled_connection = signal_toggled().connect (sigc::mem_fun (*this, &RegisteredToggleButton::on_toggled));
+}
+
+void
+RegisteredToggleButton::setActive (bool b)
+{
+    setProgrammatically = true;
+    set_active (b);
+    //The slave button is greyed out if the master button is untoggled
+    for (std::list<Gtk::Widget*>::const_iterator i = _slavewidgets.begin(); i != _slavewidgets.end(); ++i) {
+        (*i)->set_sensitive(b);
+    }
+    setProgrammatically = false;
+}
+
+void
+RegisteredToggleButton::on_toggled()
+{
+    if (setProgrammatically) {
+        setProgrammatically = false;
+        return;
+    }
+
+    if (_wr->isUpdating())
+        return;
+    _wr->setUpdating (true);
+
+    write_to_xml(get_active() ? "true" : "false");
+    //The slave button is greyed out if the master button is untoggled
+    for (std::list<Gtk::Widget*>::const_iterator i = _slavewidgets.begin(); i != _slavewidgets.end(); ++i) {
+        (*i)->set_sensitive(get_active());
+    }
+
+    _wr->setUpdating (false);
+}
 
 /*#########################################
  * Registered UNITMENU
@@ -189,7 +243,10 @@ RegisteredScalarUnit::on_value_changed()
         if (doc) {
             SPRoot *root = doc->getRoot();
             if (root->viewBox_set) {
-                if (_user_units == RSU_x) { 
+                // check to see if scaling is uniform
+                if(Geom::are_near((root->viewBox.width() * root->height.computed) / (root->width.computed * root->viewBox.height()), 1.0, Geom::EPSILON)) {
+                    scale = (root->viewBox.width() / root->width.computed + root->viewBox.height() / root->height.computed)/2.0;
+                } else if (_user_units == RSU_x) { 
                     scale = root->viewBox.width() / root->width.computed;
                 } else {
                     scale = root->viewBox.height() / root->height.computed;
@@ -363,8 +420,8 @@ RegisteredColorPicker::on_changed (guint32 rgba)
         SPDesktop *dt = SP_ACTIVE_DESKTOP;
         if (!dt)
             return;
-        local_repr = sp_desktop_namedview(dt)->getRepr();
-        local_doc = sp_desktop_document(dt);
+        local_repr = dt->getNamedView()->getRepr();
+        local_doc = dt->getDocument();
     }
 
     gchar c[32];
@@ -754,9 +811,9 @@ RegisteredRandom::on_value_changed()
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0))
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

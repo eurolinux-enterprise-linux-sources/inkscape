@@ -21,12 +21,23 @@
 #include <sigc++/sigc++.h>
 #include "libcroco/cr-cascade.h"
 #include <2geom/forward.h>
-#include "gc-managed.h"
+#include "inkgc/gc-managed.h"
 #include "gc-finalized.h"
 #include "gc-anchored.h"
 #include <glibmm/ustring.h>
 #include <boost/ptr_container/ptr_list.hpp>
 #include <vector>
+#include <set>
+#include <deque>
+
+// This variable is introduced with 0.92.1
+// with the introduction of automatic fix 
+// for files detected to have been created 
+// with previous versions to have a similar
+// look in 0.92+.
+extern bool sp_no_convert_text_baseline_spacing;
+
+
 
 namespace Avoid {
 class Router;
@@ -38,7 +49,6 @@ class SPGroup;
 class SPRoot;
 
 namespace Inkscape {
-    struct Application;
     class Selection; 
     class UndoStackObserver;
     class EventLog;
@@ -75,8 +85,8 @@ class SPDocument : public Inkscape::GC::Managed<>,
 public:
     typedef sigc::signal<void, SPObject *> IDChangedSignal;
     typedef sigc::signal<void> ResourcesChangedSignal;
-    typedef sigc::signal<void, guint> ModifiedSignal;
-    typedef sigc::signal<void, gchar const *> URISetSignal;
+    typedef sigc::signal<void, unsigned> ModifiedSignal;
+    typedef sigc::signal<void, char const *> URISetSignal;
     typedef sigc::signal<void, double, double> ResizedSignal;
     typedef sigc::signal<void> ReconstructionStart;
     typedef sigc::signal<void> ReconstructionFinish;
@@ -100,9 +110,9 @@ public:
     CRCascade *style_cascade;
 
 protected:
-    gchar *uri;   ///< A filename (not a URI yet), or NULL
-    gchar *base;  ///< To be used for resolving relative hrefs.
-    gchar *name;  ///< basename(uri) or other human-readable label for the document.
+    char *uri;   ///< A filename (not a URI yet), or NULL
+    char *base;  ///< To be used for resolving relative hrefs.
+    char *name;  ///< basename(uri) or other human-readable label for the document.
 
 public:
 
@@ -112,17 +122,17 @@ public:
     Glib::ustring actionkey;
 
     /// Handler ID
-    guint modified_id;
+    unsigned modified_id;
     
     /// Connector rerouting handler ID
-    guint rerouting_handler_id;
+    unsigned rerouting_handler_id;
 
     Inkscape::ProfileManager* profileManager;
 
     // Instance of the connector router
     Avoid::Router *router;
 
-    GSList *_collection_queue;
+    std::vector<SPObject *> _collection_queue;
 
     bool oldSignalsConnected;
 
@@ -137,15 +147,15 @@ public:
     Inkscape::XML::Document const *getReprDoc() const { return rdoc; }
 
     /** A filename (not a URI yet), or NULL */
-    gchar const *getURI() const { return uri; }
-    void setUri(gchar const *uri);
+    char const *getURI() const { return uri; }
+    void setUri(char const *uri);
 
     /** To be used for resolving relative hrefs. */
-    gchar const *getBase() const { return base; };
-    void setBase( gchar const* base );
+    char const *getBase() const { return base; };
+    void setBase( char const* base );
 
     /** basename(uri) or other human-readable label for the document. */
-    gchar const* getName() const { return name; }
+    char const* getName() const { return name; }
 
     /** Return the main defs object for the document. */
     SPDefs *getDefs();
@@ -173,10 +183,10 @@ public:
     sigc::connection connectResized(ResizedSignal::slot_type slot);
     sigc::connection connectCommit(CommitSignal::slot_type slot);
 
-    void bindObjectToId(gchar const *id, SPObject *object);
+    void bindObjectToId(char const *id, SPObject *object);
     SPObject *getObjectById(Glib::ustring const &id) const;
-    SPObject *getObjectById(gchar const *id) const;
-    sigc::connection connectIdChanged(const gchar *id, IDChangedSignal::slot_type slot);
+    SPObject *getObjectById(char const *id) const;
+    sigc::connection connectIdChanged(const char *id, IDChangedSignal::slot_type slot);
 
     void bindObjectToRepr(Inkscape::XML::Node *repr, SPObject *object);
     SPObject *getObjectByRepr(Inkscape::XML::Node *repr) const;
@@ -197,7 +207,7 @@ public:
     bool isSeeking() const;
 
     bool isModifiedSinceSave() const { return modified_since_save; }
-    void setModifiedSinceSave(bool modified = true);
+    void setModifiedSinceSave(bool const modified = true);
 
 private:
     SPDocument(SPDocument const &); // no copy
@@ -222,55 +232,63 @@ public:
     sigc::connection _selection_changed_connection;
     sigc::connection _desktop_activated_connection;
 
-    sigc::connection connectResourcesChanged(const gchar *key, SPDocument::ResourcesChangedSignal::slot_type slot);
+    sigc::connection connectResourcesChanged(char const *key, SPDocument::ResourcesChangedSignal::slot_type slot);
 
     void fitToRect(Geom::Rect const &rect, bool with_margins = false);
-    static SPDocument *createNewDoc(const gchar *uri, unsigned int keepalive,
+    static SPDocument *createNewDoc(char const*uri, unsigned int keepalive,
             bool make_new = false, SPDocument *parent=NULL );
-    static SPDocument *createNewDocFromMem(const gchar *buffer, gint length, unsigned int keepalive);
+    static SPDocument *createNewDocFromMem(char const*buffer, int length, unsigned int keepalive);
            SPDocument *createChildDoc(std::string const &uri);
 
     /**
      * Returns the bottommost item from the list which is at the point, or NULL if none.
      */
-    static SPItem *getItemFromListAtPointBottom(unsigned int dkey, SPGroup *group, const GSList *list, Geom::Point const &p, bool take_insensitive = false);
+    static SPItem *getItemFromListAtPointBottom(unsigned int dkey, SPGroup *group, const std::vector<SPItem*> &list, Geom::Point const &p, bool take_insensitive = false);
 
-    static SPDocument *createDoc(Inkscape::XML::Document *rdoc, gchar const *uri,
-            gchar const *base, gchar const *name, unsigned int keepalive,
+    static SPDocument *createDoc(Inkscape::XML::Document *rdoc, char const *uri,
+            char const *base, char const *name, unsigned int keepalive,
             SPDocument *parent);
 
     SPDocument *doRef();
     SPDocument *doUnref();
-    Inkscape::Util::Unit const* getDefaultUnit() const;
-    Inkscape::Util::Unit const& getSVGUnit() const;
+    Inkscape::Util::Unit const* getDisplayUnit() const;
+    void setDocumentScale( const double scaleX, const double scaleY );
+    void setDocumentScale( const double scale );
+    Geom::Scale getDocumentScale() const;
     Inkscape::Util::Quantity getWidth() const;
     Inkscape::Util::Quantity getHeight() const;
+    Geom::Rect getViewBox() const;
     Geom::Point getDimensions() const;
     Geom::OptRect preferredBounds() const;
+    void setWidthAndHeight(const Inkscape::Util::Quantity &width, const Inkscape::Util::Quantity &height, bool changeSize=true);
     void setWidth(const Inkscape::Util::Quantity &width, bool changeSize=true);
     void setHeight(const Inkscape::Util::Quantity &height, bool changeSize=true);
     void setViewBox(const Geom::Rect &viewBox);
     void requestModified();
-    gint ensureUpToDate();
-    bool addResource(const gchar *key, SPObject *object);
-    bool removeResource(const gchar *key, SPObject *object);
-    const GSList *getResourceList(const gchar *key) const;
-    GSList *getItemsInBox(unsigned int dkey, Geom::Rect const &box) const;
-    GSList *getItemsPartiallyInBox(unsigned int dkey, Geom::Rect const &box) const;
-    SPItem *getItemAtPoint(unsigned int key, Geom::Point const &p, gboolean into_groups, SPItem *upto = NULL) const;
-    GSList *getItemsAtPoints(unsigned const key, std::vector<Geom::Point> points) const;
+    int ensureUpToDate();
+    bool addResource(char const *key, SPObject *object);
+    bool removeResource(char const *key, SPObject *object);
+    const std::vector<SPObject *> getResourceList(char const *key) const;
+    std::vector<SPItem*> getItemsInBox(unsigned int dkey, Geom::Rect const &box, bool into_groups = false) const;
+    std::vector<SPItem*> getItemsPartiallyInBox(unsigned int dkey, Geom::Rect const &box, bool into_groups = false) const;
+    SPItem *getItemAtPoint(unsigned int key, Geom::Point const &p, bool into_groups, SPItem *upto = NULL) const;
+    std::vector<SPItem*> getItemsAtPoints(unsigned const key, std::vector<Geom::Point> points, bool all_layers = true, size_t limit = 0) const ;
     SPItem *getGroupAtPoint(unsigned int key,  Geom::Point const &p) const;
 
-    void changeUriAndHrefs(gchar const *uri);
-    void emitResizedSignal(gdouble width, gdouble height);
+    void changeUriAndHrefs(char const *uri);
+    void emitResizedSignal(double width, double height);
 	
     unsigned int vacuumDocument();
 
     void importDefs(SPDocument *source);
 
 private:
-    void do_change_uri(gchar const *const filename, bool const rebase);
+    void do_change_uri(char const *const filename, bool const rebase);
     void setupViewport(SPItemCtx *ctx);
+    void importDefsNode(SPDocument *source, Inkscape::XML::Node *defs, Inkscape::XML::Node *target_defs);
+    void build_flat_item_list(unsigned int dkey, SPGroup *group, gboolean into_groups) const;
+    mutable std::deque<SPItem*> _node_cache;
+    mutable bool _node_cache_valid;
 };
 
 /*

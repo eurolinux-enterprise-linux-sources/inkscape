@@ -15,10 +15,6 @@
 # include <config.h>
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/dialog.h>
 
 #if WITH_GTKMM_3_0
@@ -83,6 +79,7 @@ private:
 
     Gtk::Label  _label_name;
     Gtk::Label  _label_descr;
+    Inkscape::UI::Widget::CheckButton _locked_toggle;
     Inkscape::UI::Widget::CheckButton _relative_toggle;
     static bool _relative_toggle_status; // remember the status of the _relative_toggle_status button across instances
     Inkscape::UI::Widget::UnitMenu _unit_menu;

@@ -285,8 +285,8 @@ void PrintMetafile::brush_classify(SPObject *parent, int depth, Inkscape::Pixbuf
                 return;
             }
             char temp[32];  // large enough
-            temp[31] = '\0';
-            strncpy(temp, pat_i->getAttribute("id"), 31); // Some names may be longer than [EW]MFhatch#_######
+            strncpy(temp, pat_i->getAttribute("id"), sizeof(temp)-1); // Some names may be longer than [EW]MFhatch#_######
+            temp[sizeof(temp)-1] = '\0';
             hatch_classify(temp, hatchType, hatchColor, bkColor);
             if (*hatchType != -1) {
                 return;
@@ -388,8 +388,9 @@ Geom::PathVector PrintMetafile::center_ellipse_as_SVG_PathV(Geom::Point ctr, dou
     y2 = ctr[Y]  +  sin(F) * rx * cos(M_PI)   +   cos(F)  * ry * sin(M_PI);
 
     char text[256];
-    sprintf(text, " M %f,%f A %f %f %f 0 0 %f %f A %f %f %f 0 0 %f %f z", x1, y1,  rx, ry, F * 360. / (2.*M_PI), x2, y2,   rx, ry, F * 360. / (2.*M_PI), x1, y1);
-    std::vector<Geom::Path> outres =  Geom::parse_svg_path(text);
+    sprintf(text, " M %f,%f A %f %f %f 0 0 %f %f A %f %f %f 0 0 %f %f z",
+            x1, y1,  rx, ry, F * 360. / (2.*M_PI), x2, y2,   rx, ry, F * 360. / (2.*M_PI), x1, y1);
+    Geom::PathVector outres =  Geom::parse_svg_path(text);
     return outres;
 }
 
@@ -419,7 +420,7 @@ Geom::PathVector PrintMetafile::center_elliptical_ring_as_SVG_PathV(Geom::Point 
     sprintf(text, " M %f,%f A %f %f %f 0 1 %f %f A %f %f %f 0 1 %f %f z M %f,%f  A %f %f %f 0 0 %f %f A %f %f %f 0 0 %f %f z",
             x11, y11,  rx1, ry1, degrot, x12, y12,   rx1, ry1, degrot, x11, y11,
             x21, y21,  rx2, ry2, degrot, x22, y22,   rx2, ry2, degrot, x21, y21);
-    std::vector<Geom::Path> outres =  Geom::parse_svg_path(text);
+    Geom::PathVector outres = Geom::parse_svg_path(text);
 
     return outres;
 }
@@ -440,7 +441,7 @@ Geom::PathVector PrintMetafile::center_elliptical_hole_as_SVG_PathV(Geom::Point 
     char text[256];
     sprintf(text, " M %f,%f A %f %f %f 0 0 %f %f A %f %f %f 0 0 %f %f z M 50000,50000 50000,-50000 -50000,-50000 -50000,50000 z",
             x1, y1,  rx, ry, F * 360. / (2.*M_PI), x2, y2,   rx, ry, F * 360. / (2.*M_PI), x1, y1);
-    std::vector<Geom::Path> outres =  Geom::parse_svg_path(text);
+    Geom::PathVector outres =  Geom::parse_svg_path(text);
     return outres;
 }
 
@@ -452,7 +453,7 @@ width  vector to side edge
 */
 Geom::PathVector PrintMetafile::rect_cutter(Geom::Point ctr, Geom::Point pos, Geom::Point neg, Geom::Point width)
 {
-    std::vector<Geom::Path> outres;
+    Geom::PathVector outres;
     Geom::Path cutter;
     cutter.start(ctr + pos - width);
     cutter.appendNew<Geom::LineSegment>(ctr + pos + width);

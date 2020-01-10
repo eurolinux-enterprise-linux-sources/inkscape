@@ -11,29 +11,16 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "config.h"
-
 #include "attributes.h"
 #include "sp-polygon.h"
 #include "display/curve.h"
 #include <glibmm/i18n.h>
 #include <2geom/pathvector.h>
-#include <2geom/bezier-curve.h>
-#include <2geom/hvlinesegment.h>
+#include <2geom/curves.h>
 #include "helper/geom-curves.h"
 #include "svg/stringstream.h"
 #include "xml/repr.h"
 #include "document.h"
-
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createPolygon() {
-		return new SPPolygon();
-	}
-
-	bool polygonRegistered = SPFactory::instance().registerObject("svg:polygon", createPolygon);
-}
 
 SPPolygon::SPPolygon() : SPShape() {
 }

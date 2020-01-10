@@ -27,12 +27,12 @@
 # include "config.h"
 #endif
 
-//#include <png.h>   //This must precede text_reassemble.h or it blows up in pngconf.h when compiling
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <libuemf/symbol_convert.h>
 
+#include "document.h"
 #include "sp-root.h" // even though it is included indirectly by wmf-inout.h
 #include "sp-path.h"
 #include "print.h"
@@ -45,8 +45,8 @@
 #include "display/drawing-item.h"
 #include "clear-n_.h"
 #include "svg/svg.h"
-#include "util/units.h" // even though it is included indirectly by wmf-inout.h
-#include "inkscape.h" // even though it is included indirectly by wmf-inout.h
+#include "util/units.h" // even though it is included indirectly by emf-inout.h
+#include "inkscape.h"   // even though it is included indirectly by emf-inout.h
 
 #include "emf-print.h"
 #include "emf-inout.h"
@@ -165,7 +165,15 @@ Emf::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar const *filena
     ext->set_param_bool("FixImageRot",new_FixImageRot);
     ext->set_param_bool("textToPath", new_val);
 
+    // ensure usage of dot as decimal separator in scanf/printf functions (indepentendly of current locale)
+    char *oldlocale = g_strdup(setlocale(LC_NUMERIC, NULL));
+    setlocale(LC_NUMERIC, "C");
+
     print_document_to_file(doc, filename);
+
+    // restore decimal separator used in scanf/printf functions to initial value
+    setlocale(LC_NUMERIC, oldlocale);
+    g_free(oldlocale);
 
     return;
 }
@@ -188,7 +196,7 @@ double Emf::current_scale(PEMF_CALLBACK_DATA d){
     "matrix(a,b,c,d,e,f)"  (WITH the double quotes)
 */
 std::string Emf::current_matrix(PEMF_CALLBACK_DATA d, double x, double y, int useoffset){
-    std::stringstream cxform;
+    SVGOStringStream cxform;
     double scale = current_scale(d);
     cxform << "\"matrix(";
     cxform << d->dc[d->level].worldTransform.eM11/scale;   cxform << ",";
@@ -480,7 +488,7 @@ uint32_t Emf::add_image(PEMF_CALLBACK_DATA d,  void *pEmr, uint32_t cbBits, uint
     uint32_t width, height, colortype, numCt, invert; // if needed these values will be set in get_DIB_params
     if(cbBits && cbBmi  && (iUsage == U_DIB_RGB_COLORS)){
         // next call returns pointers and values, but allocates no memory
-        dibparams = get_DIB_params(pEmr, offBits, offBmi, &px, (const U_RGBQUAD **) &ct,
+        dibparams = get_DIB_params((const char *)pEmr, offBits, offBmi, &px, (const U_RGBQUAD **) &ct,
             &numCt, &width, &height, &colortype, &invert);
         if(dibparams ==U_BI_RGB){
             // U_EMRCREATEMONOBRUSH uses text/bk colors instead of what is in the color map.
@@ -1058,7 +1066,7 @@ Emf::snap_to_faraway_pair(double *x, double *y)
    Since exclude clip can go through here, it calls snap_to_faraway_pair for numerical stability.
 */
 std::string Emf::pix_to_xy(PEMF_CALLBACK_DATA d, double x, double y){
-    std::stringstream cxform;
+    SVGOStringStream cxform;
     double tx = pix_to_x_point(d,x,y);
     double ty = pix_to_y_point(d,x,y);
     snap_to_faraway_pair(&tx,&ty);
@@ -1174,10 +1182,7 @@ Emf::select_extpen(PEMF_CALLBACK_DATA d, int index)
                 if (!d->dc[d->level].style.stroke_dasharray.values.empty() && (d->level==0 || (d->level>0 && d->dc[d->level].style.stroke_dasharray.values!=d->dc[d->level-1].style.stroke_dasharray.values)))
                     d->dc[d->level].style.stroke_dasharray.values.clear();
                 for (unsigned int i=0; i<pEmr->elp.elpNumEntries; i++) {
-//  Doing it this way typically results in a pattern that is tiny, better to assume the array
-//  is the same scale as for dot/dash below, that is, no scaling should be applied
-//                    double dash_length = pix_to_abs_size( d, pEmr->elp.elpStyleEntry[i] );
-                    double dash_length = pEmr->elp.elpStyleEntry[i];
+                    double dash_length = pix_to_abs_size( d, pEmr->elp.elpStyleEntry[i] );
                     d->dc[d->level].style.stroke_dasharray.values.push_back(dash_length);
                 }
                 d->dc[d->level].style.stroke_dasharray.set = 1;
@@ -1307,7 +1312,7 @@ Emf::select_extpen(PEMF_CALLBACK_DATA d, int index)
             d->dc[d->level].stroke_set    = true;
         }
         else if(pEmr->elp.elpBrushStyle == U_BS_DIBPATTERN || pEmr->elp.elpBrushStyle == U_BS_DIBPATTERNPT){
-            d->dc[d->level].stroke_idx  = add_image(d, pEmr, pEmr->cbBits, pEmr->cbBmi, *(uint32_t *) &(pEmr->elp.elpColor), pEmr->offBits, pEmr->offBmi);
+            d->dc[d->level].stroke_idx  = add_image(d, (void *)pEmr, pEmr->cbBits, pEmr->cbBmi, *(uint32_t *) &(pEmr->elp.elpColor), pEmr->offBits, pEmr->offBmi);
             d->dc[d->level].stroke_mode = DRAW_IMAGE;
             d->dc[d->level].stroke_set  = true;
         }
@@ -1515,6 +1520,9 @@ void Emf::common_image_extraction(PEMF_CALLBACK_DATA d, void *pEmr,
     int  dibparams = U_BI_UNKNOWN;  // type of image not yet determined
 
     tmp_image << "\n\t <image\n";
+    if (d->dc[d->level].clip_id){
+        tmp_image << "\tclip-path=\"url(#clipEmfPath" << d->dc[d->level].clip_id << ")\"\n";
+    }
     tmp_image << " y=\"" << dy << "\"\n x=\"" << dx <<"\"\n ";
 
     MEMPNG mempng; // PNG in memory comes back in this
@@ -1527,7 +1535,7 @@ void Emf::common_image_extraction(PEMF_CALLBACK_DATA d, void *pEmr,
     uint32_t width, height, colortype, numCt, invert; // if needed these values will be set in get_DIB_params
     if(cbBits && cbBmi && (iUsage == U_DIB_RGB_COLORS)){
         // next call returns pointers and values, but allocates no memory
-        dibparams = get_DIB_params(pEmr, offBits, offBmi, &px, (const U_RGBQUAD **) &ct,
+        dibparams = get_DIB_params((const char *)pEmr, offBits, offBmi, &px, (const U_RGBQUAD **) &ct,
             &numCt, &width, &height, &colortype, &invert);
         if(dibparams ==U_BI_RGB){
             if(sw == 0 || sh == 0){
@@ -1608,10 +1616,25 @@ int Emf::myEnhMetaFileProc(char *contents, unsigned int length, PEMF_CALLBACK_DA
     uint32_t         off=0;
     uint32_t         emr_mask;
     int              OK =1;
+    int              file_status=1;
+    uint32_t         nSize;
+    uint32_t         iType;
+    const char      *blimit = contents + length;
     PU_ENHMETARECORD lpEMFR;
     TCHUNK_SPECS     tsp;
     uint32_t         tbkMode  = U_TRANSPARENT;          // holds proposed change to bkMode, if text is involved saving these to the DC must wait until the text is written
     U_COLORREF       tbkColor = U_RGB(255, 255, 255);   // holds proposed change to bkColor
+
+    // code for end user debugging
+    int  eDbgRecord=0;
+    int  eDbgComment=0;
+    int  eDbgFinal=0;
+    char const* eDbgString = getenv( "INKSCAPE_DBG_EMF" );
+    if ( eDbgString != NULL ) {
+        if(strstr(eDbgString,"RECORD")){  eDbgRecord  = 1; }
+        if(strstr(eDbgString,"COMMENT")){ eDbgComment = 1; }
+        if(strstr(eDbgString,"FINAL")){   eDbgFinal   = 1; }
+    }
 
     /* initialize the tsp for text reassembly */
     tsp.string     = NULL;
@@ -1638,18 +1661,34 @@ int Emf::myEnhMetaFileProc(char *contents, unsigned int length, PEMF_CALLBACK_DA
     while(OK){
     if(off>=length)return(0);  //normally should exit from while after EMREOF sets OK to false.
 
+    // check record sizes and types thoroughly 
+    int badrec = 0;
+    if (!U_emf_record_sizeok(contents + off, blimit, &nSize, &iType, 1) || 
+        !U_emf_record_safe(contents + off)){
+        badrec = 1;
+    }
+    else {
+        emr_mask = emr_properties(iType);
+        if (emr_mask == U_EMR_INVALID) { badrec = 1; }
+    }
+    if (badrec) {
+        file_status = 0;
+        break;
+    }
+
     lpEMFR = (PU_ENHMETARECORD)(contents + off);
-//  Uncomment the following to track down toxic records
-// std::cout << "record type: " << lpEMFR->iType  << " name " << U_emr_names(lpEMFR->iType) << " length: " << lpEMFR->nSize << " offset: " << off <<std::endl;
-    off += lpEMFR->nSize;
+
+//  At run time define environment variable INKSCAPE_DBG_EMF to include string RECORD.
+//  Users may employ this to track down toxic records
+    if(eDbgRecord){
+       std::cout << "record type: " << iType  << " name " << U_emr_names(iType) << " length: " << nSize << " offset: " << off <<std::endl;
+    }
+    off += nSize;
 
     SVGOStringStream tmp_outsvg;
     SVGOStringStream tmp_path;
     SVGOStringStream tmp_str;
     SVGOStringStream dbg_str;
-
-    emr_mask = emr_properties(lpEMFR->iType);
-    if(emr_mask == U_EMR_INVALID){ throw "Inkscape fatal memory allocation error - cannot continue"; }
 
 /* Uncomment the following to track down text problems */
 //std::cout << "tri->dirty:"<< d->tri->dirty << " emr_mask: " << std::hex << emr_mask << std::dec << std::endl;
@@ -1727,28 +1766,30 @@ std::cout << "BEFORE DRAW"
         )
     ){
 // std::cout << "PATH DRAW at TOP path" << *(d->path) << std::endl;
-        d->outsvg += "   <path ";     // this is the ONLY place <path should be used!!!  One exception, gradientfill.
-        if(d->drawtype){                 // explicit draw type EMR record
-            output_style(d, d->drawtype);
+        if(!(d->path.empty())){
+            d->outsvg += "   <path ";     // this is the ONLY place <path should be used!!!  One exception, gradientfill.
+            if(d->drawtype){                 // explicit draw type EMR record
+                output_style(d, d->drawtype);
+            }
+            else if(d->mask & U_DRAW_CLOSED){              // implicit draw type
+                output_style(d, U_EMR_STROKEANDFILLPATH);
+            }
+            else {
+                output_style(d, U_EMR_STROKEPATH);
+            }
+            d->outsvg += "\n\t";
+            d->outsvg += "\n\td=\"";      // this is the ONLY place d=" should be used!!!!  One exception, gradientfill.
+            d->outsvg += d->path;
+            d->outsvg += " \" /> \n";
+            d->path = "";
         }
-        else if(d->mask & U_DRAW_CLOSED){              // implicit draw type
-            output_style(d, U_EMR_STROKEANDFILLPATH);
-        }
-        else {
-            output_style(d, U_EMR_STROKEPATH);
-        }
-        d->outsvg += "\n\t";
-        d->outsvg += "\n\td=\"";      // this is the ONLY place d=" should be used!!!!  One exception, gradientfill.
-        d->outsvg += d->path;
-        d->outsvg += " \" /> \n";
-        d->path = "";
         // reset the flags
         d->mask = 0;
         d->drawtype = 0;
     }
 // std::cout << "AFTER DRAW logic d->mask: " << std::hex << d->mask << " emr_mask: " << emr_mask << std::dec << std::endl;
 
-    switch (lpEMFR->iType)
+    switch (iType)
     {
         case U_EMR_HEADER:
         {
@@ -3418,7 +3459,11 @@ std::cout << "BEFORE DRAW"
                      tmp_rectangle << "\n\tz\"";
                      tmp_rectangle << "\n\tstyle=\"stroke:none;fill:url(#";
                      tmp_rectangle << d->gradients.strings[fill_idx];
-                     tmp_rectangle << ");\"\n/>\n";
+                     tmp_rectangle << ");\"\n";
+                     if (d->dc[d->level].clip_id){
+                        tmp_rectangle << "\tclip-path=\"url(#clipEmfPath" << d->dc[d->level].clip_id << ")\"\n";
+                     }
+                     tmp_rectangle << "/>\n";
                  }
                  d->outsvg += tmp_rectangle.str().c_str();
             }
@@ -3452,17 +3497,23 @@ std::cout << "BEFORE DRAW"
             dbg_str << "<!-- U_EMR_??? -->\n";
             break;
     }  //end of switch
-// When testing, uncomment the following to place a comment for each processed EMR record in the SVG
-//    d->outsvg += dbg_str.str().c_str();
+//  At run time define environment variable INKSCAPE_DBG_EMF to include string COMMENT.
+//  Users may employ this to to place a comment for each processed EMR record in the SVG
+    if(eDbgComment){
+       d->outsvg += dbg_str.str().c_str();
+    }
     d->outsvg += tmp_outsvg.str().c_str();
     d->path += tmp_path.str().c_str();
 
     }  //end of while
-// When testing, uncomment the following to show the final SVG derived from the EMF
-// std::cout << d->outsvg << std::endl;
+//  At run time define environment variable INKSCAPE_DBG_EMF to include string FINAL
+//  Users may employ this to to show the final SVG derived from the EMF
+    if(eDbgFinal){
+       std::cout << d->outsvg << std::endl;
+    }
     (void) emr_properties(U_EMR_INVALID);  // force the release of the lookup table memory, returned value is irrelevant
 
-    return 1;
+    return(file_status);
 }
 
 void Emf::free_emf_strings(EMF_STRINGS name){
@@ -3477,12 +3528,18 @@ void Emf::free_emf_strings(EMF_STRINGS name){
 SPDocument *
 Emf::open( Inkscape::Extension::Input * /*mod*/, const gchar *uri )
 {
-    EMF_CALLBACK_DATA d;
-
     if (uri == NULL) {
         return NULL;
     }
 
+    // ensure usage of dot as decimal separator in scanf/printf functions (indepentendly of current locale)
+    char *oldlocale = g_strdup(setlocale(LC_NUMERIC, NULL));
+    setlocale(LC_NUMERIC, "C");
+
+    EMF_CALLBACK_DATA d;
+
+    d.n_obj   = 0;     //these might not be set otherwise if the input file is corrupt
+    d.emf_obj = NULL; 
     d.dc[0].font_name = strdup("Arial"); // Default font, set only on lowest level, it copies up from there EMF spec says device can pick whatever it wants
 
     // set up the size default for patterns in defs.  This might not be referenced if there are no patterns defined in the drawing.
@@ -3509,14 +3566,17 @@ Emf::open( Inkscape::Extension::Input * /*mod*/, const gchar *uri )
       FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING  | FT_LOAD_NO_BITMAP,
       FT_KERNING_UNSCALED);
 
-    (void) myEnhMetaFileProc(contents,length, &d);
+    int good = myEnhMetaFileProc(contents,length, &d);
     free(contents);
 
     if (d.pDesc){ free( d.pDesc ); }
 
 //    std::cout << "SVG Output: " << std::endl << d.outsvg << std::endl;
 
-    SPDocument *doc = SPDocument::createNewDocFromMem(d.outsvg.c_str(), strlen(d.outsvg.c_str()), TRUE);
+    SPDocument *doc = NULL;
+    if (good) {
+        doc = SPDocument::createNewDocFromMem(d.outsvg.c_str(), strlen(d.outsvg.c_str()), TRUE);
+    }
 
     free_emf_strings(d.hatches);
     free_emf_strings(d.images);
@@ -3538,7 +3598,11 @@ Emf::open( Inkscape::Extension::Input * /*mod*/, const gchar *uri )
 
     d.tri = trinfo_release_except_FC(d.tri);
 
-    setViewBoxIfMissing(doc);
+    // in earlier versions no viewbox was generated and a call to setViewBoxIfMissing() was needed here.
+
+    // restore decimal separator used in scanf/printf functions to initial value
+    setlocale(LC_NUMERIC, oldlocale);
+    g_free(oldlocale);
 
     return doc;
 }
@@ -3566,17 +3630,17 @@ Emf::init (void)
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
             "<name>" N_("EMF Output") "</name>\n"
             "<id>org.inkscape.output.emf</id>\n"
-            "<param name=\"textToPath\" gui-text=\"" N_("Convert texts to paths") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"TnrToSymbol\" gui-text=\"" N_("Map Unicode to Symbol font") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"TnrToWingdings\" gui-text=\"" N_("Map Unicode to Wingdings") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"TnrToZapfDingbats\" gui-text=\"" N_("Map Unicode to Zapf Dingbats") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"UsePUA\" gui-text=\"" N_("Use MS Unicode PUA (0xF020-0xF0FF) for converted characters") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"FixPPTCharPos\" gui-text=\"" N_("Compensate for PPT font bug") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"FixPPTDashLine\" gui-text=\"" N_("Convert dashed/dotted lines to single lines") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"FixPPTGrad2Polys\" gui-text=\"" N_("Convert gradients to colored polygon series") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"FixPPTLinGrad\" gui-text=\"" N_("Use native rectangular linear gradients") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"FixPPTPatternAsHatch\" gui-text=\"" N_("Map all fill patterns to standard EMF hatches") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"FixImageRot\" gui-text=\"" N_("Ignore image rotations") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"textToPath\" _gui-text=\"" N_("Convert texts to paths") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"TnrToSymbol\" _gui-text=\"" N_("Map Unicode to Symbol font") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"TnrToWingdings\" _gui-text=\"" N_("Map Unicode to Wingdings") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"TnrToZapfDingbats\" _gui-text=\"" N_("Map Unicode to Zapf Dingbats") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"UsePUA\" _gui-text=\"" N_("Use MS Unicode PUA (0xF020-0xF0FF) for converted characters") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"FixPPTCharPos\" _gui-text=\"" N_("Compensate for PPT font bug") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"FixPPTDashLine\" _gui-text=\"" N_("Convert dashed/dotted lines to single lines") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"FixPPTGrad2Polys\" _gui-text=\"" N_("Convert gradients to colored polygon series") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"FixPPTLinGrad\" _gui-text=\"" N_("Use native rectangular linear gradients") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"FixPPTPatternAsHatch\" _gui-text=\"" N_("Map all fill patterns to standard EMF hatches") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"FixImageRot\" _gui-text=\"" N_("Ignore image rotations") "\" type=\"boolean\">false</param>\n"
             "<output>\n"
                 "<extension>.emf</extension>\n"
                 "<mimetype>image/x-emf</mimetype>\n"

@@ -22,7 +22,7 @@
 
 #include "ui/dialog/dialog-manager.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "macros.h"
 #include "sp-anchor.h"
 #include "sp-image.h"
@@ -113,7 +113,7 @@ void ObjectAttributes::widget_setup (void)
         return;
     }
     
-    Inkscape::Selection *selection = sp_desktop_selection (SP_ACTIVE_DESKTOP);
+    Inkscape::Selection *selection = SP_ACTIVE_DESKTOP->getSelection();
     SPItem *item = selection->singleItem();
     if (!item)
     {
@@ -127,7 +127,7 @@ void ObjectAttributes::widget_setup (void)
     blocked = true;
 
     // CPPIFY
-    SPObject *obj = SP_OBJECT(item); //to get the selected item
+    SPObject *obj = item; //to get the selected item
 //    GObjectClass *klass = G_OBJECT_GET_CLASS(obj); //to deduce the object's type
 //    GType type = G_TYPE_FROM_CLASS(klass);
     const SPAttrDesc *desc;

@@ -19,10 +19,6 @@
 # include "config.h"
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
 #include <gtkmm/frame.h>
@@ -667,7 +663,7 @@ Extension::set_param_color (const gchar * name, guint32 color, SPDocument * doc,
 void
 Extension::error_file_open (void)
 {
-    gchar * ext_error_file = profile_path(EXTENSION_ERROR_LOG_FILENAME);
+    gchar * ext_error_file = Inkscape::Application::profile_path(EXTENSION_ERROR_LOG_FILENAME);
     gchar * filename = g_filename_from_utf8( ext_error_file, -1, NULL, NULL, NULL );
     error_file.open(filename);
     if (!error_file.is_open()) {
@@ -705,7 +701,7 @@ public:
         if (widg) {
             this->pack_start(*widg, false, false, 2);
             if (tooltip) {
-                widg->set_tooltip_text(_(tooltip));
+                widg->set_tooltip_text(tooltip);
             } else {
                 widg->set_tooltip_text("");
                 widg->set_has_tooltip(false);

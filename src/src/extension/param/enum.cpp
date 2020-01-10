@@ -18,10 +18,6 @@
 # include "config.h"
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/box.h>
 #include <gtkmm/comboboxtext.h>
 #include <glibmm/i18n.h>
@@ -255,7 +251,7 @@ Gtk::Widget *ParamComboBox::get_widget(SPDocument * doc, Inkscape::XML::Node * n
     }
 
     Gtk::HBox * hbox = Gtk::manage(new Gtk::HBox(false, 4));
-    Gtk::Label * label = Gtk::manage(new Gtk::Label(_(_text), Gtk::ALIGN_START));
+    Gtk::Label * label = Gtk::manage(new Gtk::Label(_text, Gtk::ALIGN_START));
     label->show();
     hbox->pack_start(*label, false, false, _indent);
 

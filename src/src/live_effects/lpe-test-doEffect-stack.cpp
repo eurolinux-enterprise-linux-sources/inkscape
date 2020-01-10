@@ -28,6 +28,7 @@ LPEdoEffectStackTest::LPEdoEffectStackTest(LivePathEffectObject *lpeobject) :
     registerParameter( dynamic_cast<Parameter *>(&path) );
 
     point.set_oncanvas_looks(SP_KNOT_SHAPE_SQUARE, SP_KNOT_MODE_XOR, 0x00ff0000);
+    point.param_setValue(point,true);
 }
 
 LPEdoEffectStackTest::~LPEdoEffectStackTest()
@@ -46,14 +47,14 @@ LPEdoEffectStackTest::doEffect (SPCurve * curve)
     }
 }
 
-std::vector<Geom::Path>
-LPEdoEffectStackTest::doEffect_path (std::vector<Geom::Path> const & path_in)
+Geom::PathVector
+LPEdoEffectStackTest::doEffect_path (Geom::PathVector const &path_in)
 {
     if (step >= 2) {
         return Effect::doEffect_path(path_in);
     } else {
         // return here
-        std::vector<Geom::Path> path_out = path_in;
+        Geom::PathVector path_out = path_in;
         return path_out;
     }
 }

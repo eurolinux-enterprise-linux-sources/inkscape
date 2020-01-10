@@ -34,10 +34,12 @@
 #include "extension/extension.h"
 
 #include "attribute-rel-util.h"
+#include "attribute-sort-util.h"
 
 #include "preferences.h"
 
 #include <glibmm/miscutils.h>
+#include <map>
 
 using Inkscape::IO::Writer;
 using Inkscape::Util::List;
@@ -50,8 +52,8 @@ using Inkscape::XML::calc_abs_doc_base;
 using Inkscape::XML::rebase_href_attrs;
 
 Document *sp_repr_do_read (xmlDocPtr doc, const gchar *default_ns);
-static Node *sp_repr_svg_read_node (Document *xml_doc, xmlNodePtr node, const gchar *default_ns, GHashTable *prefix_map);
-static gint sp_repr_qualified_name (gchar *p, gint len, xmlNsPtr ns, const xmlChar *name, const gchar *default_ns, GHashTable *prefix_map);
+static Node *sp_repr_svg_read_node (Document *xml_doc, xmlNodePtr node, const gchar *default_ns, std::map<std::string, std::string> &prefix_map);
+static gint sp_repr_qualified_name (gchar *p, gint len, xmlNsPtr ns, const xmlChar *name, const gchar *default_ns, std::map<std::string, std::string> &prefix_map);
 static void sp_repr_write_stream_root_element(Node *repr, Writer &out,
                                               bool add_whitespace, gchar const *default_ns,
                                               int inlineattrs, int indent,
@@ -403,7 +405,12 @@ Document *sp_repr_read_mem (const gchar * buffer, gint length, const gchar *defa
 
     g_return_val_if_fail (buffer != NULL, NULL);
 
-    doc = xmlParseMemory (const_cast<gchar *>(buffer), length);
+    int parser_options = XML_PARSE_HUGE | XML_PARSE_RECOVER;
+    parser_options |= XML_PARSE_NONET; // TODO: should we allow network access?
+                                       // proper solution would be to check the preference "/options/externalresources/xml/allow_net_access"
+                                       // as done in XmlSource::readXml which gets called by the analogous sp_repr_read_file()
+                                       // but sp_repr_read_mem() seems to be called in locations where Inkscape::Preferences::get() fails badly
+    doc = xmlReadMemory (const_cast<gchar *>(buffer), length, NULL, NULL, parser_options);
 
     rdoc = sp_repr_do_read (doc, default_ns);
     if (doc) {
@@ -486,8 +493,7 @@ Document *sp_repr_do_read (xmlDocPtr doc, const gchar *default_ns)
         return NULL;
     }
 
-    GHashTable * prefix_map;
-    prefix_map = g_hash_table_new (g_str_hash, g_str_equal);
+    std::map<std::string, std::string> prefix_map;
 
     Document *rdoc = new Inkscape::XML::SimpleDocument();
 
@@ -536,21 +542,17 @@ Document *sp_repr_do_read (xmlDocPtr doc, const gchar *default_ns)
         }
     }
 
-    g_hash_table_destroy (prefix_map);
-
     return rdoc;
 }
 
-gint sp_repr_qualified_name (gchar *p, gint len, xmlNsPtr ns, const xmlChar *name, const gchar */*default_ns*/, GHashTable *prefix_map)
+gint sp_repr_qualified_name (gchar *p, gint len, xmlNsPtr ns, const xmlChar *name, const gchar */*default_ns*/, std::map<std::string, std::string> &prefix_map)
 {
     const xmlChar *prefix;
     if (ns){
         if (ns->href ) {
             prefix = reinterpret_cast<const xmlChar*>( sp_xml_ns_uri_prefix(reinterpret_cast<const gchar*>(ns->href),
                                                                             reinterpret_cast<const char*>(ns->prefix)) );
-            void* p0 = reinterpret_cast<gpointer>(const_cast<xmlChar *>(prefix));
-            void* p1 = reinterpret_cast<gpointer>(const_cast<xmlChar *>(ns->href));
-            g_hash_table_insert( prefix_map, p0, p1 );
+            prefix_map[reinterpret_cast<const char*>(prefix)] = reinterpret_cast<const char*>(ns->href);
         }
         else {
             prefix = NULL;
@@ -567,7 +569,7 @@ gint sp_repr_qualified_name (gchar *p, gint len, xmlNsPtr ns, const xmlChar *nam
     }
 }
 
-static Node *sp_repr_svg_read_node (Document *xml_doc, xmlNodePtr node, const gchar *default_ns, GHashTable *prefix_map)
+static Node *sp_repr_svg_read_node (Document *xml_doc, xmlNodePtr node, const gchar *default_ns, std::map<std::string, std::string> &prefix_map)
 {
     xmlAttrPtr prop;
     xmlNodePtr child;
@@ -885,6 +887,10 @@ static void sp_repr_write_stream_root_element(Node *repr, Writer &out,
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     bool clean = prefs->getBool("/options/svgoutput/check_on_writing");
     if (clean) sp_attribute_clean_tree( repr );
+
+    // Sort attributes in a canonical order (helps with "diffing" SVG files).
+    bool sort = prefs->getBool("/options/svgoutput/sort_attributes");
+    if (sort) sp_attribute_sort_tree( repr );
 
     Glib::QueryQuark xml_prefix=g_quark_from_static_string("xml");
 

@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <sigc++/sigc++.h>
 #include <vector>
+#include <set>
 #include <glib.h>
 #include <glibmm/ustring.h>
 
@@ -86,7 +87,7 @@ struct GrDragger {
     // position of the knot before it began to drag; updated when released
     Geom::Point point_original;
 
-    GSList *draggables;
+    std::vector<GrDraggable *> draggables;
 
     void addDraggable(GrDraggable *draggable);
 
@@ -104,7 +105,12 @@ struct GrDragger {
     void updateDependencies(bool write_repr);
 
     /* Update handles/tensors when mesh corner moved */
-    void updateHandles( Geom::Point pc_old,  MeshNodeOperation op );
+    void moveMeshHandles( Geom::Point pc_old,  MeshNodeOperation op );
+
+    /* Following are for highlighting mesh handles when corner node is selected. */
+    GrDragger *getMgCorner();
+    void highlightNode(SPMeshNode* node, bool highlight, Geom::Point corner_pos);
+    void highlightCorner(bool highlight);
 
     bool mayMerge(GrDragger *other);
     bool mayMerge(GrDraggable *da2);
@@ -115,14 +121,20 @@ struct GrDragger {
 
     void fireDraggables(bool write_repr, bool scale_radial = false, bool merging_focus = false);
 
+protected:
+    void updateControlSizesOverload(SPKnot * knot);
+    void updateControlSizes();
+    sigc::connection sizeUpdatedConn;
+
 private:
     sigc::connection _moved_connection;
     sigc::connection _clicked_connection;
     sigc::connection _doubleclicked_connection;
-    sigc::connection _grabbed_connection;
+    sigc::connection _mousedown_connection;
     sigc::connection _ungrabbed_connection;
 };
 
+struct SPCtrlLine;
 /**
 This is the root class of the gradient dragging machinery. It holds lists of GrDraggers
 and of lines (simple canvas items). It also remembers one of the draggers as selected.
@@ -133,20 +145,21 @@ public: // FIXME: make more of this private!
     GrDrag(SPDesktop *desktop);
     virtual ~GrDrag();
 
-    bool isNonEmpty() {return (draggers != NULL);}
-    bool hasSelection() {return (selected != NULL);}
-    guint numSelected() {return (selected? g_list_length(selected) : 0);}
-    guint numDraggers() {return (draggers? g_list_length(draggers) : 0);}
+    bool isNonEmpty() {return !draggers.empty();}
+    bool hasSelection() {return !selected.empty();}
+    guint numSelected() {return selected.size();}
+    guint numDraggers() {return draggers.size();}
 
     guint singleSelectedDraggerNumDraggables() {
-        return (selected? g_slist_length(( static_cast<GrDragger *>(selected->data))->draggables) : 0);
+        return (selected.empty()? 0 : (*(selected.begin()))->draggables.size() );
     }
 
     guint singleSelectedDraggerSingleDraggableType() {
-        return (selected? (static_cast<GrDraggable*>((static_cast<GrDragger*>(selected->data))->draggables->data))->point_type : 0);}
+        return (selected.empty() ? 0 : ((*(selected.begin()))->draggables[0]->point_type)); 
+    }
 
     // especially the selection must be private, fix gradient-context to remove direct access to it
-    GList *selected; // list of GrDragger*
+    std::set<GrDragger *> selected; // list of GrDragger*
     void setSelected(GrDragger *dragger, bool add_to_selection = false, bool override = true);
     void setDeselected(GrDragger *dragger);
     void deselectAll();
@@ -165,6 +178,7 @@ public: // FIXME: make more of this private!
 
     bool keep_selection;
 
+    GrDragger *getDraggerFor(GrDraggable *d);
     GrDragger *getDraggerFor(SPItem *item, GrPointType point_type, gint point_i, Inkscape::PaintTarget fill_or_stroke);
 
     void grabKnot(GrDragger *dragger, gint x, gint y, guint32 etime);
@@ -178,10 +192,11 @@ public: // FIXME: make more of this private!
     std::vector<double> hor_levels;
     std::vector<double> vert_levels;
 
-    GList *draggers;
-    GSList *lines;
+    std::vector<GrDragger *> draggers;
+    std::vector<SPCtrlLine *> lines;
 
     void updateDraggers();
+    void refreshDraggers();
     void updateLines();
     void updateLevels();
 
@@ -200,13 +215,15 @@ private:
     void deselect_all();
 
     void addLine( SPItem *item, Geom::Point p1, Geom::Point p2, Inkscape::PaintTarget fill_or_stroke);
-    void addCurve(SPItem *item, Geom::Point p0, Geom::Point p1, Geom::Point p2, Geom::Point p3, Inkscape::PaintTarget fill_or_stroke);
+    void addCurve(SPItem *item, Geom::Point p0, Geom::Point p1, Geom::Point p2, Geom::Point p3,
+                  int corner0, int corner1, int handle0, int handle1, Inkscape::PaintTarget fill_or_stroke);
 
-    void addDragger(GrDraggable *draggable);
+    GrDragger *addDragger(GrDraggable *draggable);
 
     void addDraggersRadial(SPRadialGradient *rg, SPItem *item, Inkscape::PaintTarget fill_or_stroke);
     void addDraggersLinear(SPLinearGradient *lg, SPItem *item, Inkscape::PaintTarget fill_or_stroke);
     void addDraggersMesh(  SPMeshGradient   *mg, SPItem *item, Inkscape::PaintTarget fill_or_stroke);
+    void refreshDraggersMesh(SPMeshGradient *mg, SPItem *item, Inkscape::PaintTarget fill_or_stroke);
 
     bool styleSet( const SPCSSAttr *css );
 

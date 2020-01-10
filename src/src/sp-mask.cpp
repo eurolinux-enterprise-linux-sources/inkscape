@@ -37,16 +37,6 @@ struct SPMaskView {
 SPMaskView *sp_mask_view_new_prepend (SPMaskView *list, unsigned int key, Inkscape::DrawingItem *arenaitem);
 SPMaskView *sp_mask_view_list_remove (SPMaskView *list, SPMaskView *view);
 
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createMask() {
-		return new SPMask();
-	}
-
-	bool maskRegistered = SPFactory::instance().registerObject("svg:mask", createMask);
-}
-
 SPMask::SPMask() : SPObjectGroup() {
 	this->maskUnits_set = FALSE;
 	this->maskUnits = SP_CONTENT_UNITS_OBJECTBOUNDINGBOX;
@@ -148,23 +138,18 @@ void SPMask::update(SPCtx* ctx, unsigned int flags) {
 	
     flags &= SP_OBJECT_MODIFIED_CASCADE;
 
-    GSList *l = NULL;
-    for (SPObject *child = this->firstChild(); child; child = child->getNext()) {
-        sp_object_ref(child);
-        l = g_slist_prepend (l, child);
+    std::vector<SPObject *> children = this->childList(false);
+    for (std::vector<SPObject *>::const_iterator child = children.begin();child != children.end();++child) {
+        sp_object_ref(*child);
     }
     
-    l = g_slist_reverse (l);
     
-    while (l) {
-        SPObject *child = SP_OBJECT(l->data);
-        l = g_slist_remove(l, child);
-        
-        if (flags || (child->uflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG))) {
-            child->updateDisplay(ctx, flags);
+    for (std::vector<SPObject *>::const_iterator child = children.begin();child != children.end();++child) {
+        if (flags || ((*child)->uflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG))) {
+            (*child)->updateDisplay(ctx, flags);
         }
         
-        sp_object_unref(child);
+        sp_object_unref(*child);
     }
 
     for (SPMaskView *v = this->display; v != NULL; v = v->next) {
@@ -187,23 +172,17 @@ void SPMask::modified(unsigned int flags) {
 	
     flags &= SP_OBJECT_MODIFIED_CASCADE;
 
-    GSList *l = NULL;
-    for (SPObject *child = this->firstChild(); child; child = child->getNext()) {
-        sp_object_ref(child);
-        l = g_slist_prepend(l, child);
+    std::vector<SPObject *> children = this->childList(false);
+    for (std::vector<SPObject *>::const_iterator child = children.begin();child != children.end();++child) {
+        sp_object_ref(*child);
     }
     
-    l = g_slist_reverse(l);
-    
-    while (l) {
-        SPObject *child = SP_OBJECT(l->data);
-        l = g_slist_remove(l, child);
-        
-        if (flags || (child->mflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG))) {
-            child->emitModified(flags);
+    for (std::vector<SPObject *>::const_iterator child = children.begin();child != children.end();++child) {
+        if (flags || ((*child)->mflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG))) {
+            (*child)->emitModified(flags);
         }
         
-        sp_object_unref(child);
+        sp_object_unref(*child);
     }
 }
 
@@ -219,7 +198,7 @@ Inkscape::XML::Node* SPMask::write(Inkscape::XML::Document* xml_doc, Inkscape::X
 
 // Create a mask element (using passed elements), add it to <defs>
 const gchar *
-sp_mask_create (GSList *reprs, SPDocument *document, Geom::Affine const* applyTransform)
+sp_mask_create (std::vector<Inkscape::XML::Node*> &reprs, SPDocument *document, Geom::Affine const* applyTransform)
 {
     Inkscape::XML::Node *defsrepr = document->getDefs()->getRepr();
 
@@ -231,13 +210,12 @@ sp_mask_create (GSList *reprs, SPDocument *document, Geom::Affine const* applyTr
     const gchar *mask_id = repr->attribute("id");
     SPObject *mask_object = document->getObjectById(mask_id);
     
-    for (GSList *it = reprs; it != NULL; it = it->next) {
-        Inkscape::XML::Node *node = (Inkscape::XML::Node *)(it->data);
+    for (std::vector<Inkscape::XML::Node*>::const_iterator it = reprs.begin(); it != reprs.end(); ++it) {
+        Inkscape::XML::Node *node = (*it);
         SPItem *item = SP_ITEM(mask_object->appendChildRepr(node));
         
         if (NULL != applyTransform) {
-            Geom::Affine transform (item->transform);
-            transform *= (*applyTransform);
+            Geom::Affine transform (item->transform * (*applyTransform));
             item->doWriteTransform(item->getRepr(), transform);
         }
     }

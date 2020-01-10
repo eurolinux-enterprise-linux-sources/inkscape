@@ -41,6 +41,7 @@
 #define LIB2GEOM_SEEN_GENERIC_RECT_H
 
 #include <limits>
+#include <iostream>
 #include <boost/optional.hpp>
 #include <2geom/coord.h>
 
@@ -64,6 +65,10 @@ class GenericRect
 protected:
     CInterval f[2];
 public:
+    typedef CInterval D1Value;
+    typedef CInterval &D1Reference;
+    typedef CInterval const &D1ConstReference;
+
     /// @name Create rectangles.
     /// @{
     /** @brief Create a rectangle that contains only the point at (0,0). */
@@ -180,12 +185,34 @@ public:
     /** @brief Compute rectangle's area. */
     C area() const { return f[X].extent() * f[Y].extent(); }
     /** @brief Check whether the rectangle has zero area. */
-    bool hasZeroArea() const { return (area() == 0); }
+    bool hasZeroArea() const { return f[X].isSingular() || f[Y].isSingular(); }
 
     /** @brief Get the larger extent (width or height) of the rectangle. */
     C maxExtent() const { return std::max(f[X].extent(), f[Y].extent()); }
     /** @brief Get the smaller extent (width or height) of the rectangle. */
     C minExtent() const { return std::min(f[X].extent(), f[Y].extent()); }
+
+    /** @brief Clamp point to the rectangle. */
+    CPoint clamp(CPoint const &p) const {
+        CPoint result(f[X].clamp(p[X]), f[Y].clamp(p[Y]));
+        return result;
+    }
+    /** @brief Get the nearest point on the edge of the rectangle. */
+    CPoint nearestEdgePoint(CPoint const &p) const {
+        CPoint result = p;
+        if (!contains(p)) {
+            result = clamp(p);
+        } else {
+            C cx = f[X].nearestEnd(p[X]);
+            C cy = f[Y].nearestEnd(p[Y]);
+            if (std::abs(cx - p[X]) <= std::abs(cy - p[Y])) {
+                result[X] = cx;
+            } else {
+                result[Y] = cy;
+            }
+        }
+        return result;
+    }
     /// @}
 
     /// @name Test other rectangles and points for inclusion.
@@ -328,6 +355,10 @@ class GenericOptRect
     typedef typename CoordTraits<C>::OptRectType OptCRect;
     typedef boost::optional<CRect> Base;
 public:
+    typedef CInterval D1Value;
+    typedef CInterval &D1Reference;
+    typedef CInterval const &D1ConstReference;
+
     /// @name Create potentially empty rectangles.
     /// @{
     GenericOptRect() : Base() {}
@@ -363,7 +394,7 @@ public:
     /// @name Check other rectangles and points for inclusion.
     /// @{
     /** @brief Check for emptiness. */
-    inline bool isEmpty() const { return !*this; };
+    inline bool empty() const { return !*this; };
     /** @brief Check whether the rectangles have any common points.
      * Empty rectangles will not intersect with any other rectangle. */
     bool intersects(CRect const &r) const { return r.intersects(*this); }
@@ -483,13 +514,11 @@ inline bool GenericRect<C>::contains(OptCRect const &r) const {
     return !r || contains(*r);
 }
 
-//#ifdef _GLIBCXX_IOSTREAM
 template <typename C>
 inline std::ostream &operator<<(std::ostream &out, GenericRect<C> const &r) {
-    out << "X: " << r[X] << "  Y: " << r[Y];
+    out << "Rect " << r[X] << " x " << r[Y];
     return out;
 }
-//#endif
 
 } // end namespace Geom
 

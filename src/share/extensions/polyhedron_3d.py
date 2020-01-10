@@ -46,7 +46,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 # standard library
 import sys
@@ -55,8 +55,10 @@ from math import *
 # local library
 import inkex
 import simplestyle
+from simpletransform import computePointInNode
 
-inkex.localize()
+# Initialize gettext for messages outside an inkex derived class
+inkex.localize() 
 
 # third party
 try:
@@ -467,7 +469,8 @@ class Poly_3D(inkex.Effect):
         #INKSCAPE GROUP TO CONTAIN THE POLYHEDRON
         
         #Put in in the centre of the current view
-        poly_transform = 'translate(' + str( self.view_center[0]) + ',' + str( self.view_center[1]) + ')'
+        view_center = computePointInNode(list(self.view_center), self.current_layer)
+        poly_transform = 'translate(' + str( view_center[0]) + ',' + str( view_center[1]) + ')'
         if scale != 1:
             poly_transform += ' scale(' + str(scale) + ')'
         #we will put all the rotations in the object name, so it can be repeated in 

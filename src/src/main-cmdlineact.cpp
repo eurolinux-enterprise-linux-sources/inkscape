@@ -4,12 +4,11 @@
  *
  * Copyright (C) 2007 Authors
  *
- * Released under GNU GPL v2, read the file 'COPYING' for more information
+ * Released under GNU GPL v2+, read the file 'COPYING' for more information
  */
 
 #include <ui/view/view.h>
 #include <desktop.h>
-#include <desktop-handles.h>
 #include <helper/action.h>
 #include <helper/action-context.h>
 #include <selection.h>
@@ -82,7 +81,7 @@ CmdLineAction::doList (ActionContext const & context) {
 bool
 CmdLineAction::idle (void) {
 	std::list<SPDesktop *> desktops;
-	inkscape_get_all_desktops(desktops);
+	INKSCAPE.get_all_desktops(desktops);
 
 	// We're going to assume one desktop per document, because no one
 	// should have had time to make more at this point.

@@ -60,15 +60,6 @@ public:
         _pt[X] = x;
         _pt[Y] = y;
     }
-    IntPoint(IntPoint const &p) {
-        _pt[X] = p._pt[X];
-        _pt[Y] = p._pt[Y];
-    }
-    IntPoint &operator=(IntPoint const &p) {
-        _pt[X] = p._pt[X];
-        _pt[Y] = p._pt[Y];
-        return *this;
-    }
     /// @}
 
     /// @name Access the coordinates of a point
@@ -92,6 +83,10 @@ public:
 
     /// @name Vector-like arithmetic operations
     /// @{
+    IntPoint operator-() const {
+        IntPoint ret(-_pt[X], -_pt[Y]);
+        return ret;
+    }
     IntPoint &operator+=(IntPoint const &o) {
         _pt[X] += o._pt[X];
         _pt[Y] += o._pt[Y];
@@ -120,30 +115,53 @@ public:
     }
     /// @}
     
-    /** @brief Lexicographical ordering functor. */
-    template <Dim2 d> struct LexOrder;
+    /** @brief Lexicographical ordering functor.
+     * @param d The more significant dimension */
+    template <Dim2 d> struct LexLess;
+    /** @brief Lexicographical ordering functor.
+     * @param d The more significant dimension */
+    template <Dim2 d> struct LexGreater;
     /** @brief Lexicographical ordering functor with runtime dimension. */
-    class LexOrderRt {
-    public:
-        LexOrderRt(Dim2 d) : dim(d) {}
-        inline bool operator()(IntPoint const &a, IntPoint const &b);
+    struct LexLessRt {
+        LexLessRt(Dim2 d) : dim(d) {}
+        inline bool operator()(IntPoint const &a, IntPoint const &b) const;
+    private:
+        Dim2 dim;
+    };
+    /** @brief Lexicographical ordering functor with runtime dimension. */
+    struct LexGreaterRt {
+        LexGreaterRt(Dim2 d) : dim(d) {}
+        inline bool operator()(IntPoint const &a, IntPoint const &b) const;
     private:
         Dim2 dim;
     };
 };
 
-template<> struct IntPoint::LexOrder<X> {
-    bool operator()(IntPoint const &a, IntPoint const &b) {
+template<> struct IntPoint::LexLess<X> {
+    bool operator()(IntPoint const &a, IntPoint const &b) const {
         return a[X] < b[X] || (a[X] == b[X] && a[Y] < b[Y]);
     }
 };
-template<> struct IntPoint::LexOrder<Y> {
-    bool operator()(IntPoint const &a, IntPoint const &b) {
+template<> struct IntPoint::LexLess<Y> {
+    bool operator()(IntPoint const &a, IntPoint const &b) const {
         return a[Y] < b[Y] || (a[Y] == b[Y] && a[X] < b[X]);
     }
 };
-inline bool IntPoint::LexOrderRt::operator()(IntPoint const &a, IntPoint const &b) {
-    return dim ? IntPoint::LexOrder<Y>()(a, b) : IntPoint::LexOrder<X>()(a, b);
+template<> struct IntPoint::LexGreater<X> {
+    bool operator()(IntPoint const &a, IntPoint const &b) const {
+        return a[X] > b[X] || (a[X] == b[X] && a[Y] > b[Y]);
+    }
+};
+template<> struct IntPoint::LexGreater<Y> {
+    bool operator()(IntPoint const &a, IntPoint const &b) const {
+        return a[Y] > b[Y] || (a[Y] == b[Y] && a[X] > b[X]);
+    }
+};
+inline bool IntPoint::LexLessRt::operator()(IntPoint const &a, IntPoint const &b) const {
+    return dim ? IntPoint::LexLess<Y>()(a, b) : IntPoint::LexLess<X>()(a, b);
+}
+inline bool IntPoint::LexGreaterRt::operator()(IntPoint const &a, IntPoint const &b) const {
+    return dim ? IntPoint::LexGreater<Y>()(a, b) : IntPoint::LexGreater<X>()(a, b);
 }
 
 }  // namespace Geom

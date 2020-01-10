@@ -18,7 +18,7 @@
 #define noSP_SS_VERBOSE
 
 #include "stroke-style.h"
-#include "../gradient-chemistry.h"
+#include "gradient-chemistry.h"
 #include "sp-gradient.h"
 #include "sp-stop.h"
 #include "svg/svg-color.h"
@@ -204,8 +204,8 @@ StrokeStyle::StrokeStyle() :
     unitSelector->addUnit(*unit_table.getUnit("%"));
     _old_unit = unitSelector->getUnit();
     if (desktop) {
-        unitSelector->setUnit(sp_desktop_namedview(desktop)->display_units->abbr);
-        _old_unit = sp_desktop_namedview(desktop)->display_units;
+        unitSelector->setUnit(desktop->getNamedView()->display_units->abbr);
+        _old_unit = desktop->getNamedView()->display_units;
     }
     widthSpin->setUnitMenu(unitSelector);
     unitChangedConn = unitSelector->signal_changed().connect(sigc::mem_fun(*this, &StrokeStyle::unitChangedCB));
@@ -219,107 +219,6 @@ StrokeStyle::StrokeStyle() :
 #else
     widthAdj->signal_value_changed().connect(sigc::mem_fun(*this, &StrokeStyle::widthChangedCB));
 #endif
-    i++;
-
-    /* Join type */
-    // TRANSLATORS: The line join style specifies the shape to be used at the
-    //  corners of paths. It can be "miter", "round" or "bevel".
-    spw_label(table, _("Join:"), 0, i, NULL);
-
-    hb = spw_hbox(table, 3, 1, i);
-
-    Gtk::RadioButtonGroup joinGrp;
-
-    joinMiter = makeRadioButton(joinGrp, INKSCAPE_ICON("stroke-join-miter"),
-                                hb, STROKE_STYLE_BUTTON_JOIN, "miter");
-
-    // TRANSLATORS: Miter join: joining lines with a sharp (pointed) corner.
-    //  For an example, draw a triangle with a large stroke width and modify the
-    //  "Join" option (in the Fill and Stroke dialog).
-    joinMiter->set_tooltip_text(_("Miter join"));
-
-    joinRound = makeRadioButton(joinGrp, INKSCAPE_ICON("stroke-join-round"),
-                                hb, STROKE_STYLE_BUTTON_JOIN, "round");
-
-    // TRANSLATORS: Round join: joining lines with a rounded corner.
-    //  For an example, draw a triangle with a large stroke width and modify the
-    //  "Join" option (in the Fill and Stroke dialog).
-    joinRound->set_tooltip_text(_("Round join"));
-
-    joinBevel = makeRadioButton(joinGrp, INKSCAPE_ICON("stroke-join-bevel"),
-                                hb, STROKE_STYLE_BUTTON_JOIN, "bevel");
-
-    // TRANSLATORS: Bevel join: joining lines with a blunted (flattened) corner.
-    //  For an example, draw a triangle with a large stroke width and modify the
-    //  "Join" option (in the Fill and Stroke dialog).
-    joinBevel->set_tooltip_text(_("Bevel join"));
-
-    i++;
-
-    /* Miterlimit  */
-    // TRANSLATORS: Miter limit: only for "miter join", this limits the length
-    //  of the sharp "spike" when the lines connect at too sharp an angle.
-    // When two line segments meet at a sharp angle, a miter join results in a
-    //  spike that extends well beyond the connection point. The purpose of the
-    //  miter limit is to cut off such spikes (i.e. convert them into bevels)
-    //  when they become too long.
-    //spw_label(t, _("Miter _limit:"), 0, i);
-
-    hb = spw_hbox(table, 3, 1, i);
-
-#if WITH_GTKMM_3_0
-    miterLimitAdj = new Glib::RefPtr<Gtk::Adjustment>(Gtk::Adjustment::create(4.0, 0.0, 100.0, 0.1, 10.0, 0.0));
-    miterLimitSpin = new Inkscape::UI::Widget::SpinButton(*miterLimitAdj, 0.1, 2);
-#else
-    miterLimitAdj = new Gtk::Adjustment(4.0, 0.0, 100.0, 0.1, 10.0, 0.0);
-    miterLimitSpin = new Inkscape::UI::Widget::SpinButton(*miterLimitAdj, 0.1, 2);
-#endif
-
-    miterLimitSpin->set_tooltip_text(_("Maximum length of the miter (in units of stroke width)"));
-    miterLimitSpin->show();
-    spw_label(table, _("Miter _limit:"), 0, i, miterLimitSpin);
-    sp_dialog_defocus_on_enter_cpp(miterLimitSpin);
-
-    hb->pack_start(*miterLimitSpin, false, false, 0);
-
-#if WITH_GTKMM_3_0
-    (*miterLimitAdj)->signal_value_changed().connect(sigc::mem_fun(*this, &StrokeStyle::miterLimitChangedCB));
-
-#else
-    miterLimitAdj->signal_value_changed().connect(sigc::mem_fun(*this, &StrokeStyle::miterLimitChangedCB));
-#endif
-    i++;
-
-    /* Cap type */
-    // TRANSLATORS: cap type specifies the shape for the ends of lines
-    //spw_label(t, _("_Cap:"), 0, i);
-    spw_label(table, _("Cap:"), 0, i, NULL);
-
-    hb = spw_hbox(table, 3, 1, i);
-
-    Gtk::RadioButtonGroup capGrp;
-
-    capButt = makeRadioButton(capGrp, INKSCAPE_ICON("stroke-cap-butt"),
-                                hb, STROKE_STYLE_BUTTON_CAP, "butt");
-
-    // TRANSLATORS: Butt cap: the line shape does not extend beyond the end point
-    //  of the line; the ends of the line are square
-    capButt->set_tooltip_text(_("Butt cap"));
-
-    capRound = makeRadioButton(capGrp, INKSCAPE_ICON("stroke-cap-round"),
-                                hb, STROKE_STYLE_BUTTON_CAP, "round");
-
-    // TRANSLATORS: Round cap: the line shape extends beyond the end point of the
-    //  line; the ends of the line are rounded
-    capRound->set_tooltip_text(_("Round cap"));
-
-    capSquare = makeRadioButton(capGrp, INKSCAPE_ICON("stroke-cap-square"),
-                                hb, STROKE_STYLE_BUTTON_CAP, "square");
-
-    // TRANSLATORS: Square cap: the line shape extends beyond the end point of the
-    //  line; the ends of the line are square
-    capSquare->set_tooltip_text(_("Square cap"));
-
     i++;
 
     /* Dash */
@@ -380,6 +279,143 @@ StrokeStyle::StrokeStyle() :
     endMarkerCombo->show();
 
     hb->pack_start(*endMarkerCombo, true, true, 0);
+
+    i++;
+
+    /* Join type */
+    // TRANSLATORS: The line join style specifies the shape to be used at the
+    //  corners of paths. It can be "miter", "round" or "bevel".
+    spw_label(table, _("Join:"), 0, i, NULL);
+
+    hb = spw_hbox(table, 3, 1, i);
+
+    Gtk::RadioButtonGroup joinGrp;
+
+    joinRound = makeRadioButton(joinGrp, INKSCAPE_ICON("stroke-join-round"),
+                                hb, STROKE_STYLE_BUTTON_JOIN, "round");
+
+    // TRANSLATORS: Round join: joining lines with a rounded corner.
+    //  For an example, draw a triangle with a large stroke width and modify the
+    //  "Join" option (in the Fill and Stroke dialog).
+    joinRound->set_tooltip_text(_("Round join"));
+
+    joinBevel = makeRadioButton(joinGrp, INKSCAPE_ICON("stroke-join-bevel"),
+                                hb, STROKE_STYLE_BUTTON_JOIN, "bevel");
+
+    // TRANSLATORS: Bevel join: joining lines with a blunted (flattened) corner.
+    //  For an example, draw a triangle with a large stroke width and modify the
+    //  "Join" option (in the Fill and Stroke dialog).
+    joinBevel->set_tooltip_text(_("Bevel join"));
+
+    joinMiter = makeRadioButton(joinGrp, INKSCAPE_ICON("stroke-join-miter"),
+                                hb, STROKE_STYLE_BUTTON_JOIN, "miter");
+
+    // TRANSLATORS: Miter join: joining lines with a sharp (pointed) corner.
+    //  For an example, draw a triangle with a large stroke width and modify the
+    //  "Join" option (in the Fill and Stroke dialog).
+    joinMiter->set_tooltip_text(_("Miter join"));
+
+    /* Miterlimit  */
+    // TRANSLATORS: Miter limit: only for "miter join", this limits the length
+    //  of the sharp "spike" when the lines connect at too sharp an angle.
+    // When two line segments meet at a sharp angle, a miter join results in a
+    //  spike that extends well beyond the connection point. The purpose of the
+    //  miter limit is to cut off such spikes (i.e. convert them into bevels)
+    //  when they become too long.
+    //spw_label(t, _("Miter _limit:"), 0, i);
+
+#if WITH_GTKMM_3_0
+    miterLimitAdj = new Glib::RefPtr<Gtk::Adjustment>(Gtk::Adjustment::create(4.0, 0.0, 100.0, 0.1, 10.0, 0.0));
+    miterLimitSpin = new Inkscape::UI::Widget::SpinButton(*miterLimitAdj, 0.1, 2);
+#else
+    miterLimitAdj = new Gtk::Adjustment(4.0, 0.0, 100.0, 0.1, 10.0, 0.0);
+    miterLimitSpin = new Inkscape::UI::Widget::SpinButton(*miterLimitAdj, 0.1, 2);
+#endif
+
+    miterLimitSpin->set_tooltip_text(_("Maximum length of the miter (in units of stroke width)"));
+    miterLimitSpin->show();
+    sp_dialog_defocus_on_enter_cpp(miterLimitSpin);
+
+    hb->pack_start(*miterLimitSpin, false, false, 0);
+
+#if WITH_GTKMM_3_0
+    (*miterLimitAdj)->signal_value_changed().connect(sigc::mem_fun(*this, &StrokeStyle::miterLimitChangedCB));
+
+#else
+    miterLimitAdj->signal_value_changed().connect(sigc::mem_fun(*this, &StrokeStyle::miterLimitChangedCB));
+#endif
+
+    i++;
+
+    /* Cap type */
+    // TRANSLATORS: cap type specifies the shape for the ends of lines
+    //spw_label(t, _("_Cap:"), 0, i);
+    spw_label(table, _("Cap:"), 0, i, NULL);
+
+    hb = spw_hbox(table, 3, 1, i);
+
+    Gtk::RadioButtonGroup capGrp;
+
+    capButt = makeRadioButton(capGrp, INKSCAPE_ICON("stroke-cap-butt"),
+                                hb, STROKE_STYLE_BUTTON_CAP, "butt");
+
+    // TRANSLATORS: Butt cap: the line shape does not extend beyond the end point
+    //  of the line; the ends of the line are square
+    capButt->set_tooltip_text(_("Butt cap"));
+
+    capRound = makeRadioButton(capGrp, INKSCAPE_ICON("stroke-cap-round"),
+                                hb, STROKE_STYLE_BUTTON_CAP, "round");
+
+    // TRANSLATORS: Round cap: the line shape extends beyond the end point of the
+    //  line; the ends of the line are rounded
+    capRound->set_tooltip_text(_("Round cap"));
+
+    capSquare = makeRadioButton(capGrp, INKSCAPE_ICON("stroke-cap-square"),
+                                hb, STROKE_STYLE_BUTTON_CAP, "square");
+
+    // TRANSLATORS: Square cap: the line shape extends beyond the end point of the
+    //  line; the ends of the line are square
+    capSquare->set_tooltip_text(_("Square cap"));
+
+    i++;
+
+    /* Paint order */
+    // TRANSLATORS: Paint order determines the order the 'fill', 'stroke', and 'markers are painted.
+    spw_label(table, _("Order:"), 0, i, NULL);
+
+    hb = spw_hbox(table, 4, 1, i);
+
+    Gtk::RadioButtonGroup paintOrderGrp;
+
+    paintOrderFSM = makeRadioButton(paintOrderGrp, INKSCAPE_ICON("paint-order-fsm"),
+                                    hb, STROKE_STYLE_BUTTON_ORDER, "normal");
+    paintOrderFSM->set_tooltip_text(_("Fill, Stroke, Markers")); 
+
+    paintOrderSFM = makeRadioButton(paintOrderGrp, INKSCAPE_ICON("paint-order-sfm"),
+                                    hb, STROKE_STYLE_BUTTON_ORDER, "stroke fill markers");
+    paintOrderSFM->set_tooltip_text(_("Stroke, Fill, Markers")); 
+
+    paintOrderFMS = makeRadioButton(paintOrderGrp, INKSCAPE_ICON("paint-order-fms"),
+                                    hb, STROKE_STYLE_BUTTON_ORDER, "fill markers stroke");
+    paintOrderFMS->set_tooltip_text(_("Fill, Markers, Stroke")); 
+
+    i++;
+
+    hb = spw_hbox(table, 4, 1, i);
+
+    paintOrderMFS = makeRadioButton(paintOrderGrp, INKSCAPE_ICON("paint-order-mfs"),
+                                    hb, STROKE_STYLE_BUTTON_ORDER, "markers fill stroke");
+    paintOrderMFS->set_tooltip_text(_("Markers, Fill, Stroke")); 
+
+    paintOrderSMF = makeRadioButton(paintOrderGrp, INKSCAPE_ICON("paint-order-smf"),
+                                    hb, STROKE_STYLE_BUTTON_ORDER, "stroke markers fill");
+    paintOrderSMF->set_tooltip_text(_("Stroke, Markers, Fill")); 
+
+    paintOrderMSF = makeRadioButton(paintOrderGrp, INKSCAPE_ICON("paint-order-msf"),
+                                    hb, STROKE_STYLE_BUTTON_ORDER, "markers stroke fill");
+    paintOrderMSF->set_tooltip_text(_("Markers, Stroke, Fill")); 
+
+    i++;
 
     setDesktop(desktop);
     updateLine();
@@ -450,13 +486,17 @@ StrokeStyle::makeRadioButton(Gtk::RadioButtonGroup &grp,
  */
 void StrokeStyle::markerSelectCB(MarkerComboBox *marker_combo, StrokeStyle *spw, SPMarkerLoc const /*which*/)
 {
-    if (spw->update) {
+    bool markers_update = spw->startMarkerCombo->update() ||
+                          spw->midMarkerCombo->update() ||
+                          spw->endMarkerCombo->update();
+
+    if (spw->update || markers_update) {
         return;
     }
 
     spw->update = true;
 
-    SPDocument *document = sp_desktop_document(spw->desktop);
+    SPDocument *document = spw->desktop->getDocument();
     if (!document) {
         return;
     }
@@ -471,13 +511,13 @@ void StrokeStyle::markerSelectCB(MarkerComboBox *marker_combo, StrokeStyle *spw,
 
     // Also update the marker combobox, so the document's markers
     // show up at the top of the combobox
-//    sp_stroke_style_line_update( SP_WIDGET(spw), desktop ? sp_desktop_selection(desktop) : NULL);
+//    sp_stroke_style_line_update( SP_WIDGET(spw), desktop ? desktop->getSelection() : NULL);
     //spw->updateMarkerHist(which);
 
-    Inkscape::Selection *selection = sp_desktop_selection(spw->desktop);
-    GSList const *items = selection->itemList();
-    for (; items != NULL; items = items->next) {
-        SPItem *item = reinterpret_cast<SPItem *>(items->data);
+    Inkscape::Selection *selection = spw->desktop->getSelection();
+    std::vector<SPItem*> itemlist=selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i){
+        SPItem *item = *i;
         if (!SP_IS_SHAPE(item) || SP_IS_RECT(item)) { // can't set marker to rect, until it's converted to using <path>
             continue;
         }
@@ -798,6 +838,43 @@ StrokeStyle::setCapType (unsigned const captype)
 }
 
 /**
+ * Sets the cap type for a line, and updates the stroke style widget's buttons
+ */
+void
+StrokeStyle::setPaintOrder (gchar const *paint_order)
+{
+    Gtk::RadioButton *tb = paintOrderFSM;
+
+    SPIPaintOrder temp;
+    temp.read( paint_order );
+
+    if (temp.layer[0] != SP_CSS_PAINT_ORDER_NORMAL) {
+
+        if (temp.layer[0] == SP_CSS_PAINT_ORDER_FILL) {
+            if (temp.layer[1] == SP_CSS_PAINT_ORDER_STROKE) {
+                tb = paintOrderFSM;
+            } else {
+                tb = paintOrderFMS;
+            }
+        } else if (temp.layer[0] == SP_CSS_PAINT_ORDER_STROKE) {
+            if (temp.layer[1] == SP_CSS_PAINT_ORDER_FILL) {
+                tb = paintOrderSFM;
+            } else {
+                tb = paintOrderSMF;
+            }
+        } else {
+            if (temp.layer[1] == SP_CSS_PAINT_ORDER_STROKE) {
+                tb = paintOrderMSF;
+            } else {
+                tb = paintOrderMFS;
+            }
+        }
+
+    }
+    setPaintOrderButtons(tb);
+}
+
+/**
  * Callback for when stroke style widget is updated, including markers, cap type,
  * join type, etc.
  */
@@ -810,18 +887,21 @@ StrokeStyle::updateLine()
 
     update = true;
 
-    Inkscape::Selection *sel = desktop ? sp_desktop_selection(desktop) : NULL;
+    Inkscape::Selection *sel = desktop ? desktop->getSelection() : NULL;
 
     FillOrStroke kind = GPOINTER_TO_INT(get_data("kind")) ? FILL : STROKE;
 
     // create temporary style
-    SPStyle *query = sp_style_new (SP_ACTIVE_DOCUMENT);
+    SPStyle query(SP_ACTIVE_DOCUMENT);
     // query into it
-    int result_sw = sp_desktop_query_style (SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_STROKEWIDTH);
-    int result_ml = sp_desktop_query_style (SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_STROKEMITERLIMIT);
-    int result_cap = sp_desktop_query_style (SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_STROKECAP);
-    int result_join = sp_desktop_query_style (SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_STROKEJOIN);
-    SPIPaint &targPaint = (kind == FILL) ? query->fill : query->stroke;
+    int result_sw = sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_STROKEWIDTH);
+    int result_ml = sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_STROKEMITERLIMIT);
+    int result_cap = sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_STROKECAP);
+    int result_join = sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_STROKEJOIN);
+
+    int result_order = sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_PAINTORDER);
+
+    SPIPaint &targPaint = (kind == FILL) ? query.fill : query.stroke;
 
     if (!sel || sel->isEmpty()) {
         // Nothing selected, grey-out all controls in the stroke-style dialog
@@ -839,14 +919,14 @@ StrokeStyle::updateLine()
             // same width, or only one object; no sense to keep percent, switch to absolute
             Inkscape::Util::Unit const *tempunit = unitSelector->getUnit();
             if (tempunit->type != Inkscape::Util::UNIT_TYPE_LINEAR) {
-                unitSelector->setUnit(sp_desktop_namedview(SP_ACTIVE_DESKTOP)->display_units->abbr);
+                unitSelector->setUnit(SP_ACTIVE_DESKTOP->getNamedView()->display_units->abbr);
             }
         }
 
         Inkscape::Util::Unit const *unit = unitSelector->getUnit();
 
         if (unit->type == Inkscape::Util::UNIT_TYPE_LINEAR) {
-            double avgwidth = Inkscape::Util::Quantity::convert(query->stroke_width.computed, "px", unit);
+            double avgwidth = Inkscape::Util::Quantity::convert(query.stroke_width.computed, "px", unit);
 #if WITH_GTKMM_3_0
             (*widthAdj)->set_value(avgwidth);
 #else
@@ -879,32 +959,37 @@ StrokeStyle::updateLine()
 
     if (result_ml != QUERY_STYLE_NOTHING)
 #if WITH_GTKMM_3_0
-        (*miterLimitAdj)->set_value(query->stroke_miterlimit.value); // TODO: reflect averagedness?
+        (*miterLimitAdj)->set_value(query.stroke_miterlimit.value); // TODO: reflect averagedness?
 #else
-        miterLimitAdj->set_value(query->stroke_miterlimit.value); // TODO: reflect averagedness?
+        miterLimitAdj->set_value(query.stroke_miterlimit.value); // TODO: reflect averagedness?
 #endif
 
     if (result_join != QUERY_STYLE_MULTIPLE_DIFFERENT &&
         result_join != QUERY_STYLE_NOTHING ) {
-        setJoinType(query->stroke_linejoin.value);
+        setJoinType(query.stroke_linejoin.value);
     } else {
         setJoinButtons(NULL);
     }
 
     if (result_cap != QUERY_STYLE_MULTIPLE_DIFFERENT &&
         result_cap != QUERY_STYLE_NOTHING ) {
-        setCapType (query->stroke_linecap.value);
+        setCapType (query.stroke_linecap.value);
     } else {
         setCapButtons(NULL);
     }
 
-    sp_style_unref(query);
+    if (result_order != QUERY_STYLE_MULTIPLE_DIFFERENT &&
+        result_order != QUERY_STYLE_NOTHING ) {
+        setPaintOrder (query.paint_order.value);
+    } else {
+        setPaintOrder (NULL);
+    }
 
     if (!sel || sel->isEmpty())
         return;
 
-    GSList const *objects = sel->itemList();
-    SPObject * const object = SP_OBJECT(objects->data);
+    std::vector<SPItem*> const objects = sel->itemList();
+    SPObject * const object = objects[0];
     SPStyle * const style = object->style;
 
     /* Markers */
@@ -957,15 +1042,14 @@ StrokeStyle::scaleLine()
 
     update = true;
     
-    SPDocument *document = sp_desktop_document (desktop);
-    Inkscape::Selection *selection = sp_desktop_selection (desktop);
-
-    GSList const *items = selection->itemList();
+    SPDocument *document = desktop->getDocument();
+    Inkscape::Selection *selection = desktop->getSelection();
+    std::vector<SPItem*> items=selection->itemList();
 
     /* TODO: Create some standardized method */
     SPCSSAttr *css = sp_repr_css_attr_new();
 
-    if (items) {
+    if (!items.empty()) {
 #if WITH_GTKMM_3_0
         double width_typed = (*widthAdj)->get_value();
         double const miterlimit = (*miterLimitAdj)->get_value();
@@ -980,13 +1064,13 @@ StrokeStyle::scaleLine()
         int ndash;
         dashSelector->get_dash(&ndash, &dash, &offset);
 
-        for (GSList const *i = items; i != NULL; i = i->next) {
+        for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end();++i){
             /* Set stroke width */
             double width;
             if (unit->type == Inkscape::Util::UNIT_TYPE_LINEAR) {
                 width = Inkscape::Util::Quantity::convert(width_typed, unit, "px");
             } else { // percentage
-                gdouble old_w = SP_OBJECT(i->data)->style->stroke_width.computed;
+                gdouble old_w = (*i)->style->stroke_width.computed;
                 width = old_w * width_typed / 100;
             }
 
@@ -1005,7 +1089,7 @@ StrokeStyle::scaleLine()
             /* Set dash */
             setScaledDash(css, ndash, dash, offset, width);
 
-            sp_desktop_apply_css_recursive (SP_OBJECT(i->data), css, true);
+            sp_desktop_apply_css_recursive ((*i), css, true);
         }
 
         g_free(dash);
@@ -1108,13 +1192,17 @@ void StrokeStyle::buttonToggledCB(StrokeStyleButton *tb, StrokeStyle *spw)
                 sp_repr_css_set_property(css, "stroke-linecap", tb->get_stroke_style());
                 sp_desktop_set_style (spw->desktop, css);
                 spw->setCapButtons(tb);
+                break;
+            case STROKE_STYLE_BUTTON_ORDER:
+                sp_repr_css_set_property(css, "paint-order", tb->get_stroke_style());
+                sp_desktop_set_style (spw->desktop, css);
+                //spw->setPaintButtons(tb);
         }
 
         sp_repr_css_attr_unref(css);
         css = 0;
 
-        DocumentUndo::done(sp_desktop_document(spw->desktop), SP_VERB_DIALOG_FILL_STROKE,
-                           _("Set stroke style"));
+        DocumentUndo::done(spw->desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE, _("Set stroke style"));
     }
 }
 
@@ -1143,11 +1231,26 @@ StrokeStyle::setCapButtons(Gtk::ToggleButton *active)
 
 
 /**
+ * Updates the paint order style toggle buttons
+ */
+void
+StrokeStyle::setPaintOrderButtons(Gtk::ToggleButton *active)
+{
+    paintOrderFSM->set_active(active == paintOrderFSM);
+    paintOrderSFM->set_active(active == paintOrderSFM);
+    paintOrderFMS->set_active(active == paintOrderFMS);
+    paintOrderMFS->set_active(active == paintOrderMFS);
+    paintOrderSMF->set_active(active == paintOrderSMF);
+    paintOrderMSF->set_active(active == paintOrderMSF);
+}
+
+
+/**
  * Updates the marker combobox to highlight the appropriate marker and scroll to
  * that marker.
  */
 void
-StrokeStyle::updateAllMarkers(GSList const *objects)
+StrokeStyle::updateAllMarkers(std::vector<SPItem*> const &objects)
 {
     struct { MarkerComboBox *key; int loc; } const keyloc[] = {
             { startMarkerCombo, SP_MARKER_LOC_START },
@@ -1156,9 +1259,10 @@ StrokeStyle::updateAllMarkers(GSList const *objects)
     };
 
     bool all_texts = true;
-    for (GSList *i = (GSList *) objects; i != NULL; i = i->next) {
-        if (!SP_IS_TEXT (i->data)) {
+    for(std::vector<SPItem*>::const_iterator i=objects.begin();i!=objects.end();++i){
+        if (!SP_IS_TEXT (*i)) {
             all_texts = false;
+            break;
         }
     }
 
@@ -1170,7 +1274,7 @@ StrokeStyle::updateAllMarkers(GSList const *objects)
 
     // We show markers of the first object in the list only
     // FIXME: use the first in the list that has the marker of each type, if any
-    SPObject *object = SP_OBJECT(objects->data);
+    SPObject *object = objects[0];
 
     for (unsigned i = 0; i < G_N_ELEMENTS(keyloc); ++i) {
         // For all three marker types,
@@ -1200,7 +1304,7 @@ StrokeStyle::updateAllMarkers(GSList const *objects)
             if (update) {
                 setMarkerColor(marker, combo->get_loc(), SP_ITEM(object));
 
-                SPDocument *document = sp_desktop_document(desktop);
+                SPDocument *document = desktop->getDocument();
                 DocumentUndo::done(document, SP_VERB_DIALOG_FILL_STROKE,
                                    _("Set marker color"));
             }

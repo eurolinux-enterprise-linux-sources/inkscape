@@ -5,10 +5,10 @@ iconsdir = $(datadir)/inkscape/icons
 branding_DATA =  \
 	README \
 	inkscape.svg \
+	inkscape-flat.svg \
+	inkscape-text.svg \
 	sodipodi.svg \
-	tux.svg \
-	draw-freely.svg \
-	draw-freely.ru.svg
+	tux.svg
 
 icons_DATA = \
 	inkscape.svg

@@ -39,7 +39,7 @@ public:
     virtual bool event(Inkscape::UI::Tools::ToolBase *, GdkEvent *event);
 
     bool empty() { return _mmap.empty(); }
-    unsigned size() { return _mmap.empty(); }
+    unsigned size() { return _mmap.size(); }
     void setItems(std::set<ShapeRecord> const &);
     void clear() { _mmap.clear(); }
     void cleanup();
@@ -53,6 +53,8 @@ public:
 
     void insertNodesAtExtrema(ExtremumType extremum);
     void insertNodes();
+    void insertNode(Geom::Point pt);
+    void alertLPE();
     void duplicateNodes();
     void joinNodes();
     void breakNodes();
@@ -104,9 +106,9 @@ private:
     }
 
     void _commit(CommitEvent cps);
-    void _done(gchar const *reason, bool alert_LPE = false);
+    void _done(gchar const *reason, bool alert_LPE = true);
     void _doneWithCleanup(gchar const *reason, bool alert_LPE = false);
-    guint32 _getOutlineColor(ShapeRole role);
+    guint32 _getOutlineColor(ShapeRole role, SPItem *item);
 
     MapType _mmap;
 public:

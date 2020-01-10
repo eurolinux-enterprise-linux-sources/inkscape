@@ -14,10 +14,14 @@
 #ifndef SEEN_GRAPHLAYOUT_H
 #define SEEN_GRAPHLAYOUT_H
 
-struct _GSList;
-void graphlayout(_GSList const *const items);
-class SPItem;
-bool isConnector(SPItem const *const item);
 #include <list>
-void filterConnectors(_GSList const *const items, std::list<SPItem *> &filtered);
+
+class SPItem;
+
+void graphlayout(std::vector<SPItem*> const &items);
+
+bool isConnector(SPItem const *const item);
+
+void filterConnectors(std::vector<SPItem*> const &items, std::list<SPItem *> &filtered);
+
 #endif // SEEN_GRAPHLAYOUT_H

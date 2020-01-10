@@ -1,6 +1,4 @@
-#define __SP_FONT_SELECTOR_C__
-
-/*
+/**
  * Font selection widgets
  *
  * Authors:
@@ -38,7 +36,11 @@
 
 struct SPFontSelector
 {
+#if GTK_CHECK_VERSION(3,0,0)
+    GtkBox hbox;
+#else
     GtkHBox hbox;
+#endif
 
     unsigned int block_emit : 1;
 
@@ -59,7 +61,11 @@ struct SPFontSelector
 
 struct SPFontSelectorClass
 {
+#if GTK_CHECK_VERSION(3,0,0)
+    GtkBoxClass parent_class;
+#else
     GtkHBoxClass parent_class;
+#endif
 
     void (* font_set) (SPFontSelector *fsel, gchar *fontspec);
 };
@@ -69,8 +75,6 @@ enum {
     LAST_SIGNAL
 };
 
-static void sp_font_selector_class_init         (SPFontSelectorClass    *c);
-static void sp_font_selector_init               (SPFontSelector         *fsel);
 static void sp_font_selector_dispose            (GObject              *object);
 
 static void sp_font_selector_family_select_row  (GtkTreeSelection       *selection,
@@ -85,35 +89,17 @@ static void sp_font_selector_size_changed       (GtkComboBox            *combobo
 static void sp_font_selector_emit_set           (SPFontSelector         *fsel);
 static void sp_font_selector_set_sizes( SPFontSelector *fsel );
 
-static GtkHBoxClass *fs_parent_class = NULL;
 static guint fs_signals[LAST_SIGNAL] = { 0 };
 
-GType sp_font_selector_get_type()
-{
-    static GType type = 0;
-    if (!type) {
-        GTypeInfo info = {
-            sizeof(SPFontSelectorClass),
-            0, // base_init
-            0, // base_finalize
-            (GClassInitFunc)sp_font_selector_class_init,
-            0, // class_finalize
-            0, // class_data
-            sizeof(SPFontSelector),
-            0, // n_preallocs
-            (GInstanceInitFunc)sp_font_selector_init,
-            0 // value_table
-        };
-        type = g_type_register_static(GTK_TYPE_HBOX, "SPFontSelector", &info, static_cast<GTypeFlags>(0));
-    }
-    return type;
-}
+#if GTK_CHECK_VERSION(3,0,0)
+G_DEFINE_TYPE(SPFontSelector, sp_font_selector, GTK_TYPE_BOX);
+#else
+G_DEFINE_TYPE(SPFontSelector, sp_font_selector, GTK_TYPE_HBOX);
+#endif
 
 static void sp_font_selector_class_init(SPFontSelectorClass *c)
 {
     GObjectClass *object_class = G_OBJECT_CLASS(c);
-
-    fs_parent_class = (GtkHBoxClass* )g_type_class_peek_parent (c);
 
     fs_signals[FONT_SET] = g_signal_new ("font_set",
                                            G_TYPE_FROM_CLASS(object_class),
@@ -173,9 +159,24 @@ static void sp_font_selector_init(SPFontSelector *fsel)
 
         /* Muck with style, see text-toolbar.cpp */
         gtk_widget_set_name( GTK_WIDGET(fsel->family_treeview), "font_selector_family" );
+
+#if GTK_CHECK_VERSION(3,0,0)
+        GtkCssProvider *css_provider = gtk_css_provider_new();
+        gtk_css_provider_load_from_data(css_provider,
+                                        "#font_selector_family {\n"
+                                        "  -GtkWidget-wide-separators:  true;\n"
+                                        "  -GtkWidget-separator-height: 6;\n"
+                                        "}\n",
+                                        -1, NULL);
+
+        GdkScreen *screen = gdk_screen_get_default();
+        gtk_style_context_add_provider_for_screen(screen,
+                                                  GTK_STYLE_PROVIDER(css_provider),
+                                                  GTK_STYLE_PROVIDER_PRIORITY_USER);
+#else
         gtk_rc_parse_string (
             "widget \"*font_selector_family\" style \"fontfamily-separator-style\"");
-        
+#endif        
 
         Inkscape::FontLister* fontlister = Inkscape::FontLister::get_instance();
         Glib::RefPtr<Gtk::ListStore> store = fontlister->get_font_list();
@@ -285,8 +286,8 @@ static void sp_font_selector_dispose(GObject *object)
         fsel->styles.length = 0;
     }
 
-    if (G_OBJECT_CLASS(fs_parent_class)->dispose) {
-        G_OBJECT_CLASS(fs_parent_class)->dispose(object);
+    if (G_OBJECT_CLASS(sp_font_selector_parent_class)->dispose) {
+        G_OBJECT_CLASS(sp_font_selector_parent_class)->dispose(object);
     }
 }
 
@@ -554,4 +555,4 @@ double sp_font_selector_get_size(SPFontSelector *fsel)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :

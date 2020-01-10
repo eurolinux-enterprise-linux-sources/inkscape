@@ -1,5 +1,5 @@
-#ifndef __NR_FILTER_H__
-#define __NR_FILTER_H__
+#ifndef SEEN_NR_FILTER_H
+#define SEEN_NR_FILTER_H
 
 /*
  * SVG filters rendering
@@ -18,7 +18,7 @@
 #include "display/nr-filter-types.h"
 #include "svg/svg-length.h"
 #include "sp-filter-units.h"
-#include "gc-managed.h"
+#include "inkgc/gc-managed.h"
 
 namespace Inkscape {
 class DrawingContext;

@@ -90,7 +90,6 @@ ink_common_sources += \
 	display/nr-filter-types.h       \
 	display/nr-filter-units.cpp	\
 	display/nr-filter-units.h	\
-	display/nr-filter-utils.cpp     \
 	display/nr-filter-utils.h       \
 	display/nr-light.cpp			\
 	display/nr-light.h				\
@@ -116,8 +115,6 @@ ink_common_sources += \
 	display/sp-ctrlcurve.h \
 	display/sp-ctrlline.cpp	\
 	display/sp-ctrlline.h \
-	display/sp-ctrlpoint.cpp	\
-	display/sp-ctrlpoint.h \
 	display/sp-ctrlquadr.cpp \
 	display/sp-ctrlquadr.h
 

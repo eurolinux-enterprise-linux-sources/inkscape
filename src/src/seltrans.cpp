@@ -26,11 +26,12 @@
 #include "document-undo.h"
 #include "sp-namedview.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "desktop-style.h"
 #include "knot.h"
 #include "message-stack.h"
 #include "snap.h"
+#include "pure-transform.h"
 #include "selection.h"
 #include "ui/tools/select-tool.h"
 #include "sp-item.h"
@@ -112,7 +113,7 @@ Inkscape::SelTrans::SelTrans(SPDesktop *desktop) :
     _opposite_for_bboxpoints(Geom::Point(0,0)),
     _origin_for_specpoints(Geom::Point(0,0)),
     _origin_for_bboxpoints(Geom::Point(0,0)),
-    _stamp_cache(NULL),
+    _stamp_cache(std::vector<SPItem*>()),
     _message_context(desktop->messageStack()),
     _bounding_box_prefs_observer(*this)
 {
@@ -131,9 +132,9 @@ Inkscape::SelTrans::SelTrans(SPDesktop *desktop) :
     _makeHandles();
     _updateHandles();
 
-    _selection = sp_desktop_selection(desktop);
+    _selection = desktop->getSelection();
 
-    _norm = sp_canvas_item_new(sp_desktop_controls(desktop),
+    _norm = sp_canvas_item_new(desktop->getControls(),
                                SP_TYPE_CTRL,
                                "anchor", SP_ANCHOR_CENTER,
                                "mode", SP_CTRL_MODE_COLOR,
@@ -146,7 +147,7 @@ Inkscape::SelTrans::SelTrans(SPDesktop *desktop) :
                                "pixbuf", handles[12],
                                NULL);
 
-    _grip = sp_canvas_item_new(sp_desktop_controls(desktop),
+    _grip = sp_canvas_item_new(desktop->getControls(),
                                SP_TYPE_CTRL,
                                "anchor", SP_ANCHOR_CENTER,
                                "mode", SP_CTRL_MODE_XOR,
@@ -163,7 +164,7 @@ Inkscape::SelTrans::SelTrans(SPDesktop *desktop) :
     sp_canvas_item_hide(_norm);
 
     for (int i = 0; i < 4; i++) {
-        _l[i] = ControlManager::getManager().createControlLine(sp_desktop_controls(desktop));
+        _l[i] = ControlManager::getManager().createControlLine(desktop->getControls());
         sp_canvas_item_hide(_l[i]);
     }
 
@@ -239,8 +240,9 @@ void Inkscape::SelTrans::setCenter(Geom::Point const &p)
     _center_is_set = true;
 
     // Write the new center position into all selected items
-    for (GSList const *l = _desktop->selection->itemList(); l; l = l->next) {
-        SPItem *it = SP_ITEM(l->data);
+    std::vector<SPItem*> items=_desktop->selection->itemList();
+    for ( std::vector<SPItem*>::const_iterator iter=items.begin();iter!=items.end(); ++iter) {
+        SPItem *it = SP_ITEM(*iter);
         it->setCenter(p);
         // only set the value; updating repr and document_done will be done once, on ungrab
     }
@@ -252,7 +254,7 @@ void Inkscape::SelTrans::grab(Geom::Point const &p, gdouble x, gdouble y, bool s
 {
     // While dragging a handle, we will either scale, skew, or rotate and the "translating" parameter will be false
     // When dragging the selected item itself however, we will translate the selection and that parameter will be true
-    Inkscape::Selection *selection = sp_desktop_selection(_desktop);
+    Inkscape::Selection *selection = _desktop->getSelection();
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
 
     g_return_if_fail(!_grabbed);
@@ -268,8 +270,9 @@ void Inkscape::SelTrans::grab(Geom::Point const &p, gdouble x, gdouble y, bool s
         return;
     }
 
-    for (GSList const *l = selection->itemList(); l; l = l->next) {
-        SPItem *it = reinterpret_cast<SPItem*>(sp_object_ref(SP_ITEM(l->data), NULL));
+    std::vector<SPItem*> items=_desktop->selection->itemList();
+    for ( std::vector<SPItem*>::const_iterator iter=items.begin();iter!=items.end(); ++iter) {
+        SPItem *it = static_cast<SPItem*>(sp_object_ref(*iter, NULL));
         _items.push_back(it);
         _items_const.push_back(it);
         _items_affines.push_back(it->i2dt_affine());
@@ -370,7 +373,7 @@ void Inkscape::SelTrans::grab(Geom::Point const &p, gdouble x, gdouble y, bool s
     }
 
     _updateHandles();
-    g_return_if_fail(_stamp_cache == NULL);
+    g_return_if_fail(_stamp_cache.empty());
 }
 
 void Inkscape::SelTrans::transform(Geom::Affine const &rel_affine, Geom::Point const &norm)
@@ -418,7 +421,7 @@ void Inkscape::SelTrans::ungrab()
 
     _desktop->snapindicator->remove_snapsource();
 
-    Inkscape::Selection *selection = sp_desktop_selection(_desktop);
+    Inkscape::Selection *selection = _desktop->getSelection();
     _updateVolatileState();
 
     for (unsigned i = 0; i < _items.size(); i++) {
@@ -432,10 +435,8 @@ void Inkscape::SelTrans::ungrab()
         for (int i = 0; i < 4; i++)
             sp_canvas_item_hide(_l[i]);
     }
-
-    if (_stamp_cache) {
-        g_slist_free(_stamp_cache);
-        _stamp_cache = NULL;
+    if(!_stamp_cache.empty()){
+        _stamp_cache.clear();
     }
 
     _message_context.clear();
@@ -473,29 +474,32 @@ void Inkscape::SelTrans::ungrab()
             // when trying to stretch a perfectly vertical line in horizontal direction, which will not be allowed
             // by the handles; this would be identified as a (zero) translation by isTranslation()
             if (_current_relative_affine.isTranslation()) {
-                DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_SELECT,
+                DocumentUndo::done(_desktop->getDocument(), SP_VERB_CONTEXT_SELECT,
                                    _("Move"));
             } else if (_current_relative_affine.withoutTranslation().isScale()) {
-                DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_SELECT,
+                DocumentUndo::done(_desktop->getDocument(), SP_VERB_CONTEXT_SELECT,
                                    _("Scale"));
             } else if (_current_relative_affine.withoutTranslation().isRotation()) {
-                DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_SELECT,
+                DocumentUndo::done(_desktop->getDocument(), SP_VERB_CONTEXT_SELECT,
                                    _("Rotate"));
             } else {
-                DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_SELECT,
+                DocumentUndo::done(_desktop->getDocument(), SP_VERB_CONTEXT_SELECT,
                                    _("Skew"));
             }
+        } else {
+            _updateHandles();
         }
 
     } else {
 
         if (_center_is_set) {
             // we were dragging center; update reprs and commit undoable action
-            for (GSList const *l = _desktop->selection->itemList(); l; l = l->next) {
-                SPItem *it = SP_ITEM(l->data);
+        	std::vector<SPItem*> items=_desktop->selection->itemList();
+            for ( std::vector<SPItem*>::const_iterator iter=items.begin();iter!=items.end(); ++iter) {
+                SPItem *it = *iter;
                 it->updateRepr();
             }
-            DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_SELECT,
+            DocumentUndo::done(_desktop->getDocument(), SP_VERB_CONTEXT_SELECT,
                                _("Set center"));
         }
 
@@ -512,29 +516,28 @@ void Inkscape::SelTrans::ungrab()
 
 void Inkscape::SelTrans::stamp()
 {
-    Inkscape::Selection *selection = sp_desktop_selection(_desktop);
+    Inkscape::Selection *selection = _desktop->getSelection();
 
     bool fixup = !_grabbed;
-    if ( fixup && _stamp_cache ) {
+    if ( fixup && !_stamp_cache.empty() ) {
         // TODO - give a proper fix. Simple temporary work-around for the grab() issue
-        g_slist_free(_stamp_cache);
-        _stamp_cache = NULL;
+        _stamp_cache.clear();
     }
 
     /* stamping mode */
     if (!_empty) {
-        GSList *l;
-        if (_stamp_cache) {
+    	std::vector<SPItem*> l;
+        if (!_stamp_cache.empty()) {
             l = _stamp_cache;
         } else {
             /* Build cache */
-            l  = g_slist_copy((GSList *) selection->itemList());
-            l  = g_slist_sort(l, (GCompareFunc) sp_object_compare_position);
+            l = selection->itemList();
+            sort(l.begin(),l.end(),sp_object_compare_position_bool);
             _stamp_cache = l;
         }
 
-        while (l) {
-            SPItem *original_item = SP_ITEM(l->data);
+        for(std::vector<SPItem*>::const_iterator x=l.begin();x!=l.end(); ++x) {
+            SPItem *original_item = *x;
             Inkscape::XML::Node *original_repr = original_item->getRepr();
 
             // remember the position of the item
@@ -549,7 +552,7 @@ void Inkscape::SelTrans::stamp()
             // move to the saved position
             copy_repr->setPosition(pos > 0 ? pos : 0);
 
-            SPItem *copy_item = (SPItem *) sp_desktop_document(_desktop)->getObjectByRepr(copy_repr);
+            SPItem *copy_item = (SPItem *) _desktop->getDocument()->getObjectByRepr(copy_repr);
 
             Geom::Affine const *new_affine;
             if (_show == SHOW_OUTLINE) {
@@ -568,16 +571,14 @@ void Inkscape::SelTrans::stamp()
             }
 
             Inkscape::GC::release(copy_repr);
-            l = l->next;
         }
-        DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_SELECT,
+        DocumentUndo::done(_desktop->getDocument(), SP_VERB_CONTEXT_SELECT,
                            _("Stamp"));
     }
 
-    if ( fixup && _stamp_cache ) {
+    if ( fixup && !_stamp_cache.empty() ) {
         // TODO - give a proper fix. Simple temporary work-around for the grab() issue
-        g_slist_free(_stamp_cache);
-        _stamp_cache = NULL;
+        _stamp_cache.clear();
     }
 }
 
@@ -606,7 +607,7 @@ void Inkscape::SelTrans::_updateHandles()
 
 void Inkscape::SelTrans::_updateVolatileState()
 {
-    Inkscape::Selection *selection = sp_desktop_selection(_desktop);
+    Inkscape::Selection *selection = _desktop->getSelection();
     _empty = selection->isEmpty();
 
     if (_empty) {
@@ -712,14 +713,15 @@ void Inkscape::SelTrans::handleClick(SPKnot */*knot*/, guint state, SPSelTransHa
         case HANDLE_CENTER:
             if (state & GDK_SHIFT_MASK) {
                 // Unset the  center position for all selected items
-                for (GSList const *l = _desktop->selection->itemList(); l; l = l->next) {
-                    SPItem *it = SP_ITEM(l->data);
+            	std::vector<SPItem*> items=_desktop->selection->itemList();
+                for ( std::vector<SPItem*>::const_iterator iter=items.begin();iter!=items.end(); ++iter) {
+                    SPItem *it = *iter;
                     it->unsetCenter();
                     it->updateRepr();
                     _center_is_set = false;  // center has changed
                     _updateHandles();
                 }
-                DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_CONTEXT_SELECT,
+                DocumentUndo::done(_desktop->getDocument(), SP_VERB_CONTEXT_SELECT,
                                    _("Reset center"));
             }
             break;
@@ -898,10 +900,7 @@ gboolean Inkscape::SelTrans::scaleRequest(Geom::Point &pt, guint state)
         // When scaling by an integer, snapping is not needed
     } else {
         // In all other cases we should try to snap now
-        SnapManager &m = _desktop->namedview->snap_manager;
-        m.setup(_desktop, false, _items_const);
-
-        Inkscape::SnappedPoint bb, sn;
+        Inkscape::PureScale  *bb, *sn;
 
         if ((state & GDK_CONTROL_MASK) || _desktop->isToolboxButtonActive ("lock")) {
             // Scale is locked to a 1:1 aspect ratio, so that s[X] must be made to equal s[Y].
@@ -916,30 +915,37 @@ gboolean Inkscape::SelTrans::scaleRequest(Geom::Point &pt, guint state)
             }
 
             // Snap along a suitable constraint vector from the origin.
-            bb = m.constrainedSnapScale(_bbox_points, _point, default_scale, _origin_for_bboxpoints);
-            sn = m.constrainedSnapScale(_snap_points, _point, geom_scale, _origin_for_specpoints);
+
+            bb = new Inkscape::PureScaleConstrained(default_scale, _origin_for_bboxpoints);
+            sn = new Inkscape::PureScaleConstrained(geom_scale, _origin_for_specpoints);
         } else {
             /* Scale aspect ratio is unlocked */
-            bb = m.freeSnapScale(_bbox_points, _point, default_scale, _origin_for_bboxpoints);
-            sn = m.freeSnapScale(_snap_points, _point, geom_scale, _origin_for_specpoints);
+            bb = new Inkscape::PureScale(default_scale, _origin_for_bboxpoints, false);
+            sn = new Inkscape::PureScale(geom_scale, _origin_for_specpoints, false);
         }
+        SnapManager &m = _desktop->namedview->snap_manager;
+        m.setup(_desktop, false, _items_const);
+        m.snapTransformed(_bbox_points, _point, (*bb));
+        m.snapTransformed(_snap_points, _point, (*sn));
+        m.unSetup();
 
         // These lines below are duplicated in stretchRequest
-        if (bb.getSnapped() || sn.getSnapped()) {
-            if (bb.getSnapped()) {
-                if (!bb.isOtherSnapBetter(sn, false)) {
+        //TODO: Eliminate this code duplication
+        if (bb->best_snapped_point.getSnapped() || sn->best_snapped_point.getSnapped()) {
+            if (bb->best_snapped_point.getSnapped()) {
+                if (!bb->best_snapped_point.isOtherSnapBetter(sn->best_snapped_point, false)) {
                     // We snapped the bbox (which is either visual or geometric)
-                    _desktop->snapindicator->set_new_snaptarget(bb);
-                    default_scale = Geom::Scale(bb.getTransformation());
+                    _desktop->snapindicator->set_new_snaptarget(bb->best_snapped_point);
+                    default_scale = bb->getScaleSnapped();
                     // Calculate the new transformation and update the handle position
                     pt = _calcAbsAffineDefault(default_scale);
                 }
-            } else if (sn.getSnapped()) {
-                _desktop->snapindicator->set_new_snaptarget(sn);
+            } else if (sn->best_snapped_point.getSnapped()) {
+                _desktop->snapindicator->set_new_snaptarget(sn->best_snapped_point);
                 // We snapped the special points (e.g. nodes), which are not at the visual bbox
                 // The handle location however (pt) might however be at the visual bbox, so we
                 // will have to calculate pt taking the stroke width into account
-                geom_scale = Geom::Scale(sn.getTransformation());
+                geom_scale = sn->getScaleSnapped();
                 pt = _calcAbsAffineGeom(geom_scale);
             }
         } else {
@@ -947,7 +953,9 @@ gboolean Inkscape::SelTrans::scaleRequest(Geom::Point &pt, guint state)
             _calcAbsAffineDefault(default_scale);
             _desktop->snapindicator->remove_snaptarget();
         }
-        m.unSetup();
+
+        delete bb;
+        delete sn;
     }
 
     /* Status text */
@@ -1004,21 +1012,22 @@ gboolean Inkscape::SelTrans::stretchRequest(SPSelTransHandle const &handle, Geom
         SnapManager &m = _desktop->namedview->snap_manager;
         m.setup(_desktop, false, _items_const);
 
-        Inkscape::SnappedPoint bb, sn;
-        g_assert(bb.getSnapped() == false); // Check initialization to catch any regression
-
         bool symmetrical = state & GDK_CONTROL_MASK;
 
-        bb = m.constrainedSnapStretch(_bbox_points, _point, Geom::Coord(default_scale[axis]), _origin_for_bboxpoints, Geom::Dim2(axis), symmetrical);
-        sn = m.constrainedSnapStretch(_snap_points, _point, Geom::Coord(geom_scale[axis]), _origin_for_specpoints, Geom::Dim2(axis), symmetrical);
+        Inkscape::PureStretchConstrained bb = Inkscape::PureStretchConstrained(Geom::Coord(default_scale[axis]), _origin_for_bboxpoints, Geom::Dim2(axis), symmetrical);
+        Inkscape::PureStretchConstrained sn = Inkscape::PureStretchConstrained(Geom::Coord(geom_scale[axis]), _origin_for_specpoints, Geom::Dim2(axis), symmetrical);
 
-        if (bb.getSnapped()) {
+        m.snapTransformed(_bbox_points, _point, bb);
+        m.snapTransformed(_snap_points, _point, sn);
+        m.unSetup();
+
+        if (bb.best_snapped_point.getSnapped()) {
             // We snapped the bbox (which is either visual or geometric)
-            default_scale[axis] = bb.getTransformation()[axis];
+            default_scale[axis] = bb.getMagnitude();
         }
 
-        if (sn.getSnapped()) {
-            geom_scale[axis] = sn.getTransformation()[axis];
+        if (sn.best_snapped_point.getSnapped()) {
+            geom_scale[axis] = sn.getMagnitude();
         }
 
         if (symmetrical) {
@@ -1029,21 +1038,21 @@ gboolean Inkscape::SelTrans::stretchRequest(SPSelTransHandle const &handle, Geom
         }
 
         // These lines below are duplicated in scaleRequest
-        if (bb.getSnapped() || sn.getSnapped()) {
-            if (bb.getSnapped()) {
-                if (!bb.isOtherSnapBetter(sn, false)) {
+        if (bb.best_snapped_point.getSnapped() || sn.best_snapped_point.getSnapped()) {
+            if (bb.best_snapped_point.getSnapped()) {
+                if (!bb.best_snapped_point.isOtherSnapBetter(sn.best_snapped_point, false)) {
                     // We snapped the bbox (which is either visual or geometric)
-                    _desktop->snapindicator->set_new_snaptarget(bb);
-                    default_scale = Geom::Scale(bb.getTransformation());
+                    _desktop->snapindicator->set_new_snaptarget(bb.best_snapped_point);
+                    default_scale = bb.getStretchSnapped();
                     // Calculate the new transformation and update the handle position
                     pt = _calcAbsAffineDefault(default_scale);
                 }
-            } else if (sn.getSnapped()) {
-                _desktop->snapindicator->set_new_snaptarget(sn);
+            } else if (sn.best_snapped_point.getSnapped()) {
+                _desktop->snapindicator->set_new_snaptarget(sn.best_snapped_point);
                 // We snapped the special points (e.g. nodes), which are not at the visual bbox
                 // The handle location however (pt) might however be at the visual bbox, so we
                 // will have to calculate pt taking the stroke width into account
-                geom_scale = Geom::Scale(sn.getTransformation());
+                geom_scale = sn.getStretchSnapped();
                 pt = _calcAbsAffineGeom(geom_scale);
             }
         } else {
@@ -1051,8 +1060,6 @@ gboolean Inkscape::SelTrans::stretchRequest(SPSelTransHandle const &handle, Geom
             _calcAbsAffineDefault(default_scale);
             _desktop->snapindicator->remove_snaptarget();
         }
-
-        m.unSetup();
     }
 
     // status text
@@ -1157,16 +1164,14 @@ gboolean Inkscape::SelTrans::skewRequest(SPSelTransHandle const &handle, Geom::P
         SnapManager &m = _desktop->namedview->snap_manager;
         m.setup(_desktop, false, _items_const);
 
-        Geom::Point cvec; cvec[dim_b] = 1.;
-        Inkscape::Snapper::SnapConstraint const constraint(cvec);
-        // When skewing, we cannot snap the corners of the bounding box, see the comment in "constrainedSnapSkew" for details
-        Geom::Point const s(skew[dim_a], scale[dim_a]);
-        Inkscape::SnappedPoint sn = m.constrainedSnapSkew(_snap_points, _point, constraint, s, _origin, Geom::Dim2(dim_b));
+        // When skewing, we cannot snap the corners of the bounding box, see the comment in PureSkewConstrained for details
+        Inkscape::PureSkewConstrained sn = Inkscape::PureSkewConstrained(skew[dim_a], scale[dim_a], _origin, Geom::Dim2(dim_b));
+        m.snapTransformed(_snap_points, _point, sn);
 
-        if (sn.getSnapped()) {
+        if (sn.best_snapped_point.getSnapped()) {
             // We snapped something, so change the skew to reflect it
-            skew[dim_a] = sn.getTransformation()[0];
-             _desktop->snapindicator->set_new_snaptarget(sn);
+            skew[dim_a] = sn.getSkewSnapped();
+             _desktop->snapindicator->set_new_snaptarget(sn.best_snapped_point);
         } else {
             _desktop->snapindicator->remove_snaptarget();
         }
@@ -1192,7 +1197,7 @@ gboolean Inkscape::SelTrans::skewRequest(SPSelTransHandle const &handle, Geom::P
     }
 
     // Update the status text
-    double degrees = mod360symm(Geom::rad_to_deg(radians));
+    double degrees = mod360symm(Geom::deg_from_rad(radians));
     _message_context.setF(Inkscape::IMMEDIATE_MESSAGE,
                           // TRANSLATORS: don't modify the first ";"
                           // (it will NOT be displayed as ";" - only the second one will be)
@@ -1244,13 +1249,14 @@ gboolean Inkscape::SelTrans::rotateRequest(Geom::Point &pt, guint state)
         SnapManager &m = _desktop->namedview->snap_manager;
         m.setup(_desktop, false, _items_const);
         // When rotating, we cannot snap the corners of the bounding box, see the comment in "constrainedSnapRotate" for details
-        Inkscape::SnappedPoint sn = m.constrainedSnapRotate(_snap_points, _point, radians, _origin);
+        Inkscape::PureRotateConstrained sn = Inkscape::PureRotateConstrained(radians, _origin);
+        m.snapTransformed(_snap_points, _point, sn);
         m.unSetup();
 
-        if (sn.getSnapped()) {
-            _desktop->snapindicator->set_new_snaptarget(sn);
+        if (sn.best_snapped_point.getSnapped()) {
+            _desktop->snapindicator->set_new_snaptarget(sn.best_snapped_point);
             // We snapped something, so change the rotation to reflect it
-            radians = sn.getTransformation()[0];
+            radians = sn.getAngleSnapped();
             r1 = Geom::Rotate(0);
             r2 = Geom::Rotate(radians);
         } else {
@@ -1267,7 +1273,7 @@ gboolean Inkscape::SelTrans::rotateRequest(Geom::Point &pt, guint state)
     pt = _point * Geom::Translate(-_origin) * _relative_affine * Geom::Translate(_origin);
 
     // Update the status text
-    double degrees = mod360symm(Geom::rad_to_deg(radians));
+    double degrees = mod360symm(Geom::deg_from_rad(radians));
     _message_context.setF(Inkscape::IMMEDIATE_MESSAGE,
                           // TRANSLATORS: don't modify the first ";"
                           // (it will NOT be displayed as ";" - only the second one will be)
@@ -1283,7 +1289,7 @@ gboolean Inkscape::SelTrans::centerRequest(Geom::Point &pt, guint state)
     // items will share a single center. While dragging that single center, it should never snap to the
     // centers of any of the selected objects. Therefore we will have to pass the list of selected items
     // to the snapper, to avoid self-snapping of the rotation center
-    GSList *items = (GSList *) const_cast<Selection *>(_selection)->itemList();
+	std::vector<SPItem*> items = const_cast<Selection *>(_selection)->itemList();
     SnapManager &m = _desktop->namedview->snap_manager;
     m.setup(_desktop);
     m.setRotationCenterSource(items);
@@ -1353,30 +1359,19 @@ void Inkscape::SelTrans::moveTo(Geom::Point const &xy, guint state)
     bool const control = (state & GDK_CONTROL_MASK);
     bool const shift = (state & GDK_SHIFT_MASK);
 
-    if (alt) {
-
-        // Alt pressed means: move only by integer multiples of the grid spacing
-
-        if (control) { // ... if also constrained to the orthogonal axes
-            if (fabs(dxy[Geom::X]) > fabs(dxy[Geom::Y])) {
-                dxy[Geom::Y] = 0;
-            } else {
-                dxy[Geom::X] = 0;
-            }
+    if (control) { // constrained to the orthogonal axes
+        if (fabs(dxy[Geom::X]) > fabs(dxy[Geom::Y])) {
+            dxy[Geom::Y] = 0;
+        } else {
+            dxy[Geom::X] = 0;
         }
+    }
+
+    if (alt) {// Alt pressed means: move only by integer multiples of the grid spacing
         m.setup(_desktop, true, _items_const);
         dxy = m.multipleOfGridPitch(dxy, _point);
         m.unSetup();
-    } else if (shift) {
-        if (control) { // shift & control: constrained movement without snapping
-            if (fabs(dxy[Geom::X]) > fabs(dxy[Geom::Y])) {
-                dxy[Geom::Y] = 0;
-            } else {
-                dxy[Geom::X] = 0;
-            }
-        }
-    } else { //!shift: with snapping
-
+    } else if (!shift) { //!shift: with snapping
         /* We're snapping to things, possibly with a constraint to horizontal or
         ** vertical movement.  Obtain a list of possible translations and then
         ** pick the smallest.
@@ -1387,52 +1382,55 @@ void Inkscape::SelTrans::moveTo(Geom::Point const &xy, guint state)
         /* This will be our list of possible translations */
         std::list<Inkscape::SnappedPoint> s;
 
+        Inkscape::PureTranslate *bb, *sn;
+
         if (control) { // constrained movement with snapping
 
             /* Snap to things, and also constrain to horizontal or vertical movement */
 
-            unsigned int dim = fabs(dxy[Geom::X]) > fabs(dxy[Geom::Y]) ? Geom::X : Geom::Y;
+            Geom::Dim2 dim = fabs(dxy[Geom::X]) > fabs(dxy[Geom::Y]) ? Geom::X : Geom::Y;
             // When doing a constrained translation, all points will move in the same direction, i.e.
             // either horizontally or vertically. Therefore we only have to specify the direction of
             // the constraint-line once. The constraint lines are parallel, but might not be colinear.
             // Therefore we will have to set the point through which the constraint-line runs
-            // individually for each point to be snapped; this will be handled however by _snapTransformed()
-            Geom::Point cvec; cvec[dim] = 1.;
-            s.push_back(m.constrainedSnapTranslate(_bbox_points,
-                                                     _point,
-                                                     Inkscape::Snapper::SnapConstraint(cvec),
-                                                     dxy));
-
-            s.push_back(m.constrainedSnapTranslate(_snap_points,
-                                                     _point,
-                                                     Inkscape::Snapper::SnapConstraint(cvec),
-                                                     dxy));
+            // individually for each point to be snapped; this will be handled however by snapTransformed()
+            bb = new Inkscape::PureTranslateConstrained(dxy[dim], dim);
+            sn = new Inkscape::PureTranslateConstrained(dxy[dim], dim);
         } else { // !control
-
-            // Let's leave this timer code here for a while. I'll probably need it in the near future (Diederik van Lierop)
-            /* GTimeVal starttime;
-            GTimeVal endtime;
-            g_get_current_time(&starttime); */
-
             /* Snap to things with no constraint */
-            s.push_back(m.freeSnapTranslate(_bbox_points, _point, dxy));
-            s.push_back(m.freeSnapTranslate(_snap_points, _point, dxy));
-
-              /*g_get_current_time(&endtime);
-              double elapsed = ((((double)endtime.tv_sec - starttime.tv_sec) * G_USEC_PER_SEC + (endtime.tv_usec - starttime.tv_usec))) / 1000.0;
-              std::cout << "Time spent snapping: " << elapsed << std::endl; */
+            bb = new Inkscape::PureTranslate(dxy);
+            sn = new Inkscape::PureTranslate(dxy);
         }
+        // Let's leave this timer code here for a while. I'll probably need it in the near future (Diederik van Lierop)
+        /* GTimeVal starttime;
+        GTimeVal endtime;
+        g_get_current_time(&starttime); */
+
+        m.snapTransformed(_bbox_points, _point, (*bb));
+        m.snapTransformed(_snap_points, _point, (*sn));
         m.unSetup();
+
+        /*g_get_current_time(&endtime);
+        double elapsed = ((((double)endtime.tv_sec - starttime.tv_sec) * G_USEC_PER_SEC + (endtime.tv_usec - starttime.tv_usec))) / 1000.0;
+        std::cout << "Time spent snapping: " << elapsed << std::endl; */
 
         /* Pick one */
         Inkscape::SnappedPoint best_snapped_point;
-        for (std::list<Inkscape::SnappedPoint>::const_iterator i = s.begin(); i != s.end(); ++i) {
-            if (i->getSnapped()) {
-                if (best_snapped_point.isOtherSnapBetter(*i, true)) {
-                    best_snapped_point = *i;
-                    dxy = i->getTransformation();
-                }
-            }
+
+        bool sn_is_best = sn->best_snapped_point.getSnapped();
+        bool bb_is_best = bb->best_snapped_point.getSnapped();
+
+        if (bb_is_best && sn_is_best) {
+            sn_is_best = bb->best_snapped_point.isOtherSnapBetter(sn->best_snapped_point, true);
+            bb_is_best = !sn_is_best;
+        }
+
+        if (sn_is_best) {
+            best_snapped_point = sn->best_snapped_point;
+            dxy = sn->getTranslationSnapped();
+        } else if (bb_is_best) {
+            best_snapped_point = bb->best_snapped_point;
+            dxy = bb->getTranslationSnapped();
         }
 
         if (best_snapped_point.getSnapped()) {
@@ -1610,7 +1608,7 @@ void Inkscape::SelTrans::_keepClosestPointOnly(Geom::Point const &p)
     }
 
 }
-
+// TODO: This code is duplicated in transform-handle-set.cpp; fix this!
 void Inkscape::SelTrans::getNextClosestPoint(bool reverse)
 {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
@@ -1636,6 +1634,12 @@ void Inkscape::SelTrans::getNextClosestPoint(bool reverse)
             } else {
                 _snap_points.push_back(*_all_snap_sources_iter);
             }
+
+            // Show the updated snap source now; otherwise it won't be shown until the selection is being moved again
+            SnapManager &m = _desktop->namedview->snap_manager;
+            m.setup(_desktop);
+            m.displaySnapsource(*_all_snap_sources_iter);
+            m.unSetup();
         }
     }
 }

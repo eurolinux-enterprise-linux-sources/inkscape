@@ -14,29 +14,17 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <vector>
-#include <gdk/gdk.h>
-#include <glibmm/ustring.h>
 #include <2geom/affine.h>
+#include <cstddef>
+#include <glibmm/ustring.h>
+#include <sigc++/connection.h>
+#include <vector>
+
 #include "sp-paint-server.h"
 #include "sp-gradient-spread.h"
 #include "sp-gradient-units.h"
 #include "sp-gradient-vector.h"
 #include "sp-mesh-array.h"
-
-#include <stddef.h>
-#include <sigc++/connection.h>
-
-
-
-//#include <glib.h>
-//#include <glib-object.h>
-//#include <2geom/forward.h>
-//#include "sp-gradient-spread.h"
-//#include "sp-gradient-units.h"
-//
-//class SPGradient;
-//struct SPMeshGradient;
 
 class SPGradientReference;
 class SPStop;
@@ -49,12 +37,6 @@ enum SPGradientType {
     SP_GRADIENT_TYPE_LINEAR,
     SP_GRADIENT_TYPE_RADIAL,
     SP_GRADIENT_TYPE_MESH
-};
-
-enum SPGradientMeshType {
-    SP_GRADIENT_MESH_TYPE_UNKNOWN,
-    SP_GRADIENT_MESH_TYPE_NORMAL,
-    SP_GRADIENT_MESH_TYPE_CONICAL
 };
 
 enum SPGradientState {
@@ -109,30 +91,30 @@ public:
 private:
     /** gradientUnits attribute */
     SPGradientUnits units;
-    guint units_set : 1;
+    unsigned int units_set : 1;
 public:
 
     /** gradientTransform attribute */
     Geom::Affine gradientTransform;
-    guint gradientTransform_set : 1;
+    unsigned int gradientTransform_set : 1;
 
 private:
     /** spreadMethod attribute */
     SPGradientSpread spread;
-    guint spread_set : 1;
+    unsigned int spread_set : 1;
 
     /** Gradient stops */
-    guint has_stops : 1;
+    unsigned int has_stops : 1;
 
     /** Gradient patches */
-    guint has_patches : 1;
+    unsigned int has_patches : 1;
 
 public:
     /** Reference (href) */
     SPGradientReference *ref;
 
     /** State in Inkscape gradient system */
-    guint state;
+    unsigned int state;
     
     /** Linear and Radial Gradients */
 
@@ -146,14 +128,15 @@ public:
     SPStop* getFirstStop();
     int getStopCount() const;
 
-    gboolean isEquivalent(SPGradient *b);
-    gboolean isAligned(SPGradient *b);
+    bool isEquivalent(SPGradient *b);
+    bool isAligned(SPGradient *b);
 
     /** Mesh Gradients **************/
 
     /** Composed array (for mesh gradients) */
     SPMeshNodeArray array;
-
+    SPMeshNodeArray array_smoothed; // Smoothed version of array
+    
     bool hasPatches() const;
 
 
@@ -175,7 +158,13 @@ public:
  */
     SPGradient *getVector(bool force_private = false);
 
-    static GType getType();
+ /**
+ * Returns private mesh of given gradient (the gradient at the end of the href chain which has
+ * patches), optionally normalizing it.
+ */
+    SPGradient *getArray(bool force_private = false);
+
+    //static GType getType();
 
     /** Forces vector to be built, if not present (i.e. changed) */
     void ensureVector();
@@ -196,7 +185,7 @@ public:
 
     void setSwatch(bool swatch = true);
 
-    static void gradientRefModified(SPObject *href, guint flags, SPGradient *gradient);
+    static void gradientRefModified(SPObject *href, unsigned int flags, SPGradient *gradient);
     static void gradientRefChanged(SPObject *old_ref, SPObject *ref, SPGradient *gr);
 
 private:
@@ -208,13 +197,13 @@ private:
 protected:
     virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
     virtual void release();
-    virtual void modified(guint flags);
-    virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags);
+    virtual void modified(unsigned int flags);
+    virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
 
     virtual void child_added(Inkscape::XML::Node *child, Inkscape::XML::Node *ref);
     virtual void remove_child(Inkscape::XML::Node *child);
 
-    virtual void set(unsigned key, gchar const *value);
+    virtual void set(unsigned key, char const *value);
 };
 
 void
@@ -226,8 +215,6 @@ sp_gradient_pattern_common_setup(cairo_pattern_t *cp,
 /* Gradient repr methods */
 void sp_gradient_repr_write_vector(SPGradient *gr);
 void sp_gradient_repr_clear_vector(SPGradient *gr);
-
-void sp_meshgradient_repr_write(SPMeshGradient *mg);
 
 cairo_pattern_t *sp_gradient_create_preview_pattern(SPGradient *gradient, double width);
 

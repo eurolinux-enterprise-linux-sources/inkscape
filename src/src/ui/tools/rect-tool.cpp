@@ -28,7 +28,7 @@
 #include "sp-namedview.h"
 #include "selection.h"
 #include "selection-chemistry.h"
-#include "desktop-handles.h"
+
 #include "snap.h"
 #include "desktop.h"
 #include "desktop-style.h"
@@ -40,25 +40,15 @@
 #include "xml/node-event-vector.h"
 #include "preferences.h"
 #include "context-fns.h"
-#include "shape-editor.h"
+#include "ui/shape-editor.h"
 #include "verbs.h"
 #include "display/sp-canvas-item.h"
 
 using Inkscape::DocumentUndo;
 
-#include "tool-factory.h"
-
 namespace Inkscape {
 namespace UI {
 namespace Tools {
-
-namespace {
-	ToolBase* createRectContext() {
-		return new RectTool();
-	}
-
-	bool rectContextRegistered = ToolFactory::instance().registerObject("/tools/shapes/rect", createRectContext);
-}
 
 const std::string& RectTool::getPrefsPath() {
 	return RectTool::prefsPath;
@@ -102,8 +92,8 @@ RectTool::~RectTool() {
  * destroys old and creates new knotholder.
  */
 void RectTool::selection_changed(Inkscape::Selection* selection) {
-    this->shape_editor->unset_item(SH_KNOTHOLDER);
-    this->shape_editor->set_item(selection->singleItem(), SH_KNOTHOLDER);
+    this->shape_editor->unset_item();
+    this->shape_editor->set_item(selection->singleItem());
 }
 
 void RectTool::setup() {
@@ -111,13 +101,13 @@ void RectTool::setup() {
 
     this->shape_editor = new ShapeEditor(this->desktop);
 
-    SPItem *item = sp_desktop_selection(this->desktop)->singleItem();
+    SPItem *item = this->desktop->getSelection()->singleItem();
     if (item) {
-        this->shape_editor->set_item(item, SH_KNOTHOLDER);
+        this->shape_editor->set_item(item);
     }
 
     this->sel_changed_connection.disconnect();
-    this->sel_changed_connection = sp_desktop_selection(this->desktop)->connectChanged(
+    this->sel_changed_connection = this->desktop->getSelection()->connectChanged(
     	sigc::mem_fun(this, &RectTool::selection_changed)
     );
 
@@ -153,7 +143,6 @@ bool RectTool::item_handler(SPItem* item, GdkEvent* event) {
     case GDK_BUTTON_PRESS:
         if ( event->button.button == 1 && !this->space_panning) {
             Inkscape::setup_for_drag_start(desktop, this, event);
-            ret = TRUE;
         }
         break;
         // motion and release are always on root (why?)
@@ -170,7 +159,7 @@ bool RectTool::root_handler(GdkEvent* event) {
     static bool dragging;
 
     SPDesktop *desktop = this->desktop;
-    Inkscape::Selection *selection = sp_desktop_selection (desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
 
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
 
@@ -476,16 +465,16 @@ void RectTool::finishItem() {
 
         this->desktop->canvas->endForcedFullRedraws();
 
-        sp_desktop_selection(this->desktop)->set(this->rect);
+        this->desktop->getSelection()->set(this->rect);
 
-        DocumentUndo::done(sp_desktop_document(this->desktop), SP_VERB_CONTEXT_RECT, _("Create rectangle"));
+        DocumentUndo::done(this->desktop->getDocument(), SP_VERB_CONTEXT_RECT, _("Create rectangle"));
 
         this->rect = NULL;
     }
 }
 
 void RectTool::cancel(){
-    sp_desktop_selection(this->desktop)->clear();
+    this->desktop->getSelection()->clear();
     sp_canvas_item_ungrab(SP_CANVAS_ITEM(this->desktop->acetate), 0);
 
     if (this->rect != NULL) {
@@ -500,7 +489,7 @@ void RectTool::cancel(){
 
     this->desktop->canvas->endForcedFullRedraws();
 
-    DocumentUndo::cancel(sp_desktop_document(this->desktop));
+    DocumentUndo::cancel(this->desktop->getDocument());
 }
 
 }

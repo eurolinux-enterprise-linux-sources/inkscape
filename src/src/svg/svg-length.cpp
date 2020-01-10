@@ -1,6 +1,4 @@
-#define __SP_SVG_LENGTH_C__
-
-/*
+/**
  * SVG data parser
  *
  * Authors:
@@ -12,19 +10,15 @@
  * This code is in public domain
  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
+#include <cmath>
 #include <cstring>
 #include <string>
-#include <math.h>
 #include <glib.h>
+#include <iostream>
 
 #include "svg.h"
 #include "stringstream.h"
 #include "util/units.h"
-
 
 static unsigned sp_svg_length_read_lff(gchar const *str, SVGLength::Unit *unit, float *val, float *computed, char **next);
 
@@ -417,14 +411,6 @@ So after the number, the string does not necessarily have a \0 or a unit, it mig
                     *computed = Inkscape::Util::Quantity::convert(v, "in", "px");
                 }
                 break;
-            case UVAL('f','t'):
-                if (unit) {
-                    *unit = SVGLength::FOOT;
-                }
-                if (computed) {
-                    *computed = Inkscape::Util::Quantity::convert(v, "ft", "px");
-                }
-                break;
             case UVAL('e','m'):
                 if (unit) {
                     *unit = SVGLength::EM;
@@ -469,6 +455,45 @@ unsigned int sp_svg_length_read_ldd(gchar const *str, SVGLength::Unit *unit, dou
     return r;
 }
 
+std::string SVGLength::write() const
+{
+    return sp_svg_length_write_with_units(*this);
+}
+
+void SVGLength::set(SVGLength::Unit u, float v)
+{
+    _set = true;
+    unit = u;
+    Glib::ustring hack("px");
+    switch( unit ) {
+        case NONE:
+        case PX:
+        case EM:
+        case EX:
+        case PERCENT:
+            break;
+        case PT:
+            hack = "pt";
+            break;
+        case PC:
+            hack = "pc";
+            break;
+        case MM:
+            hack = "pt";
+            break;
+        case CM:
+            hack = "pt";
+            break;
+        case INCH:
+            hack = "pt";
+            break;
+        default:
+            break;
+    }
+    value = v;
+    computed =  Inkscape::Util::Quantity::convert(v, hack, "px");
+}
+
 void SVGLength::set(SVGLength::Unit u, float v, float c)
 {
     _set = true;
@@ -483,6 +508,12 @@ void SVGLength::unset(SVGLength::Unit u, float v, float c)
     unit = u;
     value = v;
     computed = c;
+}
+
+void SVGLength::scale(double scale)
+{
+    value *= scale;
+    computed *= scale;
 }
 
 void SVGLength::update(double em, double ex, double scale)
@@ -527,8 +558,6 @@ gchar const *sp_svg_length_get_css_units(SVGLength::Unit unit)
         case SVGLength::MM: return "mm";
         case SVGLength::CM: return "cm";
         case SVGLength::INCH: return "in";
-        case SVGLength::FOOT: return "";  // Not in SVG/CSS specification.
-        case SVGLength::MITRE: return ""; // Not in SVG/CSS specification.
         case SVGLength::EM: return "em";
         case SVGLength::EX: return "ex";
         case SVGLength::PERCENT: return "%";
@@ -545,10 +574,6 @@ std::string sp_svg_length_write_with_units(SVGLength const &length)
     Inkscape::SVGOStringStream os;
     if (length.unit == SVGLength::PERCENT) {
         os << 100*length.value << sp_svg_length_get_css_units(length.unit);
-    } else if (length.unit == SVGLength::FOOT) {
-        os << 12*length.value << sp_svg_length_get_css_units(SVGLength::INCH);
-    } else if (length.unit == SVGLength::MITRE) {
-        os << 100*length.value << sp_svg_length_get_css_units(SVGLength::CM);
     } else {
         os << length.value << sp_svg_length_get_css_units(length.unit);
     }
@@ -573,4 +598,4 @@ void SVGLength::readOrUnset(gchar const *str, Unit u, float v, float c)
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :

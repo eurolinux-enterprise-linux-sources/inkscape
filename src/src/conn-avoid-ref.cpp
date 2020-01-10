@@ -19,7 +19,7 @@
 #include "display/curve.h"
 #include "2geom/line.h"
 #include "2geom/crossing.h"
-#include "2geom/convex-cover.h"
+#include "2geom/convex-hull.h"
 #include "helper/geom-curves.h"
 #include "svg/stringstream.h"
 #include "conn-avoid-ref.h"
@@ -32,7 +32,7 @@
 #include "xml/node.h"
 #include "document.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "document-undo.h"
 #include "sp-namedview.h"
 #include "sp-item-group.h"
@@ -87,11 +87,11 @@ void SPAvoidRef::setAvoid(char const *value)
 
 void SPAvoidRef::handleSettingChange(void)
 {
-    SPDesktop *desktop = inkscape_active_desktop();
+    SPDesktop *desktop = SP_ACTIVE_DESKTOP;
     if (desktop == NULL) {
         return;
     }
-    if (sp_desktop_document(desktop) != item->document) {
+    if (desktop->getDocument() != item->document) {
         // We don't want to go any further if the active desktop's document
         // isn't the same as the document that this item is part of.  This
         // case can happen if a new document is loaded from the file chooser
@@ -139,9 +139,9 @@ void SPAvoidRef::handleSettingChange(void)
 }
 
 
-GSList *SPAvoidRef::getAttachedShapes(const unsigned int type)
+std::vector<SPItem *> SPAvoidRef::getAttachedShapes(const unsigned int type)
 {
-    GSList *list = NULL;
+    std::vector<SPItem *> list;
 
     Avoid::IntList shapes;
     GQuark shapeId = g_quark_from_string(item->getId());
@@ -157,15 +157,15 @@ GSList *SPAvoidRef::getAttachedShapes(const unsigned int type)
             continue;
         }
         SPItem *shapeItem = SP_ITEM(obj);
-        list = g_slist_prepend(list, shapeItem);
+        list.push_back(shapeItem);
     }
     return list;
 }
 
 
-GSList *SPAvoidRef::getAttachedConnectors(const unsigned int type)
+std::vector<SPItem *> SPAvoidRef::getAttachedConnectors(const unsigned int type)
 {
-    GSList *list = NULL;
+    std::vector<SPItem *> list;
 
     Avoid::IntList conns;
     GQuark shapeId = g_quark_from_string(item->getId());
@@ -181,7 +181,7 @@ GSList *SPAvoidRef::getAttachedConnectors(const unsigned int type)
             continue;
         }
         SPItem *connItem = SP_ITEM(obj);
-        list = g_slist_prepend(list, connItem);
+        list.push_back(connItem);
     }
     return list;
 }
@@ -252,8 +252,9 @@ static std::vector<Geom::Point> approxItemWithPoints(SPItem const *item, const G
     {
         SPGroup* group = SP_GROUP(item);
         // consider all first-order children
-        for (GSList const* i = sp_item_group_item_list(group); i != NULL; i = i->next) {
-            SPItem* child_item = SP_ITEM(i->data);
+        std::vector<SPItem*> itemlist = sp_item_group_item_list(group);
+        for (std::vector<SPItem*>::const_iterator i = itemlist.begin(); i != itemlist.end(); ++i) {
+            SPItem* child_item = *i;
             std::vector<Geom::Point> child_points = approxItemWithPoints(child_item, item_transform * child_item->transform);
             poly_points.insert(poly_points.end(), child_points.begin(), child_points.end());
         }
@@ -277,7 +278,7 @@ static std::vector<Geom::Point> approxItemWithPoints(SPItem const *item, const G
 }
 static Avoid::Polygon avoid_item_poly(SPItem const *item)
 {
-    SPDesktop *desktop = inkscape_active_desktop();
+    SPDesktop *desktop = SP_ACTIVE_DESKTOP;
     g_assert(desktop != NULL);
     double spacing = desktop->namedview->connector_spacing;
 
@@ -295,14 +296,14 @@ static Avoid::Polygon avoid_item_poly(SPItem const *item)
     Geom::Line hull_edge(hull[-1], hull[0]);
     Geom::Line prev_parallel_hull_edge;
     prev_parallel_hull_edge.setOrigin(hull_edge.origin()+hull_edge.versor().ccw()*spacing);
-    prev_parallel_hull_edge.setVersor(hull_edge.versor());
-    int hull_size = hull.boundary.size();
+    prev_parallel_hull_edge.setVector(hull_edge.versor());
+    int hull_size = hull.size();
     for (int i = 0; i < hull_size; ++i)
     {
         hull_edge.setPoints(hull[i], hull[i+1]);
         Geom::Line parallel_hull_edge;
         parallel_hull_edge.setOrigin(hull_edge.origin()+hull_edge.versor().ccw()*spacing);
-        parallel_hull_edge.setVersor(hull_edge.versor());
+        parallel_hull_edge.setVector(hull_edge.versor());
 
         // determine the intersection point
         try {
@@ -330,7 +331,7 @@ static Avoid::Polygon avoid_item_poly(SPItem const *item)
 }
 
 
-GSList *get_avoided_items(GSList *list, SPObject *from, SPDesktop *desktop,
+std::vector<SPItem *> get_avoided_items(std::vector<SPItem *> &list, SPObject *from, SPDesktop *desktop,
         bool initialised)
 {
     for (SPObject *child = from->firstChild() ; child != NULL; child = child->next ) {
@@ -341,7 +342,7 @@ GSList *get_avoided_items(GSList *list, SPObject *from, SPDesktop *desktop,
             (!initialised || SP_ITEM(child)->avoidRef->shapeRef)
             )
         {
-            list = g_slist_prepend (list, SP_ITEM(child));
+            list.push_back(SP_ITEM(child));
         }
 
         if (SP_IS_ITEM(child) && desktop->isLayer(SP_ITEM(child))) {
@@ -370,22 +371,20 @@ void init_avoided_shape_geometry(SPDesktop *desktop)
 {
     // Don't count this as changes to the document,
     // it is basically just late initialisation.
-    SPDocument *document = sp_desktop_document(desktop);
+    SPDocument *document = desktop->getDocument();
     bool saved = DocumentUndo::getUndoSensitive(document);
     DocumentUndo::setUndoSensitive(document, false);
 
     bool initialised = false;
-    GSList *items = get_avoided_items(NULL, desktop->currentRoot(), desktop,
+    std::vector<SPItem *> tmp;
+    std::vector<SPItem *> items = get_avoided_items(tmp, desktop->currentRoot(), desktop,
             initialised);
 
-    for ( GSList const *iter = items ; iter != NULL ; iter = iter->next ) {
-        SPItem *item = reinterpret_cast<SPItem *>(iter->data);
+    for (std::vector<SPItem *>::const_iterator iter = items.begin(); iter != items.end(); ++iter) {
+        SPItem *item = *iter;
         item->avoidRef->handleSettingChange();
     }
 
-    if (items) {
-        g_slist_free(items);
-    }
     DocumentUndo::setUndoSensitive(document, saved);
 }
 

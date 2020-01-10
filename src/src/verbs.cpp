@@ -32,16 +32,15 @@
 #include <cstring>
 #include <string>
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
+// Note that gtkmm headers must be included before gtk+ C headers
+// in all files.  The same applies for glibmm/glib etc.
+// If this is not done, then errors will be generate relating to Glib::Threads being undefined
 #include <gtkmm/filechooserdialog.h>
 #include <gtkmm/messagedialog.h>
 #include <gtkmm/stock.h>
 
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "display/curve.h"
 #include "document.h"
 #include "ui/tools/freehand-base.h"
@@ -52,8 +51,8 @@
 #include "helper/action.h"
 #include "helper/action-context.h"
 #include "help.h"
-#include "inkscape-private.h"
-#include "interface.h"
+#include "inkscape.h"
+#include "ui/interface.h"
 #include "layer-fns.h"
 #include "layer-manager.h"
 #include "message-stack.h"
@@ -62,14 +61,15 @@
 #include "ui/tools/select-tool.h"
 #include "selection-chemistry.h"
 #include "seltrans.h"
-#include "shape-editor.h"
+#include "ui/shape-editor.h"
 #include "shortcuts.h"
+#include "sp-defs.h"
 #include "sp-flowtext.h"
 #include "sp-guide.h"
 #include "splivarot.h"
 #include "sp-namedview.h"
 #include "text-chemistry.h"
-#include "tools-switch.h"
+#include "ui/tools-switch.h"
 #include "ui/dialog/align-and-distribute.h"
 #include "ui/dialog/clonetiler.h"
 #include "ui/dialog/dialog-manager.h"
@@ -213,6 +213,25 @@ public:
         Verb(code, id, name, tip, image, _("Object"))
     { }
 }; // ObjectVerb class
+
+/**
+ * A class to encompass all of the verbs which deal with operations related to tags.
+ */
+class TagVerb : public Verb {
+private:
+    static void perform(SPAction *action, void *mydata);
+protected:
+    virtual SPAction *make_action(Inkscape::ActionContext const & context);
+public:
+    /** Use the Verb initializer with the same parameters. */
+    TagVerb(unsigned int const code,
+               gchar const *id,
+               gchar const *name,
+               gchar const *tip,
+               gchar const *image) :
+        Verb(code, id, name, tip, image, _("Tag"))
+    { }
+}; // TagVerb class
 
 /**
  * A class to encompass all of the verbs which deal with operations relative to context.
@@ -455,6 +474,19 @@ SPAction *LayerVerb::make_action(Inkscape::ActionContext const & context)
  * @return The built action.
  */
 SPAction *ObjectVerb::make_action(Inkscape::ActionContext const & context)
+{
+    return make_action_helper(context, &perform);
+}
+
+/**
+ * Create an action for a \c TagVerb.
+ *
+ * Calls \c make_action_helper with the \c vector.
+ *
+ * @param  view  Which view the action should be created for.
+ * @return The built action.
+ */
+SPAction *TagVerb::make_action(Inkscape::ActionContext const & context)
 {
     return make_action_helper(context, &perform);
 }
@@ -800,7 +832,14 @@ Verb *Verb::getbyid(gchar const *id)
         verb = verb_found->second;
     }
 
-    if (verb == NULL)
+    if (verb == NULL
+#if !HAVE_POTRACE
+                // Squash warning about disabled features
+                && strcmp(id, "ToolPaintBucket")  != 0
+                && strcmp(id, "SelectionTrace")   != 0
+                && strcmp(id, "PaintBucketPrefs") != 0
+#endif
+            )
         printf("Unable to find: %s\n", id);
 
     return verb;
@@ -873,10 +912,10 @@ void FileVerb::perform(SPAction *action, void *data)
 //            sp_file_export_to_ocal(*parent);
 //            break;
         case SP_VERB_FILE_NEXT_DESKTOP:
-            inkscape_switch_desktops_next();
+            INKSCAPE.switch_desktops_next();
             break;
         case SP_VERB_FILE_PREV_DESKTOP:
-            inkscape_switch_desktops_prev();
+            INKSCAPE.switch_desktops_prev();
             break;
         case SP_VERB_FILE_CLOSE_VIEW:
             sp_ui_close_view(NULL);
@@ -915,10 +954,10 @@ void EditVerb::perform(SPAction *action, void *data)
 
     switch (reinterpret_cast<std::size_t>(data)) {
         case SP_VERB_EDIT_UNDO:
-            sp_undo(dt, sp_desktop_document(dt));
+            sp_undo(dt, dt->getDocument());
             break;
         case SP_VERB_EDIT_REDO:
-            sp_redo(dt, sp_desktop_document(dt));
+            sp_redo(dt, dt->getDocument());
             break;
         case SP_VERB_EDIT_CUT:
             sp_selection_cut(dt);
@@ -1040,10 +1079,12 @@ void EditVerb::perform(SPAction *action, void *data)
         case SP_VERB_EDIT_DELETE_ALL_GUIDES:
             sp_guide_delete_all_guides(dt);
             break;
+        case SP_VERB_EDIT_GUIDES_TOGGLE_LOCK:
+            dt->toggleGuidesLock();
+            break;
         case SP_VERB_EDIT_GUIDES_AROUND_PAGE:
             sp_guide_create_guides_around_page(dt);
             break;
-
         case SP_VERB_EDIT_NEXT_PATHEFFECT_PARAMETER:
             sp_selection_next_patheffect_param(dt);
             break;
@@ -1103,11 +1144,20 @@ void SelectionVerb::perform(SPAction *action, void *data)
         case SP_VERB_SELECTION_LOWER:
             sp_selection_lower(selection, dt);
             break;
+        case SP_VERB_SELECTION_STACK_UP:
+            sp_selection_stack_up(selection, dt);
+            break;
+        case SP_VERB_SELECTION_STACK_DOWN:
+            sp_selection_stack_down(selection, dt);
+            break;
         case SP_VERB_SELECTION_GROUP:
             sp_selection_group(selection, dt);
             break;
         case SP_VERB_SELECTION_UNGROUP:
             sp_selection_ungroup(selection, dt);
+            break;
+        case SP_VERB_SELECTION_UNGROUP_POP_SELECTION:
+            sp_selection_ungroup_pop_selection(selection, dt);
             break;
         default:
             handled = false;
@@ -1169,12 +1219,16 @@ void SelectionVerb::perform(SPAction *action, void *data)
         case SP_VERB_SELECTION_REVERSE:
             SelectionHelper::reverse(dt);
             break;
+
+#if HAVE_POTRACE
         case SP_VERB_SELECTION_TRACE:
-            inkscape_dialogs_unhide();
+            INKSCAPE.dialogs_unhide();
             dt->_dlg_mgr->showDialog("Trace");
             break;
+#endif
+
         case SP_VERB_SELECTION_PIXEL_ART:
-            inkscape_dialogs_unhide();
+            INKSCAPE.dialogs_unhide();
             dt->_dlg_mgr->showDialog("PixelArt");
             break;
         case SP_VERB_SELECTION_CREATE_BITMAP:
@@ -1188,7 +1242,7 @@ void SelectionVerb::perform(SPAction *action, void *data)
             sp_selected_path_break_apart(dt);
             break;
         case SP_VERB_SELECTION_ARRANGE:
-            inkscape_dialogs_unhide();
+            INKSCAPE.dialogs_unhide();
             dt->_dlg_mgr->showDialog("TileDialog"); //FIXME: denis: What's this string (to be changed)
             break;
         default:
@@ -1223,7 +1277,7 @@ void LayerVerb::perform(SPAction *action, void *data)
             SPObject *next=Inkscape::next_layer(dt->currentRoot(), dt->currentLayer());
             if (next) {
                 dt->setCurrentLayer(next);
-                DocumentUndo::done(sp_desktop_document(dt), SP_VERB_LAYER_NEXT,
+                DocumentUndo::done(dt->getDocument(), SP_VERB_LAYER_NEXT,
                                    _("Switch to next layer"));
                 dt->messageStack()->flash(Inkscape::NORMAL_MESSAGE, _("Switched to next layer."));
             } else {
@@ -1235,7 +1289,7 @@ void LayerVerb::perform(SPAction *action, void *data)
             SPObject *prev=Inkscape::previous_layer(dt->currentRoot(), dt->currentLayer());
             if (prev) {
                 dt->setCurrentLayer(prev);
-                DocumentUndo::done(sp_desktop_document(dt), SP_VERB_LAYER_PREV,
+                DocumentUndo::done(dt->getDocument(), SP_VERB_LAYER_PREV,
                                    _("Switch to previous layer"));
                 dt->messageStack()->flash(Inkscape::NORMAL_MESSAGE, _("Switched to previous layer."));
             } else {
@@ -1305,7 +1359,7 @@ void LayerVerb::perform(SPAction *action, void *data)
                         description = _("Lower layer");
                         break;
                 };
-                DocumentUndo::done(sp_desktop_document(dt), verb, description);
+                DocumentUndo::done(dt->getDocument(), verb, description);
                 if (message) {
                     dt->messageStack()->flash(Inkscape::NORMAL_MESSAGE, message);
                     g_free((void *) message);
@@ -1318,40 +1372,10 @@ void LayerVerb::perform(SPAction *action, void *data)
         }
         case SP_VERB_LAYER_DUPLICATE: {
             if ( dt->currentLayer() != dt->currentRoot() ) {
-                // Note with either approach:
-                // Any clone masters are duplicated, their clones use the *original*,
-                // but the duplicated master is not linked up as master nor clone of the original.
-#if 0
-                // Only copies selectable things, honoring locks, visibility, avoids sublayers.
-                SPObject *new_layer = Inkscape::create_layer(dt->currentRoot(), dt->currentLayer(), LPOS_BELOW);
-                if ( dt->currentLayer()->label() ) {
-                    gchar* name = g_strdup_printf(_("%s copy"), dt->currentLayer()->label());
-                    dt->layer_manager->renameLayer( new_layer, name, TRUE );
-                    g_free(name);
-                }
-                sp_edit_select_all(dt);
-                sp_selection_duplicate(dt, true);
-                sp_selection_to_prev_layer(dt, true);
-                dt->setCurrentLayer(new_layer);
-                sp_edit_select_all(dt);
-#else
-                // Copies everything, regardless of locks, visibility, sublayers.
-                //XML Tree being directly used here while it shouldn't be.
-                Inkscape::XML::Node *selected = dt->currentLayer()->getRepr();
-                Inkscape::XML::Node *parent = selected->parent();
-                Inkscape::XML::Node *dup = selected->duplicate(parent->document());
-                parent->addChild(dup, selected);
-                SPObject *new_layer = dt->currentLayer()->next;
-                if (new_layer) {
-                    if (new_layer->label()) {
-                        gchar* name = g_strdup_printf(_("%s copy"), new_layer->label());
-                        dt->layer_manager->renameLayer( new_layer, name, TRUE );
-                        g_free(name);
-                    }
-                    dt->setCurrentLayer(new_layer);
-                }
-#endif
-                DocumentUndo::done(sp_desktop_document(dt), SP_VERB_LAYER_DUPLICATE,
+
+            	sp_selection_duplicate(dt, true, true);
+
+                DocumentUndo::done(dt->getDocument(), SP_VERB_LAYER_DUPLICATE,
                                    _("Duplicate layer"));
 
                 // TRANSLATORS: this means "The layer has been duplicated."
@@ -1363,7 +1387,7 @@ void LayerVerb::perform(SPAction *action, void *data)
         }
         case SP_VERB_LAYER_DELETE: {
             if ( dt->currentLayer() != dt->currentRoot() ) {
-                sp_desktop_selection(dt)->clear();
+                dt->getSelection()->clear();
                 SPObject *old_layer=dt->currentLayer();
 
                 sp_object_ref(old_layer, NULL);
@@ -1387,7 +1411,7 @@ void LayerVerb::perform(SPAction *action, void *data)
                     dt->setCurrentLayer(survivor);
                 }
 
-                DocumentUndo::done(sp_desktop_document(dt), SP_VERB_LAYER_DELETE,
+                DocumentUndo::done(dt->getDocument(), SP_VERB_LAYER_DELETE,
                                    _("Delete layer"));
 
                 // TRANSLATORS: this means "The layer has been deleted."
@@ -1402,23 +1426,23 @@ void LayerVerb::perform(SPAction *action, void *data)
                 dt->messageStack()->flash(Inkscape::ERROR_MESSAGE, _("No current layer."));
             } else {
                 dt->toggleLayerSolo( dt->currentLayer() );
-                DocumentUndo::done(sp_desktop_document(dt), SP_VERB_LAYER_SOLO, _("Toggle layer solo"));
+                DocumentUndo::done(dt->getDocument(), SP_VERB_LAYER_SOLO, _("Toggle layer solo"));
             }
             break;
         }
         case SP_VERB_LAYER_SHOW_ALL: {
             dt->toggleHideAllLayers( false );
-            DocumentUndo::maybeDone(sp_desktop_document(dt), "layer:showall", SP_VERB_LAYER_SHOW_ALL, _("Show all layers"));
+            DocumentUndo::maybeDone(dt->getDocument(), "layer:showall", SP_VERB_LAYER_SHOW_ALL, _("Show all layers"));
             break;
         }
         case SP_VERB_LAYER_HIDE_ALL: {
             dt->toggleHideAllLayers( true );
-            DocumentUndo::maybeDone(sp_desktop_document(dt), "layer:hideall", SP_VERB_LAYER_HIDE_ALL, _("Hide all layers"));
+            DocumentUndo::maybeDone(dt->getDocument(), "layer:hideall", SP_VERB_LAYER_HIDE_ALL, _("Hide all layers"));
             break;
         }
         case SP_VERB_LAYER_LOCK_ALL: {
             dt->toggleLockAllLayers( true );
-            DocumentUndo::maybeDone(sp_desktop_document(dt), "layer:lockall", SP_VERB_LAYER_LOCK_ALL, _("Lock all layers"));
+            DocumentUndo::maybeDone(dt->getDocument(), "layer:lockall", SP_VERB_LAYER_LOCK_ALL, _("Lock all layers"));
             break;
         }
         case SP_VERB_LAYER_LOCK_OTHERS: {
@@ -1426,13 +1450,13 @@ void LayerVerb::perform(SPAction *action, void *data)
                 dt->messageStack()->flash(Inkscape::ERROR_MESSAGE, _("No current layer."));
             } else {
                 dt->toggleLockOtherLayers( dt->currentLayer() );
-                DocumentUndo::done(sp_desktop_document(dt), SP_VERB_LAYER_LOCK_OTHERS, _("Lock other layers"));
+                DocumentUndo::done(dt->getDocument(), SP_VERB_LAYER_LOCK_OTHERS, _("Lock other layers"));
             }
             break;
         }
         case SP_VERB_LAYER_UNLOCK_ALL: {
             dt->toggleLockAllLayers( false );
-            DocumentUndo::maybeDone(sp_desktop_document(dt), "layer:unlockall", SP_VERB_LAYER_UNLOCK_ALL, _("Unlock all layers"));
+            DocumentUndo::maybeDone(dt->getDocument(), "layer:unlockall", SP_VERB_LAYER_UNLOCK_ALL, _("Unlock all layers"));
             break;
         }
         case SP_VERB_LAYER_TOGGLE_LOCK:
@@ -1515,12 +1539,12 @@ void ObjectVerb::perform( SPAction *action, void *data)
             break;
         case SP_VERB_OBJECT_FLIP_HORIZONTAL:
             sp_selection_scale_relative(sel, center, Geom::Scale(-1.0, 1.0));
-            DocumentUndo::done(sp_desktop_document(dt), SP_VERB_OBJECT_FLIP_HORIZONTAL,
+            DocumentUndo::done(dt->getDocument(), SP_VERB_OBJECT_FLIP_HORIZONTAL,
                                _("Flip horizontally"));
             break;
         case SP_VERB_OBJECT_FLIP_VERTICAL:
             sp_selection_scale_relative(sel, center, Geom::Scale(1.0, -1.0));
-            DocumentUndo::done(sp_desktop_document(dt), SP_VERB_OBJECT_FLIP_VERTICAL,
+            DocumentUndo::done(dt->getDocument(), SP_VERB_OBJECT_FLIP_VERTICAL,
                                _("Flip vertically"));
             break;
         case SP_VERB_OBJECT_SET_MASK:
@@ -1535,6 +1559,9 @@ void ObjectVerb::perform( SPAction *action, void *data)
         case SP_VERB_OBJECT_SET_CLIPPATH:
             sp_selection_set_mask(dt, true, false);
             break;
+        case SP_VERB_OBJECT_CREATE_CLIP_GROUP:
+            sp_selection_set_clipgroup(dt);
+            break;
         case SP_VERB_OBJECT_EDIT_CLIPPATH:
             sp_selection_edit_clip_or_mask(dt, true);
             break;
@@ -1546,6 +1573,43 @@ void ObjectVerb::perform( SPAction *action, void *data)
     }
 
 } // end of sp_verb_action_object_perform()
+
+/**
+ * Decode the verb code and take appropriate action.
+ */
+void TagVerb::perform( SPAction *action, void *data)
+{
+    SPDesktop *dt = static_cast<SPDesktop*>(sp_action_get_view(action));
+    if (!dt)
+        return;
+
+    Inkscape::XML::Document * doc;
+    Inkscape::XML::Node * repr;
+    gchar *id;
+
+    switch (reinterpret_cast<std::size_t>(data)) {
+        case SP_VERB_TAG_NEW:
+            static int tag_suffix=1;
+            id=NULL;
+            do {
+                g_free(id);
+                id = g_strdup_printf(_("Set %d"), tag_suffix++);
+            } while (dt->doc()->getObjectById(id));
+            
+            doc = dt->doc()->getReprDoc();
+            repr = doc->createElement("inkscape:tag");
+            repr->setAttribute("id", id);
+            g_free(id);
+            
+            dt->doc()->getDefs()->addChild(repr, NULL);
+            Inkscape::DocumentUndo::done(dt->doc(), SP_VERB_DIALOG_TAGS, _("Create new selection set"));
+            break;
+        default:
+            break;
+    }
+
+} // end of sp_verb_action_tag_perform()
+
 
 /**
  * Decode the verb code and take appropriate action.
@@ -1564,7 +1628,7 @@ void ContextVerb::perform(SPAction *action, void *data)
     /** \todo !!! hopefully this can go away soon and actions can look after
      * themselves
      */
-    for (vidx = SP_VERB_CONTEXT_SELECT; vidx <= SP_VERB_CONTEXT_PAINTBUCKET_PREFS; vidx++)
+    for (vidx = SP_VERB_CONTEXT_SELECT; vidx <= SP_VERB_CONTEXT_LPETOOL_PREFS; vidx++)
     {
         SPAction *tool_action= get((sp_verb_t)vidx)->get_action(action->context);
         if (tool_action) {
@@ -1631,9 +1695,13 @@ void ContextVerb::perform(SPAction *action, void *data)
         case SP_VERB_CONTEXT_CONNECTOR:
             tools_switch(dt,  TOOLS_CONNECTOR);
             break;
+
+#if HAVE_POTRACE
         case SP_VERB_CONTEXT_PAINTBUCKET:
             tools_switch(dt, TOOLS_PAINTBUCKET);
             break;
+#endif
+
         case SP_VERB_CONTEXT_ERASER:
             tools_switch(dt, TOOLS_ERASER);
             break;
@@ -1717,10 +1785,14 @@ void ContextVerb::perform(SPAction *action, void *data)
             prefs->setInt("/dialogs/preferences/page", PREFS_PAGE_TOOLS_CONNECTOR);
             dt->_dlg_mgr->showDialog("InkscapePreferences");
             break;
+
+#if HAVE_POTRACE
         case SP_VERB_CONTEXT_PAINTBUCKET_PREFS:
             prefs->setInt("/dialogs/preferences/page", PREFS_PAGE_TOOLS_PAINTBUCKET);
             dt->_dlg_mgr->showDialog("InkscapePreferences");
             break;
+#endif
+
         case SP_VERB_CONTEXT_ERASER_PREFS:
             prefs->setInt("/dialogs/preferences/page", PREFS_PAGE_TOOLS_ERASER);
             dt->_dlg_mgr->showDialog("InkscapePreferences");
@@ -1758,7 +1830,7 @@ void TextVerb::perform(SPAction *action, void */*data*/)
     g_return_if_fail(ensure_desktop_valid(action));
     SPDesktop *dt = sp_action_get_desktop(action);
 
-    SPDocument *doc = sp_desktop_document(dt);
+    SPDocument *doc = dt->getDocument();
     (void)doc;
     Inkscape::XML::Node *repr = dt->namedview->getRepr();
     (void)repr;
@@ -1773,13 +1845,13 @@ void ZoomVerb::perform(SPAction *action, void *data)
     SPDesktop *dt = sp_action_get_desktop(action);
     Inkscape::UI::Tools::ToolBase *ec = dt->event_context;
 
-    SPDocument *doc = sp_desktop_document(dt);
+    SPDocument *doc = dt->getDocument();
 
     Inkscape::XML::Node *repr = dt->namedview->getRepr();
 
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     gdouble zoom_inc =
-        prefs->getDoubleLimited( "/options/zoomincrement/value", 1.414213562, 1.01, 10 );
+        prefs->getDoubleLimited( "/options/zoomincrement/value", M_SQRT2, 1.01, 10 );
 
     double zcorr = 1.0;
     Glib::ustring abbr = prefs->getString("/options/zoomcorrection/unit");
@@ -1883,7 +1955,6 @@ void ZoomVerb::perform(SPAction *action, void *data)
         case SP_VERB_TOGGLE_GRID:
             dt->toggleGrids();
             break;
-#ifdef HAVE_GTK_WINDOW_FULLSCREEN
         case SP_VERB_FULLSCREEN:
             dt->fullscreen();
             break;
@@ -1891,7 +1962,6 @@ void ZoomVerb::perform(SPAction *action, void *data)
             dt->fullscreen();
             dt->focusMode(!dt->is_fullscreen());
             break;
-#endif // HAVE_GTK_WINDOW_FULLSCREEN
         case SP_VERB_FOCUSTOGGLE:
             dt->focusMode(!dt->is_focusMode());
             break;
@@ -1929,7 +1999,7 @@ void ZoomVerb::perform(SPAction *action, void *data)
             dt->toggleColorProfAdjust();
             break;
         case SP_VERB_VIEW_ICON_PREVIEW:
-            inkscape_dialogs_unhide();
+            INKSCAPE.dialogs_unhide();
             dt->_dlg_mgr->showDialog("IconPreviewPanel");
             break;
 
@@ -1948,7 +2018,7 @@ void DialogVerb::perform(SPAction *action, void *data)
 {
     if (reinterpret_cast<std::size_t>(data) != SP_VERB_DIALOG_TOGGLE) {
         // unhide all when opening a new dialog
-        inkscape_dialogs_unhide();
+        INKSCAPE.dialogs_unhide();
     }
     
     g_return_if_fail(ensure_desktop_valid(action));
@@ -2011,7 +2081,7 @@ void DialogVerb::perform(SPAction *action, void *data)
             dt->_dlg_mgr->showDialog("UndoHistory");
             break;
         case SP_VERB_DIALOG_TOGGLE:
-            inkscape_dialogs_toggle();
+            INKSCAPE.dialogs_toggle();
             break;
         case SP_VERB_DIALOG_CLONETILER:
             //clonetiler_dialog();
@@ -2036,6 +2106,12 @@ void DialogVerb::perform(SPAction *action, void *data)
             break;
         case SP_VERB_DIALOG_LAYERS:
             dt->_dlg_mgr->showDialog("LayersPanel");
+            break;
+        case SP_VERB_DIALOG_OBJECTS:
+            dt->_dlg_mgr->showDialog("ObjectsPanel");
+            break;
+        case SP_VERB_DIALOG_TAGS:
+            dt->_dlg_mgr->showDialog("TagsPanel");
             break;
         case SP_VERB_DIALOG_LIVE_PATH_EFFECT:
             dt->_dlg_mgr->showDialog("LivePathEffect");
@@ -2083,7 +2159,7 @@ void HelpVerb::perform(SPAction *action, void *data)
         */
 
         case SP_VERB_HELP_MEMORY:
-            inkscape_dialogs_unhide();
+            INKSCAPE.dialogs_unhide();
             dt->_dlg_mgr->showDialog("Memory");
             break;
         default:
@@ -2112,10 +2188,14 @@ void TutorialVerb::perform(SPAction *action, void *data)
             // TRANSLATORS: See "tutorial-basic.svg" comment.
             sp_help_open_tutorial(NULL, (gpointer)_("tutorial-advanced.svg"));
             break;
+
+#if HAVE_POTRACE
         case SP_VERB_TUTORIAL_TRACING:
             // TRANSLATORS: See "tutorial-basic.svg" comment.
             sp_help_open_tutorial(NULL, (gpointer)_("tutorial-tracing.svg"));
             break;
+#endif
+
         case SP_VERB_TUTORIAL_TRACING_PIXELART:
             sp_help_open_tutorial(NULL, (gpointer)_("tutorial-tracing-pixelart.svg"));
             break;
@@ -2247,7 +2327,7 @@ void FitCanvasVerb::perform(SPAction *action, void *data)
 {
     g_return_if_fail(ensure_desktop_valid(action));
     SPDesktop *dt = sp_action_get_desktop(action);
-    SPDocument *doc = sp_desktop_document(dt);
+    SPDocument *doc = dt->getDocument();
     if (!doc) return;
 
     switch (reinterpret_cast<std::size_t>(data)) {
@@ -2313,7 +2393,7 @@ void LockAndHideVerb::perform(SPAction *action, void *data)
 {
     g_return_if_fail(ensure_desktop_valid(action));
     SPDesktop *dt = sp_action_get_desktop(action);
-    SPDocument *doc = sp_desktop_document(dt);
+    SPDocument *doc = dt->getDocument();
     if (!doc) return;
 
     switch (reinterpret_cast<std::size_t>(data)) {
@@ -2379,7 +2459,7 @@ Verb *Verb::_base_verbs[] = {
     new FileVerb(SP_VERB_FILE_CLOSE_VIEW, "FileClose", N_("_Close"),
                  N_("Close this document window"), INKSCAPE_ICON("window-close")),
     new FileVerb(SP_VERB_FILE_QUIT, "FileQuit", N_("_Quit"), N_("Quit Inkscape"), INKSCAPE_ICON("application-exit")),
-    new FileVerb(SP_VERB_FILE_TEMPLATES, "FileTemplates", N_("_Templates..."),
+    new FileVerb(SP_VERB_FILE_TEMPLATES, "FileTemplates", N_("New from _Template..."),
                 N_("Create new project from template"), INKSCAPE_ICON("dialog-templates")),
 
     // Edit
@@ -2469,6 +2549,7 @@ Verb *Verb::_base_verbs[] = {
                  N_("Deselect any selected objects or nodes"), INKSCAPE_ICON("edit-select-none")),
     new EditVerb(SP_VERB_EDIT_DELETE_ALL_GUIDES, "EditRemoveAllGuides", N_("Delete All Guides"),
                  N_("Delete all the guides in the document"), NULL),
+    new EditVerb(SP_VERB_EDIT_GUIDES_TOGGLE_LOCK, "EditGuidesToggleLock", N_("Lock All Guides"), N_("Toggle lock of all guides in the document"), NULL),
     new EditVerb(SP_VERB_EDIT_GUIDES_AROUND_PAGE, "EditGuidesAroundPage", N_("Create _Guides Around the Page"),
                  N_("Create four guides aligned with the page borders"), NULL),
     new EditVerb(SP_VERB_EDIT_NEXT_PATHEFFECT_PARAMETER, "EditNextPathEffectParameter", N_("Next path effect parameter"),
@@ -2483,10 +2564,20 @@ Verb *Verb::_base_verbs[] = {
                       N_("Raise selection one step"), INKSCAPE_ICON("selection-raise")),
     new SelectionVerb(SP_VERB_SELECTION_LOWER, "SelectionLower", N_("_Lower"),
                       N_("Lower selection one step"), INKSCAPE_ICON("selection-lower")),
+
+
+    new SelectionVerb(SP_VERB_SELECTION_STACK_UP, "SelectionStackUp", N_("_Stack up"),
+                      N_("Stack selection one step up"), INKSCAPE_ICON("layer-lower")),
+    new SelectionVerb(SP_VERB_SELECTION_STACK_DOWN, "SelectionStackDown", N_("_Stack down"),
+                      N_("Stack selection one step down"), INKSCAPE_ICON("layer-raise")),
+
+
     new SelectionVerb(SP_VERB_SELECTION_GROUP, "SelectionGroup", N_("_Group"),
                       N_("Group selected objects"), INKSCAPE_ICON("object-group")),
     new SelectionVerb(SP_VERB_SELECTION_UNGROUP, "SelectionUnGroup", N_("_Ungroup"),
                       N_("Ungroup selected groups"), INKSCAPE_ICON("object-ungroup")),
+    new SelectionVerb(SP_VERB_SELECTION_UNGROUP_POP_SELECTION, "SelectionUnGroupPopSelection", N_("_Pop selected objects out of group"),
+                      N_("Pop selected objects out of group"), INKSCAPE_ICON("object-ungroup-pop-selection")),
 
     new SelectionVerb(SP_VERB_SELECTION_TEXTTOPATH, "SelectionTextToPath", N_("_Put on Path"),
                       N_("Put text on path"), INKSCAPE_ICON("text-put-on-path")),
@@ -2545,9 +2636,13 @@ Verb *Verb::_base_verbs[] = {
                       N_("Simplify selected paths (remove extra nodes)"), INKSCAPE_ICON("path-simplify")),
     new SelectionVerb(SP_VERB_SELECTION_REVERSE, "SelectionReverse", N_("_Reverse"),
                       N_("Reverse the direction of selected paths (useful for flipping markers)"), INKSCAPE_ICON("path-reverse")),
+
+#if HAVE_POTRACE
     // TRANSLATORS: "to trace" means "to convert a bitmap to vector graphics" (to vectorize)
     new SelectionVerb(SP_VERB_SELECTION_TRACE, "SelectionTrace", N_("_Trace Bitmap..."),
                       N_("Create one or more paths from a bitmap by tracing it"), INKSCAPE_ICON("bitmap-trace")),
+#endif
+
     new SelectionVerb(SP_VERB_SELECTION_PIXEL_ART, "SelectionPixelArt", N_("Trace Pixel Art..."),
                       N_("Create paths using Kopf-Lischinski algorithm to vectorize pixel art"), INKSCAPE_ICON("pixelart-trace")),
     new SelectionVerb(SP_VERB_SELECTION_CREATE_BITMAP, "SelectionCreateBitmap", N_("Make a _Bitmap Copy"),
@@ -2637,11 +2732,15 @@ Verb *Verb::_base_verbs[] = {
                  N_("Remove mask from selection"), NULL),
     new ObjectVerb(SP_VERB_OBJECT_SET_CLIPPATH, "ObjectSetClipPath", N_("_Set"),
                  N_("Apply clipping path to selection (using the topmost object as clipping path)"), NULL),
+    new ObjectVerb(SP_VERB_OBJECT_CREATE_CLIP_GROUP, "ObjectCreateClipGroup", N_("Create Cl_ip Group"),
+                 N_("Creates a clip group using the selected objects as a base"), NULL),
     new ObjectVerb(SP_VERB_OBJECT_EDIT_CLIPPATH, "ObjectEditClipPath", N_("_Edit"),
                  N_("Edit clipping path"), INKSCAPE_ICON("path-clip-edit")),
     new ObjectVerb(SP_VERB_OBJECT_UNSET_CLIPPATH, "ObjectUnSetClipPath", N_("_Release"),
                  N_("Remove clipping path from selection"), NULL),
-
+    // Tag
+    new TagVerb(SP_VERB_TAG_NEW, "TagNew", N_("_New"),
+                 N_("Create new selection set"), NULL),
     // Tools
     new ContextVerb(SP_VERB_CONTEXT_SELECT, "ToolSelector", NC_("ContextVerb", "Select"),
                     N_("Select and transform objects"), INKSCAPE_ICON("tool-pointer")),
@@ -2681,8 +2780,12 @@ Verb *Verb::_base_verbs[] = {
                     N_("Pick colors from image"), INKSCAPE_ICON("color-picker")),
     new ContextVerb(SP_VERB_CONTEXT_CONNECTOR, "ToolConnector", NC_("ContextVerb", "Connector"),
                     N_("Create diagram connectors"), INKSCAPE_ICON("draw-connector")),
+
+#if HAVE_POTRACE
     new ContextVerb(SP_VERB_CONTEXT_PAINTBUCKET, "ToolPaintBucket", NC_("ContextVerb", "Paint Bucket"),
                     N_("Fill bounded areas"), INKSCAPE_ICON("color-fill")),
+#endif
+
     new ContextVerb(SP_VERB_CONTEXT_LPE, "ToolLPE", NC_("ContextVerb", "LPE Edit"),
                     N_("Edit Path Effect parameters"), NULL),
     new ContextVerb(SP_VERB_CONTEXT_ERASER, "ToolEraser", NC_("ContextVerb", "Eraser"),
@@ -2728,8 +2831,12 @@ Verb *Verb::_base_verbs[] = {
                     N_("Open Preferences for the Dropper tool"), NULL),
     new ContextVerb(SP_VERB_CONTEXT_CONNECTOR_PREFS, "ConnectorPrefs", N_("Connector Preferences"),
                     N_("Open Preferences for the Connector tool"), NULL),
+
+#if HAVE_POTRACE
     new ContextVerb(SP_VERB_CONTEXT_PAINTBUCKET_PREFS, "PaintBucketPrefs", N_("Paint Bucket Preferences"),
                     N_("Open Preferences for the Paint Bucket tool"), NULL),
+#endif
+
     new ContextVerb(SP_VERB_CONTEXT_ERASER_PREFS, "EraserPrefs", N_("Eraser Preferences"),
                     N_("Open Preferences for the Eraser tool"), NULL),
     new ContextVerb(SP_VERB_CONTEXT_LPETOOL_PREFS, "LPEToolPrefs", N_("LPE Tool Preferences"),
@@ -2758,12 +2865,10 @@ Verb *Verb::_base_verbs[] = {
                  INKSCAPE_ICON("zoom-half-size")),
     new ZoomVerb(SP_VERB_ZOOM_2_1, "Zoom2:1", N_("_Zoom 2:1"), N_("Zoom to 2:1"),
                  INKSCAPE_ICON("zoom-double-size")),
-#ifdef HAVE_GTK_WINDOW_FULLSCREEN
     new ZoomVerb(SP_VERB_FULLSCREEN, "FullScreen", N_("_Fullscreen"), N_("Stretch this document window to full screen"),
                  INKSCAPE_ICON("view-fullscreen")),
     new ZoomVerb(SP_VERB_FULLSCREENFOCUS, "FullScreenFocus", N_("Fullscreen & Focus Mode"), N_("Stretch this document window to full screen"),
                  INKSCAPE_ICON("view-fullscreen")),
-#endif // HAVE_GTK_WINDOW_FULLSCREEN
     new ZoomVerb(SP_VERB_FOCUSTOGGLE, "FocusToggle", N_("Toggle _Focus Mode"), N_("Remove excess toolbars to focus on drawing"),
                  NULL),
     new ZoomVerb(SP_VERB_VIEW_NEW, "ViewNew", N_("Duplic_ate Window"), N_("Open a new window with the same document"),
@@ -2804,7 +2909,7 @@ Verb *Verb::_base_verbs[] = {
 
     // Dialogs
     new DialogVerb(SP_VERB_DIALOG_DISPLAY, "DialogPreferences", N_("P_references..."),
-                   N_("Edit global Inkscape preferences"), INKSCAPE_ICON("preferences-system")),
+                   N_("Edit global Inkscape preferences"), INKSCAPE_ICON("gtk-preferences")),
     new DialogVerb(SP_VERB_DIALOG_NAMEDVIEW, "DialogDocumentProperties", N_("_Document Properties..."),
                    N_("Edit properties of this document (to be saved with the document)"), INKSCAPE_ICON("document-properties")),
     new DialogVerb(SP_VERB_DIALOG_METADATA, "DialogMetadata", N_("Document _Metadata..."),
@@ -2854,8 +2959,12 @@ Verb *Verb::_base_verbs[] = {
                    N_("Query information about extensions"), NULL),
     new DialogVerb(SP_VERB_DIALOG_LAYERS, "DialogLayers", N_("Layer_s..."),
                    N_("View Layers"), INKSCAPE_ICON("dialog-layers")),
+    new DialogVerb(SP_VERB_DIALOG_OBJECTS, "DialogObjects", N_("Object_s..."),
+                   N_("View Objects"), INKSCAPE_ICON("dialog-layers")),
+    new DialogVerb(SP_VERB_DIALOG_TAGS, "DialogTags", N_("Selection se_ts..."),
+                   N_("View Tags"), INKSCAPE_ICON("edit-select-all-layers")),
     new DialogVerb(SP_VERB_DIALOG_LIVE_PATH_EFFECT, "DialogLivePathEffect", N_("Path E_ffects ..."),
-                   N_("Manage, edit, and apply path effects"), NULL),
+                   N_("Manage, edit, and apply path effects"), INKSCAPE_ICON("dialog-path-effects")),
     new DialogVerb(SP_VERB_DIALOG_FILTER_EFFECTS, "DialogFilterEffects", N_("Filter _Editor..."),
                    N_("Manage, edit, and apply SVG filters"), INKSCAPE_ICON("dialog-filters")),
     new DialogVerb(SP_VERB_DIALOG_SVG_FONTS, "DialogSVGFonts", N_("SVG Font Editor..."),
@@ -2881,9 +2990,13 @@ Verb *Verb::_base_verbs[] = {
                      N_("Using shape tools to create and edit shapes"), NULL),
     new TutorialVerb(SP_VERB_TUTORIAL_ADVANCED, "TutorialsAdvanced", N_("Inkscape: _Advanced"),
                      N_("Advanced Inkscape topics"), NULL/*"tutorial_advanced"*/),
+
+#if HAVE_POTRACE
     // TRANSLATORS: "to trace" means "to convert a bitmap to vector graphics" (to vectorize)
     new TutorialVerb(SP_VERB_TUTORIAL_TRACING, "TutorialsTracing", N_("Inkscape: T_racing"),
                      N_("Using bitmap tracing"), NULL/*"tutorial_tracing"*/),
+#endif
+
     new TutorialVerb(SP_VERB_TUTORIAL_TRACING_PIXELART, "TutorialsTracingPixelArt", N_("Inkscape: Tracing Pixel Art"),
                      N_("Using Trace Pixel Art dialog"), NULL),
     new TutorialVerb(SP_VERB_TUTORIAL_CALLIGRAPHY, "TutorialsCalligraphy", N_("Inkscape: _Calligraphy"),
@@ -2906,7 +3019,7 @@ Verb *Verb::_base_verbs[] = {
                        N_("Fit the page to the current selection"), NULL),
     new FitCanvasVerb(SP_VERB_FIT_CANVAS_TO_DRAWING, "FitCanvasToDrawing", N_("Fit Page to Drawing"),
                        N_("Fit the page to the drawing"), NULL),
-    new FitCanvasVerb(SP_VERB_FIT_CANVAS_TO_SELECTION_OR_DRAWING, "FitCanvasToSelectionOrDrawing", N_("Fit Page to Selection or Drawing"),
+    new FitCanvasVerb(SP_VERB_FIT_CANVAS_TO_SELECTION_OR_DRAWING, "FitCanvasToSelectionOrDrawing", N_("_Resize Page to Selection"),
                        N_("Fit the page to the current selection or the drawing if there is no selection"), NULL),
     // LockAndHide
     new LockAndHideVerb(SP_VERB_UNLOCK_ALL, "UnlockAll", N_("Unlock All"),

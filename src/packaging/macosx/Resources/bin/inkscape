@@ -43,7 +43,7 @@ if [ -z "$INK_PATH_ORIG" ]; then
 	#	Fink
 	#	MacPorts (former DarwinPorts)
 	#	LaTeX distribution for Mac OS X
-	PATH_OTHER="/usr/texbin:/opt/local/bin:/sw/bin/:/usr/local/bin"
+	PATH_OTHER="/Library/TeX/texbin:/usr/texbin:/opt/local/bin:/sw/bin/:/usr/local/bin"
 
 	# Put /usr/bin at beginning of path so we make sure we use Apple's python 
 	# over one that may be installed be Macports, Fink or some other means.
@@ -95,6 +95,10 @@ export XDG_DATA_DIRS="$TOP/share"
 export ASPELL_CONF="prefix $TOP;"
 export POPPLER_DATADIR="$TOP/share/poppler"
 
+# Using fontconfig backend for slightly crisper UI text rendering
+export PANGOCAIRO_BACKEND="fontconfig"
+#export PANGOCAIRO_BACKEND="coretext"
+
 # no DBUS for now
 unset DBUS_LAUNCHD_SESSION_BUS_SOCKET
 unset DBUS_SESSION_BUS_ADDRESS
@@ -140,7 +144,7 @@ then
 	export LANG="en_US.UTF-8"
 else
 	tmpLANG="`grep \"\`echo $LANGSTR\`_\" /usr/share/locale/locale.alias | \
-		tail -n1 | sed 's/\./ /' | awk '{print $2}'`"
+		tail -n1 | awk '{print $2}' | sed 's/\./ /' | awk '{print $1}'`"
 	if [ "x$tmpLANG" == "x" ]
 	then
 		# override broken script
@@ -167,6 +171,7 @@ esac
 unset INK_DEBUG # ignore for recursive calls
 
 if [ "x$INK_DEBUG_SHELL" != "x" ]; then
+	unset INK_DEBUG_SHELL  # ignore for recursive calls
 	exec bash
 else
 	$EXEC "$CWD/inkscape-bin" "$@"

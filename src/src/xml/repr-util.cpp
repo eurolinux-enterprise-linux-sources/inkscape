@@ -32,6 +32,7 @@
 #include <2geom/point.h>
 #include "svg/stringstream.h"
 #include "svg/css-ostringstream.h"
+#include "svg/svg-length.h"
 
 #include "xml/repr.h"
 #include "xml/repr-sorting.h"
@@ -309,6 +310,11 @@ int sp_repr_compare_position(Inkscape::XML::Node const *first, Inkscape::XML::No
        pjrm */
 }
 
+bool sp_repr_compare_position_bool(Inkscape::XML::Node const *first, Inkscape::XML::Node const *second){
+    return sp_repr_compare_position(first, second)<0;
+}
+
+
 /**
  * Find an element node using an unique attribute.
  *
@@ -363,6 +369,34 @@ Inkscape::XML::Node *sp_repr_lookup_name( Inkscape::XML::Node *repr, gchar const
 {
     Inkscape::XML::Node const *found = sp_repr_lookup_name( const_cast<Inkscape::XML::Node const *>(repr), name, maxdepth );
     return const_cast<Inkscape::XML::Node *>(found);
+}
+
+std::vector<Inkscape::XML::Node const *> sp_repr_lookup_name_many( Inkscape::XML::Node const *repr, gchar const *name, gint maxdepth )
+{
+    std::vector<Inkscape::XML::Node const *> nodes;
+    std::vector<Inkscape::XML::Node const *> found;
+    g_return_val_if_fail(repr != NULL, nodes);
+    g_return_val_if_fail(name != NULL, nodes);
+
+    GQuark const quark = g_quark_from_string(name);
+
+    if ( (GQuark)repr->code() == quark ) {
+        nodes.push_back(repr);
+    }
+
+    if ( maxdepth != 0 ) {
+        // maxdepth == -1 means unlimited
+        if ( maxdepth == -1 ) {
+            maxdepth = 0;
+        }
+
+        for (Inkscape::XML::Node const *child = repr->firstChild() ; child; child = child->next() ) {
+            found = sp_repr_lookup_name_many( child, name, maxdepth - 1);
+            nodes.insert(nodes.end(), found.begin(), found.end());
+        }
+    }
+
+    return nodes;
 }
 
 /**
@@ -494,11 +528,26 @@ unsigned int sp_repr_set_svg_double(Inkscape::XML::Node *repr, gchar const *key,
 {
     g_return_val_if_fail(repr != NULL, FALSE);
     g_return_val_if_fail(key != NULL, FALSE);
+    g_return_val_if_fail(val==val, FALSE);//tests for nan
 
     Inkscape::SVGOStringStream os;
     os << val;
 
     repr->setAttribute(key, os.str().c_str());
+    return true;
+}
+
+/**
+ * For attributes where an exponent is allowed.
+ *
+ * Not suitable for property attributes.
+ */
+unsigned int sp_repr_set_svg_length(Inkscape::XML::Node *repr, gchar const *key, SVGLength &val)
+{
+    g_return_val_if_fail(repr != NULL, FALSE);
+    g_return_val_if_fail(key != NULL, FALSE);
+
+    repr->setAttribute(key, val.write());
     return true;
 }
 

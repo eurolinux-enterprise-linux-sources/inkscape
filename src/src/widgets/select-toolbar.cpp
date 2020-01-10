@@ -21,15 +21,15 @@
 #include "ui/widget/spinbutton.h"
 #include <glibmm/i18n.h>
 #include "select-toolbar.h"
-#include "desktop-handles.h"
+
 #include "desktop.h"
 #include "display/sp-canvas.h"
 #include "document-undo.h"
 #include "document.h"
-#include "ege-adjustment-action.h"
+#include "widgets/ege-adjustment-action.h"
 #include "helper/action-context.h"
 #include "helper/action.h"
-#include "ink-action.h"
+#include "widgets/ink-action.h"
 #include "inkscape.h"
 #include "message-stack.h"
 #include "preferences.h"
@@ -73,6 +73,7 @@ sp_selection_layout_widget_update(SPWidget *spw, Inkscape::Selection *sel)
         if ( bbox ) {
             UnitTracker *tracker = reinterpret_cast<UnitTracker*>(g_object_get_data(G_OBJECT(spw), "tracker"));
             Unit const *unit = tracker->getActiveUnit();
+            g_return_if_fail(unit != NULL);
 
             struct { char const *key; double val; } const keyval[] = {
                 { "X", bbox->min()[X] },
@@ -105,7 +106,7 @@ static void
 sp_selection_layout_widget_modify_selection(SPWidget *spw, Inkscape::Selection *selection, guint flags, gpointer data)
 {
     SPDesktop *desktop = static_cast<SPDesktop *>(data);
-    if ((sp_desktop_selection(desktop) == selection) // only respond to changes in our desktop
+    if ((desktop->getSelection() == selection) // only respond to changes in our desktop
         && (flags & (SP_OBJECT_MODIFIED_FLAG        |
                      SP_OBJECT_PARENT_MODIFIED_FLAG |
                      SP_OBJECT_CHILD_MODIFIED_FLAG   )))
@@ -118,7 +119,7 @@ static void
 sp_selection_layout_widget_change_selection(SPWidget *spw, Inkscape::Selection *selection, gpointer data)
 {
     SPDesktop *desktop = static_cast<SPDesktop *>(data);
-    if (sp_desktop_selection(desktop) == selection) { // only respond to changes in our desktop
+    if (desktop->getSelection() == selection) { // only respond to changes in our desktop
         gboolean setActive = (selection && !selection->isEmpty());
         std::vector<GtkAction*> *contextActions = reinterpret_cast<std::vector<GtkAction*> *>(g_object_get_data(G_OBJECT(spw), "contextActions"));
         if ( contextActions ) {
@@ -135,13 +136,13 @@ sp_selection_layout_widget_change_selection(SPWidget *spw, Inkscape::Selection *
 }
 
 static void
-sp_object_layout_any_value_changed(GtkAdjustment *adj, SPWidget *spw)
+sp_object_layout_any_value_changed(GtkAdjustment *adj, GObject *tbl)
 {
-    if (g_object_get_data(G_OBJECT(spw), "update")) {
+    if (g_object_get_data(tbl, "update")) {
         return;
     }
 
-    UnitTracker *tracker = reinterpret_cast<UnitTracker*>(g_object_get_data(G_OBJECT(spw), "tracker"));
+    UnitTracker *tracker = reinterpret_cast<UnitTracker*>(g_object_get_data(tbl, "tracker"));
     if ( !tracker || tracker->isUpdating() ) {
         /*
          * When only units are being changed, don't treat changes
@@ -149,11 +150,11 @@ sp_object_layout_any_value_changed(GtkAdjustment *adj, SPWidget *spw)
          */
         return;
     }
-    g_object_set_data(G_OBJECT(spw), "update", GINT_TO_POINTER(TRUE));
+    g_object_set_data(tbl, "update", GINT_TO_POINTER(TRUE));
 
     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
-    SPDocument *document = sp_desktop_document(desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
+    SPDocument *document = desktop->getDocument();
 
     document->ensureUpToDate ();
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
@@ -167,7 +168,7 @@ sp_object_layout_any_value_changed(GtkAdjustment *adj, SPWidget *spw)
     Geom::OptRect bbox_user = selection->bounds(bbox_type);
 
     if ( !bbox_user ) {
-        g_object_set_data(G_OBJECT(spw), "update", GINT_TO_POINTER(FALSE));
+        g_object_set_data(tbl, "update", GINT_TO_POINTER(FALSE));
         return;
     }
 
@@ -178,11 +179,12 @@ sp_object_layout_any_value_changed(GtkAdjustment *adj, SPWidget *spw)
     gdouble xrel = 0;
     gdouble yrel = 0;
     Unit const *unit = tracker->getActiveUnit();
+    g_return_if_fail(unit != NULL);
 
-    GtkAdjustment* a_x = GTK_ADJUSTMENT( g_object_get_data( G_OBJECT(spw), "X" ) );
-    GtkAdjustment* a_y = GTK_ADJUSTMENT( g_object_get_data( G_OBJECT(spw), "Y" ) );
-    GtkAdjustment* a_w = GTK_ADJUSTMENT( g_object_get_data( G_OBJECT(spw), "width" ) );
-    GtkAdjustment* a_h = GTK_ADJUSTMENT( g_object_get_data( G_OBJECT(spw), "height" ) );
+    GtkAdjustment* a_x = GTK_ADJUSTMENT( g_object_get_data( tbl, "X" ) );
+    GtkAdjustment* a_y = GTK_ADJUSTMENT( g_object_get_data( tbl, "Y" ) );
+    GtkAdjustment* a_w = GTK_ADJUSTMENT( g_object_get_data( tbl, "width" ) );
+    GtkAdjustment* a_h = GTK_ADJUSTMENT( g_object_get_data( tbl, "height" ) );
 
     if (unit->type == Inkscape::Util::UNIT_TYPE_LINEAR) {
         x0 = Quantity::convert(gtk_adjustment_get_value(a_x), unit, "px");
@@ -203,7 +205,7 @@ sp_object_layout_any_value_changed(GtkAdjustment *adj, SPWidget *spw)
     }
 
     // Keep proportions if lock is on
-    GtkToggleAction *lock = GTK_TOGGLE_ACTION( g_object_get_data(G_OBJECT(spw), "lock") );
+    GtkToggleAction *lock = GTK_TOGGLE_ACTION( g_object_get_data(tbl, "lock") );
     if ( gtk_toggle_action_get_active(lock) ) {
         if (adj == a_h) {
             x1 = x0 + yrel * bbox_user->dimensions()[Geom::X];
@@ -239,7 +241,7 @@ sp_object_layout_any_value_changed(GtkAdjustment *adj, SPWidget *spw)
     if (actionkey != NULL) {
 
         // FIXME: fix for GTK breakage, see comment in SelectedStyle::on_opacity_changed
-        sp_desktop_canvas(desktop)->forceFullRedrawAfterInterruptions(0);
+        desktop->getCanvas()->forceFullRedrawAfterInterruptions(0);
 
         bool transform_stroke = prefs->getBool("/options/transform/stroke", true);
         bool preserve = prefs->getBool("/options/preservetransform/value", false);
@@ -260,71 +262,10 @@ sp_object_layout_any_value_changed(GtkAdjustment *adj, SPWidget *spw)
                                 _("Transform by toolbar"));
 
         // resume interruptibility
-        sp_desktop_canvas(desktop)->endForcedFullRedraws();
+        desktop->getCanvas()->endForcedFullRedraws();
     }
 
-    g_object_set_data(G_OBJECT(spw), "update", GINT_TO_POINTER(FALSE));
-}
-
-static GtkWidget* createCustomSlider( GtkAdjustment *adjustment, gdouble climbRate, guint digits, Inkscape::UI::Widget::UnitTracker *unit_tracker )
-{
-#if WITH_GTKMM_3_0
-    Glib::RefPtr<Gtk::Adjustment> adj = Glib::wrap(adjustment, true);
-    Inkscape::UI::Widget::SpinButton *inkSpinner = new Inkscape::UI::Widget::SpinButton(adj, climbRate, digits);
-#else
-    Inkscape::UI::Widget::SpinButton *inkSpinner = new Inkscape::UI::Widget::SpinButton(*Glib::wrap(adjustment, true), climbRate, digits);
-#endif
-    inkSpinner->addUnitTracker(unit_tracker);
-    inkSpinner = Gtk::manage( inkSpinner );
-    GtkWidget *widget = GTK_WIDGET( inkSpinner->gobj() );
-    return widget;
-}
-
-// TODO create_adjustment_action appears to be a rogue tile copy from toolbox.cpp. Resolve it to be unified:
-
-static EgeAdjustmentAction * create_adjustment_action( gchar const *name,
-                                                       gchar const *label,
-                                                       gchar const *shortLabel,
-                                                       gchar const *data,
-                                                       gdouble lower,
-                                                       GtkWidget* focusTarget,
-                                                       UnitTracker* tracker,
-                                                       GtkWidget* spw,
-                                                       gchar const *tooltip,
-                                                       gboolean altx )
-{
-    static bool init = false;
-    if ( !init ) {
-        init = true;
-        ege_adjustment_action_set_compact_tool_factory( createCustomSlider );
-    }
-
-    GtkAdjustment* adj = GTK_ADJUSTMENT( gtk_adjustment_new( 0.0, lower, 1e6, SPIN_STEP, SPIN_PAGE_STEP, 0 ) );
-    if (tracker) {
-        tracker->addAdjustment(adj);
-    }
-    if ( spw ) {
-        g_object_set_data( G_OBJECT(spw), data, adj );
-    }
-
-    EgeAdjustmentAction* act = ege_adjustment_action_new( adj, name, Q_(label), tooltip, 0, SPIN_STEP, 3, tracker );
-    if ( shortLabel ) {
-        g_object_set( act, "short_label", Q_(shortLabel), NULL );
-    }
-
-    g_signal_connect( G_OBJECT(adj), "value_changed", G_CALLBACK(sp_object_layout_any_value_changed), spw );
-    if ( focusTarget ) {
-        ege_adjustment_action_set_focuswidget( act, focusTarget );
-    }
-
-    if ( altx ) { // this spinbutton will be activated by alt-x
-        g_object_set( G_OBJECT(act), "self-id", "altx", NULL );
-    }
-
-    // Using a cast just to make sure we pass in the right kind of function pointer
-    g_object_set( G_OBJECT(act), "tool-post", static_cast<EgeWidgetFixup>(sp_set_font_size_smaller), NULL );
-
-    return act;
+    g_object_set_data(tbl, "update", GINT_TO_POINTER(FALSE));
 }
 
 // toggle button callbacks and updaters
@@ -468,10 +409,10 @@ void sp_select_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GOb
     contextActions->push_back( act );
 
     // Create the parent widget for x y w h tracker.
-    GtkWidget *spw = sp_widget_new_global(INKSCAPE);
+    GtkWidget *spw = sp_widget_new_global();
 
     // Remember the desktop's canvas widget, to be used for defocusing.
-    g_object_set_data(G_OBJECT(spw), "dtw", sp_desktop_canvas(desktop));
+    g_object_set_data(G_OBJECT(spw), "dtw", desktop->getCanvas());
 
     // The vb frame holds all other widgets and is used to set sensitivity depending on selection state.
 #if GTK_CHECK_VERSION(3,0,0)
@@ -486,7 +427,7 @@ void sp_select_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GOb
     // Create the units menu.
     UnitTracker* tracker = new UnitTracker(Inkscape::Util::UNIT_TYPE_LINEAR);
     tracker->addUnit(unit_table.getUnit("%"));
-    tracker->setActiveUnit( sp_desktop_namedview(desktop)->display_units );
+    tracker->setActiveUnit( desktop->getNamedView()->display_units );
 
     g_object_set_data( G_OBJECT(spw), "tracker", tracker );
     g_signal_connect( G_OBJECT(spw), "destroy", G_CALLBACK(destroy_tracker), spw );
@@ -495,21 +436,60 @@ void sp_select_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GOb
 
     // four spinbuttons
 
-    eact = create_adjustment_action( "XAction", C_("Select toolbar", "X position"), C_("Select toolbar", "X:"), "X",
-                                    -1e6, GTK_WIDGET(desktop->canvas), tracker, spw,
-                                     _("Horizontal coordinate of selection"), TRUE );
+    eact = create_adjustment_action(
+            "XAction",                            /* name */ 
+            C_("Select toolbar", "X position"),   /* label */ 
+            C_("Select toolbar", "X:"),           /* shortLabel */ 
+            C_("Select toolbar", "Horizontal coordinate of selection"), /* tooltip */ 
+            "/tools/select/X",                    /* path */ 
+            0.0,                                  /* def(default) */ 
+            GTK_WIDGET(desktop->canvas),          /* focusTarget */ 
+            G_OBJECT(spw),                        /* dataKludge */ 
+            TRUE, "altx",                         /* altx, altx_mark */ 
+            -1e6, 1e6, SPIN_STEP, SPIN_PAGE_STEP, /* lower, uppper, step, page */ 
+            0, 0, 0,                              /* descrLabels, descrValues, descrCount */ 
+            sp_object_layout_any_value_changed,   /* callback */ 
+            tracker,                              /* unit_tracker */ 
+            SPIN_STEP, 3, 1);                     /* climb, digits, factor */
+
     gtk_action_group_add_action( selectionActions, GTK_ACTION(eact) );
     contextActions->push_back( GTK_ACTION(eact) );
 
-    eact = create_adjustment_action( "YAction", C_("Select toolbar", "Y position"), C_("Select toolbar", "Y:"), "Y",
-                                     -1e6, GTK_WIDGET(desktop->canvas), tracker, spw,
-                                     _("Vertical coordinate of selection"), FALSE );
+    eact = create_adjustment_action(
+            "YAction",                            /* name */
+            C_("Select toolbar", "Y position"),   /* label */
+            C_("Select toolbar", "Y:"),           /* shortLabel */
+            C_("Select toolbar", "Vertical coordinate of selection"), /* tooltip */
+            "/tools/select/Y",                    /* path */
+            0.0,                                  /* def(default) */
+            GTK_WIDGET(desktop->canvas),          /* focusTarget */
+            G_OBJECT(spw),                        /* dataKludge */
+            TRUE, "altx",                         /* altx, altx_mark */
+            -1e6, 1e6, SPIN_STEP, SPIN_PAGE_STEP, /* lower, uppper, step, page */
+            0, 0, 0,                              /* descrLabels, descrValues, descrCount */
+            sp_object_layout_any_value_changed,   /* callback */
+            tracker,                              /* unit_tracker */
+            SPIN_STEP, 3, 1);                     /* climb, digits, factor */              
+
     gtk_action_group_add_action( selectionActions, GTK_ACTION(eact) );
     contextActions->push_back( GTK_ACTION(eact) );
 
-    eact = create_adjustment_action( "WidthAction", C_("Select toolbar", "Width"), C_("Select toolbar", "W:"), "width",
-                                     0.0, GTK_WIDGET(desktop->canvas), tracker, spw,
-                                     _("Width of selection"), FALSE );
+    eact = create_adjustment_action(
+            "WidthAction",                        /* name */
+            C_("Select toolbar", "Width"),        /* label */
+            C_("Select toolbar", "W:"),           /* shortLabel */
+            C_("Select toolbar", "Width of selection"), /* tooltip */
+            "/tools/select/width",                /* path */                      
+            0.0,                                  /* def(default) */
+            GTK_WIDGET(desktop->canvas),          /* focusTarget */
+            G_OBJECT(spw),                        /* dataKludge */
+            TRUE, "altx",                         /* altx, altx_mark */
+            0.0, 1e6, SPIN_STEP, SPIN_PAGE_STEP,  /* lower, uppper, step, page */
+            0, 0, 0,                              /* descrLabels, descrValues, descrCount */
+            sp_object_layout_any_value_changed,   /* callback */
+            tracker,                              /* unit_tracker */
+            SPIN_STEP, 3, 1);                     /* climb, digits, factor */
+
     gtk_action_group_add_action( selectionActions, GTK_ACTION(eact) );
     contextActions->push_back( GTK_ACTION(eact) );
 
@@ -526,9 +506,23 @@ void sp_select_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GOb
     gtk_action_group_add_action( mainActions, GTK_ACTION(itact) );
     }
 
-    eact = create_adjustment_action( "HeightAction", C_("Select toolbar", "Height"), C_("Select toolbar", "H:"), "height",
-                                     0.0, GTK_WIDGET(desktop->canvas), tracker, spw,
-                                     _("Height of selection"), FALSE );
+    eact = create_adjustment_action(
+            "HeightAction",                       /* name */
+            C_("Select toolbar", "Height"),       /* label */
+            C_("Select toolbar", "H:"),           /* shortLabel */
+            C_("Select toolbar", "Height of selection"), /* tooltip */
+            "/tools/select/height",               /* path */                      
+            0.0,                                  /* def(default) */
+            GTK_WIDGET(desktop->canvas),          /* focusTarget */
+            G_OBJECT(spw),                        /* dataKludge */
+            TRUE, "altx",                         /* altx, altx_mark */
+            0.0, 1e6, SPIN_STEP, SPIN_PAGE_STEP,  /* lower, uppper, step, page */
+            0, 0, 0,                              /* descrLabels, descrValues, descrCount */
+            sp_object_layout_any_value_changed,   /* callback */
+            tracker,                              /* unit_tracker */
+            SPIN_STEP, 3, 1);                     /* climb, digits, factor */
+
+
     gtk_action_group_add_action( selectionActions, GTK_ACTION(eact) );
     contextActions->push_back( GTK_ACTION(eact) );
 
@@ -544,7 +538,7 @@ void sp_select_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GOb
     g_signal_connect(G_OBJECT(spw), "change_selection", G_CALLBACK(sp_selection_layout_widget_change_selection), desktop);
 
     // Update now.
-    sp_selection_layout_widget_update(SP_WIDGET(spw), SP_ACTIVE_DESKTOP ? sp_desktop_selection(SP_ACTIVE_DESKTOP) : NULL);
+    sp_selection_layout_widget_update(SP_WIDGET(spw), SP_ACTIVE_DESKTOP ? SP_ACTIVE_DESKTOP->getSelection() : NULL);
 
     for ( std::vector<GtkAction*>::iterator iter = contextActions->begin();
           iter != contextActions->end(); ++iter) {

@@ -61,13 +61,9 @@ using std::strstr;
 # define debug(f, a...) /* */
 #endif
 
-namespace {
-    SPObject* createObject() {
-        return new SPObject();
-    }
-
-    bool gridRegistered = SPFactory::instance().registerObject("inkscape:grid", createObject);
-}
+// Define to enable indented tracing of SPObject.
+//#define OBJECT_TRACE
+unsigned SPObject::indent_level = 0;
 
 guint update_in_progress = 0; // guard against update-during-update
 
@@ -79,13 +75,17 @@ Inkscape::XML::NodeEventVector object_event_vector = {
     SPObject::repr_order_changed
 };
 
-// A friend class used to set internal members on SPObject so as to not expose settors in SPObject's public API
+/**
+ * A friend class used to set internal members on SPObject so as to not expose settors in SPObject's public API
+ */
 class SPObjectImpl
 {
 public:
 
 /**
  * Null's the id member of an SPObject without attempting to free prior contents.
+ *
+ * @param[inout] obj Pointer to the object which's id shall be nulled.
  */
     static void setIdNull( SPObject* obj ) {
         if (obj) {
@@ -95,6 +95,9 @@ public:
 
 /**
  * Sets the id member of an object, freeing any prior content.
+ *
+ * @param[inout] obj Pointer to the object which's id shall be set.
+ * @param[in] id New id
  */
     static void setId( SPObject* obj, gchar const* id ) {
         if (obj && (id != obj->id) ) {
@@ -109,13 +112,13 @@ public:
     }
 };
 
-static gchar *sp_object_get_unique_id(SPObject    *object,
-                                      gchar const *defid);
-
+/**
+ * Constructor, sets all attributes to default values.
+ */
 SPObject::SPObject()
-    : cloned(0), uflags(0), mflags(0), hrefcount(0), _total_hrefcount(0),
+    : cloned(0), clone_original(NULL), uflags(0), mflags(0), hrefcount(0), _total_hrefcount(0),
       document(NULL), parent(NULL), children(NULL), _last_child(NULL),
-      next(NULL), id(NULL), repr(NULL), refCount(1),
+      next(NULL), id(NULL), repr(NULL), refCount(1),hrefList(std::list<SPObject*>()),
       _successor(NULL), _collection_policy(SPObject::COLLECT_WITH_PARENT),
       _label(NULL), _default_label(NULL)
 {
@@ -130,9 +133,13 @@ SPObject::SPObject()
     // vg, g, defs, desc, title, symbol, use, image, switch, path, rect, circle, ellipse, line, polyline,
     // polygon, text, tspan, tref, textPath, altGlyph, glyphRef, marker, linearGradient, radialGradient,
     // stop, pattern, clipPath, mask, filter, feImage, a, font, glyph, missing-glyph, foreignObject
-    this->style = sp_style_new_from_object(this);
+    this->style = new SPStyle( NULL, this ); // Is it necessary to call with "this"?
+    this->context_style = NULL;
 }
 
+/**
+ * Destructor, frees the used memory and unreferences a potential successor of the object.
+ */
 SPObject::~SPObject() {
     g_free(this->_label);
     g_free(this->_default_label);
@@ -143,6 +150,24 @@ SPObject::~SPObject() {
     if (this->_successor) {
         sp_object_unref(this->_successor, NULL);
         this->_successor = NULL;
+    }
+
+    if( style == NULL ) {
+        // style pointer could be NULL if unreffed too many times.
+        // Conjecture: style pointer is never NULL.
+        std::cerr << "SPObject::~SPObject(): style pointer is NULL" << std::endl;
+    } else if( style->refCount() > 1 ) {
+        // Conjecture: style pointer should be unreffed by other classes before reaching here.
+        // Conjecture is false for SPTSpan where ref is held by InputStreamTextSource.
+        // As an additional note:
+        //   The outer tspan of a nested tspan will result in a ref count of five: one for the
+        //   TSpan itself, one for the InputStreamTextSource instance before the inner tspan and
+        //   one for the one after, along with one for each corresponding DrawingText instance.
+        // std::cerr << "SPObject::~SPObject(): someone else still holding ref to style" << std::endl;
+        //
+        sp_style_unref( this->style );
+    } else {
+        delete this->style;
     }
 }
 
@@ -156,6 +181,10 @@ void SPObject::update(SPCtx* /*ctx*/, unsigned int /*flags*/) {
 }
 
 void SPObject::modified(unsigned int /*flags*/) {
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::modified  (default) (empty function)" );
+    objectTrace( "SPObject::modified  (default)", false );
+#endif
     //throw;
 }
 
@@ -235,7 +264,7 @@ SPObject *sp_object_unref(SPObject *object, SPObject *owner)
     return NULL;
 }
 
-SPObject *sp_object_href(SPObject *object, gpointer /*owner*/)
+SPObject *sp_object_href(SPObject *object, SPObject* owner)
 {
     g_return_val_if_fail(object != NULL, NULL);
     g_return_val_if_fail(SP_IS_OBJECT(object), NULL);
@@ -243,10 +272,13 @@ SPObject *sp_object_href(SPObject *object, gpointer /*owner*/)
     object->hrefcount++;
     object->_updateTotalHRefCount(1);
 
+    if(owner)
+        object->hrefList.push_front(owner);
+
     return object;
 }
 
-SPObject *sp_object_hunref(SPObject *object, gpointer /*owner*/)
+SPObject *sp_object_hunref(SPObject *object, SPObject* owner)
 {
     g_return_val_if_fail(object != NULL, NULL);
     g_return_val_if_fail(SP_IS_OBJECT(object), NULL);
@@ -254,6 +286,9 @@ SPObject *sp_object_hunref(SPObject *object, gpointer /*owner*/)
 
     object->hrefcount--;
     object->_updateTotalHRefCount(-1);
+
+    if(owner)
+        object->hrefList.remove(owner);
 
     return NULL;
 }
@@ -340,6 +375,10 @@ int sp_object_compare_position(SPObject const *first, SPObject const *second)
     return result;
 }
 
+bool sp_object_compare_position_bool(SPObject const *first, SPObject const *second){
+    return sp_object_compare_position(first,second)<0;
+}
+
 
 SPObject *SPObject::appendChildRepr(Inkscape::XML::Node *repr) {
     if ( !cloned ) {
@@ -363,14 +402,14 @@ void SPObject::changeCSS(SPCSSAttr *css, gchar const *attr)
     sp_repr_css_change(this->getRepr(), css, attr);
 }
 
-GSList *SPObject::childList(bool add_ref, Action) {
-    GSList *l = NULL;
+std::vector<SPObject*> SPObject::childList(bool add_ref, Action) {
+	 std::vector<SPObject*> l;
     for ( SPObject *child = firstChild() ; child; child = child->getNext() ) {
         if (add_ref) {
             sp_object_ref (child);
         }
 
-        l = g_slist_prepend (l, child);
+        l.push_back(child);
     }
     return l;
 
@@ -406,9 +445,9 @@ void SPObject::requestOrphanCollection() {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
 
     // do not remove style or script elements (Bug #276244)
-    if (SP_IS_STYLE_ELEM(this)) {
+    if (dynamic_cast<SPStyleElem *>(this)) {
         // leave it
-    } else if (SP_IS_SCRIPT(this)) {
+    } else if (dynamic_cast<SPScript *>(this)) {
         // leave it
   
     } else if ((! prefs->getBool("/options/cleanupswatches/value", false)) && SP_IS_PAINT_SERVER(this) && static_cast<SPPaintServer*>(this)->isSwatch() ) {
@@ -604,7 +643,7 @@ void SPObject::child_added(Inkscape::XML::Node *child, Inkscape::XML::Node *ref)
 
     const std::string type_string = NodeTraits::get_type_string(*child);
 
-    SPObject* ochild = SPFactory::instance().createObject(type_string);
+    SPObject* ochild = SPFactory::createObject(type_string);
     if (ochild == NULL) {
         // Currenty, there are many node types that do not have
         // corresponding classes in the SPObject tree.
@@ -651,6 +690,10 @@ void SPObject::order_changed(Inkscape::XML::Node *child, Inkscape::XML::Node * /
 }
 
 void SPObject::build(SPDocument *document, Inkscape::XML::Node *repr) {
+
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::build" );
+#endif
     SPObject* object = this;
 
     /* Nothing specific here */
@@ -659,11 +702,15 @@ void SPObject::build(SPDocument *document, Inkscape::XML::Node *repr) {
     object->readAttr("xml:space");
     object->readAttr("inkscape:label");
     object->readAttr("inkscape:collect");
+    if(object->cloned && (repr->attribute("id")) ) // The cases where this happens are when the "original" has no id. This happens
+                                                   // if it is a SPString (a TextNode, e.g. in a <title>), or when importing
+                                                   // stuff externally modified to have no id.
+        object->clone_original = document->getObjectById(repr->attribute("id"));
 
     for (Inkscape::XML::Node *rchild = repr->firstChild() ; rchild != NULL; rchild = rchild->next()) {
         const std::string typeString = NodeTraits::get_type_string(*rchild);
 
-        SPObject* child = SPFactory::instance().createObject(typeString);
+        SPObject* child = SPFactory::createObject(typeString);
         if (child == NULL) {
             // Currenty, there are many node types that do not have
             // corresponding classes in the SPObject tree.
@@ -676,10 +723,17 @@ void SPObject::build(SPDocument *document, Inkscape::XML::Node *repr) {
         sp_object_unref(child, NULL);
         child->invoke_build(document, rchild, object->cloned);
     }
+
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::build", false );
+#endif
 }
 
 void SPObject::invoke_build(SPDocument *document, Inkscape::XML::Node *repr, unsigned int cloned)
 {
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::invoke_build" );
+#endif
     debug("id=%p, typename=%s", this, g_type_name_from_instance((GTypeInstance*)this));
 
     //g_assert(object != NULL);
@@ -699,6 +753,9 @@ void SPObject::invoke_build(SPDocument *document, Inkscape::XML::Node *repr, uns
         Inkscape::GC::anchor(repr);
     }
     this->cloned = cloned;
+
+    /* Invoke derived methods, if any */
+    this->build(document, repr);
 
     if ( !cloned ) {
         this->document->bindObjectToRepr(this->repr, this);
@@ -733,11 +790,13 @@ void SPObject::invoke_build(SPDocument *document, Inkscape::XML::Node *repr, uns
         g_assert(this->getId() == NULL);
     }
 
-    /* Invoke derived methods, if any */
-    this->build(document, repr);
 
     /* Signalling (should be connected AFTER processing derived methods */
     sp_repr_add_listener(repr, &object_event_vector, this);
+
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::invoke_build", false );
+#endif
 }
 
 int SPObject::getIntAttribute(char const *key, int def)
@@ -795,9 +854,10 @@ void SPObject::releaseReferences() {
         g_assert(!this->id);
     }
 
-    if (this->style) {
-        this->style = sp_style_unref(this->style);
-    }
+    // style belongs to SPObject, we should not need to unref here.
+    // if (this->style) {
+    //     this->style = sp_style_unref(this->style);
+    // }
 
     this->document = NULL;
     this->repr = NULL;
@@ -837,6 +897,13 @@ void SPObject::repr_order_changed(Inkscape::XML::Node * /*repr*/, Inkscape::XML:
 }
 
 void SPObject::set(unsigned int key, gchar const* value) {
+
+#ifdef OBJECT_TRACE
+    std::stringstream temp;
+    temp << "SPObject::set: " << key  << " " << (value?value:"null");
+    objectTrace( temp.str() );
+#endif
+
     g_assert(key != SP_ATTR_INVALID);
 
     SPObject* object = this;
@@ -914,12 +981,15 @@ void SPObject::set(unsigned int key, gchar const* value) {
             object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_STYLE_MODIFIED_FLAG);
             break;
         case SP_ATTR_STYLE:
-            sp_style_read_from_object(object->style, object);
+            object->style->readFromObject( object );
             object->requestDisplayUpdate(SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_STYLE_MODIFIED_FLAG);
             break;
         default:
             break;
     }
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::set", false );
+#endif
 }
 
 void SPObject::setKeyValue(unsigned int key, gchar const *value)
@@ -984,6 +1054,10 @@ static gchar const *sp_xml_get_space_string(unsigned int space)
 }
 
 Inkscape::XML::Node* SPObject::write(Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, guint flags) {
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::write" );
+#endif
+
     if (!repr && (flags & SP_OBJECT_WRITE_BUILD)) {
         repr = this->getRepr()->duplicate(doc);
         if (!( flags & SP_OBJECT_WRITE_EXT )) {
@@ -1006,9 +1080,8 @@ Inkscape::XML::Node* SPObject::write(Inkscape::XML::Document *doc, Inkscape::XML
             repr->setAttribute("inkscape:collect", NULL);
         }
 
-        SPStyle const *const obj_style = this->style;
-        if (obj_style) {
-            gchar *s = sp_style_write_string(obj_style, SP_STYLE_FLAG_IFSET);
+        if (style) {
+            Glib::ustring s = style->write(SP_STYLE_FLAG_IFSET);
 
             // Check for valid attributes. This may be time consuming.
             // It is useful, though, for debugging Inkscape code.
@@ -1016,17 +1089,14 @@ Inkscape::XML::Node* SPObject::write(Inkscape::XML::Document *doc, Inkscape::XML
             if( prefs->getBool("/options/svgoutput/check_on_editing") ) {
 
                 unsigned int flags = sp_attribute_clean_get_prefs();
-                Glib::ustring s_cleaned = sp_attribute_clean_style( repr, s, flags ); 
-                g_free( s );
-                s = (s_cleaned.empty() ? NULL : g_strdup (s_cleaned.c_str()));
+                Glib::ustring s_cleaned = sp_attribute_clean_style( repr, s.c_str(), flags ); 
             }
 
-            if( s == NULL || strcmp(s,"") == 0 ) {
+            if( s.empty() ) {
                 repr->setAttribute("style", NULL);
             } else {
-                repr->setAttribute("style", s);
+                repr->setAttribute("style", s.c_str());
             }
-            g_free(s);
 
         } else {
             /** \todo I'm not sure what to do in this case.  Bug #1165868
@@ -1056,38 +1126,68 @@ Inkscape::XML::Node* SPObject::write(Inkscape::XML::Document *doc, Inkscape::XML
         sp_style_unset_property_attrs (this);
     }
 
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::write", false );
+#endif
     return repr;
 }
 
 Inkscape::XML::Node * SPObject::updateRepr(unsigned int flags)
 {
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::updateRepr 1" );
+#endif
+
     if ( !cloned ) {
         Inkscape::XML::Node *repr = getRepr();
         if (repr) {
+#ifdef OBJECT_TRACE
+            objectTrace( "SPObject::updateRepr 1", false );
+#endif
             return updateRepr(repr->document(), repr, flags);
         } else {
             g_critical("Attempt to update non-existent repr");
+#ifdef OBJECT_TRACE
+            objectTrace( "SPObject::updateRepr 1", false );
+#endif
             return NULL;
         }
     } else {
         /* cloned objects have no repr */
+#ifdef OBJECT_TRACE
+        objectTrace( "SPObject::updateRepr 1", false );
+#endif
         return NULL;
     }
 }
 
 Inkscape::XML::Node * SPObject::updateRepr(Inkscape::XML::Document *doc, Inkscape::XML::Node *repr, unsigned int flags)
 {
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::updateRepr 2" );
+#endif
+
     g_assert(doc != NULL);
 
     if (cloned) {
         /* cloned objects have no repr */
+#ifdef OBJECT_TRACE
+        objectTrace( "SPObject::updateRepr 2", false );
+#endif
         return NULL;
     }
 
     if (!(flags & SP_OBJECT_WRITE_BUILD) && !repr) {
         repr = getRepr();
     }
+
+#ifdef OBJECT_TRACE
+    Inkscape::XML::Node *node = write(doc, repr, flags);
+    objectTrace( "SPObject::updateRepr 2", false );
+    return node;
+#else
     return this->write(doc, repr, flags);
+#endif
 
 }
 
@@ -1107,6 +1207,10 @@ void SPObject::requestDisplayUpdate(unsigned int flags)
     g_return_if_fail((flags & SP_OBJECT_MODIFIED_FLAG) || (flags & SP_OBJECT_CHILD_MODIFIED_FLAG));
     g_return_if_fail(!((flags & SP_OBJECT_MODIFIED_FLAG) && (flags & SP_OBJECT_CHILD_MODIFIED_FLAG)));
 
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::requestDisplayUpdate" );
+#endif
+
     bool already_propagated = (!(this->uflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG)));
 
     this->uflags |= flags;
@@ -1121,11 +1225,20 @@ void SPObject::requestDisplayUpdate(unsigned int flags)
             document->requestModified();
         }
     }
+
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::requestDisplayUpdate", false );
+#endif
+
 }
 
 void SPObject::updateDisplay(SPCtx *ctx, unsigned int flags)
 {
     g_return_if_fail(!(flags & ~SP_OBJECT_MODIFIED_CASCADE));
+
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::updateDisplay" );
+#endif
 
     update_in_progress ++;
 
@@ -1148,7 +1261,7 @@ void SPObject::updateDisplay(SPCtx *ctx, unsigned int flags)
      */
     if ((flags & SP_OBJECT_STYLE_MODIFIED_FLAG) && (flags & SP_OBJECT_PARENT_MODIFIED_FLAG)) {
         if (this->style && this->parent) {
-            sp_style_merge_from_parent(this->style, this->parent->style);
+            style->cascade( this->parent->style );
         }
     }
 
@@ -1167,6 +1280,10 @@ void SPObject::updateDisplay(SPCtx *ctx, unsigned int flags)
     }
 
     update_in_progress --;
+
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::updateDisplay", false );
+#endif
 }
 
 void SPObject::requestModified(unsigned int flags)
@@ -1178,6 +1295,10 @@ void SPObject::requestModified(unsigned int flags)
     g_return_if_fail(!(flags & SP_OBJECT_PARENT_MODIFIED_FLAG));
     g_return_if_fail((flags & SP_OBJECT_MODIFIED_FLAG) || (flags & SP_OBJECT_CHILD_MODIFIED_FLAG));
     g_return_if_fail(!((flags & SP_OBJECT_MODIFIED_FLAG) && (flags & SP_OBJECT_CHILD_MODIFIED_FLAG)));
+
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::requestModified" );
+#endif
 
     bool already_propagated = (!(this->mflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG)));
 
@@ -1193,12 +1314,19 @@ void SPObject::requestModified(unsigned int flags)
             document->requestModified();
         }
     }
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::requestModified", false );
+#endif
 }
 
 void SPObject::emitModified(unsigned int flags)
 {
     /* only the MODIFIED_CASCADE flag is legal here */
     g_return_if_fail(!(flags & ~SP_OBJECT_MODIFIED_CASCADE));
+
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::emitModified", true, flags );
+#endif
 
 #ifdef SP_OBJECT_DEBUG_CASCADE
     g_print("Modified %s:%s %x %x %x\n", g_type_name_from_instance((GTypeInstance *) this), getId(), flags, this->uflags, this->mflags);
@@ -1216,6 +1344,10 @@ void SPObject::emitModified(unsigned int flags)
 
     _modified_signal.emit(this, flags);
     sp_object_unref(this);
+
+#ifdef OBJECT_TRACE
+    objectTrace( "SPObject::emitModified", false );
+#endif
 }
 
 gchar const *SPObject::getTagName(SPException *ex) const
@@ -1255,6 +1387,18 @@ void SPObject::setAttribute(gchar const *key, gchar const *value, SPException *e
     getRepr()->setAttribute(key, value, false);
 }
 
+void SPObject::setAttribute(char const *key, Glib::ustring const &value, SPException *ex)
+{
+    setAttribute(key, value.empty() ? NULL : value.c_str(), ex);
+}
+
+void SPObject::setAttribute(Glib::ustring const &key, Glib::ustring const &value, SPException *ex)
+{
+    setAttribute( key.empty()   ? NULL : key.c_str(),
+                  value.empty() ? NULL : value.c_str(), ex);
+}
+
+
 void SPObject::removeAttribute(gchar const *key, SPException *ex)
 {
     /* If exception is not clear, return */
@@ -1272,7 +1416,7 @@ bool SPObject::storeAsDouble( gchar const *key, double *val ) const
 }
 
 /** Helper */
-static gchar*
+gchar*
 sp_object_get_unique_id(SPObject    *object,
                         gchar const *id)
 {
@@ -1406,12 +1550,12 @@ bool SPObject::setDesc(gchar const *desc, bool verbatim)
     return setTitleOrDesc(desc, "svg:desc", verbatim);
 }
 
-gchar * SPObject::getTitleOrDesc(gchar const *svg_tagname) const
+char * SPObject::getTitleOrDesc(gchar const *svg_tagname) const
 {
-    gchar *result = 0;
+    char *result = NULL;
     SPObject *elem = findFirstChild(svg_tagname);
     if ( elem ) {
-        result = g_string_free(elem->textualContent(), FALSE);
+        result = elem->textualContent();
     }
     return result;
 }
@@ -1493,7 +1637,7 @@ SPObject * SPObject::findFirstChild(gchar const *tagname) const
     return NULL;
 }
 
-GString * SPObject::textualContent() const
+char* SPObject::textualContent() const
 {
     GString* text = g_string_new("");
 
@@ -1502,15 +1646,59 @@ GString * SPObject::textualContent() const
         Inkscape::XML::NodeType child_type = child->repr->type();
 
         if (child_type == Inkscape::XML::ELEMENT_NODE) {
-            GString * new_text = child->textualContent();
-            g_string_append(text, new_text->str);
-            g_string_free(new_text, TRUE);
+            char* new_string = child->textualContent();
+            g_string_append(text, new_string);
+            g_free(new_string);
         }
         else if (child_type == Inkscape::XML::TEXT_NODE) {
             g_string_append(text, child->repr->content());
         }
     }
-    return text;
+    return g_string_free(text, FALSE);
+}
+
+// For debugging: Print SP tree structure.
+void SPObject::recursivePrintTree( unsigned level )
+{
+    if (level == 0) {
+        std::cout << "SP Object Tree" << std::endl;
+    }
+    std::cout << "SP: ";
+    for (unsigned i = 0; i < level; ++i) {
+        std::cout << "  ";
+    }
+    std::cout << (getId()?getId():"No object id") << std::endl;
+    for (SPObject *child = children; child; child = child->next) {
+        child->recursivePrintTree( level+1 );
+    }
+}
+
+// Function to allow tracing of program flow through SPObject and derived classes.
+// To trace function, add at entrance ('in' = true) and exit of function ('in' = false).
+void SPObject::objectTrace( std::string text, bool in, unsigned flags ) {
+    if( in ) {
+        for (unsigned i = 0; i < indent_level; ++i) {
+            std::cout << "  ";
+        }
+        std::cout << text << ":"
+                  << " entrance: "
+                  << (id?id:"null")
+                  << " uflags: " << uflags
+                  << " mflags: " << mflags
+                  << " flags: " << flags << std::endl;
+        ++indent_level;
+    } else {
+        --indent_level;
+        for (unsigned i = 0; i < indent_level; ++i) {
+            std::cout << "  ";
+        }
+        std::cout << text << ":"
+                  << " exit: "
+                  << (id?id:"null")
+                  << " uflags: " << uflags
+                  << " mflags: " << mflags
+                  << " flags: " << flags << std::endl;
+    }
 }
 
 /*

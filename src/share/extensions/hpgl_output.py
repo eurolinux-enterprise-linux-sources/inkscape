@@ -15,7 +15,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 
 # standard library
@@ -23,8 +23,6 @@ import sys
 # local libraries
 import hpgl_encoder
 import inkex
-inkex.localize()
-
 
 class HpglOutput(inkex.Effect):
 
@@ -41,7 +39,7 @@ class HpglOutput(inkex.Effect):
         self.OptionParser.add_option('--mirrorY',       action='store', type='inkbool', dest='mirrorY',       default='FALSE', help='Mirror Y axis')
         self.OptionParser.add_option('--center',        action='store', type='inkbool', dest='center',        default='FALSE', help='Center zero point')
         self.OptionParser.add_option('--overcut',       action='store', type='float',   dest='overcut',       default=1.0,     help='Overcut (mm)')
-        self.OptionParser.add_option('--toolOffset',    action='store', type='float',   dest='toolOffset',    default=0.25,    help='Tool offset (mm)')
+        self.OptionParser.add_option('--toolOffset',    action='store', type='float',   dest='toolOffset',    default=0.25,    help='Tool (Knife) offset correction (mm)')
         self.OptionParser.add_option('--precut',        action='store', type='inkbool', dest='precut',        default='TRUE',  help='Use precut')
         self.OptionParser.add_option('--flat',          action='store', type='float',   dest='flat',          default=1.2,     help='Curve flatness')
         self.OptionParser.add_option('--autoAlign',     action='store', type='inkbool', dest='autoAlign',     default='TRUE',  help='Auto align')
@@ -62,12 +60,12 @@ class HpglOutput(inkex.Effect):
                 type, value, traceback = sys.exc_info()
                 raise ValueError, ("", type, value), traceback
         # convert raw HPGL to HPGL
-        hpglInit = 'IN;SP%d' % self.options.pen
+        hpglInit = 'IN'
         if self.options.force > 0:
             hpglInit += ';FS%d' % self.options.force
         if self.options.speed > 0:
             hpglInit += ';VS%d' % self.options.speed
-        self.hpgl = hpglInit + self.hpgl + ';PU0,0;SP0;IN;'
+        self.hpgl = hpglInit + self.hpgl + ';SP0;PU0,0;IN; '
 
     def output(self):
         # print to file

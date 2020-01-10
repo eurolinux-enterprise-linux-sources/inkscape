@@ -29,14 +29,15 @@
 #include "document.h"
 #include "document-undo.h"
 #include "selection.h"
-#include "desktop-handles.h"
 
-#include "dialogs/dialog-events.h"
+
+#include "ui/dialog-events.h"
 #include "verbs.h"
-#include "interface.h"
+#include "ui/interface.h"
 #include "preferences.h"
 #include "sp-text.h"
 #include "sp-flowtext.h"
+#include "sp-flowdiv.h"
 #include "text-editing.h"
 #include "sp-tspan.h"
 #include "sp-tref.h"
@@ -238,10 +239,10 @@ Find::Find()
 
     show_all_children();
 
-    Inkscape::Selection *selection = sp_desktop_selection (SP_ACTIVE_DESKTOP);
+    Inkscape::Selection *selection = SP_ACTIVE_DESKTOP->getSelection();
     SPItem *item = selection->singleItem();
     if (item) {
-        if (SP_IS_TEXT(item) || SP_IS_FLOWTEXT(item)) {
+        if (dynamic_cast<SPText *>(item) || dynamic_cast<SPFlowtext *>(item)) {
             gchar *str;
             str = sp_te_get_string_multiline (item);
             entry_find.getEntry()->set_text(str);
@@ -343,7 +344,7 @@ bool Find::item_text_match (SPItem *item, const gchar *find, bool exact, bool ca
         return false;
     }
 
-    if (SP_IS_TEXT(item) || SP_IS_FLOWTEXT(item)) {
+    if (dynamic_cast<SPText *>(item) || dynamic_cast<SPFlowtext *>(item)) {
         const gchar *item_text = sp_te_get_string_multiline (item);
         if (item_text == NULL) {
             return false;
@@ -388,7 +389,7 @@ bool Find::item_id_match (SPItem *item, const gchar *id, bool exact, bool casema
         return false;
     }
 
-    if (SP_IS_STRING(item)) { // SPStrings have "on demand" ids which are useless for searching
+    if (dynamic_cast<SPString *>(item)) { // SPStrings have "on demand" ids which are useless for searching
         return false;
     }
 
@@ -548,7 +549,7 @@ bool Find::item_font_match(SPItem *item, const gchar *text, bool exact, bool cas
 }
 
 
-GSList *Find::filter_fields (GSList *l, bool exact, bool casematch)
+std::vector<SPItem*> Find::filter_fields (std::vector<SPItem*> &l, bool exact, bool casematch)
 {
     Glib::ustring tmp = entry_find.getEntry()->get_text();
     if (tmp.empty()) {
@@ -556,16 +557,19 @@ GSList *Find::filter_fields (GSList *l, bool exact, bool casematch)
     }
     gchar* text = g_strdup(tmp.c_str());
 
-    GSList *in = l;
-    GSList *out = NULL;
+    std::vector<SPItem*> in = l;
+    std::vector<SPItem*> out;
 
     if (check_searchin_text.get_active()) {
-        for (GSList *i = in; i != NULL; i = i->next) {
-            if (item_text_match (SP_ITEM(i->data), text, exact, casematch)) {
-                if (!g_slist_find(out, i->data)) {
-                    out = g_slist_prepend (out, i->data);
+        for(std::vector<SPItem*>::const_reverse_iterator i=in.rbegin(); in.rend() != i; ++i) {
+            SPObject *obj = *i;
+            SPItem *item = dynamic_cast<SPItem *>(obj);
+            g_assert(item != NULL);
+            if (item_text_match(item, text, exact, casematch)) {
+                if (out.end()==find(out.begin(),out.end(), *i)) {
+                    out.push_back(*i);
                     if (_action_replace) {
-                        item_text_match (SP_ITEM(i->data), text, exact, casematch, _action_replace);
+                        item_text_match(item, text, exact, casematch, _action_replace);
                     }
                 }
             }
@@ -580,12 +584,14 @@ GSList *Find::filter_fields (GSList *l, bool exact, bool casematch)
         bool attrvalue = check_attributevalue.get_active();
 
         if (ids) {
-            for (GSList *i = in; i != NULL; i = i->next) {
-                if (item_id_match (SP_ITEM(i->data), text, exact, casematch)) {
-                    if (!g_slist_find(out, i->data)) {
-                        out = g_slist_prepend (out, i->data);
+            for(std::vector<SPItem*>::const_reverse_iterator i=in.rbegin(); in.rend() != i; ++i) {
+                SPObject *obj = *i;
+                SPItem *item = dynamic_cast<SPItem *>(obj);
+                if (item_id_match(item, text, exact, casematch)) {
+                    if (out.end()==find(out.begin(),out.end(), *i)) {
+                        out.push_back(*i);
                         if (_action_replace) {
-                            item_id_match (SP_ITEM(i->data), text, exact, casematch, _action_replace);
+                            item_id_match(item, text, exact, casematch, _action_replace);
                         }
                     }
                 }
@@ -594,13 +600,15 @@ GSList *Find::filter_fields (GSList *l, bool exact, bool casematch)
 
 
         if (style) {
-            for (GSList *i = in; i != NULL; i = i->next) {
-                if (item_style_match (SP_ITEM(i->data), text, exact, casematch)) {
-                    if (!g_slist_find(out, i->data))
-                        if (!g_slist_find(out, i->data)) {
-                            out = g_slist_prepend (out, i->data);
+            for(std::vector<SPItem*>::const_reverse_iterator i=in.rbegin(); in.rend() != i; ++i) {
+                SPObject *obj = *i;
+                SPItem *item = dynamic_cast<SPItem *>(obj);
+                g_assert(item != NULL);
+                if (item_style_match(item, text, exact, casematch)) {
+                    if (out.end()==find(out.begin(),out.end(), *i)){
+                            out.push_back(*i);
                             if (_action_replace) {
-                                item_style_match (SP_ITEM(i->data), text, exact, casematch, _action_replace);
+                                item_style_match(item, text, exact, casematch, _action_replace);
                             }
                         }
                 }
@@ -609,12 +617,15 @@ GSList *Find::filter_fields (GSList *l, bool exact, bool casematch)
 
 
         if (attrname) {
-            for (GSList *i = in; i != NULL; i = i->next) {
-                if (item_attr_match (SP_ITEM(i->data), text, exact, casematch)) {
-                    if (!g_slist_find(out, i->data)) {
-                        out = g_slist_prepend (out, i->data);
+            for(std::vector<SPItem*>::const_reverse_iterator i=in.rbegin(); in.rend() != i; ++i) {
+                SPObject *obj = *i;
+                SPItem *item = dynamic_cast<SPItem *>(obj);
+                g_assert(item != NULL);
+                if (item_attr_match(item, text, exact, casematch)) {
+                    if (out.end()==find(out.begin(),out.end(), *i)) {
+                        out.push_back(*i);
                         if (_action_replace) {
-                            item_attr_match (SP_ITEM(i->data), text, exact, casematch, _action_replace);
+                            item_attr_match(item, text, exact, casematch, _action_replace);
                         }
                     }
                 }
@@ -623,12 +634,15 @@ GSList *Find::filter_fields (GSList *l, bool exact, bool casematch)
 
 
         if (attrvalue) {
-            for (GSList *i = in; i != NULL; i = i->next) {
-                if (item_attrvalue_match (SP_ITEM(i->data), text, exact, casematch)) {
-                    if (!g_slist_find(out, i->data)) {
-                        out = g_slist_prepend (out, i->data);
+            for(std::vector<SPItem*>::const_reverse_iterator i=in.rbegin(); in.rend() != i; ++i) {
+                SPObject *obj = *i;
+                SPItem *item = dynamic_cast<SPItem *>(obj);
+                g_assert(item != NULL);
+                if (item_attrvalue_match(item, text, exact, casematch)) {
+                    if (out.end()==find(out.begin(),out.end(), *i)) {
+                        out.push_back(*i);
                         if (_action_replace) {
-                            item_attrvalue_match (SP_ITEM(i->data), text, exact, casematch, _action_replace);
+                            item_attrvalue_match(item, text, exact, casematch, _action_replace);
                         }
                     }
                 }
@@ -637,12 +651,15 @@ GSList *Find::filter_fields (GSList *l, bool exact, bool casematch)
 
 
         if (font) {
-            for (GSList *i = in; i != NULL; i = i->next) {
-                if (item_font_match (SP_ITEM(i->data), text, exact, casematch)) {
-                    if (!g_slist_find(out, i->data)) {
-                        out = g_slist_prepend (out, i->data);
+            for(std::vector<SPItem*>::const_reverse_iterator i=in.rbegin(); in.rend() != i; ++i) {
+                SPObject *obj = *i;
+                SPItem *item = dynamic_cast<SPItem *>(obj);
+                g_assert(item != NULL);
+                if (item_font_match(item, text, exact, casematch)) {
+                    if (out.end()==find(out.begin(),out.end(),*i)) {
+                        out.push_back(*i);
                         if (_action_replace) {
-                            item_font_match (SP_ITEM(i->data), text, exact, casematch, _action_replace);
+                            item_font_match(item, text, exact, casematch, _action_replace);
                         }
                     }
                 }
@@ -661,62 +678,68 @@ bool Find::item_type_match (SPItem *item)
 {
     bool all  =check_alltypes.get_active();
 
-    if ( SP_IS_RECT(item)) {
+    if ( dynamic_cast<SPRect *>(item)) {
         return ( all ||check_rects.get_active());
 
-    } else if (SP_IS_GENERICELLIPSE(item)) {
+    } else if (dynamic_cast<SPGenericEllipse *>(item)) {
         return ( all ||  check_ellipses.get_active());
 
-    } else if (SP_IS_STAR(item) || SP_IS_POLYGON(item)) {
+    } else if (dynamic_cast<SPStar *>(item) || dynamic_cast<SPPolygon *>(item)) {
         return ( all || check_stars.get_active());
 
-    } else if (SP_IS_SPIRAL(item)) {
+    } else if (dynamic_cast<SPSpiral *>(item)) {
         return ( all || check_spirals.get_active());
 
-    } else if (SP_IS_PATH(item) || SP_IS_LINE(item) || SP_IS_POLYLINE(item)) {
+    } else if (dynamic_cast<SPPath *>(item) || dynamic_cast<SPLine *>(item) || dynamic_cast<SPPolyLine *>(item)) {
         return (all || check_paths.get_active());
 
-    } else if (SP_IS_TEXT(item) || SP_IS_TSPAN(item) || SP_IS_TREF(item) || SP_IS_STRING(item)) {
+    } else if (dynamic_cast<SPText *>(item) || dynamic_cast<SPTSpan *>(item) || 
+	           dynamic_cast<SPTRef *>(item) || dynamic_cast<SPString *>(item) ||
+			   dynamic_cast<SPFlowtext *>(item) || dynamic_cast<SPFlowdiv *>(item) ||
+			   dynamic_cast<SPFlowtspan *>(item) || dynamic_cast<SPFlowpara *>(item)) {
         return (all || check_texts.get_active());
 
-    } else if (SP_IS_GROUP(item) && !desktop->isLayer(item) ) { // never select layers!
+    } else if (dynamic_cast<SPGroup *>(item) && !desktop->isLayer(item) ) { // never select layers!
         return (all || check_groups.get_active());
 
-    } else if (SP_IS_USE(item)) {
+    } else if (dynamic_cast<SPUse *>(item)) {
         return (all || check_clones.get_active());
 
-    } else if (SP_IS_IMAGE(item)) {
+    } else if (dynamic_cast<SPImage *>(item)) {
         return (all || check_images.get_active());
 
-    } else if (SP_IS_OFFSET(item)) {
+    } else if (dynamic_cast<SPOffset *>(item)) {
         return (all || check_offsets.get_active());
     }
 
     return false;
 }
 
-GSList *Find::filter_types (GSList *l)
+std::vector<SPItem*> Find::filter_types (std::vector<SPItem*> &l)
 {
-    GSList *n = NULL;
-    for (GSList *i = l; i != NULL; i = i->next) {
-        if (item_type_match (SP_ITEM(i->data))) {
-            n = g_slist_prepend (n, i->data);
+    std::vector<SPItem*> n;
+    for(std::vector<SPItem*>::const_reverse_iterator i=l.rbegin(); l.rend() != i; ++i) {
+        SPObject *obj = *i;
+        SPItem *item = dynamic_cast<SPItem *>(obj);
+        g_assert(item != NULL);
+        if (item_type_match(item)) {
+        	n.push_back(*i);
         }
     }
     return n;
 }
 
 
-GSList *Find::filter_list (GSList *l, bool exact, bool casematch)
+std::vector<SPItem*> &Find::filter_list (std::vector<SPItem*> &l, bool exact, bool casematch)
 {
     l = filter_types (l);
     l = filter_fields (l, exact, casematch);
     return l;
 }
 
-GSList *Find::all_items (SPObject *r, GSList *l, bool hidden, bool locked)
+std::vector<SPItem*> &Find::all_items (SPObject *r, std::vector<SPItem*> &l, bool hidden, bool locked)
 {
-    if (SP_IS_DEFS(r)) {
+    if (dynamic_cast<SPDefs *>(r)) {
         return l; // we're not interested in items in defs
     }
 
@@ -725,10 +748,10 @@ GSList *Find::all_items (SPObject *r, GSList *l, bool hidden, bool locked)
     }
 
     for (SPObject *child = r->firstChild(); child; child = child->getNext()) {
-        if (SP_IS_ITEM(child) && !child->cloned && !desktop->isLayer(SP_ITEM(child))) {
-            SPItem *item = reinterpret_cast<SPItem *>(child);
+        SPItem *item = dynamic_cast<SPItem *>(child);
+        if (item && !child->cloned && !desktop->isLayer(item)) {
             if ((hidden || !desktop->itemIsHidden(item)) && (locked || !item->isLocked())) {
-                l = g_slist_prepend (l, child);
+                l.insert(l.begin(),(SPItem*)child);
             }
         }
         l = all_items (child, l, hidden, locked);
@@ -736,19 +759,22 @@ GSList *Find::all_items (SPObject *r, GSList *l, bool hidden, bool locked)
     return l;
 }
 
-GSList *Find::all_selection_items (Inkscape::Selection *s, GSList *l, SPObject *ancestor, bool hidden, bool locked)
+std::vector<SPItem*> &Find::all_selection_items (Inkscape::Selection *s, std::vector<SPItem*> &l, SPObject *ancestor, bool hidden, bool locked)
 {
-    for (GSList *i = (GSList *) s->itemList(); i != NULL; i = i->next) {
-        if (SP_IS_ITEM (i->data) && !reinterpret_cast<SPItem *>(i->data)->cloned && !desktop->isLayer(SP_ITEM(i->data))) {
-            SPItem *item = reinterpret_cast<SPItem *>(i->data);
+	std::vector<SPItem*> itemlist=s->itemList();
+    for(std::vector<SPItem*>::const_reverse_iterator i=itemlist.rbegin(); itemlist.rend() != i; ++i) {
+        SPObject *obj = *i;
+        SPItem *item = dynamic_cast<SPItem *>(obj);
+        g_assert(item != NULL);
+        if (item && !item->cloned && !desktop->isLayer(item)) {
             if (!ancestor || ancestor->isAncestorOf(item)) {
                 if ((hidden || !desktop->itemIsHidden(item)) && (locked || !item->isLocked())) {
-                    l = g_slist_prepend (l, i->data);
+                    l.push_back(*i);
                 }
             }
         }
-        if (!ancestor || ancestor->isAncestorOf(SP_OBJECT (i->data))) {
-            l = all_items (SP_OBJECT (i->data), l, hidden, locked);
+        if (!ancestor || ancestor->isAncestorOf(item)) {
+            l = all_items(item, l, hidden, locked);
         }
     }
     return l;
@@ -791,7 +817,7 @@ void Find::onAction()
     bool casematch = check_case_sensitive.get_active();
     blocked = true;
 
-    GSList *l = NULL;
+    std::vector<SPItem*> l;
     if (check_scope_selection.get_active()) {
         if (check_scope_layer.get_active()) {
             l = all_selection_items (desktop->selection, l, desktop->currentLayer(), hidden, locked);
@@ -802,15 +828,15 @@ void Find::onAction()
         if (check_scope_layer.get_active()) {
             l = all_items (desktop->currentLayer(), l, hidden, locked);
         } else {
-            l = all_items(sp_desktop_document(desktop)->getRoot(), l, hidden, locked);
+            l = all_items(desktop->getDocument()->getRoot(), l, hidden, locked);
         }
     }
-    guint all = g_slist_length (l);
+    guint all = l.size();
 
-    GSList *n = filter_list (l, exact, casematch);
+    std::vector<SPItem*> n = filter_list (l, exact, casematch);
 
-    if (n != NULL) {
-        int count = g_slist_length (n);
+    if (!n.empty()) {
+        int count = n.size();
         desktop->messageStack()->flashF(Inkscape::NORMAL_MESSAGE,
                                         // TRANSLATORS: "%s" is replaced with "exact" or "partial" when this string is displayed
                                         ngettext("<b>%d</b> object found (out of <b>%d</b>), %s match.",
@@ -828,19 +854,22 @@ void Find::onAction()
             button_replace.set_sensitive(attributenameyok);
         }
 
-        Inkscape::Selection *selection = sp_desktop_selection (desktop);
+        Inkscape::Selection *selection = desktop->getSelection();
         selection->clear();
         selection->setList(n);
-        scroll_to_show_item (desktop, SP_ITEM(n->data));
+        SPObject *obj = n[0];
+        SPItem *item = dynamic_cast<SPItem *>(obj);
+        g_assert(item != NULL);
+        scroll_to_show_item(desktop, item);
 
         if (_action_replace) {
-            DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_TEXT, _("Replace text or property"));
+            DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_TEXT, _("Replace text or property"));
         }
 
     } else {
         status.set_text(_("Nothing found"));
         if (!check_scope_selection.get_active()) {
-            Inkscape::Selection *selection = sp_desktop_selection (desktop);
+            Inkscape::Selection *selection = desktop->getSelection();
             selection->clear();
         }
         desktop->messageStack()->flash(Inkscape::WARNING_MESSAGE, _("No objects found"));

@@ -14,34 +14,33 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "sp-item.h"
-
 #include <list>
+#include <string>
+#include "sp-item.h"
 
 #define SP_LPE_ITEM(obj) (dynamic_cast<SPLPEItem*>((SPObject*)obj))
 #define SP_IS_LPE_ITEM(obj) (dynamic_cast<const SPLPEItem*>((SPObject*)obj) != NULL)
 
-class CLPEItem;
 class LivePathEffectObject;
 class SPCurve;
 class SPDesktop;
 
 namespace Inkscape{ 
-namespace Display {
-    class TemporaryItem;
-}
-namespace LivePathEffect{
-    class LPEObjectReference;
-    class Effect;
-}
+    namespace Display {
+        class TemporaryItem;
+    }
+    namespace LivePathEffect{
+        class LPEObjectReference;
+        class Effect;
+    }
 }
 
 typedef std::list<Inkscape::LivePathEffect::LPEObjectReference *> PathEffectList;
 
 class SPLPEItem : public SPItem {
 public:
-	SPLPEItem();
-	virtual ~SPLPEItem();
+    SPLPEItem();
+    virtual ~SPLPEItem();
 
     int path_effects_enabled;
 
@@ -55,28 +54,29 @@ public:
                              std::vector<LivePathEffectObject const *> const &new_lpeobjs );
 
 
-	virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
-	virtual void release();
+    virtual void build(SPDocument* doc, Inkscape::XML::Node* repr);
+    virtual void release();
 
-	virtual void set(unsigned int key, gchar const* value);
+    virtual void set(unsigned int key, char const* value);
 
-	virtual void update(SPCtx* ctx, unsigned int flags);
-	virtual void modified(unsigned int flags);
+    virtual void update(SPCtx* ctx, unsigned int flags);
+    virtual void modified(unsigned int flags);
 
-	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
-	virtual void remove_child(Inkscape::XML::Node* child);
+    virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
+    virtual void remove_child(Inkscape::XML::Node* child);
 
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags);
+    virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
 
-	virtual void update_patheffect(bool write);
+    virtual void update_patheffect(bool write);
 
-    bool performPathEffect(SPCurve *curve);
+    bool performPathEffect(SPCurve *curve, bool is_clip_or_mask = false);
 
     bool pathEffectsEnabled() const;
     bool hasPathEffect() const;
     bool hasPathEffectOfType(int const type) const;
     bool hasPathEffectRecursive() const;
     Inkscape::LivePathEffect::Effect* getPathEffectOfType(int type);
+    Inkscape::LivePathEffect::Effect const* getPathEffectOfType(int type) const;
     bool hasBrokenPathEffect() const;
 
     PathEffectList getEffectList();
@@ -89,16 +89,16 @@ public:
     bool setCurrentPathEffect(Inkscape::LivePathEffect::LPEObjectReference* lperef);
     void removeCurrentPathEffect(bool keep_paths);
     void removeAllPathEffects(bool keep_paths);
-    void addPathEffect(gchar *value, bool reset);
+    void addPathEffect(std::string value, bool reset);
     void addPathEffect(LivePathEffectObject * new_lpeobj);
-
+    void apply_to_mask(SPItem * item);
+    void apply_to_clippath(SPItem * item);
+    void apply_to_clip_or_mask(SPItem * clip_mask, SPItem * item);
     bool forkPathEffectsIfNecessary(unsigned int nr_of_allowed_users = 1);
 
     void editNextParamOncanvas(SPDesktop *dt);
 };
 
-void sp_lpe_item_apply_to_mask(SPItem * item);
-void sp_lpe_item_apply_to_clippath(SPItem * item);
 void sp_lpe_item_update_patheffect (SPLPEItem *lpeitem, bool wholetree, bool write); // careful, class already has method with *very* similar name!
 
 #endif /* !SP_LPE_ITEM_H_SEEN */

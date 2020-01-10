@@ -18,13 +18,13 @@
 #ifndef SEEN_INKSCAPE_XML_SP_REPR_ACTION_H
 #define SEEN_INKSCAPE_XML_SP_REPR_ACTION_H
 
-#include <glib.h>
+typedef unsigned int GQuark;
 #include <glibmm/ustring.h>
 
 #include <iterator>
 #include "util/share.h"
 #include "util/forward-pointer-iterator.h"
-#include "gc-managed.h"
+#include "inkgc/gc-managed.h"
 #include "xml/node.h"
 
 namespace Inkscape {
@@ -33,13 +33,13 @@ namespace XML {
 /**
  * @brief Enumeration of all XML event types
  */
-enum EventType {
-    EVENT_ADD, ///< Child added
-    EVENT_DEL, ///< Child removed
-    EVENT_CHG_ATTR, ///< Attribute changed
-    EVENT_CHG_CONTENT, ///< Content changed
-    EVENT_CHG_ORDER ///< Order of children changed
-};
+// enum EventType {
+//     EVENT_ADD, ///< Child added
+//     EVENT_DEL, ///< Child removed
+//     EVENT_CHG_ATTR, ///< Attribute changed
+//     EVENT_CHG_CONTENT, ///< Content changed
+//     EVENT_CHG_ORDER ///< Order of children changed
+// };
 
 /**
  * @brief Generic XML modification event

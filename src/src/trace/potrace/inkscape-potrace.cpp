@@ -25,11 +25,10 @@
 #include "trace/imagemap-gdk.h"
 
 #include <inkscape.h>
-#include <desktop-handles.h>
+#include "desktop.h"
 #include "message-stack.h"
 #include <sp-path.h>
 #include <svg/path-string.h>
-#include "curve.h"
 #include "bitmap.h"
 
 using Glib::ustring;
@@ -128,7 +127,7 @@ static bool hasPoint(std::vector<Point> &points, double x, double y)
 
 
 /**
- *  Recursively descend the path_t node tree, writing paths in SVG
+ *  Recursively descend the potrace_path_t node tree, writing paths in SVG
  *  format into the output stream.  The Point vector is used to prevent
  *  redundant paths.  Returns number of paths processed.
  */
@@ -144,7 +143,7 @@ static long writePaths(PotraceTracingEngine *engine, potrace_path_t *plist,
         //g_message("node->fm:%d\n", node->fm);
         if (!curve->n)
             continue;
-        dpoint_t *pt = curve->c[curve->n - 1];
+        const potrace_dpoint_t *pt = curve->c[curve->n - 1];
         double x0 = 0.0;
         double y0 = 0.0;
         double x1 = 0.0;
@@ -192,7 +191,7 @@ static long writePaths(PotraceTracingEngine *engine, potrace_path_t *plist,
             }
         data.closePath();
 
-        for (path_t *child=node->childlist; child ; child=child->sibling)
+        for (potrace_path_t *child=node->childlist; child ; child=child->sibling)
             {
             nodeCount += writePaths(engine, child, data, points);
             }
@@ -430,7 +429,7 @@ std::vector<TracingEngineResult> PotraceTracingEngine::traceSingle(GdkPixbuf * t
     if (!grayMap)
         return results;
 
-    long nodeCount;
+    long nodeCount = 0L;
     std::string d = grayMapToPath(grayMap, &nodeCount);
 
     grayMap->destroy(grayMap);
@@ -456,7 +455,7 @@ std::vector<TracingEngineResult> PotraceTracingEngine::traceGrayMap(GrayMap *gra
 
     brightnessFloor = 0.0; //important to set this
 
-    long nodeCount;
+    long nodeCount = 0L;
     std::string d = grayMapToPath(grayMap, &nodeCount);
 
     char const *style = "fill:#000000";
@@ -489,7 +488,7 @@ std::vector<TracingEngineResult> PotraceTracingEngine::traceBrightnessMulti(GdkP
               brightnessThreshold += delta) {
             GrayMap *grayMap = filter(*this, thePixbuf);
             if ( grayMap ) {
-                long nodeCount;
+                long nodeCount = 0L;
                 std::string d = grayMapToPath(grayMap, &nodeCount);
 
                 grayMap->destroy(grayMap);
@@ -497,7 +496,7 @@ std::vector<TracingEngineResult> PotraceTracingEngine::traceBrightnessMulti(GdkP
                 if ( !d.empty() ) {
                     //### get style info
                     int grayVal = (int)(256.0 * brightnessThreshold);
-                    ustring style = ustring::compose("fill-opacity:1.0;fill:%1%2%3", twohex(grayVal), twohex(grayVal), twohex(grayVal) );
+                    ustring style = ustring::compose("fill-opacity:1.0;fill:#%1%2%3", twohex(grayVal), twohex(grayVal), twohex(grayVal) );
 
                     //g_message("### GOT '%s' \n", style.c_str());
                     TracingEngineResult result(style, d, nodeCount);
@@ -510,7 +509,7 @@ std::vector<TracingEngineResult> PotraceTracingEngine::traceBrightnessMulti(GdkP
                     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
                     if (desktop) {
                         ustring msg = ustring::compose(_("Trace: %1.  %2 nodes"), traceCount++, nodeCount);
-                        sp_desktop_message_stack(desktop)->flash(Inkscape::NORMAL_MESSAGE, msg);
+                        desktop->getMessageStack()->flash(Inkscape::NORMAL_MESSAGE, msg);
                     }
                 }
             }
@@ -558,7 +557,7 @@ std::vector<TracingEngineResult> PotraceTracingEngine::traceQuant(GdkPixbuf * th
                 }
 
                 //## Now we have a traceable graymap
-                long nodeCount;
+                long nodeCount = 0L;
                 std::string d = grayMapToPath(gm, &nodeCount);
 
                 if ( !d.empty() ) {
@@ -573,7 +572,7 @@ std::vector<TracingEngineResult> PotraceTracingEngine::traceQuant(GdkPixbuf * th
                     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
                     if (desktop) {
                         ustring msg = ustring::compose(_("Trace: %1.  %2 nodes"), colorIndex, nodeCount);
-                        sp_desktop_message_stack(desktop)->flash(Inkscape::NORMAL_MESSAGE, msg);
+                        desktop->getMessageStack()->flash(Inkscape::NORMAL_MESSAGE, msg);
                     }
                 }
             }// for colorIndex

@@ -44,19 +44,6 @@
  * (Lauris Kaplinski)
  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
-
-
-#if HAVE_STRING_H
-#endif
-
-
-#if HAVE_STDLIB_H
-#endif
-
 #include <string>
 #include <cstring>
 #include "xml/repr.h"
@@ -112,9 +99,8 @@ void Inkscape::DocumentUndo::done(SPDocument *doc, const unsigned int event_type
     maybeDone(doc, NULL, event_type, event_description);
 }
 
-void Inkscape::DocumentUndo::resetKey( Inkscape::Application * /*inkscape*/, SPDesktop * /*desktop*/, GObject *base )
+void Inkscape::DocumentUndo::resetKey( SPDocument *doc )
 {
-    SPDocument *doc = reinterpret_cast<SPDocument *>(base);
     doc->actionkey.clear();
 }
 
@@ -176,12 +162,12 @@ void Inkscape::DocumentUndo::maybeDone(SPDocument *doc, const gchar *key, const 
 		return;
 	}
 
-	if (key && !doc->actionkey.empty() && (doc->actionkey == key) && doc->priv->undo) {
-                ((Inkscape::Event *)doc->priv->undo->data)->event =
-                    sp_repr_coalesce_log (((Inkscape::Event *)doc->priv->undo->data)->event, log);
+	if (key && !doc->actionkey.empty() && (doc->actionkey == key) && !doc->priv->undo.empty()) {
+                (doc->priv->undo.back())->event =
+                    sp_repr_coalesce_log ((doc->priv->undo.back())->event, log);
 	} else {
                 Inkscape::Event *event = new Inkscape::Event(log, event_type, event_description);
-                doc->priv->undo = g_slist_prepend (doc->priv->undo, event);
+                doc->priv->undo.push_back(event);
 		doc->priv->history_size++;
 		doc->priv->undoStackObservers.notifyUndoCommitEvent(event);
 	}
@@ -210,6 +196,7 @@ void Inkscape::DocumentUndo::cancel(SPDocument *doc)
 
 	if (doc->priv->partial) {
 		sp_repr_undo_log (doc->priv->partial);
+                doc->emitReconstructionFinish();
 		sp_repr_free_log (doc->priv->partial);
 		doc->priv->partial = NULL;
 	}
@@ -225,10 +212,31 @@ static void finish_incomplete_transaction(SPDocument &doc) {
 		priv.partial = sp_repr_coalesce_log(priv.partial, log);
 		sp_repr_debug_print_log(priv.partial);
                 Inkscape::Event *event = new Inkscape::Event(priv.partial);
-		priv.undo = g_slist_prepend(priv.undo, event);
+		priv.undo.push_back(event);
                 priv.undoStackObservers.notifyUndoCommitEvent(event);
 		priv.partial = NULL;
 	}
+}
+
+static void perform_document_update(SPDocument &doc) {
+    sp_repr_begin_transaction(doc.rdoc);
+    doc.ensureUpToDate();
+
+    Inkscape::XML::Event *update_log=sp_repr_commit_undoable(doc.rdoc);
+    doc.emitReconstructionFinish();
+
+    if (update_log != NULL) {
+        g_warning("Document was modified while being updated after undo operation");
+        sp_repr_debug_print_log(update_log);
+
+        //Coalesce the update changes with the last action performed by user
+        if (!doc.priv->undo.empty()) {
+            Inkscape::Event* undo_stack_top = doc.priv->undo.back();
+            undo_stack_top->event = sp_repr_coalesce_log(undo_stack_top->event, update_log);
+        } else {
+            sp_repr_free_log(update_log);
+        }
+    }
 }
 
 gboolean Inkscape::DocumentUndo::undo(SPDocument *doc)
@@ -251,12 +259,13 @@ gboolean Inkscape::DocumentUndo::undo(SPDocument *doc)
 
 	finish_incomplete_transaction(*doc);
 
-	if (doc->priv->undo) {
-		Inkscape::Event *log=(Inkscape::Event *)doc->priv->undo->data;
-		doc->priv->undo = g_slist_remove (doc->priv->undo, log);
+	if (! doc->priv->undo.empty()) {
+		Inkscape::Event *log = doc->priv->undo.back();
+		doc->priv->undo.pop_back();
 		sp_repr_undo_log (log->event);
-                //doc->_updateDocument();
-		doc->priv->redo = g_slist_prepend (doc->priv->redo, log);
+		perform_document_update(*doc);
+
+		doc->priv->redo.push_back(log);
 
                 doc->setModifiedSinceSave();
                 doc->priv->undoStackObservers.notifyUndoEvent(log);
@@ -272,7 +281,7 @@ gboolean Inkscape::DocumentUndo::undo(SPDocument *doc)
         doc->priv->seeking = false;
 
 	if (ret)
-		inkscape_external_change();
+		INKSCAPE.external_change();
 
 	return ret;
 }
@@ -297,11 +306,11 @@ gboolean Inkscape::DocumentUndo::redo(SPDocument *doc)
 
 	finish_incomplete_transaction(*doc);
 
-	if (doc->priv->redo) {
-		Inkscape::Event *log=(Inkscape::Event *)doc->priv->redo->data;
-		doc->priv->redo = g_slist_remove (doc->priv->redo, log);
+	if (! doc->priv->redo.empty()) {
+		Inkscape::Event *log = doc->priv->redo.back();
+		doc->priv->redo.pop_back();
 		sp_repr_replay_log (log->event);
-		doc->priv->undo = g_slist_prepend (doc->priv->undo, log);
+		doc->priv->undo.push_back(log);
 
                 doc->setModifiedSinceSave();
 		doc->priv->undoStackObservers.notifyRedoEvent(log);
@@ -316,45 +325,39 @@ gboolean Inkscape::DocumentUndo::redo(SPDocument *doc)
 	doc->priv->sensitive = TRUE;
         doc->priv->seeking = false;
 
-	if (ret)
-		inkscape_external_change();
+	if (ret) {
+		INKSCAPE.external_change();
+                doc->emitReconstructionFinish();
+        }
 
 	return ret;
 }
 
 void Inkscape::DocumentUndo::clearUndo(SPDocument *doc)
 {
-        if (doc->priv->undo)
-                doc->priv->undoStackObservers.notifyClearUndoEvent();
-
-	while (doc->priv->undo) {
-		GSList *current;
-
-		current = doc->priv->undo;
-		doc->priv->undo = current->next;
-		doc->priv->history_size--;
-
-                delete ((Inkscape::Event *) current->data);
-		g_slist_free_1 (current);
-	}
+    if (! doc->priv->undo.empty())
+        doc->priv->undoStackObservers.notifyClearUndoEvent();
+    while (! doc->priv->undo.empty()) {
+        Inkscape::Event *e = doc->priv->undo.back();
+        doc->priv->undo.pop_back();
+        delete e;
+        doc->priv->history_size--;
+    }
 }
 
 void Inkscape::DocumentUndo::clearRedo(SPDocument *doc)
 {
-        if (doc->priv->redo)
+        if (!doc->priv->redo.empty())
                 doc->priv->undoStackObservers.notifyClearRedoEvent();
 
-	while (doc->priv->redo) {
-		GSList *current;
-
-		current = doc->priv->redo;
-		doc->priv->redo = current->next;
-		doc->priv->history_size--;
-
-                delete ((Inkscape::Event *) current->data);
-		g_slist_free_1 (current);
-	}
+    while (! doc->priv->redo.empty()) {
+        Inkscape::Event *e = doc->priv->redo.back();
+        doc->priv->redo.pop_back();
+        delete e;
+        doc->priv->history_size--;
+    }
 }
+
 /*
   Local Variables:
   mode:c++

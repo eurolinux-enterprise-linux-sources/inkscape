@@ -82,7 +82,7 @@ public:
     virtual void Render (SPCanvasBuf *buf) = 0;
 
     virtual void readRepr() = 0;
-    virtual void onReprAttrChanged (Inkscape::XML::Node * /*repr*/, const gchar */*key*/, const gchar */*oldval*/, const gchar */*newval*/, bool /*is_interactive*/) = 0;
+    virtual void onReprAttrChanged (Inkscape::XML::Node * /*repr*/, char const */*key*/, char const */*oldval*/, char const */*newval*/, bool /*is_interactive*/) = 0;
 
     Gtk::Widget * newWidget();
 
@@ -101,6 +101,9 @@ public:
 
     static void on_repr_attr_changed (Inkscape::XML::Node * repr, const gchar *key, const gchar *oldval, const gchar *newval, bool is_interactive, void * data);
 
+    bool isLegacy() const { return legacy; }
+    bool isPixel() const { return pixel; }
+
     bool isVisible() const { return (isEnabled() &&visible); };
     bool isEnabled() const;
 
@@ -118,7 +121,11 @@ protected:
 
     GridType gridtype;
 
-private:
+    // For dealing with old Inkscape SVG files (pre 0.92)
+    bool legacy;
+    bool pixel;
+    
+ private:
     CanvasGrid(const CanvasGrid&);
     CanvasGrid& operator=(const CanvasGrid&);
 };
@@ -129,11 +136,12 @@ public:
     CanvasXYGrid(SPNamedView * nv, Inkscape::XML::Node * in_repr, SPDocument * in_doc);
     virtual ~CanvasXYGrid();
 
-    void Update (Geom::Affine const &affine, unsigned int flags);
-    void Render (SPCanvasBuf *buf);
+    virtual void Scale  (Geom::Scale const &scale);
+    virtual void Update (Geom::Affine const &affine, unsigned int flags);
+    virtual void Render (SPCanvasBuf *buf);
 
-    void readRepr();
-    void onReprAttrChanged (Inkscape::XML::Node * repr, const gchar *key, const gchar *oldval, const gchar *newval, bool is_interactive);
+    virtual void readRepr();
+    virtual void onReprAttrChanged (Inkscape::XML::Node * repr, char const *key, char const *oldval, char const *newval, bool is_interactive);
 
     Geom::Point spacing; /**< Spacing between elements of the grid */
     bool scaled[2];    /**< Whether the grid is in scaled mode, which can

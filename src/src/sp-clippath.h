@@ -20,6 +20,8 @@
 
 struct SPClipPathView;
 
+#include <cstdio>
+
 #include "sp-object-group.h"
 #include "uri-references.h"
 #include "xml/node.h"
@@ -42,8 +44,8 @@ public:
     unsigned int clipPathUnits : 1;
 
     SPClipPathView *display;
-    static const gchar *create(GSList *reprs, SPDocument *document, Geom::Affine const* applyTransform);
-    static GType sp_clippath_get_type(void);
+    static char const *create(std::vector<Inkscape::XML::Node*> &reprs, SPDocument *document, Geom::Affine const* applyTransform);
+    //static GType sp_clippath_get_type(void);
 
     Inkscape::DrawingItem *show(Inkscape::Drawing &drawing, unsigned int key);
     void hide(unsigned int key);
@@ -57,12 +59,12 @@ protected:
 
 	virtual void child_added(Inkscape::XML::Node* child, Inkscape::XML::Node* ref);
 
-	virtual void set(unsigned int key, const gchar* value);
+	virtual void set(unsigned int key, char const* value);
 
 	virtual void update(SPCtx* ctx, unsigned int flags);
 	virtual void modified(unsigned int flags);
 
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, guint flags);
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document* doc, Inkscape::XML::Node* repr, unsigned int flags);
 };
 
 
@@ -85,15 +87,15 @@ protected:
             return false;
         }
         SPObject * const owner = this->getOwner();
-        if (obj->isAncestorOf(owner)) {
+        if (!URIReference::_acceptObject(obj)) {
             //XML Tree being used directly here while it shouldn't be...
             Inkscape::XML::Node * const owner_repr = owner->getRepr();
             //XML Tree being used directly here while it shouldn't be...
             Inkscape::XML::Node * const obj_repr = obj->getRepr();
-            gchar const * owner_name = NULL;
-            gchar const * owner_clippath = NULL;
-            gchar const * obj_name = NULL;
-            gchar const * obj_id = NULL;
+            char const * owner_name = "";
+            char const * owner_clippath = "";
+            char const * obj_name = "";
+            char const * obj_id = "";
             if (owner_repr != NULL) {
                 owner_name = owner_repr->name();
                 owner_clippath = owner_repr->attribute("clippath");
@@ -102,7 +104,7 @@ protected:
                 obj_name = obj_repr->name();
                 obj_id = obj_repr->attribute("id");
             }
-            g_warning("Ignoring recursive clippath reference "
+            printf("WARNING: Ignoring recursive clippath reference "
                       "<%s clippath=\"%s\"> in <%s id=\"%s\">",
                       owner_name, owner_clippath,
                       obj_name, obj_id);

@@ -61,6 +61,8 @@ ink_common_sources +=		\
 	ui/dialog/inkscape-preferences.h	\
 	ui/dialog/input.cpp			\
 	ui/dialog/input.h			\
+	ui/dialog/knot-properties.cpp		\
+	ui/dialog/knot-properties.h		\
 	ui/dialog/layer-properties.cpp		\
 	ui/dialog/layer-properties.h		\
 	ui/dialog/layers.cpp			\
@@ -100,12 +102,12 @@ ink_common_sources +=		\
 	ui/dialog/template-load-tab.h		\
 	ui/dialog/template-widget.cpp		\
 	ui/dialog/template-widget.h		\
+	ui/dialog/tags.cpp			\
+	ui/dialog/tags.h			\
 	ui/dialog/text-edit.cpp			\
 	ui/dialog/text-edit.h			\
 	ui/dialog/tile.cpp			\
 	ui/dialog/tile.h			\
-	ui/dialog/tracedialog.cpp		\
-	ui/dialog/tracedialog.h			\
 	ui/dialog/pixelartdialog.cpp		\
 	ui/dialog/pixelartdialog.h		\
 	ui/dialog/transformation.cpp		\
@@ -114,4 +116,18 @@ ink_common_sources +=		\
 	ui/dialog/undo-history.h		\
 	ui/dialog/xml-tree.cpp		\
 	ui/dialog/xml-tree.h		\
+	ui/dialog/lpe-powerstroke-properties.cpp	\
+	ui/dialog/lpe-powerstroke-properties.h	\
+	ui/dialog/objects.cpp	\
+	ui/dialog/objects.h	\
+	ui/dialog/lpe-fillet-chamfer-properties.cpp		\
+	ui/dialog/lpe-fillet-chamfer-properties.h		\
 	$(inkboard_dialogs)
+
+if HAVE_POTRACE
+
+ink_common_sources +=		\
+	ui/dialog/tracedialog.cpp		\
+	ui/dialog/tracedialog.h
+
+endif

@@ -20,14 +20,14 @@
 #endif
 
 #include <cstring>
+
+#include "ui/widget/color-notebook.h"
 #include <xml/node.h>
 
 #include <extension/extension.h>
 #include "document-private.h"
 #include "sp-object.h"
 #include <color.h>
-#include "widgets/sp-color-selector.h"
-#include "widgets/sp-color-notebook.h"
 
 #include "parameter.h"
 #include "bool.h"
@@ -39,6 +39,8 @@
 #include "notebook.h"
 #include "radiobutton.h"
 #include "string.h"
+
+#include <glibmm/i18n.h>
 
 namespace Inkscape {
 namespace Extension {
@@ -56,6 +58,16 @@ Parameter *Parameter::make(Inkscape::XML::Node *in_repr, Inkscape::Extension::Ex
     const char *guitext = in_repr->attribute("gui-text");
     if (guitext == NULL) {
         guitext = in_repr->attribute("_gui-text");
+        if (guitext == NULL) {
+            // guitext = ""; // propably better to require devs to explicitly set an empty gui-text if this is what they want
+        } else {
+            const char *context = in_repr->attribute("msgctxt");
+            if (context != NULL) {
+                guitext = g_dpgettext2(NULL, context, guitext);
+            } else {
+                guitext = _(guitext);
+            }
+        }
     }
     const char *gui_tip = in_repr->attribute("gui-tip");
     if (gui_tip == NULL) {
@@ -64,6 +76,14 @@ Parameter *Parameter::make(Inkscape::XML::Node *in_repr, Inkscape::Extension::Ex
     const char *desc = in_repr->attribute("gui-description");
     if (desc == NULL) {
         desc = in_repr->attribute("_gui-description");
+        if (desc != NULL) {
+            const char *context = in_repr->attribute("msgctxt");
+            if (context != NULL) {
+                desc = g_dpgettext2(NULL, context, desc);
+            } else {
+                desc = _(desc);
+            }
+        }
     }
     bool gui_hidden = false;
     {

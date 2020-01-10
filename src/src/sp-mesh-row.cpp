@@ -1,5 +1,5 @@
 /** @file
- * @gradient meshpatch class.
+ * @gradient meshrow class.
  */
 /* Authors:
  *   Lauris Kaplinski <lauris@kaplinski.com>
@@ -19,19 +19,9 @@
 
 #include "xml/repr.h"
 
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createMeshRow() {
-		return new SPMeshRow();
-	}
-
-	bool meshRowRegistered = SPFactory::instance().registerObject("svg:meshRow", createMeshRow);
-}
-
-SPMeshRow* SPMeshRow::getNextMeshRow()
+SPMeshrow* SPMeshrow::getNextMeshrow()
 {
-    SPMeshRow *result = 0;
+    SPMeshrow *result = 0;
 
     for (SPObject* obj = getNext(); obj && !result; obj = obj->getNext()) {
         if (SP_IS_MESHROW(obj)) {
@@ -42,19 +32,19 @@ SPMeshRow* SPMeshRow::getNextMeshRow()
     return result;
 }
 
-SPMeshRow* SPMeshRow::getPrevMeshRow()
+SPMeshrow* SPMeshrow::getPrevMeshrow()
 {
-    SPMeshRow *result = 0;
+    SPMeshrow *result = 0;
 
     for (SPObject* obj = getPrev(); obj; obj = obj->getPrev()) {
-        // The closest previous SPObject that is an SPMeshRow *should* be ourself.
+        // The closest previous SPObject that is an SPMeshrow *should* be ourself.
         if (SP_IS_MESHROW(obj)) {
-            SPMeshRow* meshrow = SP_MESHROW(obj);
+            SPMeshrow* meshrow = SP_MESHROW(obj);
             // Sanity check to ensure we have a proper sibling structure.
-            if (meshrow->getNextMeshRow() == this) {
+            if (meshrow->getNextMeshrow() == this) {
                 result = meshrow;
             } else {
-                g_warning("SPMeshRow previous/next relationship broken");
+                g_warning("SPMeshrow previous/next relationship broken");
             }
             break;
         }
@@ -67,30 +57,57 @@ SPMeshRow* SPMeshRow::getPrevMeshRow()
 /*
  * Mesh Row
  */
-SPMeshRow::SPMeshRow() : SPObject() {
+SPMeshrow::SPMeshrow() : SPObject() {
 }
 
-SPMeshRow::~SPMeshRow() {
+SPMeshrow::~SPMeshrow() {
 }
 
-void SPMeshRow::build(SPDocument* doc, Inkscape::XML::Node* repr) {
+void SPMeshrow::build(SPDocument* doc, Inkscape::XML::Node* repr) {
 	SPObject::build(doc, repr);
 }
+
 
 /**
  * Virtual build: set meshrow attributes from its associated XML node.
  */
-
-void SPMeshRow::set(unsigned int /*key*/, const gchar* /*value*/) {
+void SPMeshrow::set(unsigned int /*key*/, const gchar* /*value*/) {
 }
+
+/**
+ * modified
+ */
+void SPMeshrow::modified(unsigned int flags) {
+
+    flags &= SP_OBJECT_MODIFIED_CASCADE;
+    GSList *l = NULL;
+
+    for (SPObject *child = this->firstChild() ; child; child = child->getNext() ) {
+        sp_object_ref(child);
+        l = g_slist_prepend(l, child);
+    }
+
+    l = g_slist_reverse(l);
+
+    while (l) {
+        SPObject *child = SP_OBJECT(l->data);
+        l = g_slist_remove(l, child);
+
+        if (flags || (child->mflags & (SP_OBJECT_MODIFIED_FLAG | SP_OBJECT_CHILD_MODIFIED_FLAG))) {
+            child->emitModified(flags);
+        }
+
+        sp_object_unref(child);
+    }
+}
+
 
 /**
  * Virtual set: set attribute to value.
  */
-
-Inkscape::XML::Node* SPMeshRow::write(Inkscape::XML::Document* xml_doc, Inkscape::XML::Node* repr, guint flags) {
+Inkscape::XML::Node* SPMeshrow::write(Inkscape::XML::Document* xml_doc, Inkscape::XML::Node* repr, guint flags) {
     if ((flags & SP_OBJECT_WRITE_BUILD) && !repr) {
-        repr = xml_doc->createElement("svg:meshRow");
+        repr = xml_doc->createElement("svg:meshrow");
     }
 
     SPObject::write(xml_doc, repr, flags);

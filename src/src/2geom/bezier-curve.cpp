@@ -32,6 +32,9 @@
  */
 
 #include <2geom/bezier-curve.h>
+#include <2geom/path-sink.h>
+#include <2geom/basic-intersection.h>
+#include <2geom/nearest-time.h>
 
 namespace Geom 
 {
@@ -97,7 +100,7 @@ namespace Geom
  * @class BezierCurveN
  * @brief Bezier curve with compile-time specified order.
  *
- * @tparam degree unsigned value indicating the order of the bezier curve
+ * @tparam degree unsigned value indicating the order of the Bezier curve
  * 
  * @relates BezierCurve 
  * @ingroup Curves
@@ -105,13 +108,22 @@ namespace Geom
 
 
 BezierCurve::BezierCurve(std::vector<Point> const &pts)
+    : inner(pts)
 {
-    inner = D2<Bezier>(Bezier::Order(pts.size() - 1), Bezier::Order(pts.size() - 1));
+    if (pts.size() < 2) {
+        THROW_RANGEERROR("Bezier curve must have at least 2 control points");
+    }
+}
+
+bool BezierCurve::isDegenerate() const
+{
     for (unsigned d = 0; d < 2; ++d) {
-        for (unsigned i = 0; i < pts.size(); i++) {
-            inner[d][i] = pts[i][d];
+        Coord ic = inner[d][0];
+        for (unsigned i = 1; i < size(); ++i) {
+            if (inner[d][i] != ic) return false;
         }
     }
+    return true;
 }
 
 Coord BezierCurve::length(Coord tolerance) const
@@ -124,16 +136,118 @@ Coord BezierCurve::length(Coord tolerance) const
         return distance(initialPoint(), finalPoint());
     case 2:
         {
-            std::vector<Point> pts = points();
+            std::vector<Point> pts = controlPoints();
             return bezier_length(pts[0], pts[1], pts[2], tolerance);
         }
     case 3:
         {
-            std::vector<Point> pts = points();
+            std::vector<Point> pts = controlPoints();
             return bezier_length(pts[0], pts[1], pts[2], pts[3], tolerance);
         }
     default:
-        return bezier_length(points(), tolerance);
+        return bezier_length(controlPoints(), tolerance);
+    }
+}
+
+std::vector<CurveIntersection>
+BezierCurve::intersect(Curve const &other, Coord eps) const
+{
+    std::vector<CurveIntersection> result;
+
+    // in case we encounter an order-1 curve created from a vector
+    // or a degenerate elliptical arc
+    if (isLineSegment()) {
+        LineSegment ls(initialPoint(), finalPoint());
+        result = ls.intersect(other);
+        return result;
+    }
+
+    // here we are sure that this curve is at least a quadratic Bezier
+    BezierCurve const *bez = dynamic_cast<BezierCurve const *>(&other);
+    if (bez) {
+        std::vector<std::pair<double, double> > xs;
+        find_intersections(xs, inner, bez->inner, eps);
+        for (unsigned i = 0; i < xs.size(); ++i) {
+            CurveIntersection x(*this, other, xs[i].first, xs[i].second);
+            result.push_back(x);
+        }
+        return result;
+    }
+
+    // pass other intersection types to the other curve
+    result = other.intersect(*this, eps);
+    transpose_in_place(result);
+    return result;
+}
+
+bool BezierCurve::isNear(Curve const &c, Coord precision) const
+{
+    if (this == &c) return true;
+
+    BezierCurve const *other = dynamic_cast<BezierCurve const *>(&c);
+    if (!other) return false;
+
+    if (!are_near(inner.at0(), other->inner.at0(), precision)) return false;
+    if (!are_near(inner.at1(), other->inner.at1(), precision)) return false;
+
+    if (size() == other->size()) {
+        for (unsigned i = 1; i < order(); ++i) {
+            if (!are_near(inner.point(i), other->inner.point(i), precision)) {
+                return false;
+            }
+        }
+        return true;
+    } else {
+        // TODO: comparison after degree elevation
+        return false;
+    }
+}
+
+bool BezierCurve::operator==(Curve const &c) const
+{
+    if (this == &c) return true;
+
+    BezierCurve const *other = dynamic_cast<BezierCurve const *>(&c);
+    if (!other) return false;
+    if (size() != other->size()) return false;
+
+    for (unsigned i = 0; i < size(); ++i) {
+        if (controlPoint(i) != other->controlPoint(i)) return false;
+    }
+    return true;
+}
+
+Coord BezierCurve::nearestTime(Point const &p, Coord from, Coord to) const
+{
+    return nearest_time(p, inner, from, to);
+}
+
+void BezierCurve::feed(PathSink &sink, bool moveto_initial) const
+{
+    if (size() > 4) {
+        Curve::feed(sink, moveto_initial);
+        return;
+    }
+
+    Point ip = controlPoint(0);
+    if (moveto_initial) {
+        sink.moveTo(ip);
+    }
+    switch (size()) {
+    case 2:
+        sink.lineTo(controlPoint(1));
+        break;
+    case 3:
+        sink.quadTo(controlPoint(1), controlPoint(2));
+        break;
+    case 4:
+        sink.curveTo(controlPoint(1), controlPoint(2), controlPoint(3));
+        break;
+    default:
+        // TODO: add a path sink method that accepts a vector of control points
+        //       and converts to cubic spline by default
+        assert(false);
+        break;
     }
 }
 
@@ -164,9 +278,11 @@ Curve *BezierCurveN<1>::derivative() const {
 }
 
 template<>
-Coord BezierCurveN<1>::nearestPoint(Point const& p, Coord from, Coord to) const
+Coord BezierCurveN<1>::nearestTime(Point const& p, Coord from, Coord to) const
 {
-    if ( from > to ) std::swap(from, to);
+    using std::swap;
+
+    if ( from > to ) swap(from, to);
     Point ip = pointAt(from);
     Point fp = pointAt(to);
     Point v = fp - ip;
@@ -178,23 +294,89 @@ Coord BezierCurveN<1>::nearestPoint(Point const& p, Coord from, Coord to) const
     else return from + t*(to-from);
 }
 
+template <>
+std::vector<CurveIntersection> BezierCurveN<1>::intersect(Curve const &other, Coord eps) const
+{
+    std::vector<CurveIntersection> result;
 
-static Coord bezier_length_internal(std::vector<Point> &v1, Coord tolerance)
+    // only handle intersections with other LineSegments here
+    if (other.isLineSegment()) {
+        Line this_line(initialPoint(), finalPoint());
+        Line other_line(other.initialPoint(), other.finalPoint());
+        result = this_line.intersect(other_line);
+        filter_line_segment_intersections(result, true, true);
+        return result;
+    }
+
+    // pass all other types to the other curve
+    result = other.intersect(*this, eps);
+    transpose_in_place(result);
+    return result;
+}
+
+template <>
+int BezierCurveN<1>::winding(Point const &p) const
+{
+    Point ip = inner.at0(), fp = inner.at1();
+    if (p[Y] == std::max(ip[Y], fp[Y])) return 0;
+
+    Point v = fp - ip;
+    assert(v[Y] != 0);
+    Coord t = (p[Y] - ip[Y]) / v[Y];
+    assert(t >= 0 && t <= 1);
+    Coord xcross = lerp(t, ip[X], fp[X]);
+    if (xcross > p[X]) {
+        return v[Y] > 0 ? 1 : -1;
+    }
+    return 0;
+}
+
+template <>
+void BezierCurveN<1>::feed(PathSink &sink, bool moveto_initial) const
+{
+    if (moveto_initial) {
+        sink.moveTo(controlPoint(0));
+    }
+    sink.lineTo(controlPoint(1));
+}
+
+template <>
+void BezierCurveN<2>::feed(PathSink &sink, bool moveto_initial) const
+{
+    if (moveto_initial) {
+        sink.moveTo(controlPoint(0));
+    }
+    sink.quadTo(controlPoint(1), controlPoint(2));
+}
+
+template <>
+void BezierCurveN<3>::feed(PathSink &sink, bool moveto_initial) const
+{
+    if (moveto_initial) {
+        sink.moveTo(controlPoint(0));
+    }
+    sink.curveTo(controlPoint(1), controlPoint(2), controlPoint(3));
+}
+
+
+static Coord bezier_length_internal(std::vector<Point> &v1, Coord tolerance, int level)
 {
     /* The Bezier length algorithm used in 2Geom utilizes a simple fact:
      * the Bezier curve is longer than the distance between its endpoints
      * but shorter than the length of the polyline formed by its control
      * points. When the difference between the two values is smaller than the
      * error tolerance, we can be sure that the true value is no further than
-     * 2*tolerance from their arithmetic mean. When it's larger, we recursively
+     * 0.5 * tolerance from their arithmetic mean. When it's larger, we recursively
      * subdivide the Bezier curve into two parts and add their lengths.
+     * 
+     * We cap the maximum number of subdivisions at 256, which corresponds to 8 levels.
      */
     Coord lower = distance(v1.front(), v1.back());
     Coord upper = 0.0;
     for (size_t i = 0; i < v1.size() - 1; ++i) {
         upper += distance(v1[i], v1[i+1]);
     }
-    if (upper - lower < 2*tolerance) {
+    if (upper - lower <= 2*tolerance || level >= 8) {
         return (lower + upper) / 2;
     }
         
@@ -252,7 +434,8 @@ static Coord bezier_length_internal(std::vector<Point> &v1, Coord tolerance)
         v2[i] = v1[0];
     }
 
-    return bezier_length_internal(v1, 0.5*tolerance) + bezier_length_internal(v2, 0.5*tolerance);
+    return bezier_length_internal(v1, 0.5 * tolerance, level + 1) +
+           bezier_length_internal(v2, 0.5 * tolerance, level + 1);
 }
 
 /** @brief Compute the length of a bezier curve given by a vector of its control points
@@ -261,17 +444,17 @@ Coord bezier_length(std::vector<Point> const &points, Coord tolerance)
 {
     if (points.size() < 2) return 0.0;
     std::vector<Point> v1 = points;
-    return bezier_length_internal(v1, tolerance);
+    return bezier_length_internal(v1, tolerance, 0);
 }
 
-/** @brief Compute the length of a quadratic bezier curve given by its control points
- * @relatesalso QuadraticBezier */
-Coord bezier_length(Point a0, Point a1, Point a2, Coord tolerance)
+static Coord bezier_length_internal(Point a0, Point a1, Point a2, Coord tolerance, int level)
 {
     Coord lower = distance(a0, a2);
     Coord upper = distance(a0, a1) + distance(a1, a2);
 
-    if (upper - lower < 2*tolerance) return (lower + upper)/2;
+    if (upper - lower <= 2*tolerance || level >= 8) {
+        return (lower + upper) / 2;
+    }
 
     Point // Casteljau subdivision
         // b0 = a0,
@@ -279,17 +462,25 @@ Coord bezier_length(Point a0, Point a1, Point a2, Coord tolerance)
         b1 = 0.5*(a0 + a1),
         c1 = 0.5*(a1 + a2),
         b2 = 0.5*(b1 + c1); // == c2
-    return bezier_length(a0, b1, b2, 0.5*tolerance) + bezier_length(b2, c1, a2, 0.5*tolerance);
+    return bezier_length_internal(a0, b1, b2, 0.5 * tolerance, level + 1) +
+           bezier_length_internal(b2, c1, a2, 0.5 * tolerance, level + 1);
 }
 
-/** @brief Compute the length of a cubic bezier curve given by its control points
- * @relatesalso CubicBezier */
-Coord bezier_length(Point a0, Point a1, Point a2, Point a3, Coord tolerance)
+/** @brief Compute the length of a quadratic bezier curve given by its control points
+ * @relatesalso QuadraticBezier */
+Coord bezier_length(Point a0, Point a1, Point a2, Coord tolerance)
+{
+    return bezier_length_internal(a0, a1, a2, tolerance, 0);
+}
+
+static Coord bezier_length_internal(Point a0, Point a1, Point a2, Point a3, Coord tolerance, int level)
 {
     Coord lower = distance(a0, a3);
     Coord upper = distance(a0, a1) + distance(a1, a2) + distance(a2, a3);
 
-    if (upper - lower < 2*tolerance) return (lower + upper)/2;
+    if (upper - lower <= 2*tolerance || level >= 8) {
+        return (lower + upper) / 2;
+    }
 
     Point // Casteljau subdivision
         // b0 = a0,
@@ -300,7 +491,15 @@ Coord bezier_length(Point a0, Point a1, Point a2, Point a3, Coord tolerance)
         b2 = 0.5*(b1 + t0),
         c2 = 0.5*(t0 + c1),
         b3 = 0.5*(b2 + c2); // == c3
-    return bezier_length(a0, b1, b2, b3, 0.5*tolerance) + bezier_length(b3, c2, c1, a3, 0.5*tolerance);
+    return bezier_length_internal(a0, b1, b2, b3, 0.5 * tolerance, level + 1) +
+           bezier_length_internal(b3, c2, c1, a3, 0.5 * tolerance, level + 1);
+}
+
+/** @brief Compute the length of a cubic bezier curve given by its control points
+ * @relatesalso CubicBezier */
+Coord bezier_length(Point a0, Point a1, Point a2, Point a3, Coord tolerance)
+{
+    return bezier_length_internal(a0, a1, a2, a3, tolerance, 0);
 }
 
 } // end namespace Geom

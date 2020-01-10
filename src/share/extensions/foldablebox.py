@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 
 __version__ = "0.2"
@@ -22,6 +22,7 @@ __version__ = "0.2"
 import inkex, simplestyle
 from math import *
 from simplepath import formatPath
+import simpletransform
 
 class FoldableBox(inkex.Effect):
 
@@ -257,6 +258,12 @@ class FoldableBox(inkex.Effect):
         lower_pos += bTab
 
         g.set( 'transform', 'translate(%f,%f)' % ( (docW-left_pos)/2, (docH-lower_pos)/2 ) )
+
+        # compensate preserved transforms of parent layer
+        if self.current_layer.getparent() is not None:
+            mat = simpletransform.composeParents(self.current_layer, [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+            simpletransform.applyTransformToNode(simpletransform.invertTransform(mat), g)
+
 
 if __name__ == '__main__':   #pragma: no cover
     e = FoldableBox()

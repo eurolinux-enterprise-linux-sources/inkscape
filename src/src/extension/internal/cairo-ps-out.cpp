@@ -146,12 +146,12 @@ CairoPsOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar con
 
     bool new_textToPath  = FALSE;
     try {
-        new_textToPath  = mod->get_param_bool("textToPath");
+        new_textToPath = (strcmp(mod->get_param_optiongroup("textToPath"), "paths") == 0);
     } catch(...) {}
 
     bool new_textToLaTeX  = FALSE;
     try {
-        new_textToLaTeX  = mod->get_param_bool("textToLaTeX");
+        new_textToLaTeX = (strcmp(mod->get_param_optiongroup("textToPath"), "LaTeX") == 0);
     }
     catch(...) {
         g_warning("Parameter <textToLaTeX> might not exist");
@@ -235,12 +235,12 @@ CairoEpsOutput::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar co
 
     bool new_textToPath  = FALSE;
     try {
-        new_textToPath  = mod->get_param_bool("textToPath");
+        new_textToPath = (strcmp(mod->get_param_optiongroup("textToPath"), "paths") == 0);
     } catch(...) {}
 
     bool new_textToLaTeX  = FALSE;
     try {
-        new_textToLaTeX  = mod->get_param_bool("textToLaTeX");
+        new_textToLaTeX = (strcmp(mod->get_param_optiongroup("textToPath"), "LaTeX") == 0);
     }
     catch(...) {
         g_warning("Parameter <textToLaTeX> might not exist");
@@ -326,20 +326,23 @@ CairoPsOutput::init (void)
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
             "<name>" N_("PostScript") "</name>\n"
             "<id>" SP_MODULE_KEY_PRINT_CAIRO_PS "</id>\n"
-            "<param name=\"PSlevel\" gui-text=\"" N_("Restrict to PS level:") "\" type=\"enum\" >\n"
+            "<param name=\"PSlevel\" _gui-text=\"" N_("Restrict to PS level:") "\" type=\"enum\" >\n"
                 "<_item value='PS3'>" N_("PostScript level 3") "</_item>\n"
                 "<_item value='PS2'>" N_("PostScript level 2") "</_item>\n"
             "</param>\n"
-            "<param name=\"textToPath\" gui-text=\"" N_("Convert texts to paths") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"textToLaTeX\" gui-text=\"" N_("PS+LaTeX: Omit text in PS, and create LaTeX file") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"blurToBitmap\" gui-text=\"" N_("Rasterize filter effects") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"resolution\" gui-text=\"" N_("Resolution for rasterization (dpi):") "\" type=\"int\" min=\"1\" max=\"10000\">90</param>\n"
-            "<param name=\"area\" gui-text=\"" N_("Output page size") "\" type=\"optiongroup\" >\n"
+            "<param name=\"textToPath\" _gui-text=\"" N_("Text output options:") "\" type=\"optiongroup\">\n"
+                "<_option value=\"embed\">" N_("Embed fonts") "</_option>\n"
+                "<_option value=\"paths\">" N_("Convert text to paths") "</_option>\n"
+                "<_option value=\"LaTeX\">" N_("Omit text in PDF and create LaTeX file") "</_option>\n"
+            "</param>\n"
+            "<param name=\"blurToBitmap\" _gui-text=\"" N_("Rasterize filter effects") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"resolution\" _gui-text=\"" N_("Resolution for rasterization (dpi):") "\" type=\"int\" min=\"1\" max=\"10000\">96</param>\n"
+            "<param name=\"area\" _gui-text=\"" N_("Output page size") "\" type=\"optiongroup\" >\n"
                 "<_option value=\"page\">" N_("Use document's page size") "</_option>"
                 "<_option value=\"drawing\">" N_("Use exported object's size") "</_option>"
             "</param>"
-            "<param name=\"bleed\" gui-text=\"" N_("Bleed/margin (mm):") "\" type=\"float\" min=\"-10000\" max=\"10000\">0</param>\n"
-            "<param name=\"exportId\" gui-text=\"" N_("Limit export to the object with ID:") "\" type=\"string\"></param>\n"
+            "<param name=\"bleed\" _gui-text=\"" N_("Bleed/margin (mm):") "\" type=\"float\" min=\"-10000\" max=\"10000\">0</param>\n"
+            "<param name=\"exportId\" _gui-text=\"" N_("Limit export to the object with ID:") "\" type=\"string\"></param>\n"
             "<output>\n"
             "<extension>.ps</extension>\n"
                 "<mimetype>image/x-postscript</mimetype>\n"
@@ -365,20 +368,23 @@ CairoEpsOutput::init (void)
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
             "<name>" N_("Encapsulated PostScript") "</name>\n"
             "<id>" SP_MODULE_KEY_PRINT_CAIRO_EPS "</id>\n"
-            "<param name=\"PSlevel\" gui-text=\"" N_("Restrict to PS level:") "\" type=\"enum\" >\n"
+            "<param name=\"PSlevel\" _gui-text=\"" N_("Restrict to PS level:") "\" type=\"enum\" >\n"
                 "<_item value='PS3'>" N_("PostScript level 3") "</_item>\n"
                 "<_item value='PS2'>" N_("PostScript level 2") "</_item>\n"
             "</param>\n"
-            "<param name=\"textToPath\" gui-text=\"" N_("Convert texts to paths") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"textToLaTeX\" gui-text=\"" N_("EPS+LaTeX: Omit text in EPS, and create LaTeX file") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"blurToBitmap\" gui-text=\"" N_("Rasterize filter effects") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"resolution\" gui-text=\"" N_("Resolution for rasterization (dpi):") "\" type=\"int\" min=\"1\" max=\"10000\">90</param>\n"
-            "<param name=\"area\" gui-text=\"" N_("Output page size") "\" type=\"optiongroup\" >\n"
+            "<param name=\"textToPath\" _gui-text=\"" N_("Text output options:") "\" type=\"optiongroup\">\n"
+                "<_option value=\"embed\">" N_("Embed fonts") "</_option>\n"
+                "<_option value=\"paths\">" N_("Convert text to paths") "</_option>\n"
+                "<_option value=\"LaTeX\">" N_("Omit text in PDF and create LaTeX file") "</_option>\n"
+            "</param>\n"
+            "<param name=\"blurToBitmap\" _gui-text=\"" N_("Rasterize filter effects") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"resolution\" _gui-text=\"" N_("Resolution for rasterization (dpi):") "\" type=\"int\" min=\"1\" max=\"10000\">96</param>\n"
+            "<param name=\"area\" _gui-text=\"" N_("Output page size") "\" type=\"optiongroup\" >\n"
                 "<_option value=\"page\">" N_("Use document's page size") "</_option>"
                 "<_option value=\"drawing\">" N_("Use exported object's size") "</_option>"
             "</param>"
-            "<param name=\"bleed\" gui-text=\"" N_("Bleed/margin (mm)") "\" type=\"float\" min=\"-10000\" max=\"10000\">0</param>\n"
-            "<param name=\"exportId\" gui-text=\"" N_("Limit export to the object with ID:") "\" type=\"string\"></param>\n"
+            "<param name=\"bleed\" _gui-text=\"" N_("Bleed/margin (mm)") "\" type=\"float\" min=\"-10000\" max=\"10000\">0</param>\n"
+            "<param name=\"exportId\" _gui-text=\"" N_("Limit export to the object with ID:") "\" type=\"string\"></param>\n"
             "<output>\n"
                 "<extension>.eps</extension>\n"
                 "<mimetype>image/x-e-postscript</mimetype>\n"

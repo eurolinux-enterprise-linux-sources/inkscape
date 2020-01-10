@@ -15,10 +15,6 @@
 # include <config.h>
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/dialog.h> // for Gtk::RESPONSE_*
 #include <gtkmm/menu.h>
 #include <gtkmm/stock.h>
@@ -33,7 +29,8 @@
 #include "panel.h"
 #include "icon-size.h"
 #include "preferences.h"
-#include "desktop-handles.h"
+#include "desktop.h"
+
 #include "inkscape.h"
 #include "widgets/eek-preview.h"
 #include "ui/previewfillable.h"
@@ -76,6 +73,10 @@ Panel::Panel(Glib::ustring const &label, gchar const *prefs_path,
     _action_area(0),
     _fillable(0)
 {
+    set_name( "InkscapePanel" );
+#if WITH_GTKMM_3_0
+    set_orientation( Gtk::ORIENTATION_VERTICAL );
+#endif
     _init();
 }
 
@@ -95,7 +96,6 @@ void Panel::_popper(GdkEventButton* event)
 
 void Panel::_init()
 {
-    Glib::ustring tmp("<");
     _anchor = SP_ANCHOR_CENTER;
 
     guint panel_size = 0, panel_mode = 0, panel_ratio = 100, panel_border = 0;
@@ -285,7 +285,10 @@ void Panel::_init()
     pack_start(_top_bar, false, false);
 
     Gtk::HBox* boxy = Gtk::manage(new Gtk::HBox());
-
+    boxy->set_name( "PanelBoxY" );
+    _contents.set_name( "PanelContents" );
+    _right_bar.set_name( "PanelRightBar" );
+    _top_bar.set_name( "PanelTopBar" );
     boxy->pack_start(_contents, true, true);
     boxy->pack_start(_right_bar, false, true);
 
@@ -293,7 +296,7 @@ void Panel::_init()
 
     signalResponse().connect(sigc::mem_fun(*this, &Panel::_handleResponse));
 
-    signalActivateDesktop().connect(sigc::hide<0>(sigc::mem_fun(*this, &Panel::setDesktop)));
+    signalActivateDesktop().connect(sigc::mem_fun(*this, &Panel::setDesktop));
 
     show_all_children();
 
@@ -643,13 +646,13 @@ Panel::signalDocumentReplaced()
     return _signal_document_replaced;
 }
 
-sigc::signal<void, Inkscape::Application *, SPDesktop *> &
+sigc::signal<void, SPDesktop *> &
 Panel::signalActivateDesktop()
 {
     return _signal_activate_desktop;
 }
 
-sigc::signal<void, Inkscape::Application *, SPDesktop *> &
+sigc::signal<void, SPDesktop *> &
 Panel::signalDeactiveDesktop()
 {
     return _signal_deactive_desktop;
@@ -667,7 +670,7 @@ void Panel::_handleResponse(int response_id)
 
 Inkscape::Selection *Panel::_getSelection()
 {
-    return sp_desktop_selection(_desktop);
+    return _desktop->getSelection();
 }
 
 } // namespace Widget

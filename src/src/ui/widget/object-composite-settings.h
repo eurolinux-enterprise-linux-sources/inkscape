@@ -11,14 +11,6 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/box.h>
 #include <gtkmm/alignment.h>
 #include <gtkmm/adjustment.h>
@@ -30,9 +22,9 @@
 #include "ui/widget/spinbutton.h"
 
 class SPDesktop;
+struct InkscapeApplication;
 
 namespace Inkscape {
-struct Application;
 
 namespace UI {
 namespace Widget {
@@ -66,8 +58,8 @@ private:
     gulong _desktop_activated;
     sigc::connection _subject_changed;
     
-    static void _on_desktop_activate(Inkscape::Application *application, SPDesktop *desktop, ObjectCompositeSettings *w);
-    static void _on_desktop_deactivate(Inkscape::Application *application, SPDesktop *desktop, ObjectCompositeSettings *w);
+    static void _on_desktop_activate(SPDesktop *desktop, ObjectCompositeSettings *w);
+    static void _on_desktop_deactivate(SPDesktop *desktop, ObjectCompositeSettings *w);
     void _subjectChanged();
     void _blendBlurValueChanged();
     void _opacityValueChanged();

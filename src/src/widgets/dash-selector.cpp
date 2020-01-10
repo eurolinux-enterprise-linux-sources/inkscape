@@ -25,7 +25,7 @@
 #include <2geom/coord.h>
 
 #include "style.h"
-#include "dialogs/dialog-events.h"
+#include "ui/dialog-events.h"
 #include "preferences.h"
 #include "ui/widget/spinbutton.h"
 #include "display/cairo-utils.h"
@@ -118,18 +118,18 @@ void SPDashSelector::init_dashes() {
         
         int pos = 0;
         if (!dash_prefs.empty()) {
-            SPStyle *style = sp_style_new (NULL);
+            SPStyle style;
             dashes = g_new (double *, dash_prefs.size() + 2); // +1 for custom slot, +1 for terminator slot
             
             for (std::vector<Glib::ustring>::iterator i = dash_prefs.begin(); i != dash_prefs.end(); ++i) {
-                sp_style_read_from_prefs(style, *i);
+                style.readFromPrefs( *i );
                 
-                if (!style->stroke_dasharray.values.empty()) {
-                    dashes[pos] = g_new (double, style->stroke_dasharray.values.size() + 1);
+                if (!style.stroke_dasharray.values.empty()) {
+                    dashes[pos] = g_new (double, style.stroke_dasharray.values.size() + 1);
                     double *d = dashes[pos];
                     unsigned i = 0;
-                    for (; i < style->stroke_dasharray.values.size(); i++) {
-                        d[i] = style->stroke_dasharray.values[i];
+                    for (; i < style.stroke_dasharray.values.size(); i++) {
+                        d[i] = style.stroke_dasharray.values[i];
                     }
                     d[i] = -1;
                 } else {
@@ -188,11 +188,13 @@ void SPDashSelector::set_dash (int ndash, double *dash, double o)
     else  if(ndash==0) {
        pos = 0;
     }
-
     if(pos>=0){
        this->set_data("pattern", dashes[pos]);
        this->dash_combo.set_active(pos);
        this->offset->set_value(o);
+       if(pos == 10) {
+           this->offset->set_value(10.0);
+       }
     }
     else { // Hit a custom pattern in the SVG, write it into the combobox.
        count--;  // the one slot for custom patterns

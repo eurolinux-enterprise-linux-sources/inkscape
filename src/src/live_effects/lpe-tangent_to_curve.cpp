@@ -16,8 +16,6 @@
 #include <glibmm/i18n.h>
 
 #include "live_effects/lpe-tangent_to_curve.h"
-// FIXME: The following are only needed to convert the path's SPCurve* to pwd2.
-//        There must be a more convenient way to achieve this.
 #include "sp-path.h"
 #include "display/curve.h"
 
@@ -92,7 +90,7 @@ LPETangentToCurve::doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const
     C = ptA - derivA * length_left;
     D = ptA + derivA * length_right;
 
-    output = Piecewise<D2<SBasis> >(D2<SBasis>(Linear(C[X], D[X]), Linear(C[Y], D[Y])));
+    output = Piecewise<D2<SBasis> >(D2<SBasis>(SBasis(C[X], D[X]), SBasis(C[Y], D[Y])));
 
     return output;
 }
@@ -108,13 +106,13 @@ LPETangentToCurve::addKnotHolderEntities(KnotHolder *knotholder, SPDesktop *desk
     {
         KnotHolderEntity *e = new TtC::KnotHolderEntityLeftEnd(this);
         e->create( desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN,
-                    _("Adjust the \"left\" end of the tangent") );
+                    _("Adjust the <b>left</b> end of the tangent") );
         knotholder->add(e);
     }
     {
         KnotHolderEntity *e = new TtC::KnotHolderEntityRightEnd(this);
         e->create( desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN,
-                   _("Adjust the \"right\" end of the tangent") );
+                   _("Adjust the <b>right</b> end of the tangent") );
         knotholder->add(e);
     }
 };
@@ -130,15 +128,14 @@ KnotHolderEntityAttachPt::knot_set(Geom::Point const &p, Geom::Point const &/*or
 
     Geom::Point const s = snap_knot_position(p, state);
 
-    // FIXME: There must be a better way of converting the path's SPCurve* to pwd2.
-    SPCurve *curve = SP_PATH(item)->get_curve_for_edit();
-    Geom::PathVector pathv = curve->get_pathvector();
-    Piecewise<D2<SBasis> > pwd2;
-    for (unsigned int i=0; i < pathv.size(); i++) {
-        pwd2.concat(pathv[i].toPwSb());
+    if ( !SP_IS_SHAPE(lpe->sp_lpe_item) ) {
+        //lpe->t_attach.param_set_value(0);
+        g_warning("LPEItem is not a path! %s:%d\n", __FILE__, __LINE__);
+        return;
     }
-
-    double t0 = nearest_point(s, pwd2);
+    Piecewise<D2<SBasis> > pwd2 = paths_to_pw( lpe->pathvector_before_effect );
+    
+    double t0 = nearest_time(s, pwd2);
     lpe->t_attach.param_set_value(t0);
 
     // FIXME: this should not directly ask for updating the item. It should write to SVG, which triggers updating.
@@ -152,7 +149,7 @@ KnotHolderEntityLeftEnd::knot_set(Geom::Point const &p, Geom::Point const &/*ori
 
     Geom::Point const s = snap_knot_position(p, state);
 
-    double lambda = Geom::nearest_point(s, lpe->ptA, lpe->derivA);
+    double lambda = Geom::nearest_time(s, lpe->ptA, lpe->derivA);
     lpe->length_left.param_set_value(-lambda);
 
     sp_lpe_item_update_patheffect (SP_LPE_ITEM(item), false, true);
@@ -165,7 +162,7 @@ KnotHolderEntityRightEnd::knot_set(Geom::Point const &p, Geom::Point const &/*or
     
     Geom::Point const s = snap_knot_position(p, state);
 
-    double lambda = Geom::nearest_point(s, lpe->ptA, lpe->derivA);
+    double lambda = Geom::nearest_time(s, lpe->ptA, lpe->derivA);
     lpe->length_right.param_set_value(lambda);
 
     sp_lpe_item_update_patheffect (SP_LPE_ITEM(item), false, true);

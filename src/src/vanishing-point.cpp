@@ -6,6 +6,7 @@
  *   Johan Engelen <j.b.c.engelen@ewi.utwente.nl>
  *   Maximilian Albert <Anhalter42@gmx.de>
  *   Abhishek Sharma
+ *   Jon A. Cruz <jon@joncruz.org>
  *
  * Copyright (C) 2005-2007 authors
  *
@@ -15,14 +16,14 @@
 #include <glibmm/i18n.h>
 
 #include "vanishing-point.h"
-#include "desktop-handles.h"
+
 #include "desktop.h"
 #include "display/sp-canvas-item.h"
 #include "display/sp-ctrlline.h"
 #include "ui/tools/tool-base.h"
 #include "xml/repr.h"
 #include "perspective-line.h"
-#include "shape-editor.h"
+#include "ui/shape-editor.h"
 #include "snap.h"
 #include "sp-namedview.h"
 #include "ui/control-manager.h"
@@ -93,7 +94,7 @@ vp_knot_moved_handler (SPKnot *knot, Geom::Point const &ppointer, guint state, g
     Geom::Point p = ppointer;
 
     // FIXME: take from prefs
-    double snap_dist = SNAP_DIST / inkscape_active_desktop()->current_zoom();
+    double snap_dist = SNAP_DIST / SP_ACTIVE_DESKTOP->current_zoom();
 
     /*
      * We use dragging_started to indicate if we have already checked for the need to split Draggers up.
@@ -109,7 +110,7 @@ vp_knot_moved_handler (SPKnot *knot, Geom::Point const &ppointer, guint state, g
             for (std::set<VanishingPoint*, less_ptr>::iterator vp = sel_vps.begin(); vp != sel_vps.end(); ++vp) {
                 // for each VP that has selected boxes:
                 Persp3D *old_persp = (*vp)->get_perspective();
-                sel_boxes = (*vp)->selectedBoxes(sp_desktop_selection(inkscape_active_desktop()));
+                sel_boxes = (*vp)->selectedBoxes(SP_ACTIVE_DESKTOP->getSelection());
 
                 // we create a new perspective ...
                 Persp3D *new_persp = persp3d_create_xml_element (dragger->parent->document, old_persp->perspective_impl);
@@ -128,16 +129,16 @@ vp_knot_moved_handler (SPKnot *knot, Geom::Point const &ppointer, guint state, g
             }
             // FIXME: Do we need to create a new dragger as well?
             dragger->updateZOrders ();
-            DocumentUndo::done(sp_desktop_document (inkscape_active_desktop()), SP_VERB_CONTEXT_3DBOX,
-			       _("Split vanishing points"));
+            DocumentUndo::done(SP_ACTIVE_DESKTOP->getDocument(), SP_VERB_CONTEXT_3DBOX,
+                   _("Split vanishing points"));
             return;
         }
     }
 
     if (!(state & GDK_SHIFT_MASK)) {
         // without Shift; see if we need to snap to another dragger
-        for (GList *di = dragger->parent->draggers; di != NULL; di = di->next) {
-            VPDragger *d_new = (VPDragger *) di->data;
+        for (std::vector<VPDragger *>::const_iterator di = dragger->parent->draggers.begin(); di != dragger->parent->draggers.end(); ++di) {
+            VPDragger *d_new = *di; 
             if ((d_new != dragger) && (Geom::L2 (d_new->point - p) < snap_dist)) {
                 if (have_VPs_of_same_perspective (dragger, d_new)) {
                     // this would result in degenerate boxes, which we disallow for the time being
@@ -154,7 +155,7 @@ vp_knot_moved_handler (SPKnot *knot, Geom::Point const &ppointer, guint state, g
                 d_new->vps.merge(dragger->vps);
 
                 // ... delete old dragger ...
-                drag->draggers = g_list_remove (drag->draggers, dragger);
+                drag->draggers.erase(std::remove(drag->draggers.begin(), drag->draggers.end(), dragger),drag->draggers.end());
                 delete dragger;
                 dragger = NULL;
 
@@ -173,23 +174,25 @@ vp_knot_moved_handler (SPKnot *knot, Geom::Point const &ppointer, guint state, g
                 //       deleted according to changes in the svg representation, not based on any user input
                 //       as is currently the case.
 
-                DocumentUndo::done(sp_desktop_document (inkscape_active_desktop()), SP_VERB_CONTEXT_3DBOX,
-				   _("Merge vanishing points"));
+                DocumentUndo::done(SP_ACTIVE_DESKTOP->getDocument(), SP_VERB_CONTEXT_3DBOX,
+                   _("Merge vanishing points"));
 
                 return;
             }
         }
+    }
 
-        // We didn't snap to another dragger, so we'll try a regular snap
-        SPDesktop *desktop = inkscape_active_desktop();
-        SnapManager &m = desktop->namedview->snap_manager;
-        m.setup(desktop);
-        Inkscape::SnappedPoint s = m.freeSnap(Inkscape::SnapCandidatePoint(p, Inkscape::SNAPSOURCE_OTHER_HANDLE));
-        m.unSetup();
-        if (s.getSnapped()) {
-            p = s.getPoint();
-            knot->moveto(p);
-        }
+    // We didn't hit the return statement above, so we didn't snap to another dragger. Therefore we'll now try a regular snap
+    // Regardless of the status of the SHIFT key, we will try to snap; Here SHIFT does not disable snapping, as the shift key
+    // has a different purpose in this context (see above)
+    SPDesktop *desktop = SP_ACTIVE_DESKTOP;
+    SnapManager &m = desktop->namedview->snap_manager;
+    m.setup(desktop);
+    Inkscape::SnappedPoint s = m.freeSnap(Inkscape::SnapCandidatePoint(p, Inkscape::SNAPSOURCE_OTHER_HANDLE));
+    m.unSetup();
+    if (s.getSnapped()) {
+        p = s.getPoint();
+        knot->moveto(p);
     }
 
     dragger->point = p; // FIXME: Is dragger->point being used at all?
@@ -240,7 +243,7 @@ vp_knot_ungrabbed_handler (SPKnot *knot, guint /*state*/, gpointer data)
     g_return_if_fail (dragger->parent);
     g_return_if_fail (dragger->parent->document);
     DocumentUndo::done(dragger->parent->document, SP_VERB_CONTEXT_3DBOX,
-		       _("3D box: Move vanishing point"));
+               _("3D box: Move vanishing point"));
 }
 
 unsigned int VanishingPoint::global_counter = 0;
@@ -255,29 +258,28 @@ VanishingPoint::set_pos(Proj::Pt2 const &pt) {
 std::list<SPBox3D *>
 VanishingPoint::selectedBoxes(Inkscape::Selection *sel) {
     std::list<SPBox3D *> sel_boxes;
-    for (GSList const* i = sel->itemList(); i != NULL; i = i->next) {
-        if (!SP_IS_BOX3D(i->data))
-            continue;
-        SPBox3D *box = SP_BOX3D(i->data);
-        if (this->hasBox(box)) {
-            sel_boxes.push_back (box);
+    std::vector<SPItem*> itemlist=sel->itemList();
+    for (std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i) {
+        SPItem *item = *i;
+        SPBox3D *box = dynamic_cast<SPBox3D *>(item);
+        if (box && this->hasBox(box)) {
+            sel_boxes.push_back(box);
         }
     }
     return sel_boxes;
 }
 
-VPDragger::VPDragger(VPDrag *parent, Geom::Point p, VanishingPoint &vp)
+VPDragger::VPDragger(VPDrag *parent, Geom::Point p, VanishingPoint &vp) :
+    parent(parent),
+    knot(NULL),
+    point(p),
+    point_original(p),
+    dragging_started(false),
+    vps()
 {
-    this->parent = parent;
-
-    this->point = p;
-    this->point_original = p;
-
-    this->dragging_started = false;
-
     if (vp.is_finite()) {
         // create the knot
-        this->knot = new SPKnot(inkscape_active_desktop(), NULL);
+        this->knot = new SPKnot(SP_ACTIVE_DESKTOP, NULL);
         this->knot->setMode(SP_KNOT_MODE_XOR);
         this->knot->setFill(VP_KNOT_COLOR_NORMAL, VP_KNOT_COLOR_NORMAL, VP_KNOT_COLOR_NORMAL);
         this->knot->setStroke(0x000000ff, 0x000000ff, 0x000000ff);
@@ -394,14 +396,16 @@ VPDragger::VPsOfSelectedBoxes() {
     std::set<VanishingPoint*, less_ptr> sel_vps;
     VanishingPoint *vp;
     // FIXME: Should we take the selection from the parent VPDrag? I guess it shouldn't make a difference.
-    Inkscape::Selection *sel = sp_desktop_selection(inkscape_active_desktop());
-    for (GSList const* i = sel->itemList(); i != NULL; i = i->next) {
-        if (!SP_IS_BOX3D(i->data))
-            continue;
-        SPBox3D *box = SP_BOX3D(i->data);
-        vp = this->findVPWithBox(box);
-        if (vp) {
-            sel_vps.insert (vp);
+    Inkscape::Selection *sel = SP_ACTIVE_DESKTOP->getSelection();
+    std::vector<SPItem*> itemlist=sel->itemList();
+    for (std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i) {
+        SPItem *item = *i;
+        SPBox3D *box = dynamic_cast<SPBox3D *>(item);
+        if (box) {
+            vp = this->findVPWithBox(box);
+            if (vp) {
+                sel_vps.insert (vp);
+            }
         }
     }
     return sel_vps;
@@ -487,10 +491,8 @@ VPDragger::printVPs() {
 VPDrag::VPDrag (SPDocument *document)
 {
     this->document = document;
-    this->selection = sp_desktop_selection(inkscape_active_desktop());
+    this->selection = SP_ACTIVE_DESKTOP->getSelection();
 
-    this->draggers = NULL;
-    this->lines = NULL;
     this->show_lines = true;
     this->front_or_rear_lines = 0x1;
 
@@ -517,17 +519,15 @@ VPDrag::~VPDrag()
     this->sel_changed_connection.disconnect();
     this->sel_modified_connection.disconnect();
 
-    for (GList *l = this->draggers; l != NULL; l = l->next) {
-        delete ((VPDragger *) l->data);
+    for (std::vector<VPDragger *>::const_iterator i = this->draggers.begin(); i != this->draggers.end(); ++i) {
+        delete (*i);
     }
-    g_list_free (this->draggers);
-    this->draggers = NULL;
+    this->draggers.clear();
 
-    for (GSList const *i = this->lines; i != NULL; i = i->next) {
-        sp_canvas_item_destroy(SP_CANVAS_ITEM(i->data));
+    for (std::vector<SPCtrlLine *>::const_iterator i = this->lines.begin(); i != this->lines.end(); ++i) {
+        sp_canvas_item_destroy(SP_CANVAS_ITEM(*i));
     }
-    g_slist_free (this->lines);
-    this->lines = NULL;
+    this->lines.clear(); 
 }
 
 /**
@@ -536,8 +536,8 @@ VPDrag::~VPDrag()
 VPDragger *
 VPDrag::getDraggerFor (VanishingPoint const &vp)
 {
-    for (GList const* i = this->draggers; i != NULL; i = i->next) {
-        VPDragger *dragger = (VPDragger *) i->data;
+    for (std::vector<VPDragger *>::const_iterator i = this->draggers.begin(); i != this->draggers.end(); ++i) {
+        VPDragger *dragger = *i;
         for (std::list<VanishingPoint>::iterator j = dragger->vps.begin(); j != dragger->vps.end(); ++j) {
             // TODO: Should we compare the pointers or the VPs themselves!?!?!?!
             if (*j == vp) {
@@ -552,8 +552,8 @@ void
 VPDrag::printDraggers ()
 {
     g_print ("=== VPDrag info: =================================\n");
-    for (GList const* i = this->draggers; i != NULL; i = i->next) {
-        ((VPDragger *) i->data)->printVPs();
+    for (std::vector<VPDragger *>::const_iterator i = this->draggers.begin(); i != this->draggers.end(); ++i) {
+        (*i)->printVPs();
         g_print ("========\n");
     }
     g_print ("=================================================\n");
@@ -568,23 +568,23 @@ VPDrag::updateDraggers ()
     if (this->dragging)
         return;
     // delete old draggers
-    for (GList const* i = this->draggers; i != NULL; i = i->next) {
-        delete ((VPDragger *) i->data);
+    for (std::vector<VPDragger *>::const_iterator i = this->draggers.begin(); i != this->draggers.end(); ++i) {
+        delete (*i);
     }
-    g_list_free (this->draggers);
-    this->draggers = NULL;
+    this->draggers.clear();
 
     g_return_if_fail (this->selection != NULL);
 
-    for (GSList const* i = this->selection->itemList(); i != NULL; i = i->next) {
-        SPItem *item = SP_ITEM(i->data);
-        if (!SP_IS_BOX3D (item)) continue;
-        SPBox3D *box = SP_BOX3D (item);
-
-        VanishingPoint vp;
-        for (int i = 0; i < 3; ++i) {
-            vp.set(box3d_get_perspective(box), Proj::axes[i]);
-            addDragger (vp);
+    std::vector<SPItem*> itemlist=this->selection->itemList();
+    for (std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i) {
+        SPItem *item = *i;
+        SPBox3D *box = dynamic_cast<SPBox3D *>(item);
+        if (box) {
+            VanishingPoint vp;
+            for (int i = 0; i < 3; ++i) {
+                vp.set(box3d_get_perspective(box), Proj::axes[i]);
+                addDragger (vp);
+            }
         }
     }
 }
@@ -597,24 +597,25 @@ void
 VPDrag::updateLines ()
 {
     // delete old lines
-    for (GSList const *i = this->lines; i != NULL; i = i->next) {
-        sp_canvas_item_destroy(SP_CANVAS_ITEM(i->data));
+    for (std::vector<SPCtrlLine *>::const_iterator i = this->lines.begin(); i != this->lines.end(); ++i) {
+        sp_canvas_item_destroy(SP_CANVAS_ITEM(*i));
     }
-    g_slist_free (this->lines);
-    this->lines = NULL;
+    this->lines.clear();
 
     // do nothing if perspective lines are currently disabled
     if (this->show_lines == 0) return;
 
     g_return_if_fail (this->selection != NULL);
 
-    for (GSList const* i = this->selection->itemList(); i != NULL; i = i->next) {
-        if (!SP_IS_BOX3D(i->data)) continue;
-        SPBox3D *box = SP_BOX3D (i->data);
-
-        this->drawLinesForFace (box, Proj::X);
-        this->drawLinesForFace (box, Proj::Y);
-        this->drawLinesForFace (box, Proj::Z);
+    std::vector<SPItem*> itemlist=this->selection->itemList();
+    for (std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i) {
+        SPItem *item = *i;
+        SPBox3D *box = dynamic_cast<SPBox3D *>(item);
+        if (box) {
+            this->drawLinesForFace (box, Proj::X);
+            this->drawLinesForFace (box, Proj::Y);
+            this->drawLinesForFace (box, Proj::Z);
+        }
     }
 }
 
@@ -624,16 +625,16 @@ VPDrag::updateBoxHandles ()
     // FIXME: Is there a way to update the knots without accessing the
     //        (previously) statically linked function KnotHolder::update_knots?
 
-    GSList *sel = (GSList *) selection->itemList();
-    if (!sel)
+    std::vector<SPItem*> sel = selection->itemList();
+    if (sel.empty())
         return; // no selection
 
-    if (g_slist_length (sel) > 1) {
+    if (sel.size() > 1) {
         // Currently we only show handles if a single box is selected
         return;
     }
 
-    Inkscape::UI::Tools::ToolBase *ec = inkscape_active_event_context();
+    Inkscape::UI::Tools::ToolBase *ec = INKSCAPE.active_event_context();
     g_assert (ec != NULL);
     if (ec->shape_editor != NULL) {
         ec->shape_editor->update_knotholder();
@@ -643,8 +644,8 @@ VPDrag::updateBoxHandles ()
 void
 VPDrag::updateBoxReprs ()
 {
-    for (GList *i = this->draggers; i != NULL; i = i->next) {
-        VPDragger *dragger = (VPDragger *) i->data;
+    for (std::vector<VPDragger *>::const_iterator i = this->draggers.begin(); i != this->draggers.end(); ++i) {
+        VPDragger *dragger = *i;
         for (std::list<VanishingPoint>::iterator i = dragger->vps.begin(); i != dragger->vps.end(); ++i) {
             (*i).updateBoxReprs();
         }
@@ -654,8 +655,8 @@ VPDrag::updateBoxReprs ()
 void
 VPDrag::updateBoxDisplays ()
 {
-    for (GList *i = this->draggers; i != NULL; i = i->next) {
-        VPDragger *dragger = (VPDragger *) i->data;
+    for (std::vector<VPDragger *>::const_iterator i = this->draggers.begin(); i != this->draggers.end(); ++i) {
+        VPDragger *dragger = *i;
         for (std::list<VanishingPoint>::iterator i = dragger->vps.begin(); i != dragger->vps.end(); ++i) {
             (*i).updateBoxDisplays();
         }
@@ -706,7 +707,7 @@ void VPDrag::drawLinesForFace(const SPBox3D *box, Proj::Axis axis) //, guint cor
         // draw perspective lines for infinite VPs
         boost::optional<Geom::Point> pt1, pt2, pt3, pt4;
         Persp3D *persp = box3d_get_perspective(box);
-        SPDesktop *desktop = inkscape_active_desktop (); // FIXME: Store the desktop in VPDrag
+        SPDesktop *desktop = SP_ACTIVE_DESKTOP; // FIXME: Store the desktop in VPDrag
         Box3D::PerspectiveLine pl (corner1, axis, persp);
         pt1 = pl.intersection_with_viewbox(desktop);
 
@@ -750,8 +751,8 @@ VPDrag::addDragger (VanishingPoint &vp)
     }
     Geom::Point p = vp.get_pos();
 
-    for (GList *i = this->draggers; i != NULL; i = i->next) {
-        VPDragger *dragger = (VPDragger *) i->data;
+    for (std::vector<VPDragger *>::const_iterator i = this->draggers.begin(); i != this->draggers.end(); ++i) {
+        VPDragger *dragger = *i;
         if (Geom::L2 (dragger->point - p) < MERGE_DIST) {
             // distance is small, merge this draggable into dragger, no need to create new dragger
             dragger->addVP (vp);
@@ -761,16 +762,16 @@ VPDrag::addDragger (VanishingPoint &vp)
 
     VPDragger *new_dragger = new VPDragger(this, p, vp);
     // fixme: draggers should be added AFTER the last one: this way tabbing through them will be from begin to end.
-    this->draggers = g_list_append (this->draggers, new_dragger);
+    this->draggers.push_back(new_dragger);
 }
 
 void
 VPDrag::swap_perspectives_of_VPs(Persp3D *persp2, Persp3D *persp1)
 {
     // iterate over all VP in all draggers and replace persp2 with persp1
-    for (GList *i = this->draggers; i != NULL; i = i->next) {
-        for (std::list<VanishingPoint>::iterator j = ((VPDragger *) (i->data))->vps.begin();
-             j != ((VPDragger *) (i->data))->vps.end(); ++j) {
+    for (std::vector<VPDragger *>::const_iterator i = this->draggers.begin(); i != this->draggers.end(); ++i) {
+        for (std::list<VanishingPoint>::iterator j = (*i)->vps.begin();
+             j != (*i)->vps.end(); ++j) {
             if ((*j).get_perspective() == persp2) {
                 (*j).set_perspective(persp1);
             }
@@ -780,9 +781,9 @@ VPDrag::swap_perspectives_of_VPs(Persp3D *persp2, Persp3D *persp1)
 
 void VPDrag::addLine(Geom::Point const &p1, Geom::Point const &p2, Inkscape::CtrlLineType type)
 {
-    SPCtrlLine *line = ControlManager::getManager().createControlLine(sp_desktop_controls(inkscape_active_desktop()), p1, p2, type);
+    SPCtrlLine *line = ControlManager::getManager().createControlLine(SP_ACTIVE_DESKTOP->getControls(), p1, p2, type);
     sp_canvas_item_show(line);
-    this->lines = g_slist_append(this->lines, line);
+    this->lines.push_back(line);
 }
 
 } // namespace Box3D

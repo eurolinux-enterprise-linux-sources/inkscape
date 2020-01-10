@@ -17,10 +17,6 @@
 # include <config.h>
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/entry.h>
 
@@ -192,8 +188,7 @@ EntityMultiLineEntry::on_changed()
     Gtk::TextView *tv = static_cast<Gtk::TextView*>(s->get_child());
     Glib::ustring text = tv->get_buffer()->get_text();
     if (rdf_set_work_entity (doc, _entity, text.c_str())) {
-        DocumentUndo::done(doc, SP_VERB_NONE,
-                            /* TODO: annotate */ "entity-entry.cpp:146");
+        DocumentUndo::done(doc, SP_VERB_NONE, "Document metadata updated");
     }
     _wr->setUpdating (false);
 }
@@ -206,9 +201,9 @@ EntityMultiLineEntry::on_changed()
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0))
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

@@ -20,6 +20,7 @@
 #include <cstring>
 #include <algorithm>
 #include <string>
+#include <glibmm.h>
 #include <glib/gstdio.h>
 #include <2geom/rect.h>
 #include <2geom/transforms.h>
@@ -41,7 +42,6 @@
 #include "snap-candidate.h"
 #include "preferences.h"
 #include "io/sys.h"
-#include "sp-factory.h"
 
 #if defined(HAVE_LIBLCMS1) || defined(HAVE_LIBLCMS2)
 #include "cms-system.h"
@@ -110,14 +110,6 @@ extern guint update_in_progress;
 #else // DEBUG_LCMS
 #define DEBUG_MESSAGE_SCISLAC(key, ...)
 #endif // DEBUG_LCMS
-
-namespace {
-SPObject* createImage() {
-    return new SPImage();
-}
-
-bool imageRegistered = SPFactory::instance().registerObject("svg:image", createImage);
-}
 
 SPImage::SPImage() : SPItem(), SPViewBox() {
 
@@ -804,7 +796,7 @@ void sp_image_refresh_if_outdated( SPImage* image )
     if ( image->href && image->pixbuf && image->pixbuf->modificationTime()) {
         // It *might* change
 
-        struct stat st;
+        GStatBuf st;
         memset(&st, 0, sizeof(st));
         int val = 0;
         if (g_file_test (image->pixbuf->originalPath().c_str(), G_FILE_TEST_EXISTS)){ 

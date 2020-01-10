@@ -16,10 +16,11 @@
  *   Tavmjong Bah <tavmjong@free.fr>
  *   Abhishek Sharma
  *   Kris De Gussem <Kris.DeGussem@gmail.com>
+ *   Jabiertxo Arraiza <jabier.arraiza@marker.es>
  *
  * Copyright (C) 2004 David Turner
  * Copyright (C) 2003 MenTaLguY
- * Copyright (C) 1999-2011 authors
+ * Copyright (C) 1999-2015 authors
  * Copyright (C) 2001-2002 Ximian, Inc.
  *
  * Released under GNU GPL, read the file 'COPYING' for more information
@@ -29,10 +30,6 @@
 # include "config.h"
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/box.h>
 #include <gtkmm/action.h>
 #include <gtkmm/actiongroup.h>
@@ -40,25 +37,25 @@
 #include <glibmm/i18n.h>
 
 #include "../desktop.h"
-#include "../desktop-handles.h"
 #include "../desktop-style.h"
 #include "document-undo.h"
-#include "../ege-adjustment-action.h"
-#include "../ege-output-action.h"
-#include "../ege-select-one-action.h"
+#include "widgets/ege-adjustment-action.h"
+#include "widgets/ege-output-action.h"
+#include "widgets/ege-select-one-action.h"
 #include "../graphlayout.h"
 #include "../helper/action.h"
 #include "../helper/action-context.h"
 #include "icon.h"
-#include "../ink-action.h"
-#include "../ink-comboboxentry-action.h"
+#include "ink-action.h"
+#include "ink-comboboxentry-action.h"
 #include "../inkscape.h"
-#include "../interface.h"
+#include "ui/interface.h"
 #include "../shortcuts.h"
 #include "../sp-namedview.h"
-#include "../tools-switch.h"
+#include "ui/tools-switch.h"
 #include "../ui/icon-names.h"
 #include "../ui/widget/style-swatch.h"
+#include "../ui/widget/unit-tracker.h"
 #include "../verbs.h"
 #include "../widgets/button.h"
 #include "../widgets/spinbutton-events.h"
@@ -83,7 +80,11 @@
 #include "measure-toolbar.h"
 #include "node-toolbar.h"
 #include "rect-toolbar.h"
-#include "paintbucket-toolbar.h"
+
+#if HAVE_POTRACE
+# include "paintbucket-toolbar.h"
+#endif
+
 #include "pencil-toolbar.h"
 #include "select-toolbar.h"
 #include "spray-toolbar.h"
@@ -126,7 +127,8 @@ Inkscape::IconSize ToolboxFactory::prefToSize( Glib::ustring const &path, int ba
     static Inkscape::IconSize sizeChoices[] = {
         Inkscape::ICON_SIZE_LARGE_TOOLBAR,
         Inkscape::ICON_SIZE_SMALL_TOOLBAR,
-        Inkscape::ICON_SIZE_MENU
+        Inkscape::ICON_SIZE_MENU,
+        Inkscape::ICON_SIZE_DIALOG
     };
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     int index = prefs->getIntLimited( path, base, 0, G_N_ELEMENTS(sizeChoices) );
@@ -155,7 +157,9 @@ static struct {
 	{ "/tools/calligraphic", "dyna_draw_tool", SP_VERB_CONTEXT_CALLIGRAPHIC, SP_VERB_CONTEXT_CALLIGRAPHIC_PREFS },
 	{ "/tools/lpetool",  "lpetool_tool",   SP_VERB_CONTEXT_LPETOOL, SP_VERB_CONTEXT_LPETOOL_PREFS },
 	{ "/tools/eraser",   "eraser_tool",    SP_VERB_CONTEXT_ERASER, SP_VERB_CONTEXT_ERASER_PREFS },
+#if HAVE_POTRACE
 	{ "/tools/paintbucket",    "paintbucket_tool",     SP_VERB_CONTEXT_PAINTBUCKET, SP_VERB_CONTEXT_PAINTBUCKET_PREFS },
+#endif
 	{ "/tools/text",     "text_tool",      SP_VERB_CONTEXT_TEXT, SP_VERB_CONTEXT_TEXT_PREFS },
 	{ "/tools/connector","connector_tool", SP_VERB_CONTEXT_CONNECTOR, SP_VERB_CONTEXT_CONNECTOR_PREFS },
 	{ "/tools/gradient", "gradient_tool",  SP_VERB_CONTEXT_GRADIENT, SP_VERB_CONTEXT_GRADIENT_PREFS },
@@ -206,6 +210,7 @@ static struct {
       SP_VERB_CONTEXT_ERASER_PREFS, "/tools/eraser", _("TBD")},
     { "/tools/lpetool", "lpetool_toolbox", 0, sp_lpetool_toolbox_prep, "LPEToolToolbar",
       SP_VERB_CONTEXT_LPETOOL_PREFS, "/tools/lpetool", _("TBD")},
+    // If you change TextToolbar here, change it also in desktop-widget.cpp
     { "/tools/text",   "text_toolbox",   0, sp_text_toolbox_prep, "TextToolbar",
       SP_VERB_INVALID, 0, 0},
     { "/tools/dropper", "dropper_toolbox", 0, sp_dropper_toolbox_prep,         "DropperToolbar",
@@ -216,8 +221,10 @@ static struct {
       SP_VERB_INVALID, 0, 0},
     { "/tools/mesh", "mesh_toolbox", 0, sp_mesh_toolbox_prep, "MeshToolbar",
       SP_VERB_INVALID, 0, 0},
+#if HAVE_POTRACE
     { "/tools/paintbucket",  "paintbucket_toolbox",  0, sp_paintbucket_toolbox_prep, "PaintbucketToolbar",
       SP_VERB_CONTEXT_PAINTBUCKET_PREFS, "/tools/paintbucket", N_("Style of Paint Bucket fill objects")},
+#endif
     { NULL, NULL, NULL, NULL, NULL, SP_VERB_INVALID, NULL, NULL }
 };
 
@@ -314,14 +321,28 @@ static gchar const * ui_descr =
         "    <toolitem action='SprayModeAction' />"
         "    <separator />"
         "    <toolitem action='SprayWidthAction' />"
+        "    <toolitem action='SprayPressureWidthAction' />"
         "    <toolitem action='SprayPopulationAction' />"
-        "    <toolitem action='SprayPressureAction' />"
+        "    <toolitem action='SprayPressurePopulationAction' />"
         "    <separator />"
         "    <toolitem action='SprayRotationAction' />"
         "    <toolitem action='SprayScaleAction' />"
+        "    <toolitem action='SprayPressureScaleAction' />"
         "    <separator />"
         "    <toolitem action='SprayStandard_deviationAction' />"
         "    <toolitem action='SprayMeanAction' />"
+        "    <separator />"
+        "    <toolitem action='SprayOverNoTransparentAction' />"
+        "    <toolitem action='SprayOverTransparentAction' />"
+        "    <toolitem action='SprayPickNoOverlapAction' />"
+        "    <toolitem action='SprayNoOverlapAction' />"
+        "    <toolitem action='SprayToolOffsetAction' />"
+        "    <separator />"
+        "    <toolitem action='SprayPickColorAction' />"
+        "    <toolitem action='SprayPickFillAction' />"
+        "    <toolitem action='SprayPickStrokeAction' />"
+        "    <toolitem action='SprayPickInverseValueAction' />"
+        "    <toolitem action='SprayPickCenterAction' />"
         "  </toolbar>"
 
         "  <toolbar name='ZoomToolbar'>"
@@ -344,9 +365,23 @@ static gchar const * ui_descr =
         "  <toolbar name='MeasureToolbar'>"
         "    <toolitem action='MeasureFontSizeAction' />"
         "    <separator />"
+        "    <toolitem action='MeasurePrecisionAction' />"
+        "    <separator />"
+        "    <toolitem action='MeasureScaleAction' />"
+        "    <separator />"
         "    <toolitem action='measure_units_label' />"
         "    <toolitem action='MeasureUnitsAction' />"
-        "  </toolbar>"
+        "    <toolitem action='MeasureIgnore1stAndLast' />"
+        "    <toolitem action='MeasureInBettween' />"
+        "    <toolitem action='MeasureShowHidden' />"
+        "    <toolitem action='MeasureAllLayers' />"
+        "    <toolitem action='MeasureReverse' />"
+        "    <toolitem action='MeasureToPhantom' />"
+        "    <toolitem action='MeasureToGuides' />"
+        "    <toolitem action='MeasureToItem' />"
+        "    <toolitem action='MeasureMarkDimension' />"
+        "    <toolitem action='MeasureOffsetAction' />"
+        "  </toolbar>" 
 
         "  <toolbar name='StarToolbar'>"
         "    <separator />"
@@ -403,6 +438,8 @@ static gchar const * ui_descr =
         "    <toolitem action='FreehandModeActionPencil' />"
         "    <separator />"
         "    <toolitem action='PencilToleranceAction' />"
+        "    <toolitem action='PencilLpeSimplify' />"
+        "    <toolitem action='PencilLpeSimplifyFlatten' />"
         "    <separator />"
         "    <toolitem action='PencilResetAction' />"
         "    <separator />"
@@ -443,6 +480,7 @@ static gchar const * ui_descr =
         "    <separator />"
         "  </toolbar>"
 
+#if HAVE_POTRACE
         "  <toolbar name='PaintbucketToolbar'>"
         "    <toolitem action='ChannelsAction' />"
         "    <separator />"
@@ -455,31 +493,40 @@ static gchar const * ui_descr =
         "    <separator />"
         "    <toolitem action='PaintbucketResetAction' />"
         "  </toolbar>"
+#endif
 
         "  <toolbar name='EraserToolbar'>"
         "    <toolitem action='EraserModeAction' />"
         "    <separator />"
         "    <toolitem action='EraserWidthAction' />"
+        "    <separator />"
+        "    <toolitem action='EraserMassAction' />"
+        "    <separator />"
+        "    <toolitem action='EraserBreakAppart' />"
         "  </toolbar>"
 
         "  <toolbar name='TextToolbar'>"
         "    <toolitem action='TextFontFamilyAction' />"
-        "    <toolitem action='TextFontSizeAction' />"
         "    <toolitem action='TextFontStyleAction' />"
-//        "    <toolitem action='TextBoldAction' />"
-//        "    <toolitem action='TextItalicAction' />"
+        "    <separator />"
+        "    <toolitem action='TextOuterStyleAction' />"
+        "    <toolitem action='TextFontSizeAction' />"
+        "    <toolitem action='TextLineHeightAction' />"
+        "    <toolitem action='TextLineHeightUnitsAction' />"
+        "    <toolitem action='TextLineHeightUnsetAction' />"
         "    <separator />"
         "    <toolitem action='TextAlignAction' />"
         "    <separator />"
         "    <toolitem action='TextSuperscriptAction' />"
         "    <toolitem action='TextSubscriptAction' />"
         "    <separator />"
-        "    <toolitem action='TextLineHeightAction' />"
         "    <toolitem action='TextLetterSpacingAction' />"
         "    <toolitem action='TextWordSpacingAction' />"
         "    <toolitem action='TextDxAction' />"
         "    <toolitem action='TextDyAction' />"
         "    <toolitem action='TextRotationAction' />"
+        "    <separator />"
+        "    <toolitem action='TextWritingModeAction' />"
         "    <separator />"
         "    <toolitem action='TextOrientationAction' />"
         "  </toolbar>"
@@ -522,7 +569,18 @@ static gchar const * ui_descr =
 //        "    <toolitem action='MeshEditFillAction' />"
 //        "    <toolitem action='MeshEditStrokeAction' />"
 //        "    <toolitem action='MeshShowHandlesAction' />"
+        "    <toolitem action='MeshToggleSidesAction' />"
+        "    <toolitem action='MeshMakeEllipticalAction' />"
+        "    <toolitem action='MeshPickColorsAction' />"
+        "    <toolitem action='MeshFitInBoundingBoxAction' />"
         "    <separator />"
+        "    <toolitem action='MeshShowHandlesAction' />"
+        "    <toolitem action='MeshEditFillAction' />"
+        "    <toolitem action='MeshEditStrokeAction' />"
+        "    <separator />"
+        "    <toolitem action='MeshWarningAction' />"
+        "    <separator />"
+        "    <toolitem action='MeshSmoothAction' />"
         "  </toolbar>"
 
         "  <toolbar name='DropperToolbar'>"
@@ -900,8 +958,12 @@ static Glib::RefPtr<Gtk::ActionGroup> create_or_fetch_actions( SPDesktop* deskto
     };
 
     Inkscape::IconSize toolboxSize = ToolboxFactory::prefToSize("/toolbox/small");
-
     Glib::RefPtr<Gtk::ActionGroup> mainActions;
+    if (desktop == NULL)
+    {
+        return mainActions;
+    }
+
     if ( groups.find(desktop) != groups.end() ) {
         mainActions = groups[desktop];
     }
@@ -909,10 +971,7 @@ static Glib::RefPtr<Gtk::ActionGroup> create_or_fetch_actions( SPDesktop* deskto
     if ( !mainActions ) {
         mainActions = Gtk::ActionGroup::create("main");
         groups[desktop] = mainActions;
-        if (desktop)
-        {
-            desktop->connectDestroy(&desktopDestructHandler);
-        }
+        desktop->connectDestroy(&desktopDestructHandler);
     }
 
     for ( guint i = 0; i < G_N_ELEMENTS(verbsToUse); i++ ) {
@@ -948,6 +1007,7 @@ static GtkWidget* toolboxNewCommon( GtkWidget* tb, BarId id, GtkPositionType /*h
     gtk_widget_set_sensitive(tb, FALSE);
 
     GtkWidget *hb = gtk_event_box_new(); // A simple, neutral container.
+    gtk_widget_set_name(hb, "ToolboxCommon");
 
     gtk_container_add(GTK_CONTAINER(hb), tb);
     gtk_widget_show(GTK_WIDGET(tb));
@@ -965,6 +1025,7 @@ GtkWidget *ToolboxFactory::createToolToolbox()
 {
 #if GTK_CHECK_VERSION(3,0,0)
     GtkWidget *tb = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_name(tb, "ToolToolbox");
     gtk_box_set_homogeneous(GTK_BOX(tb), FALSE);
 #else
     GtkWidget *tb = gtk_vbox_new(FALSE, 0);
@@ -977,6 +1038,7 @@ GtkWidget *ToolboxFactory::createAuxToolbox()
 {
 #if GTK_CHECK_VERSION(3,0,0)
     GtkWidget *tb = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_name(tb, "AuxToolbox");
     gtk_box_set_homogeneous(GTK_BOX(tb), FALSE);
 #else
     GtkWidget *tb = gtk_vbox_new(FALSE, 0);
@@ -993,6 +1055,7 @@ GtkWidget *ToolboxFactory::createCommandsToolbox()
 {
 #if GTK_CHECK_VERSION(3,0,0)
     GtkWidget *tb = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_name(tb, "CommandsToolbox");
     gtk_box_set_homogeneous(GTK_BOX(tb), FALSE);
 #else
     GtkWidget *tb = gtk_vbox_new(FALSE, 0);
@@ -1005,6 +1068,7 @@ GtkWidget *ToolboxFactory::createSnapToolbox()
 {
 #if GTK_CHECK_VERSION(3,0,0)
     GtkWidget *tb = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_name(tb, "SnapToolbox");
     gtk_box_set_homogeneous(GTK_BOX(tb), FALSE);
 #else
     GtkWidget *tb = gtk_vbox_new(FALSE, 0);
@@ -1073,6 +1137,10 @@ EgeAdjustmentAction * create_adjustment_action( gchar const *name,
         // but we don't have an Entry
         g_object_set_data( dataKludge, prefs->getEntry(path).getEntryName().data(), adj );
     }
+
+    if (unit_tracker) {
+        unit_tracker->addAdjustment(adj);
+    } 
 
     // Using a cast just to make sure we pass in the right kind of function pointer
     g_object_set( G_OBJECT(act), "tool-post", static_cast<EgeWidgetFixup>(sp_set_font_size_smaller), NULL );
@@ -1292,8 +1360,11 @@ void setup_tool_toolbox(GtkWidget *toolbox, SPDesktop *desktop)
         "    <toolitem action='ToolSpray' />"
         "    <toolitem action='ToolEraser' />"
 
+#if HAVE_POTRACE
         "   <!-- Fill -->"
         "    <toolitem action='ToolPaintBucket' />"
+#endif
+
         "    <toolitem action='ToolGradient' />"
 #ifdef WITH_MESH
         "    <toolitem action='ToolMesh' />"
@@ -1348,6 +1419,7 @@ void setup_aux_toolbox(GtkWidget *toolbox, SPDesktop *desktop)
             // converted to GtkActions and UIManager
 
             GtkWidget* kludge = gtk_toolbar_new();
+            gtk_widget_set_name( kludge, "Kludge" );
             g_object_set_data( G_OBJECT(kludge), "dtw", desktop->canvas);
             g_object_set_data( G_OBJECT(kludge), "desktop", desktop);
             dataHolders[aux_toolboxes[i].type_name] = kludge;
@@ -1360,7 +1432,7 @@ void setup_aux_toolbox(GtkWidget *toolbox, SPDesktop *desktop)
             } else {
                 sub_toolbox = aux_toolboxes[i].create_func(desktop);
             }
-
+            gtk_widget_set_name( sub_toolbox, "SubToolBox" );
             gtk_size_group_add_widget( grouper, sub_toolbox );
 
             gtk_container_add(GTK_CONTAINER(toolbox), sub_toolbox);
@@ -1378,9 +1450,11 @@ void setup_aux_toolbox(GtkWidget *toolbox, SPDesktop *desktop)
 
 #if GTK_CHECK_VERSION(3,0,0)
             GtkWidget* holder = gtk_grid_new();
+            gtk_widget_set_name( holder, aux_toolboxes[i].ui_name );
             gtk_grid_attach( GTK_GRID(holder), kludge, 2, 0, 1, 1);
 #else
             GtkWidget* holder = gtk_table_new( 1, 3, FALSE );
+            gtk_widget_set_name( holder, aux_toolboxes[i].ui_name );
             gtk_table_attach( GTK_TABLE(holder), kludge, 2, 3, 0, 1, GTK_SHRINK, GTK_SHRINK, 0, 0 );
 #endif
 
@@ -1420,8 +1494,11 @@ void setup_aux_toolbox(GtkWidget *toolbox, SPDesktop *desktop)
                 gtk_table_attach( GTK_TABLE(holder), swatch_, 1, 2, 0, 1, (GtkAttachOptions)(GTK_SHRINK | GTK_FILL), (GtkAttachOptions)(GTK_EXPAND | GTK_FILL), AUX_BETWEEN_BUTTON_GROUPS, AUX_SPACING );
 #endif
             }
-
-            gtk_widget_show_all( holder );
+            if(i==0){
+                gtk_widget_show_all( holder );
+            } else {
+                gtk_widget_show_now( holder );
+            }
             sp_set_font_size_smaller( holder );
 
             gtk_size_group_add_widget( grouper, holder );
@@ -1442,7 +1519,7 @@ void update_aux_toolbox(SPDesktop * /*desktop*/, ToolBase *eventcontext, GtkWidg
     for (int i = 0 ; aux_toolboxes[i].type_name ; i++ ) {
         GtkWidget *sub_toolbox = GTK_WIDGET(g_object_get_data(G_OBJECT(toolbox), aux_toolboxes[i].data_name));
         if (tname && !strcmp(tname, aux_toolboxes[i].type_name)) {
-            gtk_widget_show_all(sub_toolbox);
+            gtk_widget_show_now(sub_toolbox);
             g_object_set_data(G_OBJECT(toolbox), "shows", sub_toolbox);
         } else {
             gtk_widget_hide(sub_toolbox);
@@ -1511,14 +1588,13 @@ static void toggle_snap_callback(GtkToggleAction *act, gpointer data) //data poi
     g_assert(ptr != NULL);
 
     SPDesktop *dt = reinterpret_cast<SPDesktop*>(ptr);
-    SPNamedView *nv = sp_desktop_namedview(dt);
-    SPDocument *doc = nv->document;
-
-    if (dt == NULL || nv == NULL) {
-        g_warning("No desktop or namedview specified (in toggle_snap_callback)!");
+    SPNamedView *nv = dt->getNamedView();
+    if (nv == NULL) {
+        g_warning("No namedview specified (in toggle_snap_callback)!");
         return;
     }
 
+    SPDocument *doc = nv->document;
     Inkscape::XML::Node *repr = nv->getRepr();
 
     if (repr == NULL) {
@@ -1871,7 +1947,7 @@ void ToolboxFactory::updateSnapToolbox(SPDesktop *desktop, ToolBase * /*eventcon
     g_assert(desktop != NULL);
     g_assert(toolbox != NULL);
 
-    SPNamedView *nv = sp_desktop_namedview(desktop);
+    SPNamedView *nv = desktop->getNamedView();
     if (nv == NULL) {
         g_warning("Namedview cannot be retrieved (in updateSnapToolbox)!");
         return;

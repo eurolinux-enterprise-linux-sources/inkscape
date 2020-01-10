@@ -20,12 +20,13 @@
 #include "ui/widget/color-preview.h"
 
 #include "selection.h"
-#include "desktop-handles.h"
+
 #include "style.h"
 #include "desktop-style.h"
 #include "sp-namedview.h"
 #include "sp-linear-gradient.h"
 #include "sp-radial-gradient.h"
+#include "sp-mesh-gradient.h"
 #include "sp-pattern.h"
 #include "ui/dialog/dialog-manager.h"
 #include "ui/dialog/fill-and-stroke.h"
@@ -154,6 +155,7 @@ SelectedStyle::SelectedStyle(bool /*layout*/)
       _unit_mis(NULL),
       _sw_unit(NULL)
 {
+    set_name("SelectedStyle");
     _drop[0] = _drop[1] = 0;
     _dropEnabled[0] = _dropEnabled[1] = false;
 
@@ -212,6 +214,18 @@ SelectedStyle::SelectedStyle(bool /*layout*/)
         _gradient_box_r[i].pack_start(_rgradient[i]);
         _gradient_box_r[i].pack_start(*(Glib::wrap(_gradient_preview_r[i])));
         _gradient_box_r[i].show_all();
+
+#ifdef WITH_MESH
+        _mgradient[i].set_markup (_("<b>M</b>"));
+        sp_set_font_size_smaller (GTK_WIDGET(_mgradient[i].gobj()));
+        _mgradient[i].show_all();
+        __mgradient[i] = (i == SS_FILL)? (_("Mesh gradient fill")) : (_("Mesh gradient stroke"));
+
+        _gradient_preview_m[i] = GTK_WIDGET(sp_gradient_image_new (NULL));
+        _gradient_box_m[i].pack_start(_mgradient[i]);
+        _gradient_box_m[i].pack_start(*(Glib::wrap(_gradient_preview_m[i])));
+        _gradient_box_m[i].show_all();
+#endif
 
         _many[i].set_markup (_("Different"));
         sp_set_font_size_smaller (GTK_WIDGET(_many[i].gobj()));
@@ -350,19 +364,6 @@ SelectedStyle::SelectedStyle(bool /*layout*/)
         _popup_sw.show_all();
     }
 
-    _fill_place.signal_button_release_event().connect(sigc::mem_fun(*this, &SelectedStyle::on_fill_click));
-    _stroke_place.signal_button_release_event().connect(sigc::mem_fun(*this, &SelectedStyle::on_stroke_click));
-    _opacity_place.signal_button_press_event().connect(sigc::mem_fun(*this, &SelectedStyle::on_opacity_click));
-    _stroke_width_place.signal_button_press_event().connect(sigc::mem_fun(*this, &SelectedStyle::on_sw_click));
-    _stroke_width_place.signal_button_release_event().connect(sigc::mem_fun(*this, &SelectedStyle::on_sw_click));
-
-
-    _opacity_sb.signal_populate_popup().connect(sigc::mem_fun(*this, &SelectedStyle::on_opacity_menu));
-    _opacity_sb.signal_value_changed().connect(sigc::mem_fun(*this, &SelectedStyle::on_opacity_changed));
-    // Connect to key-press to ensure focus is consistent with other spin buttons when using the keys vs mouse-click
-    g_signal_connect (G_OBJECT (_opacity_sb.gobj()), "key-press-event", G_CALLBACK (spinbutton_keypress), _opacity_sb.gobj());
-    g_signal_connect (G_OBJECT (_opacity_sb.gobj()), "focus-in-event", G_CALLBACK (spinbutton_focus_in), _opacity_sb.gobj());
-
     _fill_place.add(_na[SS_FILL]);
     _fill_place.set_tooltip_text(__na[SS_FILL]);
 
@@ -439,6 +440,17 @@ SelectedStyle::SelectedStyle(bool /*layout*/)
                      "drag_data_received",
                      G_CALLBACK(dragDataReceived),
                      _drop[SS_FILL]);
+
+    _fill_place.signal_button_release_event().connect(sigc::mem_fun(*this, &SelectedStyle::on_fill_click));
+    _stroke_place.signal_button_release_event().connect(sigc::mem_fun(*this, &SelectedStyle::on_stroke_click));
+    _opacity_place.signal_button_press_event().connect(sigc::mem_fun(*this, &SelectedStyle::on_opacity_click));
+    _stroke_width_place.signal_button_press_event().connect(sigc::mem_fun(*this, &SelectedStyle::on_sw_click));
+    _stroke_width_place.signal_button_release_event().connect(sigc::mem_fun(*this, &SelectedStyle::on_sw_click));
+    _opacity_sb.signal_populate_popup().connect(sigc::mem_fun(*this, &SelectedStyle::on_opacity_menu));
+    _opacity_sb.signal_value_changed().connect(sigc::mem_fun(*this, &SelectedStyle::on_opacity_changed));
+    // Connect to key-press to ensure focus is consistent with other spin buttons when using the keys vs mouse-click
+    g_signal_connect (G_OBJECT (_opacity_sb.gobj()), "key-press-event", G_CALLBACK (spinbutton_keypress), _opacity_sb.gobj());
+    g_signal_connect (G_OBJECT (_opacity_sb.gobj()), "focus-in-event", G_CALLBACK (spinbutton_focus_in), _opacity_sb.gobj());
 }
 
 SelectedStyle::~SelectedStyle()
@@ -467,7 +479,7 @@ SelectedStyle::setDesktop(SPDesktop *desktop)
     _desktop = desktop;
     g_object_set_data (G_OBJECT(_opacity_sb.gobj()), "dtw", _desktop->canvas);
 
-    Inkscape::Selection *selection = sp_desktop_selection (desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
 
     selection_changed_connection = new sigc::connection (selection->connectChanged(
         sigc::bind (
@@ -485,7 +497,7 @@ SelectedStyle::setDesktop(SPDesktop *desktop)
             this )
     ));
 
-    _sw_unit = sp_desktop_namedview(desktop)->display_units;
+    _sw_unit = desktop->getNamedView()->display_units;
 
     // Set the doc default unit active in the units list
     gint length = g_slist_length(_unit_mis);
@@ -528,8 +540,7 @@ void SelectedStyle::dragDataReceived( GtkWidget */*widget*/,
                 sp_repr_css_set_property( css, (tracker->item == SS_FILL) ? "fill":"stroke", c );
                 sp_desktop_set_style( tracker->parent->_desktop, css );
                 sp_repr_css_attr_unref( css );
-                DocumentUndo::done( sp_desktop_document(tracker->parent->_desktop) , SP_VERB_NONE,
-                                    _("Drop color"));
+                DocumentUndo::done( tracker->parent->_desktop->getDocument(), SP_VERB_NONE, _("Drop color"));
             }
         }
         break;
@@ -541,7 +552,7 @@ void SelectedStyle::on_fill_remove() {
     sp_repr_css_set_property (css, "fill", "none");
     sp_desktop_set_style (_desktop, css, true, true);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                         _("Remove fill"));
 }
 
@@ -550,7 +561,7 @@ void SelectedStyle::on_stroke_remove() {
     sp_repr_css_set_property (css, "stroke", "none");
     sp_desktop_set_style (_desktop, css, true, true);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Remove stroke"));
 }
 
@@ -559,7 +570,7 @@ void SelectedStyle::on_fill_unset() {
     sp_repr_css_unset_property (css, "fill");
     sp_desktop_set_style (_desktop, css, true, true);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Unset fill"));
 }
 
@@ -575,7 +586,7 @@ void SelectedStyle::on_stroke_unset() {
     sp_repr_css_unset_property (css, "stroke-dasharray");
     sp_desktop_set_style (_desktop, css, true, true);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Unset stroke"));
 }
 
@@ -584,7 +595,7 @@ void SelectedStyle::on_fill_opaque() {
     sp_repr_css_set_property (css, "fill-opacity", "1");
     sp_desktop_set_style (_desktop, css, true);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Make fill opaque"));
 }
 
@@ -593,7 +604,7 @@ void SelectedStyle::on_stroke_opaque() {
     sp_repr_css_set_property (css, "stroke-opacity", "1");
     sp_desktop_set_style (_desktop, css, true);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Make fill opaque"));
 }
 
@@ -605,7 +616,7 @@ void SelectedStyle::on_fill_lastused() {
     sp_repr_css_set_property (css, "fill", c);
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Apply last set color to fill"));
 }
 
@@ -617,7 +628,7 @@ void SelectedStyle::on_stroke_lastused() {
     sp_repr_css_set_property (css, "stroke", c);
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Apply last set color to stroke"));
 }
 
@@ -628,7 +639,7 @@ void SelectedStyle::on_fill_lastselected() {
     sp_repr_css_set_property (css, "fill", c);
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Apply last selected color to fill"));
 }
 
@@ -639,7 +650,7 @@ void SelectedStyle::on_stroke_lastselected() {
     sp_repr_css_set_property (css, "stroke", c);
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Apply last selected color to stroke"));
 }
 
@@ -665,7 +676,7 @@ void SelectedStyle::on_fill_invert() {
     sp_repr_css_set_property (css, "fill", c);
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Invert fill"));
 }
 
@@ -689,7 +700,7 @@ void SelectedStyle::on_stroke_invert() {
     sp_repr_css_set_property (css, "stroke", c);
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Invert stroke"));
 }
 
@@ -701,7 +712,7 @@ void SelectedStyle::on_fill_white() {
     sp_repr_css_set_property (css, "fill-opacity", "1");
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("White fill"));
 }
 
@@ -713,7 +724,7 @@ void SelectedStyle::on_stroke_white() {
     sp_repr_css_set_property (css, "stroke-opacity", "1");
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("White stroke"));
 }
 
@@ -725,7 +736,7 @@ void SelectedStyle::on_fill_black() {
     sp_repr_css_set_property (css, "fill-opacity", "1.0");
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Black fill"));
 }
 
@@ -737,7 +748,7 @@ void SelectedStyle::on_stroke_black() {
     sp_repr_css_set_property (css, "stroke-opacity", "1.0");
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Black stroke"));
 }
 
@@ -780,7 +791,7 @@ void SelectedStyle::on_fill_paste() {
         sp_repr_css_set_property (css, "fill", text.c_str());
         sp_desktop_set_style (_desktop, css);
         sp_repr_css_attr_unref (css);
-        DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+        DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                            _("Paste fill"));
     }
 }
@@ -798,7 +809,7 @@ void SelectedStyle::on_stroke_paste() {
         sp_repr_css_set_property (css, "stroke", text.c_str());
         sp_desktop_set_style (_desktop, css);
         sp_repr_css_attr_unref (css);
-        DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+        DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                            _("Paste stroke"));
     }
 }
@@ -823,6 +834,9 @@ void SelectedStyle::on_fillstroke_swap() {
         break;
     case SS_LGRADIENT:
     case SS_RGRADIENT:
+#ifdef WITH_MESH
+    case SS_MGRADIENT:
+#endif
     case SS_PATTERN:
         sp_repr_css_set_property (css, "stroke", _paintserver_id[SS_FILL].c_str());
         break;
@@ -845,6 +859,9 @@ void SelectedStyle::on_fillstroke_swap() {
         break;
     case SS_LGRADIENT:
     case SS_RGRADIENT:
+#ifdef WITH_MESH
+    case SS_MGRADIENT:
+#endif
     case SS_PATTERN:
         sp_repr_css_set_property (css, "fill", _paintserver_id[SS_STROKE].c_str());
         break;
@@ -852,7 +869,7 @@ void SelectedStyle::on_fillstroke_swap() {
 
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                        _("Swap fill and stroke"));
 }
 
@@ -927,7 +944,7 @@ SelectedStyle::on_opacity_click(GdkEventButton *event)
         sp_repr_css_set_property (css, "opacity", opacity);
         sp_desktop_set_style (_desktop, css);
         sp_repr_css_attr_unref (css);
-        DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_FILL_STROKE,
+        DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_FILL_STROKE,
                            _("Change opacity"));
         return true;
     }
@@ -954,7 +971,7 @@ void SelectedStyle::on_popup_preset(int i) {
     // FIXME: update dash patterns!
     sp_desktop_set_style (_desktop, css, true);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::done(sp_desktop_document(_desktop), SP_VERB_DIALOG_SWATCHES,
+    DocumentUndo::done(_desktop->getDocument(), SP_VERB_DIALOG_SWATCHES,
                        _("Change stroke width"));
 }
 
@@ -965,7 +982,7 @@ SelectedStyle::update()
         return;
 
     // create temporary style
-    SPStyle *query = sp_style_new (sp_desktop_document(_desktop));
+    SPStyle query(_desktop->getDocument());
 
     for (int i = SS_FILL; i <= SS_STROKE; i++) {
         Gtk::EventBox *place = (i == SS_FILL)? &_fill_place : &_stroke_place;
@@ -983,7 +1000,7 @@ SelectedStyle::update()
         _popup_copy[i].set_sensitive(false);
 
         // query style from desktop. This returns a result flag and fills query with the style of subselection, if any, or selection
-        int result = sp_desktop_query_style (_desktop, query,
+        int result = sp_desktop_query_style (_desktop, &query,
                                              (i == SS_FILL)? QUERY_STYLE_PROPERTY_FILL : QUERY_STYLE_PROPERTY_STROKE);
         switch (result) {
         case QUERY_STYLE_NOTHING:
@@ -1008,12 +1025,12 @@ SelectedStyle::update()
             }
             SPIPaint *paint;
             if (i == SS_FILL) {
-                paint = &(query->fill);
+                paint = &(query.fill);
             } else {
-                paint = &(query->stroke);
+                paint = &(query.stroke);
             }
             if (paint->set && paint->isPaintserver()) {
-                SPPaintServer *server = (i == SS_FILL)? SP_STYLE_FILL_SERVER (query) : SP_STYLE_STROKE_SERVER (query);
+                SPPaintServer *server = (i == SS_FILL)? SP_STYLE_FILL_SERVER (&query) : SP_STYLE_STROKE_SERVER (&query);
                 if ( server ) {
                     Inkscape::XML::Node *srepr = server->getRepr();
                     _paintserver_id[i] += "url(#";
@@ -1032,6 +1049,14 @@ SelectedStyle::update()
                         place->add(_gradient_box_r[i]);
                         place->set_tooltip_text(__rgradient[i]);
                         _mode[i] = SS_RGRADIENT;
+#ifdef WITH_MESH
+                    } else if (SP_IS_MESHGRADIENT(server)) {
+                        SPGradient *array = SP_GRADIENT(server)->getArray();
+                        sp_gradient_image_set_gradient(SP_GRADIENT_IMAGE(_gradient_preview_m[i]), array);
+                        place->add(_gradient_box_m[i]);
+                        place->set_tooltip_text(__mgradient[i]);
+                        _mode[i] = SS_MGRADIENT;
+#endif
                     } else if (SP_IS_PATTERN (server)) {
                         place->add(_pattern[i]);
                         place->set_tooltip_text(__pattern[i]);
@@ -1042,7 +1067,7 @@ SelectedStyle::update()
                 }
             } else if (paint->set && paint->isColor()) {
                 guint32 color = paint->value.color.toRGBA32(
-                                     SP_SCALE24_TO_FLOAT ((i == SS_FILL)? query->fill_opacity.value : query->stroke_opacity.value));
+                                     SP_SCALE24_TO_FLOAT ((i == SS_FILL)? query.fill_opacity.value : query.stroke_opacity.value));
                 _lastselected[i] = _thisselected[i];
                 _thisselected[i] = color; // include opacity
                 ((Inkscape::UI::Widget::ColorPreview*)_color_preview[i])->setRgba32 (color);
@@ -1085,7 +1110,7 @@ SelectedStyle::update()
     clearTooltip(_opacity_place);
     clearTooltip(_opacity_sb);
 
-    int result = sp_desktop_query_style (_desktop, query, QUERY_STYLE_PROPERTY_MASTEROPACITY);
+    int result = sp_desktop_query_style (_desktop, &query, QUERY_STYLE_PROPERTY_MASTEROPACITY);
 
     switch (result) {
     case QUERY_STYLE_NOTHING:
@@ -1102,16 +1127,16 @@ SelectedStyle::update()
         _opacity_blocked = true;
         _opacity_sb.set_sensitive(true);
 #if WITH_GTKMM_3_0
-        _opacity_adjustment->set_value(SP_SCALE24_TO_FLOAT(query->opacity.value) * 100);
+        _opacity_adjustment->set_value(SP_SCALE24_TO_FLOAT(query.opacity.value) * 100);
 #else
-        _opacity_adjustment.set_value(SP_SCALE24_TO_FLOAT(query->opacity.value) * 100);
+        _opacity_adjustment.set_value(SP_SCALE24_TO_FLOAT(query.opacity.value) * 100);
 #endif
         _opacity_blocked = false;
         break;
     }
 
 // Now query stroke_width
-    int result_sw = sp_desktop_query_style (_desktop, query, QUERY_STYLE_PROPERTY_STROKEWIDTH);
+    int result_sw = sp_desktop_query_style (_desktop, &query, QUERY_STYLE_PROPERTY_STROKEWIDTH);
     switch (result_sw) {
     case QUERY_STYLE_NOTHING:
         _stroke_width.set_markup("");
@@ -1123,9 +1148,9 @@ SelectedStyle::update()
     {
         double w;
         if (_sw_unit) {
-            w = Inkscape::Util::Quantity::convert(query->stroke_width.computed, "px", _sw_unit);
+            w = Inkscape::Util::Quantity::convert(query.stroke_width.computed, "px", _sw_unit);
         } else {
-            w = query->stroke_width.computed;
+            w = query.stroke_width.computed;
         }
         current_stroke_width = w;
 
@@ -1148,8 +1173,6 @@ SelectedStyle::update()
     default:
         break;
     }
-
-    sp_style_unref(query);
 }
 
 void SelectedStyle::opacity_0(void) {_opacity_sb.set_value(0);}
@@ -1220,13 +1243,13 @@ void SelectedStyle::on_opacity_changed ()
     // me. As a result, scrolling the spinbutton once results in runaway change until it hits 1.0
     // or 0.0. (And no, this is not a race with ::update, I checked that.)
     // Sigh. So we disable interruptibility while we're setting the new value.
-    sp_desktop_canvas(_desktop)->forceFullRedrawAfterInterruptions(0);
+    _desktop->getCanvas()->forceFullRedrawAfterInterruptions(0);
     sp_desktop_set_style (_desktop, css);
     sp_repr_css_attr_unref (css);
-    DocumentUndo::maybeDone(sp_desktop_document(_desktop), "fillstroke:opacity", SP_VERB_DIALOG_FILL_STROKE,
+    DocumentUndo::maybeDone(_desktop->getDocument(), "fillstroke:opacity", SP_VERB_DIALOG_FILL_STROKE,
                             _("Change opacity"));
     // resume interruptibility
-    sp_desktop_canvas(_desktop)->endForcedFullRedraws();
+    _desktop->getCanvas()->endForcedFullRedraws();
     spinbutton_defocus(GTK_WIDGET(_opacity_sb.gobj()));
     _opacity_blocked = false;
 }
@@ -1364,25 +1387,25 @@ RotateableSwatch::do_motion(double by, guint modifier) {
     diff = color_adjust(hsla, by, cc, modifier);
 
     if (modifier == 3) { // alpha
-        DocumentUndo::maybeDone(sp_desktop_document(parent->getDesktop()), undokey,
+        DocumentUndo::maybeDone(parent->getDesktop()->getDocument(), undokey,
                                 SP_VERB_DIALOG_FILL_STROKE, (_("Adjust alpha")));
         double ch = hsla[3];
         parent->getDesktop()->event_context->message_context->setF(Inkscape::IMMEDIATE_MESSAGE, _("Adjusting <b>alpha</b>: was %.3g, now <b>%.3g</b> (diff %.3g); with <b>Ctrl</b> to adjust lightness, with <b>Shift</b> to adjust saturation, without modifiers to adjust hue"), ch - diff, ch, diff);
 
     } else if (modifier == 2) { // saturation
-        DocumentUndo::maybeDone(sp_desktop_document(parent->getDesktop()), undokey,
+        DocumentUndo::maybeDone(parent->getDesktop()->getDocument(), undokey,
                                 SP_VERB_DIALOG_FILL_STROKE, (_("Adjust saturation")));
         double ch = hsla[1];
         parent->getDesktop()->event_context->message_context->setF(Inkscape::IMMEDIATE_MESSAGE, _("Adjusting <b>saturation</b>: was %.3g, now <b>%.3g</b> (diff %.3g); with <b>Ctrl</b> to adjust lightness, with <b>Alt</b> to adjust alpha, without modifiers to adjust hue"), ch - diff, ch, diff);
 
     } else if (modifier == 1) { // lightness
-        DocumentUndo::maybeDone(sp_desktop_document(parent->getDesktop()), undokey,
+        DocumentUndo::maybeDone(parent->getDesktop()->getDocument(), undokey,
                                 SP_VERB_DIALOG_FILL_STROKE, (_("Adjust lightness")));
         double ch = hsla[2];
         parent->getDesktop()->event_context->message_context->setF(Inkscape::IMMEDIATE_MESSAGE, _("Adjusting <b>lightness</b>: was %.3g, now <b>%.3g</b> (diff %.3g); with <b>Shift</b> to adjust saturation, with <b>Alt</b> to adjust alpha, without modifiers to adjust hue"), ch - diff, ch, diff);
 
     } else { // hue
-        DocumentUndo::maybeDone(sp_desktop_document(parent->getDesktop()), undokey,
+        DocumentUndo::maybeDone(parent->getDesktop()->getDocument(), undokey,
                                 SP_VERB_DIALOG_FILL_STROKE, (_("Adjust hue")));
         double ch = hsla[0];
         parent->getDesktop()->event_context->message_context->setF(Inkscape::IMMEDIATE_MESSAGE, _("Adjusting <b>hue</b>: was %.3g, now <b>%.3g</b> (diff %.3g); with <b>Shift</b> to adjust saturation, with <b>Alt</b> to adjust alpha, with <b>Ctrl</b> to adjust lightness"), ch - diff, ch, diff);
@@ -1419,18 +1442,18 @@ RotateableSwatch::do_release(double by, guint modifier) {
     }
 
     if (modifier == 3) { // alpha
-        DocumentUndo::maybeDone(sp_desktop_document(parent->getDesktop()), undokey,
+        DocumentUndo::maybeDone(parent->getDesktop()->getDocument(), undokey,
                                 SP_VERB_DIALOG_FILL_STROKE, ("Adjust alpha"));
     } else if (modifier == 2) { // saturation
-        DocumentUndo::maybeDone(sp_desktop_document(parent->getDesktop()), undokey,
+        DocumentUndo::maybeDone(parent->getDesktop()->getDocument(), undokey,
                                 SP_VERB_DIALOG_FILL_STROKE, ("Adjust saturation"));
 
     } else if (modifier == 1) { // lightness
-        DocumentUndo::maybeDone(sp_desktop_document(parent->getDesktop()), undokey,
+        DocumentUndo::maybeDone(parent->getDesktop()->getDocument(), undokey,
                                 SP_VERB_DIALOG_FILL_STROKE, ("Adjust lightness"));
 
     } else { // hue
-        DocumentUndo::maybeDone(sp_desktop_document(parent->getDesktop()), undokey,
+        DocumentUndo::maybeDone(parent->getDesktop()->getDocument(), undokey,
                                 SP_VERB_DIALOG_FILL_STROKE, ("Adjust hue"));
     }
 
@@ -1502,7 +1525,7 @@ RotateableStrokeWidth::do_motion(double by, guint modifier) {
     if (modifier == 3) { // Alt, do nothing
     } else {
         double diff = value_adjust(startvalue, by, modifier, false);
-        DocumentUndo::maybeDone(sp_desktop_document(parent->getDesktop()), undokey,
+        DocumentUndo::maybeDone(parent->getDesktop()->getDocument(), undokey,
                                 SP_VERB_DIALOG_FILL_STROKE, (_("Adjust stroke width")));
         parent->getDesktop()->event_context->message_context->setF(Inkscape::IMMEDIATE_MESSAGE, _("Adjusting <b>stroke width</b>: was %.3g, now <b>%.3g</b> (diff %.3g)"), startvalue, startvalue + diff, diff);
     }
@@ -1516,7 +1539,7 @@ RotateableStrokeWidth::do_release(double by, guint modifier) {
     } else {
         value_adjust(startvalue, by, modifier, true);
         startvalue_set = false;
-        DocumentUndo::maybeDone(sp_desktop_document(parent->getDesktop()), undokey,
+        DocumentUndo::maybeDone(parent->getDesktop()->getDocument(), undokey,
                                 SP_VERB_DIALOG_FILL_STROKE, (_("Adjust stroke width")));
     }
 
@@ -1556,9 +1579,9 @@ Dialog::FillAndStroke *get_fill_and_stroke_panel(SPDesktop *desktop)
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0))
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

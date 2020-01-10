@@ -25,19 +25,10 @@
 #include "selection-chemistry.h"
 
 #include "ui/tools/zoom-tool.h"
-#include "tool-factory.h"
 
 namespace Inkscape {
 namespace UI {
 namespace Tools {
-
-namespace {
-	ToolBase* createZoomContext() {
-		return new ZoomTool();
-	}
-
-	bool zoomContextRegistered = ToolFactory::instance().registerObject("/tools/zoom", createZoomContext);
-}
 
 const std::string& ZoomTool::getPrefsPath() {
 	return ZoomTool::prefsPath;
@@ -151,7 +142,7 @@ bool ZoomTool::root_handler(GdkEvent* event) {
             if ( event->button.button == 1  && !this->space_panning) {
                 Geom::OptRect const b = Inkscape::Rubberband::get(desktop)->getRectangle();
 
-                if (b && !within_tolerance) {
+                if (b && !within_tolerance && !(GDK_SHIFT_MASK & event->button.state) ) {
                     desktop->set_display_area(*b, 10);
                 } else if (!escaped) {
                     double const zoom_rel( (event->button.state & GDK_SHIFT_MASK)

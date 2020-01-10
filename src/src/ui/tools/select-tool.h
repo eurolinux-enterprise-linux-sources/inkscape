@@ -13,7 +13,6 @@
  */
 
 #include "ui/tools/tool-base.h"
-#include <gtk/gtk.h>
 
 #define SP_SELECT_CONTEXT(obj) (dynamic_cast<Inkscape::UI::Tools::SelectTool*>((Inkscape::UI::Tools::ToolBase*)obj))
 #define SP_IS_SELECT_CONTEXT(obj) (dynamic_cast<const Inkscape::UI::Tools::SelectTool*>((const Inkscape::UI::Tools::ToolBase*)obj) != NULL)
@@ -41,10 +40,9 @@ public:
 	bool button_press_ctrl;
 	bool button_press_alt;
 
-	GList *cycling_items;
-	GList *cycling_items_cmp;
-	GList *cycling_items_selected_before;
-	GList *cycling_cur_item;
+        std::vector<SPItem *> cycling_items;
+        std::vector<SPItem *> cycling_items_cmp;
+        SPItem *cycling_cur_item;
 	bool cycling_wrap;
 
 	SPItem *item;

@@ -16,7 +16,7 @@
 
 #include "inkscape.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "document.h"
 #include "document-undo.h"
 #include "message-stack.h"
@@ -51,9 +51,9 @@ SPImage *Tracer::getSelectedSPImage()
         return NULL;
         }
 
-    Inkscape::MessageStack *msgStack = sp_desktop_message_stack(desktop);
+    Inkscape::MessageStack *msgStack = desktop->getMessageStack();
 
-    Inkscape::Selection *sel = sp_desktop_selection(desktop);
+    Inkscape::Selection *sel = desktop->getSelection();
     if (!sel)
         {
         char *msg = _("Select an <b>image</b> to trace");
@@ -65,7 +65,7 @@ SPImage *Tracer::getSelectedSPImage()
     if (sioxEnabled)
         {
         SPImage *img = NULL;
-        GSList const *list = sel->itemList();
+        std::vector<SPItem*> const list = sel->itemList();
         std::vector<SPItem *> items;
         sioxShapes.clear();
 
@@ -74,13 +74,13 @@ SPImage *Tracer::getSelectedSPImage()
            them as bottom-to-top so that we can discover the image and any
            SPItems above it
         */
-        for ( ; list ; list=list->next)
+        for (std::vector<SPItem*>::const_iterator i=list.begin() ; list.end()!=i ; ++i)
             {
-            if (!SP_IS_ITEM(list->data))
+            if (!SP_IS_ITEM(*i))
                 {
                 continue;
                 }
-            SPItem *item = SP_ITEM(list->data);
+            SPItem *item = *i;
             items.insert(items.begin(), item);
             }
         std::vector<SPItem *>::iterator iter;
@@ -217,9 +217,9 @@ Glib::RefPtr<Gdk::Pixbuf> Tracer::sioxProcessImage(SPImage *img, Glib::RefPtr<Gd
         return Glib::RefPtr<Gdk::Pixbuf>(NULL);
         }
 
-    Inkscape::MessageStack *msgStack = sp_desktop_message_stack(desktop);
+    Inkscape::MessageStack *msgStack = desktop->getMessageStack();
 
-    Inkscape::Selection *sel = sp_desktop_selection(desktop);
+    Inkscape::Selection *sel = desktop->getSelection();
     if (!sel)
         {
         char *msg = _("Select an <b>image</b> to trace");
@@ -274,6 +274,7 @@ Glib::RefPtr<Gdk::Pixbuf> Tracer::sioxProcessImage(SPImage *img, Glib::RefPtr<Gd
             for (aIter = arenaItems.begin() ; aIter!=arenaItems.end() ; ++aIter)
                 {
                 Inkscape::DrawingItem *arenaItem = *aIter;
+                arenaItem->drawing().update();
                 if (arenaItem->pick(point, 1.0f, 1))
                     {
                     weHaveAHit = true;
@@ -397,9 +398,9 @@ void Tracer::traceThread()
         return;
         }
 
-    Inkscape::MessageStack *msgStack = sp_desktop_message_stack(desktop);
+    Inkscape::MessageStack *msgStack = desktop->getMessageStack();
 
-    Inkscape::Selection *selection = sp_desktop_selection (desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
 
     if (!SP_ACTIVE_DOCUMENT)
         {

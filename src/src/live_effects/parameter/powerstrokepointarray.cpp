@@ -4,22 +4,19 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include <glibmm/i18n.h>
-
+#include "ui/dialog/lpe-powerstroke-properties.h"
 #include "live_effects/parameter/powerstrokepointarray.h"
 
 #include "live_effects/effect.h"
-#include "svg/svg.h"
-#include "svg/stringstream.h"
 #include "knotholder.h"
 #include "sp-lpe-item.h"
 
 #include <2geom/piecewise.h>
 #include <2geom/sbasis-geometric.h>
 
-// needed for on-canvas editting:
-#include "desktop.h"
-#include "live_effects/lpeobject.h"
+#include "preferences.h" // for proportional stroke/path scaling behavior
+
+#include <glibmm/i18n.h>
 
 namespace Inkscape {
 
@@ -43,30 +40,7 @@ Gtk::Widget *
 PowerStrokePointArrayParam::param_newWidget()
 {
     return NULL;
-/*
-    Inkscape::UI::Widget::RegisteredTransformedPoint * pointwdg = Gtk::manage(
-        new Inkscape::UI::Widget::RegisteredTransformedPoint( param_label,
-                                                              param_tooltip,
-                                                              param_key,
-                                                              *param_wr,
-                                                              param_effect->getRepr(),
-                                                              param_effect->getSPDoc() ) );
-    // TODO: fix to get correct desktop (don't use SP_ACTIVE_DESKTOP)
-    SPDesktop *desktop = SP_ACTIVE_DESKTOP;
-    Geom::Affine transf = desktop->doc2dt();
-    pointwdg->setTransform(transf);
-    pointwdg->setValue( *this );
-    pointwdg->clearProgrammatically();
-    pointwdg->set_undo_parameters(SP_VERB_DIALOG_LIVE_PATH_EFFECT, _("Change point parameter"));
-
-    Gtk::HBox * hbox = Gtk::manage( new Gtk::HBox() );
-    static_cast<Gtk::HBox*>(hbox)->pack_start(*pointwdg, true, true);
-    static_cast<Gtk::HBox*>(hbox)->show_all_children();
-
-    return dynamic_cast<Gtk::Widget *> (hbox);
-*/
 }
-
 
 void PowerStrokePointArrayParam::param_transform_multiply(Geom::Affine const &postmul, bool /*set*/)
 {
@@ -87,7 +61,6 @@ void PowerStrokePointArrayParam::param_transform_multiply(Geom::Affine const &po
     }
 }
 
-
 /** call this method to recalculate the controlpoints such that they stay at the same location relative to the new path. Useful after adding/deleting nodes to the path.*/
 void
 PowerStrokePointArrayParam::recalculate_controlpoints_for_new_pwd2(Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in)
@@ -106,7 +79,7 @@ PowerStrokePointArrayParam::recalculate_controlpoints_for_new_pwd2(Geom::Piecewi
                 Geom::Point pt = _vector[i];
                 Geom::Point position = last_pwd2.valueAt(pt[Geom::X]) + pt[Geom::Y] * last_pwd2_normal.valueAt(pt[Geom::X]);
                 
-                double t = nearest_point(position, pwd2_in);
+                double t = nearest_time(position, pwd2_in);
                 double offset = dot(position - pwd2_in.valueAt(t), normal.valueAt(t));
                 _vector[i] = Geom::Point(t, offset);
             }
@@ -114,6 +87,23 @@ PowerStrokePointArrayParam::recalculate_controlpoints_for_new_pwd2(Geom::Piecewi
 
         write_to_SVG();
     }
+}
+
+float PowerStrokePointArrayParam::median_width()
+{
+	size_t size = _vector.size();
+	if (size > 0)
+	{
+		if (size % 2 == 0)
+		{
+			return (_vector[size / 2 - 1].y() + _vector[size / 2].y()) / 2;
+		}
+		else
+		{
+			return _vector[size / 2].y();
+		}
+	}
+	return 1;
 }
 
 void
@@ -131,7 +121,7 @@ PowerStrokePointArrayParam::set_oncanvas_looks(SPKnotShapeType shape, SPKnotMode
     knot_mode  = mode;
     knot_color = color;
 }
-
+/*
 class PowerStrokePointArrayParamKnotHolderEntity : public KnotHolderEntity {
 public:
     PowerStrokePointArrayParamKnotHolderEntity(PowerStrokePointArrayParam *p, unsigned int index);
@@ -141,7 +131,7 @@ public:
     virtual Geom::Point knot_get() const;
     virtual void knot_click(guint state);
 
-    /** Checks whether the index falls within the size of the parameter's vector */
+    // Checks whether the index falls within the size of the parameter's vector
     bool valid_index(unsigned int index) const {
         return (_pparam->_vector.size() > index);
     };
@@ -149,7 +139,7 @@ public:
 private:
     PowerStrokePointArrayParam *_pparam;
     unsigned int _index;
-};
+};*/
 
 PowerStrokePointArrayParamKnotHolderEntity::PowerStrokePointArrayParamKnotHolderEntity(PowerStrokePointArrayParam *p, unsigned int index) 
   : _pparam(p), 
@@ -171,7 +161,7 @@ PowerStrokePointArrayParamKnotHolderEntity::knot_set(Geom::Point const &p, Geom:
     Piecewise<D2<SBasis> > const & n = _pparam->get_pwd2_normal();
 
     Geom::Point const s = snap_knot_position(p, state);
-    double t = nearest_point(s, pwd2);
+    double t = nearest_time(s, pwd2);
     double offset = dot(s - pwd2.valueAt(t), n.valueAt(t));
     _pparam->_vector.at(_index) = Geom::Point(t, offset);
     sp_lpe_item_update_patheffect(SP_LPE_ITEM(item), false, false);
@@ -196,6 +186,12 @@ PowerStrokePointArrayParamKnotHolderEntity::knot_get() const
     }
     Point canvas_point = pwd2.valueAt(offset_point[X]) + offset_point[Y] * n.valueAt(offset_point[X]);
     return canvas_point;
+}
+
+void PowerStrokePointArrayParamKnotHolderEntity::knot_set_offset(Geom::Point offset)
+{
+	_pparam->_vector.at(_index) = Geom::Point(offset.x(), offset.y() / 2);
+	this->parent_holder->knot_ungrabbed_handler(this->knot, 0);
 }
 
 void
@@ -240,10 +236,15 @@ PowerStrokePointArrayParamKnotHolderEntity::knot_click(guint state)
             // add knot to knotholder
             PowerStrokePointArrayParamKnotHolderEntity *e = new PowerStrokePointArrayParamKnotHolderEntity(_pparam, _index+1);
             e->create( this->desktop, this->item, parent_holder, Inkscape::CTRL_TYPE_UNKNOWN,
-                       _("<b>Stroke width control point</b>: drag to alter the stroke width. <b>Ctrl+click</b> adds a control point, <b>Ctrl+Alt+click</b> deletes it."),
+                       _("<b>Stroke width control point</b>: drag to alter the stroke width. <b>Ctrl+click</b> adds a control point, <b>Ctrl+Alt+click</b> deletes it, <b>Shift+click</b> launches width dialog."),
                         _pparam->knot_shape, _pparam->knot_mode, _pparam->knot_color);
             parent_holder->add(e);
         }
+    }
+    else if ((state & GDK_MOD1_MASK) || (state & GDK_SHIFT_MASK))
+    {
+    	Geom::Point offset = Geom::Point(_pparam->_vector.at(_index).x(), _pparam->_vector.at(_index).y() * 2);
+    	Inkscape::UI::Dialogs::PowerstrokePropertiesDialog::showDialog(this->desktop, offset, this);
     } 
 }
 
@@ -252,7 +253,7 @@ void PowerStrokePointArrayParam::addKnotHolderEntities(KnotHolder *knotholder, S
     for (unsigned int i = 0; i < _vector.size(); ++i) {
         PowerStrokePointArrayParamKnotHolderEntity *e = new PowerStrokePointArrayParamKnotHolderEntity(this, i);
         e->create( desktop, item, knotholder, Inkscape::CTRL_TYPE_UNKNOWN,
-                   _("<b>Stroke width control point</b>: drag to alter the stroke width. <b>Ctrl+click</b> adds a control point, <b>Ctrl+Alt+click</b> deletes it."),
+                   _("<b>Stroke width control point</b>: drag to alter the stroke width. <b>Ctrl+click</b> adds a control point, <b>Ctrl+Alt+click</b> deletes it, <b>Shift+click</b> launches width dialog."),
                    knot_shape, knot_mode, knot_color);
         knotholder->add(e);
     }

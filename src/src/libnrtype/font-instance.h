@@ -36,6 +36,9 @@ public:
     int                   nbGlyph, maxGlyph;
     font_glyph*           glyphs;
 
+    // Map of OpenType tables found in font (convert to std::set?)
+    std::map<Glib::ustring, int> openTypeTables;
+
     font_instance(void);
     virtual ~font_instance(void);
 
@@ -54,20 +57,34 @@ public:
 
     // nota: all coordinates returned by these functions are on a [0..1] scale; you need to multiply
     // by the fontsize to get the real sizes
+
+    // Return 2geom pathvector for glyph. Deallocated when font instance dies.
     Geom::PathVector*    PathVector(int glyph_id);
-                         // returns the 2geom-type pathvector for this glyph. no refcounting needed, it's deallocated when the font_instance dies
+
+    // Horizontal advance if 'vertical' is false, vertical advance if true.
     double               Advance(int glyph_id, bool vertical);
-    // nominal advance of the font.
+
+    double               GetTypoAscent()  { return _ascent; }
+    double               GetTypoDescent() { return _descent; }
+    double               GetXHeight()     { return _xheight; }
+    double               GetMaxAscent()   { return _ascent_max; }
+    double               GetMaxDescent()  { return _descent_max; }
+    const double*        GetBaselines()   { return _baselines; }
+
     bool                 FontMetrics(double &ascent, double &descent, double &leading);
-    bool                 FontDecoration(double &underline_position,     double &underline_thickness,
-                         double &linethrough_position,   double &linethrough_thickness);
+    bool                 FontDecoration(double &underline_position, double &underline_thickness,
+                                        double &linethrough_position, double &linethrough_thickness);
     bool                 FontSlope(double &run, double &rise);
                                 // for generating slanted cursors for oblique fonts
-    Geom::OptRect             BBox(int glyph_id);
+    Geom::OptRect        BBox(int glyph_id);
 
 private:
     void                 FreeTheFace();
+    // Find ascent, descent, x-height, and baselines.
+    void                 FindFontMetrics();
 
+    // Temp: make public
+public:
 #ifdef USE_PANGO_WIN32
     HFONT                 theFace;
 #else
@@ -76,6 +93,17 @@ private:
                 // as long as pFont is valid, theFace is too
 #endif
 
+private:
+
+    // Font metrics in em-box units
+    double  _ascent;       // Typographic ascent.
+    double  _descent;      // Typographic descent.
+    double  _xheight;      // x-height of font.
+    double  _ascent_max;   // Maxiumum ascent of all glyphs in font.
+    double  _descent_max;  // Maxiumum descent of all glyphs in font.
+
+    // Baselines
+    double _baselines[SP_CSS_BASELINE_SIZE];
 };
 
 

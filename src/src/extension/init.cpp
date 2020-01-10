@@ -1,6 +1,6 @@
 /*
  * This is what gets executed to initialize all of the modules.  For
- * the internal modules this invovles executing their initialization
+ * the internal modules this involves executing their initialization
  * functions, for external ones it involves reading their .spmodule
  * files and bringing them into Sodipodi.
  *
@@ -243,7 +243,7 @@ init()
     /* Load search path for extensions */
     if (Inkscape::Extension::Extension::search_path.size() == 0)
     {
-        Inkscape::Extension::Extension::search_path.push_back(profile_path("extensions"));
+        Inkscape::Extension::Extension::search_path.push_back(Inkscape::Application::profile_path("extensions"));
 
         Inkscape::Extension::Extension::search_path.push_back(g_strdup(INKSCAPE_EXTENSIONDIR));
 

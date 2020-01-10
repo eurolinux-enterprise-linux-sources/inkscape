@@ -10,10 +10,6 @@
 # include "config.h"
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/spinbutton.h>
@@ -136,7 +132,7 @@ public:
         if (_pref->get(NULL, NULL) != NULL) {
             this->set_text(Glib::ustring(_pref->get(NULL, NULL)));
         }
-        this->set_max_length(_pref->getMaxLength()); //Set the max lenght - default zero means no maximum
+        this->set_max_length(_pref->getMaxLength()); //Set the max length - default zero means no maximum
         this->signal_changed().connect(sigc::mem_fun(this, &ParamStringEntry::changed_text));
     };
     void changed_text (void);
@@ -170,7 +166,7 @@ Gtk::Widget * ParamString::get_widget(SPDocument * doc, Inkscape::XML::Node * no
     }
 
     Gtk::HBox * hbox = Gtk::manage(new Gtk::HBox(false, 4));
-    Gtk::Label * label = Gtk::manage(new Gtk::Label(_(_text), Gtk::ALIGN_START));
+    Gtk::Label * label = Gtk::manage(new Gtk::Label(_text, Gtk::ALIGN_START));
     label->show();
     hbox->pack_start(*label, false, false, _indent);
 

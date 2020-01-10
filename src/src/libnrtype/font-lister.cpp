@@ -6,7 +6,6 @@
 #include <gtkmm/treemodel.h>
 
 #include <libnrtype/font-instance.h>
-#include <libnrtype/TextWrapper.h>
 #include <libnrtype/one-glyph.h>
 
 #include "font-lister.h"
@@ -136,6 +135,8 @@ void FontLister::ensureRowStyles(GtkTreeModel* model, GtkTreeIter const* iterato
     if (!row[FontList.styles]) {
         if (row[FontList.pango_family]) {
             row[FontList.styles] = font_factory::Default()->GetUIStyles(row[FontList.pango_family]);
+        } else {
+            row[FontList.styles] = default_styles;
         }
     }
 }
@@ -178,6 +179,7 @@ void FontLister::insert_font_family(Glib::ustring new_family)
     (*treeModelIter)[FontList.family] = new_family;
     (*treeModelIter)[FontList.styles] = styles;
     (*treeModelIter)[FontList.onSystem] = false;
+    (*treeModelIter)[FontList.pango_family] = NULL;
 }
 
 void FontLister::update_font_list(SPDocument *document)
@@ -257,7 +259,8 @@ void FontLister::update_font_list(SPDocument *document)
         Gtk::TreeModel::iterator treeModelIter = font_list_store->prepend();
         (*treeModelIter)[FontList.family] = reinterpret_cast<const char *>(g_strdup((*i).c_str()));
         (*treeModelIter)[FontList.styles] = styles;
-        (*treeModelIter)[FontList.onSystem] = false;
+        (*treeModelIter)[FontList.onSystem] = false;    // false if document font
+        (*treeModelIter)[FontList.pango_family] = NULL; // CHECK ME (set to pango_family if on system?)
 
     }
 
@@ -335,7 +338,7 @@ Glib::ustring FontLister::system_fontspec(Glib::ustring fontspec)
 
     PangoFontDescription *descr = pango_font_description_from_string(fontspec.c_str());
     font_instance *res = (font_factory::Default())->Face(descr);
-    if (res->pFont) {
+    if (res && res->pFont) {
         PangoFontDescription *nFaceDesc = pango_font_describe(res->pFont);
         out = sp_font_description_get_family(nFaceDesc);
     }
@@ -385,27 +388,27 @@ std::pair<Glib::ustring, Glib::ustring> FontLister::selection_update()
 #endif
     // Get fontspec from a selection, preferences, or thin air.
     Glib::ustring fontspec;
-    SPStyle *query = sp_style_new(SP_ACTIVE_DOCUMENT);
+    SPStyle query(SP_ACTIVE_DOCUMENT);
 
     // Directly from stored font specification.
     int result =
-        sp_desktop_query_style(SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_FONT_SPECIFICATION);
+        sp_desktop_query_style(SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_FONT_SPECIFICATION);
 
     //std::cout << "  Attempting selected style" << std::endl;
-    if (result != QUERY_STYLE_NOTHING && query->font_specification.set) {
-        fontspec = query->font_specification.value;
+    if (result != QUERY_STYLE_NOTHING && query.font_specification.set) {
+        fontspec = query.font_specification.value;
         //std::cout << "   fontspec from query   :" << fontspec << ":" << std::endl;
     }
 
     // From style
     if (fontspec.empty()) {
         //std::cout << "  Attempting desktop style" << std::endl;
-        int rfamily = sp_desktop_query_style(SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_FONTFAMILY);
-        int rstyle = sp_desktop_query_style(SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_FONTSTYLE);
+        int rfamily = sp_desktop_query_style(SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_FONTFAMILY);
+        int rstyle = sp_desktop_query_style(SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_FONTSTYLE);
 
         // Must have text in selection
         if (rfamily != QUERY_STYLE_NOTHING && rstyle != QUERY_STYLE_NOTHING) {
-            fontspec = fontspec_from_style(query);
+            fontspec = fontspec_from_style(&query);
         }
         //std::cout << "   fontspec from style   :" << fontspec << ":" << std::endl;
     }
@@ -413,11 +416,10 @@ std::pair<Glib::ustring, Glib::ustring> FontLister::selection_update()
     // From preferences
     if (fontspec.empty()) {
         //std::cout << "  Attempting preferences" << std::endl;
-        sp_style_read_from_prefs(query, "/tools/text");
-        fontspec = fontspec_from_style(query);
+        query.readFromPrefs("/tools/text");
+        fontspec = fontspec_from_style(&query);
         //std::cout << "   fontspec from prefs   :" << fontspec << ":" << std::endl;
     }
-    sp_style_unref(query);
 
     // From thin air
     if (fontspec.empty()) {
@@ -650,7 +652,7 @@ void FontLister::fill_css(SPCSSAttr *css, Glib::ustring fontspec)
             break;
 #if PANGO_VERSION_CHECK(1,36,6)
         case PANGO_WEIGHT_SEMILIGHT:
-            sp_repr_css_set_property (css, "font-weight", "350");
+            sp_repr_css_set_property(css, "font-weight", "350");
             break;
 #endif
         case PANGO_WEIGHT_BOOK:
@@ -995,7 +997,7 @@ Glib::ustring FontLister::get_best_style_match(Glib::ustring family, Glib::ustri
     }
     catch (...)
     {
-        //std::cout << "  ERROR: can't find family: " << family << std::endl;
+        std::cerr << "FontLister::get_best_style_match(): can't find family: " << family << std::endl;
         return (target_style);
     }
 
@@ -1004,10 +1006,12 @@ Glib::ustring FontLister::get_best_style_match(Glib::ustring family, Glib::ustri
 
     //font_description_dump( target );
 
-    if (!row[FontList.styles]) {
+    GList *styles = default_styles;
+    if (row[FontList.onSystem] && !row[FontList.styles]) {
         row[FontList.styles] = font_factory::Default()->GetUIStyles(row[FontList.pango_family]);
+        styles = row[FontList.styles];
     }
-    GList *styles = row[FontList.styles];
+
     for (GList *l = styles; l; l = l->next) {
         Glib::ustring fontspec = family + ", " + ((StyleNames *)l->data)->CssName;
         PangoFontDescription *candidate = pango_font_description_from_string(fontspec.c_str());

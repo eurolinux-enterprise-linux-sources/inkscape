@@ -1,5 +1,5 @@
-#ifndef __NR_FILTER_SLOT_H__
-#define __NR_FILTER_SLOT_H__
+#ifndef SEEN_NR_FILTER_SLOT_H
+#define SEEN_NR_FILTER_SLOT_H
 
 /*
  * A container class for filter slots. Allows for simple getting and
@@ -15,9 +15,13 @@
  */
 
 #include <map>
-#include <cairo.h>
 #include "display/nr-filter-types.h"
 #include "display/nr-filter-units.h"
+
+extern "C" {
+typedef struct _cairo cairo_t;
+typedef struct _cairo_surface cairo_surface_t;
+}
 
 namespace Inkscape {
 class DrawingContext;
@@ -50,6 +54,9 @@ public:
 
     cairo_surface_t *get_result(int slot_nr);
 
+    void set_primitive_area(int slot, Geom::Rect &area);
+    Geom::Rect get_primitive_area(int slot);
+    
     /** Returns the number of slots in use. */
     int get_slot_count();
 
@@ -71,6 +78,11 @@ public:
 private:
     typedef std::map<int, cairo_surface_t *> SlotMap;
     SlotMap _slots;
+
+    // We need to keep track of the primitive area as this is needed in feTile
+    typedef std::map<int, Geom::Rect> PrimitiveAreaMap;
+    PrimitiveAreaMap _primitiveAreas;
+
     DrawingItem *_item;
 
     //Geom::Rect _source_bbox; ///< bounding box of source graphic surface

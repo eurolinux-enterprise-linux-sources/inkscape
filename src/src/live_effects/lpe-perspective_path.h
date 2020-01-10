@@ -17,9 +17,9 @@
 #include "live_effects/parameter/parameter.h"
 #include "live_effects/parameter/bool.h"
 #include "live_effects/lpegroupbbox.h"
+#include "2geom/point.h"
 
 #include <vector>
-#include "2geom/point.h"
 
 namespace Inkscape {
 namespace LivePathEffect {
@@ -33,9 +33,8 @@ class LPEPerspectivePath : public Effect, GroupBBoxEffect {
 public:
     LPEPerspectivePath(LivePathEffectObject *lpeobject);
     virtual ~LPEPerspectivePath();
-    
     virtual void doBeforeEffect (SPLPEItem const* lpeitem);
-
+    virtual void doOnApply(SPLPEItem const* lpeitem);
     virtual Geom::Piecewise<Geom::D2<Geom::SBasis> > doEffect_pwd2 (Geom::Piecewise<Geom::D2<Geom::SBasis> > const & pwd2_in);
 
     virtual void refresh(Gtk::Entry* perspective);
@@ -53,8 +52,6 @@ private:
     ScalarParam offsety;
     BoolParam uses_plane_xy;
     // there are all kinds of parameters. Check the /live_effects/parameter directory which types exist!
-
-    bool unapply;
     Geom::Point orig;
 
     LPEPerspectivePath(const LPEPerspectivePath&);

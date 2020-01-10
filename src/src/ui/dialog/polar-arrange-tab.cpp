@@ -16,7 +16,7 @@
 #include "verbs.h"
 #include "preferences.h"
 #include "inkscape.h"
-#include "desktop-handles.h"
+
 #include "selection.h"
 #include "document.h"
 #include "document-undo.h"
@@ -25,6 +25,7 @@
 #include "desktop.h"
 #include "sp-ellipse.h"
 #include "sp-item-transform.h"
+#include <gtkmm/messagedialog.h>
 
 namespace Inkscape {
 namespace UI {
@@ -32,26 +33,30 @@ namespace Dialog {
 
 PolarArrangeTab::PolarArrangeTab(ArrangeDialog *parent_)
 	: parent(parent_),
+#if WITH_GTKMM_3_0
+	  parametersTable(),
+#else
 	  parametersTable(3, 3, false),
-	  centerY("", "Y coordinate of the center", UNIT_TYPE_LINEAR),
-	  centerX("", "X coordinate of the center", centerY),
-	  radiusY("", "Y coordinate of the radius", UNIT_TYPE_LINEAR),
-	  radiusX("", "X coordinate of the radius", radiusY),
-	  angleY("", "Starting angle", UNIT_TYPE_RADIAL),
-	  angleX("", "End angle", angleY)
+#endif
+	  centerY("", C_("Polar arrange tab", "Y coordinate of the center"), UNIT_TYPE_LINEAR),
+	  centerX("", C_("Polar arrange tab", "X coordinate of the center"), centerY),
+	  radiusY("", C_("Polar arrange tab", "Y coordinate of the radius"), UNIT_TYPE_LINEAR),
+	  radiusX("", C_("Polar arrange tab", "X coordinate of the radius"), radiusY),
+	  angleY("", C_("Polar arrange tab", "Starting angle"), UNIT_TYPE_RADIAL),
+	  angleX("", C_("Polar arrange tab", "End angle"), angleY)
 {
 	anchorPointLabel.set_text(C_("Polar arrange tab", "Anchor point:"));
 	anchorPointLabel.set_alignment(Gtk::ALIGN_START);
 	pack_start(anchorPointLabel, false, false);
 
-	anchorBoundingBoxRadio.set_label(C_("Polar arrange tab", "Object's bounding box:"));
+	anchorBoundingBoxRadio.set_label(C_("Polar arrange tab", "Objects' bounding boxes:"));
 	anchorRadioGroup = anchorBoundingBoxRadio.get_group();
 	anchorBoundingBoxRadio.signal_toggled().connect(sigc::mem_fun(*this, &PolarArrangeTab::on_anchor_radio_changed));
 	pack_start(anchorBoundingBoxRadio, false, false);
 
 	pack_start(anchorSelector, false, false);
 
-	anchorObjectPivotRadio.set_label(C_("Polar arrange tab", "Object's rotational center"));
+	anchorObjectPivotRadio.set_label(C_("Polar arrange tab", "Objects' rotational centers"));
 	anchorObjectPivotRadio.set_group(anchorRadioGroup);
 	anchorObjectPivotRadio.signal_toggled().connect(sigc::mem_fun(*this, &PolarArrangeTab::on_anchor_radio_changed));
 	pack_start(anchorObjectPivotRadio, false, false);
@@ -75,8 +80,12 @@ PolarArrangeTab::PolarArrangeTab(ArrangeDialog *parent_)
 	arrangeOnParametersRadio.signal_toggled().connect(sigc::mem_fun(*this, &PolarArrangeTab::on_arrange_radio_changed));
 	pack_start(arrangeOnParametersRadio, false, false);
 
-	centerLabel.set_text(_("Center X/Y:"));
+	centerLabel.set_text(C_("Polar arrange tab", "Center X/Y:"));
+#if WITH_GTKMM_3_0
+	parametersTable.attach(centerLabel, 0, 0, 1, 1);
+#else
 	parametersTable.attach(centerLabel, 0, 1, 0, 1, Gtk::FILL);
+#endif
 	centerX.setDigits(2);
 	centerX.setIncrements(0.2, 0);
 	centerX.setRange(-10000, 10000);
@@ -85,11 +94,20 @@ PolarArrangeTab::PolarArrangeTab(ArrangeDialog *parent_)
 	centerY.setIncrements(0.2, 0);
 	centerY.setRange(-10000, 10000);
 	centerY.setValue(0, "px");
+#if WITH_GTKMM_3_0
+	parametersTable.attach(centerX, 1, 0, 1, 1);
+	parametersTable.attach(centerY, 2, 0, 1, 1);
+#else
 	parametersTable.attach(centerX, 1, 2, 0, 1, Gtk::FILL);
 	parametersTable.attach(centerY, 2, 3, 0, 1, Gtk::FILL);
+#endif
 
-	radiusLabel.set_text(_("Radius X/Y:"));
+	radiusLabel.set_text(C_("Polar arrange tab", "Radius X/Y:"));
+#if WITH_GTKMM_3_0
+	parametersTable.attach(radiusLabel, 0, 1, 1, 1);
+#else
 	parametersTable.attach(radiusLabel, 0, 1, 1, 2, Gtk::FILL);
+#endif
 	radiusX.setDigits(2);
 	radiusX.setIncrements(0.2, 0);
 	radiusX.setRange(0.001, 10000);
@@ -98,11 +116,20 @@ PolarArrangeTab::PolarArrangeTab(ArrangeDialog *parent_)
 	radiusY.setIncrements(0.2, 0);
 	radiusY.setRange(0.001, 10000);
 	radiusY.setValue(100, "px");
+#if WITH_GTKMM_3_0
+	parametersTable.attach(radiusX, 1, 1, 1, 1);
+	parametersTable.attach(radiusY, 2, 1, 1, 1);
+#else
 	parametersTable.attach(radiusX, 1, 2, 1, 2, Gtk::FILL);
 	parametersTable.attach(radiusY, 2, 3, 1, 2, Gtk::FILL);
+#endif
 
 	angleLabel.set_text(_("Angle X/Y:"));
+#if WITH_GTKMM_3_0
+	parametersTable.attach(angleLabel, 0, 2, 1, 1);
+#else
 	parametersTable.attach(angleLabel, 0, 1, 2, 3, Gtk::FILL);
+#endif
 	angleX.setDigits(2);
 	angleX.setIncrements(0.2, 0);
 	angleX.setRange(-10000, 10000);
@@ -111,8 +138,13 @@ PolarArrangeTab::PolarArrangeTab(ArrangeDialog *parent_)
 	angleY.setIncrements(0.2, 0);
 	angleY.setRange(-10000, 10000);
 	angleY.setValue(180, "°");
+#if WITH_GTKMM_3_0
+	parametersTable.attach(angleX, 1, 2, 1, 1);
+	parametersTable.attach(angleY, 2, 2, 1, 1);
+#else
 	parametersTable.attach(angleX, 1, 2, 2, 3, Gtk::FILL);
 	parametersTable.attach(angleY, 2, 3, 2, 3, Gtk::FILL);
+#endif
 	pack_start(parametersTable, false, false);
 
 	rotateObjectsCheckBox.set_label(_("Rotate objects"));
@@ -264,20 +296,19 @@ static void moveToPoint(int anchor, SPItem *item, Geom::Point p)
 
 void PolarArrangeTab::arrange()
 {
-	Inkscape::Selection *selection = sp_desktop_selection(parent->getDesktop());
-	const GSList *items, *tmp;
-	tmp = items = selection->itemList();
+	Inkscape::Selection *selection = parent->getDesktop()->getSelection();
+	const std::vector<SPItem*> tmp(selection->itemList());
 	SPGenericEllipse *referenceEllipse = NULL; // Last ellipse in selection
 
 	bool arrangeOnEllipse = !arrangeOnParametersRadio.get_active();
 	bool arrangeOnFirstEllipse = arrangeOnEllipse && arrangeOnFirstCircleRadio.get_active();
 
 	int count = 0;
-	while(tmp)
+	for(std::vector<SPItem*>::const_iterator i=tmp.begin();i!=tmp.end();++i)
 	{
 		if(arrangeOnEllipse)
 		{
-			SPItem *item = SP_ITEM(tmp->data);
+			SPItem *item = *i;
 
 			if(arrangeOnFirstEllipse)
 			{
@@ -290,7 +321,6 @@ void PolarArrangeTab::arrange()
 					referenceEllipse = SP_GENERICELLIPSE(item);
 			}
 		}
-		tmp = tmp->next;
 		++count;
 	}
 
@@ -342,11 +372,10 @@ void PolarArrangeTab::arrange()
 
 	Geom::Point realCenter = Geom::Point(cx, cy) * transformation;
 
-	tmp = items;
 	int i = 0;
-	while(tmp)
+	for(std::vector<SPItem*>::const_iterator it=tmp.begin();it!=tmp.end(); ++it)
 	{
-		SPItem *item = SP_ITEM(tmp->data);
+		SPItem *item = *it;
 
 		// Ignore the reference ellipse if any
 		if(item != referenceEllipse)
@@ -364,10 +393,9 @@ void PolarArrangeTab::arrange()
 
 			++i;
 		}
-		tmp = tmp->next;
 	}
 
-    DocumentUndo::done(sp_desktop_document(parent->getDesktop()), SP_VERB_SELECTION_ARRANGE,
+    DocumentUndo::done(parent->getDesktop()->getDocument(), SP_VERB_SELECTION_ARRANGE,
                        _("Arrange on ellipse"));
 }
 

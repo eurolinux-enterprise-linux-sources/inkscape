@@ -44,7 +44,7 @@
 #include "selection.h"
 #include "desktop.h"
 #include "desktop-events.h"
-#include "desktop-handles.h"
+
 #include "desktop-style.h"
 #include "message-context.h"
 #include "preferences.h"
@@ -64,8 +64,11 @@
 #include "livarot/Shape.h"
 #include "document-undo.h"
 #include "verbs.h"
+#include "style.h"
+#include "style-enums.h"
 #include <2geom/math-utils.h>
 #include <2geom/pathvector.h>
+#include "path-chemistry.h"
 #include "display/curve.h"
 
 #include "ui/tools/eraser-tool.h"
@@ -84,19 +87,9 @@ using Inkscape::DocumentUndo;
 #define DRAG_DEFAULT 1.0
 #define DRAG_MAX 1.0
 
-#include "tool-factory.h"
-
 namespace Inkscape {
 namespace UI {
 namespace Tools {
-
-namespace {
-	ToolBase* createEraserContext() {
-		return new EraserTool();
-	}
-
-	bool eraserContextRegistered = ToolFactory::instance().registerObject("/tools/eraser", createEraserContext);
-}
 
 const std::string& EraserTool::getPrefsPath() {
 	return EraserTool::prefsPath;
@@ -106,6 +99,7 @@ const std::string EraserTool::prefsPath = "/tools/eraser";
 
 EraserTool::EraserTool()
     : DynamicBase(cursor_eraser_xpm, 4, 4)
+    , nowidth(false)
 {
 }
 
@@ -121,7 +115,7 @@ void EraserTool::setup() {
     this->cal1 = new SPCurve();
     this->cal2 = new SPCurve();
 
-    this->currentshape = sp_canvas_item_new(sp_desktop_sketch(desktop), SP_TYPE_CANVAS_BPATH, NULL);
+    this->currentshape = sp_canvas_item_new(desktop->getSketch(), SP_TYPE_CANVAS_BPATH, NULL);
 
     sp_canvas_bpath_set_fill(SP_CANVAS_BPATH(this->currentshape), ERC_RED_RGBA, SP_WIND_RULE_EVENODD);
     sp_canvas_bpath_set_stroke(SP_CANVAS_BPATH(this->currentshape), 0x00000000, 1.0, SP_STROKE_LINEJOIN_MITER, SP_STROKE_LINECAP_BUTT);
@@ -155,6 +149,7 @@ static ProfileFloatElement f_profile[PROFILE_FLOAT_SIZE] = {
     sp_event_context_read(this, "cap_rounding");
 
     this->is_drawing = false;
+    //TODO not sure why get 0.01 if slider width == 0, maybe a double/int problem
 
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     if (prefs->getBool("/tools/eraser/selcue", 0) != 0) {
@@ -349,7 +344,10 @@ void EraserTool::brush() {
 
     this->point1[this->npoints] = brush + del_left;
     this->point2[this->npoints] = brush - del_right;
-
+    
+    if (this->nowidth) {
+        this->point1[this->npoints] = Geom::middle_point(this->point1[this->npoints],this->point2[this->npoints]);
+    }
     this->del = 0.5*(del_left + del_right);
 
     this->npoints++;
@@ -381,7 +379,8 @@ void EraserTool::cancel() {
 
 bool EraserTool::root_handler(GdkEvent* event) {
     gint ret = FALSE;
-
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    gint eraserMode = prefs->getBool("/tools/eraser/mode") ? 1 : 0;
     switch (event->type) {
         case GDK_BUTTON_PRESS:
             if (event->button.button == 1 && !this->space_panning) {
@@ -401,10 +400,10 @@ bool EraserTool::root_handler(GdkEvent* event) {
                 if (this->repr) {
                     this->repr = NULL;
                 }
-
-                Inkscape::Rubberband::get(desktop)->start(desktop, button_dt);
-                Inkscape::Rubberband::get(desktop)->setMode(RUBBERBAND_MODE_TOUCHPATH);
-
+                if ( ! eraserMode ) {
+                    Inkscape::Rubberband::get(desktop)->start(desktop, button_dt);
+                    Inkscape::Rubberband::get(desktop)->setMode(RUBBERBAND_MODE_TOUCHPATH);
+                }
                 /* initialize first point */
                 this->npoints = 0;
 
@@ -449,8 +448,10 @@ bool EraserTool::root_handler(GdkEvent* event) {
 
                 ret = TRUE;
             }
-
-            Inkscape::Rubberband::get(desktop)->move(motion_dt);
+            if ( !eraserMode ) {
+                this->accumulated->reset();
+                Inkscape::Rubberband::get(desktop)->move(motion_dt);
+            }
         }
         break;
 
@@ -490,7 +491,7 @@ bool EraserTool::root_handler(GdkEvent* event) {
             ret = TRUE;
         }
 
-        if (Inkscape::Rubberband::get(desktop)->is_started()) {
+        if (!eraserMode && Inkscape::Rubberband::get(desktop)->is_started()) {
             Inkscape::Rubberband::get(desktop)->stop();
         }
             
@@ -499,33 +500,32 @@ bool EraserTool::root_handler(GdkEvent* event) {
 
     case GDK_KEY_PRESS:
         switch (get_group0_keyval (&event->key)) {
-        case GDK_KEY_Up:
-        case GDK_KEY_KP_Up:
-            if (!MOD__CTRL_ONLY(event)) {
-                this->angle += 5.0;
+//        case GDK_KEY_Up:
+//        case GDK_KEY_KP_Up:
+//            if (!MOD__CTRL_ONLY(event)) {
+//                this->angle += 5.0;
 
-                if (this->angle > 90.0) {
-                    this->angle = 90.0;
-                }
+//                if (this->angle > 90.0) {
+//                    this->angle = 90.0;
+//                }
+//                sp_erc_update_toolbox (desktop, "eraser-angle", this->angle);
+//                ret = TRUE;
+//            }
+//            break;
 
-                sp_erc_update_toolbox (desktop, "eraser-angle", this->angle);
-                ret = TRUE;
-            }
-            break;
+//        case GDK_KEY_Down:
+//        case GDK_KEY_KP_Down:
+//            if (!MOD__CTRL_ONLY(event)) {
+//                this->angle -= 5.0;
 
-        case GDK_KEY_Down:
-        case GDK_KEY_KP_Down:
-            if (!MOD__CTRL_ONLY(event)) {
-                this->angle -= 5.0;
+//                if (this->angle < -90.0) {
+//                    this->angle = -90.0;
+//                }
 
-                if (this->angle < -90.0) {
-                    this->angle = -90.0;
-                }
-
-                sp_erc_update_toolbox (desktop, "eraser-angle", this->angle);
-                ret = TRUE;
-            }
-            break;
+//                sp_erc_update_toolbox (desktop, "eraser-angle", this->angle);
+//                ret = TRUE;
+//            }
+//            break;
 
         case GDK_KEY_Right:
         case GDK_KEY_KP_Right:
@@ -578,8 +578,9 @@ bool EraserTool::root_handler(GdkEvent* event) {
             break;
 
         case GDK_KEY_Escape:
-            Inkscape::Rubberband::get(desktop)->stop();
-
+            if ( !eraserMode ) {
+                Inkscape::Rubberband::get(desktop)->stop();
+            }
             if (this->is_drawing) {
                 // if drawing, cancel, otherwise pass it up for deselecting
                 this->cancel();
@@ -650,15 +651,12 @@ void EraserTool::set_to_accumulated() {
             sp_desktop_apply_style_tool (desktop, repr, "/tools/eraser", false);
 
             this->repr = repr;
-
-            SPItem *item=SP_ITEM(desktop->currentLayer()->appendChildRepr(this->repr));
-            Inkscape::GC::release(this->repr);
-
-            item->transform = SP_ITEM(desktop->currentLayer())->i2doc_affine().inverse();
-            item->updateRepr();
         }
-
+        SPItem *item = SP_ITEM(desktop->currentLayer()->appendChildRepr(this->repr));
+        Inkscape::GC::release(this->repr);
+        item->updateRepr();
         Geom::PathVector pathv = this->accumulated->get_pathvector() * desktop->dt2doc();
+        pathv *= item->i2doc_affine().inverse();
         gchar *str = sp_svg_write_path(pathv);
         g_assert( str != NULL );
         this->repr->setAttribute("d", str);
@@ -666,59 +664,91 @@ void EraserTool::set_to_accumulated() {
 
         if ( this->repr ) {
             bool wasSelection = false;
-            Inkscape::Selection *selection = sp_desktop_selection(desktop);
+            Inkscape::Selection *selection = desktop->getSelection();
             Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-            
             gint eraserMode = prefs->getBool("/tools/eraser/mode") ? 1 : 0;
             Inkscape::XML::Document *xml_doc = desktop->doc()->getReprDoc();
 
             SPItem* acid = SP_ITEM(desktop->doc()->getObjectByRepr(this->repr));
-            Geom::OptRect eraserBbox = acid->visualBounds();
-            Geom::Rect bounds = (*eraserBbox) * desktop->doc2dt();
+            Geom::OptRect eraserBbox = acid->desktopVisualBounds();
             std::vector<SPItem*> remainingItems;
-            GSList* toWorkOn = 0;
-
+            std::vector<SPItem*> toWorkOn;
             if (selection->isEmpty()) {
                 if ( eraserMode ) {
-                    toWorkOn = sp_desktop_document(desktop)->getItemsPartiallyInBox(desktop->dkey, bounds);
+                    toWorkOn = desktop->getDocument()->getItemsPartiallyInBox(desktop->dkey, *eraserBbox);
                 } else {
                     Inkscape::Rubberband *r = Inkscape::Rubberband::get(desktop);
-                    toWorkOn = sp_desktop_document(desktop)->getItemsAtPoints(desktop->dkey, r->getPoints());
+                    toWorkOn = desktop->getDocument()->getItemsAtPoints(desktop->dkey, r->getPoints());
                 }
-
-                toWorkOn = g_slist_remove( toWorkOn, acid );
+                toWorkOn.erase(std::remove(toWorkOn.begin(), toWorkOn.end(), acid), toWorkOn.end());
             } else {
-                toWorkOn = g_slist_copy(const_cast<GSList*>(selection->itemList()));
+                if ( !eraserMode ) {
+                    Inkscape::Rubberband *r = Inkscape::Rubberband::get(desktop);
+                    std::vector<SPItem*> touched;
+                    touched = desktop->getDocument()->getItemsAtPoints(desktop->dkey, r->getPoints());
+                    for (std::vector<SPItem*>::const_iterator i = touched.begin();i!=touched.end();++i) {
+                        if(selection->includes(*i)){
+                            toWorkOn.push_back((*i));
+                        }
+                    }
+                } else {
+                    toWorkOn = selection->itemList();
+                }
                 wasSelection = true;
             }
 
-            if ( g_slist_length(toWorkOn) > 0 ) {
+            if ( !toWorkOn.empty() ) {
                 if ( eraserMode ) {
-                    for (GSList *i = toWorkOn ; i ; i = i->next ) {
-                        SPItem *item = SP_ITEM(i->data);
-
-                        if ( eraserMode ) {
-                            Geom::OptRect bbox = item->visualBounds();
-
+                    for (std::vector<SPItem*>::const_iterator i = toWorkOn.begin(); i != toWorkOn.end(); ++i){
+                        SPItem *item = *i;
+                        SPUse *use = dynamic_cast<SPUse *>(item);
+                        if (SP_IS_PATH(item) && SP_PATH(item)->nodesInPath () == 2){
+                            sp_object_ref( *i, 0 );
+                            SPItem *item = *i;
+                            item->deleteObject(true);
+                            sp_object_unref(item);
+                            workDone = true;
+                            workDone = true;
+                        } else if (SP_IS_GROUP(item) || use ) {
+                            /*Do nothing*/
+                        } else {
+                            Geom::OptRect bbox = item->desktopVisualBounds();
                             if (bbox && bbox->intersects(*eraserBbox)) {
                                 Inkscape::XML::Node* dup = this->repr->duplicate(xml_doc);
                                 this->repr->parent()->appendChild(dup);
                                 Inkscape::GC::release(dup); // parent takes over
-
-                                selection->set(item);
-                                selection->add(dup);
-                                sp_selected_path_diff_skip_undo(selection, desktop);
+                                selection->set(dup);
+                                if (!this->nowidth) {
+                                    sp_selected_path_union_skip_undo(selection, desktop);
+                                }
+                                selection->add(item);
+                                if(item->style->fill_rule.value == SP_WIND_RULE_EVENODD){
+                                    SPCSSAttr *css = sp_repr_css_attr_new();
+                                    sp_repr_css_set_property(css, "fill-rule", "evenodd");
+                                    sp_desktop_set_style(desktop, css);
+                                    sp_repr_css_attr_unref(css);
+                                    css = 0;
+                                }
+                                if (this->nowidth) {
+                                    sp_selected_path_cut_skip_undo(selection, desktop);
+                                } else {
+                                    sp_selected_path_diff_skip_undo(selection, desktop);
+                                }
                                 workDone = true; // TODO set this only if something was cut.
-
+                                bool break_apart = prefs->getBool("/tools/eraser/break_apart", false);
+                                if(!break_apart){
+                                    sp_selected_path_combine(desktop, true);
+                                } else {
+                                    if(!this->nowidth){
+                                        sp_selected_path_break_apart(desktop, true);
+                                    }
+                                }
                                 if ( !selection->isEmpty() ) {
                                     // If the item was not completely erased, track the new remainder.
-                                    GSList *nowSel = g_slist_copy(const_cast<GSList *>(selection->itemList()));
-
-                                    for (GSList const *i2 = nowSel ; i2 ; i2 = i2->next ) {
-                                        remainingItems.push_back(SP_ITEM(i2->data));
+                                    std::vector<SPItem*> nowSel(selection->itemList());
+                                    for (std::vector<SPItem*>::const_iterator i2 = nowSel.begin();i2!=nowSel.end();++i2) {
+                                        remainingItems.push_back(*i2);
                                     }
-
-                                    g_slist_free(nowSel);
                                 }
                             } else {
                                 remainingItems.push_back(item);
@@ -726,19 +756,17 @@ void EraserTool::set_to_accumulated() {
                         }
                     }
                 } else {
-                    for (GSList *i = toWorkOn ; i ; i = i->next ) {
-                        sp_object_ref( SP_ITEM(i->data), 0 );
+                    for (std::vector<SPItem*> ::const_iterator i = toWorkOn.begin();i!=toWorkOn.end();++i) {
+                        sp_object_ref( *i, 0 );
                     }
 
-                    for (GSList *i = toWorkOn ; i ; i = i->next ) {
-                        SPItem *item = SP_ITEM(i->data);
+                    for (std::vector<SPItem*>::const_iterator i = toWorkOn.begin();i!=toWorkOn.end();++i) {
+                        SPItem *item = *i;
                         item->deleteObject(true);
                         sp_object_unref(item);
                         workDone = true;
                     }
                 }
-
-                g_slist_free(toWorkOn);
 
                 if ( !eraserMode ) {
                     //sp_selection_delete(desktop);
@@ -753,7 +781,6 @@ void EraserTool::set_to_accumulated() {
                     }
                 }
             }
-
             // Remove the eraser stroke itself:
             sp_repr_unparent( this->repr );
             this->repr = 0;
@@ -767,9 +794,9 @@ void EraserTool::set_to_accumulated() {
 
 
     if ( workDone ) {
-        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_ERASER, _("Draw eraser stroke"));
+        DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_ERASER, _("Draw eraser stroke"));
     } else {
-        DocumentUndo::cancel(sp_desktop_document(desktop));
+        DocumentUndo::cancel(desktop->getDocument());
     }
 }
 
@@ -806,6 +833,8 @@ add_cap(SPCurve *curve,
 }
 
 void EraserTool::accumulate() {
+    // construct a crude outline of the eraser's path.
+    // this desperately needs to be rewritten to use the path outliner...
     if ( !this->cal1->is_empty() && !this->cal2->is_empty() ) {
         this->accumulated->reset(); /*  Is this required ?? */
         SPCurve *rev_cal2 = this->cal2->create_reverse();
@@ -815,10 +844,10 @@ void EraserTool::accumulate() {
         g_assert( ! this->cal1->first_path()->closed() );
         g_assert( ! rev_cal2->first_path()->closed() );
 
-        Geom::CubicBezier const * dc_cal1_firstseg  = dynamic_cast<Geom::CubicBezier const *>( this->cal1->first_segment() );
-        Geom::CubicBezier const * rev_cal2_firstseg = dynamic_cast<Geom::CubicBezier const *>( rev_cal2->first_segment() );
-        Geom::CubicBezier const * dc_cal1_lastseg   = dynamic_cast<Geom::CubicBezier const *>( this->cal1->last_segment() );
-        Geom::CubicBezier const * rev_cal2_lastseg  = dynamic_cast<Geom::CubicBezier const *>( rev_cal2->last_segment() );
+        Geom::BezierCurve const * dc_cal1_firstseg  = dynamic_cast<Geom::BezierCurve const *>( this->cal1->first_segment() );
+        Geom::BezierCurve const * rev_cal2_firstseg = dynamic_cast<Geom::BezierCurve const *>( rev_cal2->first_segment() );
+        Geom::BezierCurve const * dc_cal1_lastseg   = dynamic_cast<Geom::BezierCurve const *>( this->cal1->last_segment() );
+        Geom::BezierCurve const * rev_cal2_lastseg  = dynamic_cast<Geom::BezierCurve const *>( rev_cal2->last_segment() );
 
         g_assert( dc_cal1_firstseg );
         g_assert( rev_cal2_firstseg );
@@ -826,14 +855,25 @@ void EraserTool::accumulate() {
         g_assert( rev_cal2_lastseg );
 
         this->accumulated->append(this->cal1, FALSE);
+        if(!this->nowidth) {
+            add_cap(this->accumulated,
+                    dc_cal1_lastseg->finalPoint() - dc_cal1_lastseg->unitTangentAt(1),
+                    dc_cal1_lastseg->finalPoint(),
+                    rev_cal2_firstseg->initialPoint(),
+                    rev_cal2_firstseg->initialPoint() + rev_cal2_firstseg->unitTangentAt(0),
+                    this->cap_rounding);
 
-        add_cap(this->accumulated, (*dc_cal1_lastseg)[2], (*dc_cal1_lastseg)[3], (*rev_cal2_firstseg)[0], (*rev_cal2_firstseg)[1], this->cap_rounding);
+            this->accumulated->append(rev_cal2, TRUE);
 
-        this->accumulated->append(rev_cal2, TRUE);
+            add_cap(this->accumulated,
+                    rev_cal2_lastseg->finalPoint() - rev_cal2_lastseg->unitTangentAt(1),
+                    rev_cal2_lastseg->finalPoint(),
+                    dc_cal1_firstseg->initialPoint(),
+                    dc_cal1_firstseg->initialPoint() + dc_cal1_firstseg->unitTangentAt(0),
+                    this->cap_rounding);
 
-        add_cap(this->accumulated, (*rev_cal2_lastseg)[2], (*rev_cal2_lastseg)[3], (*dc_cal1_firstseg)[0], (*dc_cal1_firstseg)[1], this->cap_rounding);
-
-        this->accumulated->closepath();
+            this->accumulated->closepath();
+        }
 
         rev_cal2->unref();
 
@@ -849,6 +889,8 @@ static double square(double const x)
 
 void EraserTool::fit_and_split(bool release) {
     double const tolerance_sq = square( desktop->w2d().descrim() * TOLERANCE_ERASER );
+    Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+    this->nowidth = prefs->getDouble( "/tools/eraser/width", 1) == 0;
 
 #ifdef ERASER_VERBOSE
     g_print("[F&S:R=%c]", release?'T':'F');
@@ -913,7 +955,7 @@ void EraserTool::fit_and_split(bool release) {
                 }
 
                 this->currentcurve->closepath();
-                sp_canvas_bpath_set_bpath(SP_CANVAS_BPATH(this->currentshape), this->currentcurve);
+                sp_canvas_bpath_set_bpath(SP_CANVAS_BPATH(this->currentshape), this->currentcurve, true);
             }
 
             /* Current eraser */
@@ -945,13 +987,12 @@ void EraserTool::fit_and_split(bool release) {
         g_print("[%d]Yup\n", this->npoints);
 #endif
         if (!release) {
-            Inkscape::Preferences *prefs = Inkscape::Preferences::get();
             gint eraserMode = prefs->getBool("/tools/eraser/mode") ? 1 : 0;
             g_assert(!this->currentcurve->is_empty());
 
-            SPCanvasItem *cbp = sp_canvas_item_new(sp_desktop_sketch(desktop), SP_TYPE_CANVAS_BPATH, NULL);
+            SPCanvasItem *cbp = sp_canvas_item_new(desktop->getSketch(), SP_TYPE_CANVAS_BPATH, NULL);
             SPCurve *curve = this->currentcurve->copy();
-            sp_canvas_bpath_set_bpath(SP_CANVAS_BPATH (cbp), curve);
+            sp_canvas_bpath_set_bpath(SP_CANVAS_BPATH (cbp), curve, true);
             curve->unref();
 
             guint32 fillColor = sp_desktop_get_color_tool (desktop, "/tools/eraser", true);
@@ -1000,7 +1041,7 @@ void EraserTool::draw_temporary_box() {
     }
 
     this->currentcurve->closepath();
-    sp_canvas_bpath_set_bpath(SP_CANVAS_BPATH(this->currentshape), this->currentcurve);
+    sp_canvas_bpath_set_bpath(SP_CANVAS_BPATH(this->currentshape), this->currentcurve, true);
 }
 
 }

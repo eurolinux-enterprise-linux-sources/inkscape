@@ -23,6 +23,7 @@
 # include "config.h"
 #endif
 
+#include <glibmm.h>
 #include "gradient-vector.h"
 #include "ui/widget/color-preview.h"
 #include "verbs.h"
@@ -39,7 +40,6 @@
 
 #include "xml/repr.h"
 
-#include "../dialogs/dialog-events.h"
 #include "../preferences.h"
 #include "svg/css-ostringstream.h"
 #include "sp-stop.h"
@@ -54,15 +54,17 @@
 #include <sigc++/adaptors/bind.h>
 #include "document-undo.h"
 
+#include "ui/dialog-events.h"
+#include "ui/selected-color.h"
+#include "ui/widget/color-notebook.h"
+
 using Inkscape::DocumentUndo;
+using Inkscape::UI::SelectedColor;
 
 enum {
     VECTOR_SET,
     LAST_SIGNAL
 };
-
-static void sp_gradient_vector_selector_class_init(SPGradientVectorSelectorClass *klass);
-static void sp_gradient_vector_selector_init(SPGradientVectorSelector *gvs);
 
 #if GTK_CHECK_VERSION(3,0,0)
 static void sp_gradient_vector_selector_destroy(GtkWidget *object);
@@ -79,7 +81,6 @@ static SPStop *get_selected_stop( GtkWidget *vb);
 void gr_get_usage_counts(SPDocument *doc, std::map<SPGradient *, gint> *mapUsageCount );
 unsigned long sp_gradient_to_hhssll(SPGradient *gr);
 
-static GtkVBoxClass *parent_class;
 static guint signals[LAST_SIGNAL] = {0};
 
 // TODO FIXME kill these globals!!!
@@ -88,35 +89,15 @@ static win_data wd;
 static gint x = -1000, y = -1000, w = 0, h = 0; // impossible original values to make sure they are read from prefs
 static Glib::ustring const prefs_path = "/dialogs/gradienteditor/";
 
-GType sp_gradient_vector_selector_get_type(void)
-{
-    static GType type = 0;
-    if (!type) {
-        static const GTypeInfo info = {
-            sizeof(SPGradientVectorSelectorClass),
-            NULL, /* base_init */
-            NULL, /* base_finalize */
-            reinterpret_cast<GClassInitFunc>(sp_gradient_vector_selector_class_init),
-            NULL, /* class_finalize */
-            NULL, /* class_data */
-            sizeof(SPGradientVectorSelector),
-            0,    /* n_preallocs */
-            reinterpret_cast<GInstanceInitFunc>(sp_gradient_vector_selector_init),
-            0,    /* value_table */
-        };
-
-        type = g_type_register_static( GTK_TYPE_VBOX,
-                                       "SPGradientVectorSelector",
-                                       &info,
-                                       static_cast< GTypeFlags >(0) );
-    }
-    return type;
-}
+#if GTK_CHECK_VERSION(3,0,0)
+G_DEFINE_TYPE(SPGradientVectorSelector, sp_gradient_vector_selector, GTK_TYPE_BOX);
+#else
+G_DEFINE_TYPE(SPGradientVectorSelector, sp_gradient_vector_selector, GTK_TYPE_VBOX);
+#endif
 
 static void sp_gradient_vector_selector_class_init(SPGradientVectorSelectorClass *klass)
 {
     GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
-    parent_class = static_cast<GtkVBoxClass*>(g_type_class_peek_parent(klass));
 
     signals[VECTOR_SET] = g_signal_new( "vector_set",
                                         G_TYPE_FROM_CLASS(gobject_class),
@@ -138,6 +119,10 @@ static void sp_gradient_vector_selector_class_init(SPGradientVectorSelectorClass
 
 static void sp_gradient_vector_selector_init(SPGradientVectorSelector *gvs)
 {
+#if GTK_CHECK_VERSION(3,0,0)
+    gtk_orientable_set_orientation(GTK_ORIENTABLE(gvs), GTK_ORIENTATION_VERTICAL);
+#endif
+
     gvs->idlabel = TRUE;
 
     gvs->swatched = false;
@@ -181,12 +166,12 @@ static void sp_gradient_vector_selector_destroy(GtkObject *object)
     gvs->tree_select_connection.~connection();
 
 #if GTK_CHECK_VERSION(3,0,0)
-    if ((reinterpret_cast<GtkWidgetClass *>(parent_class))->destroy) {
-        (* (reinterpret_cast<GtkWidgetClass *>(parent_class))->destroy) (object);
+    if ((GTK_WIDGET_CLASS(sp_gradient_vector_selector_parent_class))->destroy) {
+        (GTK_WIDGET_CLASS(sp_gradient_vector_selector_parent_class))->destroy(object);
     }
 #else
-    if ((reinterpret_cast<GtkObjectClass *>(parent_class))->destroy) {
-        (* (reinterpret_cast<GtkObjectClass *>(parent_class))->destroy) (object);
+    if ((GTK_OBJECT_CLASS(sp_gradient_vector_selector_parent_class))->destroy) {
+        (GTK_OBJECT_CLASS(sp_gradient_vector_selector_parent_class))->destroy(object);
     }
 #endif
 }
@@ -313,11 +298,11 @@ static void sp_gvs_rebuild_gui_full(SPGradientVectorSelector *gvs)
     /* Pick up all gradients with vectors */
     GSList *gl = NULL;
     if (gvs->gr) {
-        const GSList *gradients = gvs->gr->document->getResourceList("gradient");
-        for (const GSList *curr = gradients; curr; curr = curr->next) {
-            SPGradient* grad = SP_GRADIENT(curr->data);
+        std::vector<SPObject *> gradients = gvs->gr->document->getResourceList("gradient");
+        for (std::vector<SPObject *>::const_iterator it = gradients.begin(); it != gradients.end(); ++it) {
+            SPGradient* grad = SP_GRADIENT(*it);
             if ( grad->hasStops() && (grad->isSwatch() == gvs->swatched) ) {
-                gl = g_slist_prepend(gl, curr->data);
+                gl = g_slist_prepend(gl, *it);
             }
         }
     }
@@ -488,11 +473,10 @@ void SPGradientVectorSelector::setSwatched()
   ###                 Vector Editing Widget
   ##################################################################*/
 
-#include "../widgets/sp-color-notebook.h"
-#include "../widgets/widget-sizes.h"
-#include "../xml/node-event-vector.h"
-#include "../svg/svg-color.h"
-
+#include "widgets/widget-sizes.h"
+#include "xml/node-event-vector.h"
+#include "svg/svg-color.h"
+#include "ui/widget/color-notebook.h"
 
 #define PAD 4
 
@@ -511,8 +495,8 @@ static void sp_gradient_vector_widget_destroy(GtkObject *object, gpointer data);
 
 static void sp_gradient_vector_gradient_release(SPObject *obj, GtkWidget *widget);
 static void sp_gradient_vector_gradient_modified(SPObject *obj, guint flags, GtkWidget *widget);
-static void sp_gradient_vector_color_dragged(SPColorSelector *csel, GObject *object);
-static void sp_gradient_vector_color_changed(SPColorSelector *csel, GObject *object);
+static void sp_gradient_vector_color_dragged(Inkscape::UI::SelectedColor *selected_color, GObject *object);
+static void sp_gradient_vector_color_changed(Inkscape::UI::SelectedColor *selected_color, GObject *object);
 static void update_stop_list( GtkWidget *vb, SPGradient *gradient, SPStop *new_stop);
 
 static gboolean blocked = FALSE;
@@ -568,6 +552,7 @@ static void verify_grad(SPGradient *gradient)
         child->setAttribute("style", os.str().c_str());
         gradient->getRepr()->addChild(child, NULL);
         Inkscape::GC::release(child);
+        return;
     }
     if (i < 2) {
         sp_repr_set_css_double(stop->getRepr(), "offset", 0.0);
@@ -668,9 +653,11 @@ static void sp_grad_edit_combo_box_changed (GtkComboBox * /*widget*/, GtkWidget 
 
     blocked = TRUE;
 
-    SPColorSelector *csel = static_cast<SPColorSelector*>(g_object_get_data(G_OBJECT(tbl), "cselector"));
+    SelectedColor *csel = static_cast<SelectedColor*>(g_object_get_data(G_OBJECT(tbl), "cselector"));
     // set its color, from the stored array
-    csel->base->setColorAlpha( stop->getEffectiveColor(), stop->opacity );
+    g_object_set_data(G_OBJECT(tbl), "updating_color", reinterpret_cast<void*>(1));
+    csel->setColorAlpha(stop->getEffectiveColor(), stop->opacity);
+    g_object_set_data(G_OBJECT(tbl), "updating_color", reinterpret_cast<void*>(0));
     GtkWidget *offspin = GTK_WIDGET(g_object_get_data(G_OBJECT(tbl), "offspn"));
     GtkWidget *offslide =GTK_WIDGET(g_object_get_data(G_OBJECT(tbl), "offslide"));
 
@@ -851,9 +838,12 @@ static void sp_grd_ed_del_stop(GtkWidget */*widget*/,  GtkWidget *vb)
 
 static GtkWidget * sp_gradient_vector_widget_new(SPGradient *gradient, SPStop *select_stop)
 {
-    GtkWidget *vb, *w, *f, *csel;
+    using Inkscape::UI::Widget::ColorNotebook;
 
-    g_return_val_if_fail(!gradient || SP_IS_GRADIENT(gradient), NULL);
+    GtkWidget *vb, *w, *f;
+
+    g_return_val_if_fail(gradient != NULL, NULL);
+    g_return_val_if_fail(SP_IS_GRADIENT(gradient), NULL);
 
 #if GTK_CHECK_VERSION(3,0,0)
     vb = gtk_box_new(GTK_ORIENTATION_VERTICAL, PAD);
@@ -924,7 +914,13 @@ static GtkWidget * sp_gradient_vector_widget_new(SPGradient *gradient, SPStop *s
 
     /* Label */
     GtkWidget *l = gtk_label_new(C_("Gradient","Offset:"));
+
+#if GTK_CHECK_VERSION(3,0,0)
+    gtk_widget_set_halign(l, GTK_ALIGN_END);
+#else
     gtk_misc_set_alignment(GTK_MISC(l), 1.0, 0.5);
+#endif
+
     gtk_box_pack_start(GTK_BOX(hb),l, FALSE, FALSE, AUX_BETWEEN_BUTTON_GROUPS);
     gtk_widget_show(l);
 
@@ -979,12 +975,23 @@ static GtkWidget * sp_gradient_vector_widget_new(SPGradient *gradient, SPStop *s
     f = gtk_frame_new(_("Stop Color"));
     gtk_widget_show(f);
     gtk_box_pack_start(GTK_BOX(vb), f, TRUE, TRUE, PAD);
-    csel = static_cast<GtkWidget*>(sp_color_selector_new(SP_TYPE_COLOR_NOTEBOOK));
-    g_object_set_data(G_OBJECT(vb), "cselector", csel);
+
+    Inkscape::UI::SelectedColor *selected_color = new Inkscape::UI::SelectedColor;
+    g_object_set_data(G_OBJECT(vb), "cselector", selected_color);
+    g_object_set_data(G_OBJECT(vb), "updating_color", reinterpret_cast<void*>(0));
+    selected_color->signal_dragged.connect(sigc::bind(sigc::ptr_fun(&sp_gradient_vector_color_dragged), selected_color, G_OBJECT(vb)));
+    selected_color->signal_dragged.connect(sigc::bind(sigc::ptr_fun(&sp_gradient_vector_color_changed), selected_color, G_OBJECT(vb)));
+
+    Gtk::Widget *color_selector = Gtk::manage(new ColorNotebook(*selected_color));
+    color_selector->show();
+    gtk_container_add(GTK_CONTAINER(f), color_selector->gobj());
+
+    /*
     gtk_widget_show(csel);
     gtk_container_add(GTK_CONTAINER(f), csel);
     g_signal_connect(G_OBJECT(csel), "dragged", G_CALLBACK(sp_gradient_vector_color_dragged), vb);
     g_signal_connect(G_OBJECT(csel), "changed", G_CALLBACK(sp_gradient_vector_color_changed), vb);
+    */
 
     gtk_widget_show(vb);
 
@@ -1032,13 +1039,28 @@ GtkWidget * sp_gradient_vector_editor_new(SPGradient *gradient, SPStop *stop)
         sp_transientize(dlg);
         wd.win = dlg;
         wd.stop = 0;
-        g_signal_connect(G_OBJECT(INKSCAPE), "activate_desktop", G_CALLBACK(sp_transientize_callback), &wd);
-        g_signal_connect(G_OBJECT(dlg), "event", G_CALLBACK(sp_dialog_event_handler), dlg);
-        g_signal_connect(G_OBJECT(dlg), "destroy", G_CALLBACK(sp_gradient_vector_dialog_destroy), dlg);
-        g_signal_connect(G_OBJECT(dlg), "delete_event", G_CALLBACK(sp_gradient_vector_dialog_delete), dlg);
-        g_signal_connect(G_OBJECT(INKSCAPE), "shut_down", G_CALLBACK(sp_gradient_vector_dialog_delete), dlg);
-        g_signal_connect( G_OBJECT(INKSCAPE), "dialogs_hide", G_CALLBACK(sp_dialog_hide), dlg );
-        g_signal_connect( G_OBJECT(INKSCAPE), "dialogs_unhide", G_CALLBACK(sp_dialog_unhide), dlg );
+
+        GObject *obj = G_OBJECT(dlg);
+        sigc::connection *conn = NULL;
+
+        conn = new sigc::connection(INKSCAPE.signal_activate_desktop.connect(sigc::bind(sigc::ptr_fun(&sp_transientize_callback), &wd)));
+        g_object_set_data(obj, "desktop-activate-connection", conn);
+
+        g_signal_connect(obj, "event", G_CALLBACK(sp_dialog_event_handler), dlg);
+        g_signal_connect(obj, "destroy", G_CALLBACK(sp_gradient_vector_dialog_destroy), dlg);
+        g_signal_connect(obj, "delete_event", G_CALLBACK(sp_gradient_vector_dialog_delete), dlg);
+
+        conn = new sigc::connection(INKSCAPE.signal_shut_down.connect(
+            sigc::hide_return(
+            sigc::bind(sigc::ptr_fun(&sp_gradient_vector_dialog_delete), (GtkWidget *) NULL, (GdkEvent *) NULL, (GtkWidget *) NULL)
+        )));
+        g_object_set_data(obj, "shutdown-connection", conn);
+
+        conn = new sigc::connection(INKSCAPE.signal_dialogs_hide.connect(sigc::bind(sigc::ptr_fun(&gtk_widget_hide), dlg)));
+        g_object_set_data(obj, "dialog-hide-connection", conn);
+
+        conn = new sigc::connection(INKSCAPE.signal_dialogs_unhide.connect(sigc::bind(sigc::ptr_fun(&gtk_widget_show), dlg)));
+        g_object_set_data(obj, "dialog-unhide-connection", conn);
 
         gtk_container_set_border_width(GTK_CONTAINER(dlg), PAD);
 
@@ -1130,9 +1152,11 @@ static void sp_gradient_vector_widget_load_gradient(GtkWidget *widget, SPGradien
         }
 
         // get the color selector
-        SPColorSelector *csel = SP_COLOR_SELECTOR(g_object_get_data(G_OBJECT(widget), "cselector"));
+        SelectedColor *csel =  static_cast<SelectedColor*>(g_object_get_data(G_OBJECT(widget), "cselector"));
 
-        csel->base->setColorAlpha( stop->getEffectiveColor(), stop->opacity );
+        g_object_set_data(G_OBJECT(widget), "updating_color", reinterpret_cast<void*>(1));
+        csel->setColorAlpha(stop->getEffectiveColor(), stop->opacity);
+        g_object_set_data(G_OBJECT(widget), "updating_color", reinterpret_cast<void*>(0));
 
         /* Fill preview */
         GtkWidget *w = static_cast<GtkWidget *>(g_object_get_data(G_OBJECT(widget), "preview"));
@@ -1161,7 +1185,29 @@ static void sp_gradient_vector_dialog_destroy(GtkWidget * /*object*/, gpointer /
 static void sp_gradient_vector_dialog_destroy(GtkObject * /*object*/, gpointer /*data*/)
 #endif
 {
-    sp_signal_disconnect_by_data(INKSCAPE, dlg);
+    GObject *obj = G_OBJECT(dlg);
+    assert(obj != NULL);
+
+    sigc::connection *conn = static_cast<sigc::connection *>(g_object_get_data(obj, "desktop-activate-connection"));
+    assert(conn != NULL);
+    conn->disconnect();
+    delete conn;
+
+    conn = static_cast<sigc::connection *>(g_object_get_data(obj, "shutdown-connection"));
+    assert(conn != NULL);
+    conn->disconnect();
+    delete conn;
+
+    conn = static_cast<sigc::connection *>(g_object_get_data(obj, "dialog-hide-connection"));
+    assert(conn != NULL);
+    conn->disconnect();
+    delete conn;
+
+    conn = static_cast<sigc::connection *>(g_object_get_data(obj, "dialog-unhide-connection"));
+    assert(conn != NULL);
+    conn->disconnect();
+    delete conn;
+
     wd.win = dlg = NULL;
     wd.stop = 0;
 }
@@ -1210,6 +1256,12 @@ static void sp_gradient_vector_widget_destroy(GtkObject *object, gpointer /*data
             sp_repr_remove_listener_by_data(gradient->getRepr(), object);
         }
     }
+
+    SelectedColor *selected_color = static_cast<SelectedColor *>(g_object_get_data(G_OBJECT(object), "cselector"));
+    if (selected_color) {
+        delete selected_color;
+        g_object_set_data(G_OBJECT(object), "cselector", NULL);
+    }
 }
 
 static void sp_gradient_vector_gradient_release(SPObject */*object*/, GtkWidget *widget)
@@ -1227,7 +1279,7 @@ static void sp_gradient_vector_gradient_modified(SPObject *object, guint /*flags
     }
 }
 
-static void sp_gradient_vector_color_dragged(SPColorSelector *csel, GObject *object)
+static void sp_gradient_vector_color_dragged(Inkscape::UI::SelectedColor *selected_color, GObject *object)
 {
     SPGradient *gradient, *ngr;
 
@@ -1255,14 +1307,21 @@ static void sp_gradient_vector_color_dragged(SPColorSelector *csel, GObject *obj
         return;
     }
 
-    csel->base->getColorAlpha(stop->specified_color, stop->opacity);
+    selected_color->colorAlpha(stop->specified_color, stop->opacity);
     stop->currentColor = false;
 
     blocked = FALSE;
 }
 
-static void sp_gradient_vector_color_changed(SPColorSelector *csel, GObject *object)
+static void sp_gradient_vector_color_changed(Inkscape::UI::SelectedColor *selected_color, GObject *object)
 {
+    (void)selected_color;
+
+    void* updating_color = g_object_get_data(G_OBJECT(object), "updating_color");
+    if (updating_color) {
+        return;
+    }
+
     if (blocked) {
         return;
     }
@@ -1291,10 +1350,10 @@ static void sp_gradient_vector_color_changed(SPColorSelector *csel, GObject *obj
         return;
     }
 
-    csel = static_cast<SPColorSelector*>(g_object_get_data(G_OBJECT(object), "cselector"));
+    SelectedColor *csel = static_cast<SelectedColor *>(g_object_get_data(G_OBJECT(object), "cselector"));
     SPColor color;
     float alpha = 0;
-    csel->base->getColorAlpha( color, alpha );
+    csel->colorAlpha(color, alpha);
 
     sp_repr_set_css_double(stop->getRepr(), "offset", stop->offset);
     Inkscape::CSSOStringStream os;

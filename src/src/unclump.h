@@ -11,9 +11,8 @@
 #ifndef SEEN_DIALOGS_UNCLUMP_H
 #define SEEN_DIALOGS_UNCLUMP_H
 
-#include <glib.h>
 
-void unclump(GSList *items);
+void unclump(std::vector<SPItem*> &items);
 
 #endif /* !UNCLUMP_H_SEEN */
 

@@ -23,7 +23,7 @@
 #include "document.h"
 #include "selection.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "message-context.h"
 #include "message-stack.h"
 #include "pixmaps/cursor-gradient.xpm"
@@ -51,21 +51,11 @@
 
 using Inkscape::DocumentUndo;
 
-#include "tool-factory.h"
-
 namespace Inkscape {
 namespace UI {
 namespace Tools {
 
 static void sp_gradient_drag(GradientTool &rc, Geom::Point const pt, guint state, guint32 etime);
-
-namespace {
-	ToolBase* createGradientContext() {
-		return new GradientTool();
-	}
-
-	bool gradientContextRegistered = ToolFactory::instance().registerObject("/tools/gradient", createGradientContext);
-}
 
 const std::string& GradientTool::getPrefsPath() {
 	return GradientTool::prefsPath;
@@ -96,6 +86,9 @@ GradientTool::~GradientTool() {
     delete this->subselcon;
 }
 
+// This must match GrPointType enum sp-gradient.h
+// We should move this to a shared header (can't simply move to gradient.h since that would require
+// including <glibmm/i18n.h> which messes up "N_" in extensions... argh!).
 const gchar *gr_handle_descr [] = {
     N_("Linear gradient <b>start</b>"), //POINT_LG_BEGIN
     N_("Linear gradient <b>end</b>"),
@@ -105,18 +98,21 @@ const gchar *gr_handle_descr [] = {
     N_("Radial gradient <b>radius</b>"),
     N_("Radial gradient <b>focus</b>"), // POINT_RG_FOCUS
     N_("Radial gradient <b>mid stop</b>"),
-    N_("Radial gradient <b>mid stop</b>")
+    N_("Radial gradient <b>mid stop</b>"),
+    N_("Mesh gradient <b>corner</b>"),
+    N_("Mesh gradient <b>handle</b>"),
+    N_("Mesh gradient <b>tensor</b>")
 };
 
 void GradientTool::selection_changed(Inkscape::Selection*) {
     GradientTool *rc = (GradientTool *) this;
 
     GrDrag *drag = rc->_grdrag;
-    Inkscape::Selection *selection = sp_desktop_selection(SP_EVENT_CONTEXT(rc)->desktop);
+    Inkscape::Selection *selection = this->desktop->getSelection();
     if (selection == NULL) {
         return;
     }
-    guint n_obj = g_slist_length((GSList *) selection->itemList());
+    guint n_obj = selection->itemList().size();
 
     if (!drag->isNonEmpty() || selection->isEmpty())
         return;
@@ -167,7 +163,7 @@ void GradientTool::setup() {
     }
 
     this->enableGrDrag();
-    Inkscape::Selection *selection = sp_desktop_selection(this->desktop);
+    Inkscape::Selection *selection = this->desktop->getSelection();
 
     this->selcon = new sigc::connection(selection->connectChanged(
     	sigc::mem_fun(this, &GradientTool::selection_changed)
@@ -213,17 +209,20 @@ sp_gradient_context_is_over_line (GradientTool *rc, SPItem *item, Geom::Point ev
     //Translate mouse point into proper coord system
     rc->mousepoint_doc = desktop->w2d(event_p);
 
-    SPCtrlLine* line = SP_CTRLLINE(item);
+    if (SP_IS_CTRLLINE(item)) {
+        SPCtrlLine* line = SP_CTRLLINE(item);
 
-    Geom::LineSegment ls(line->s, line->e);
-    Geom::Point nearest = ls.pointAt(ls.nearestPoint(rc->mousepoint_doc));
-    double dist_screen = Geom::L2 (rc->mousepoint_doc - nearest) * desktop->current_zoom();
+        Geom::LineSegment ls(line->s, line->e);
+        Geom::Point nearest = ls.pointAt(ls.nearestTime(rc->mousepoint_doc));
+        double dist_screen = Geom::L2 (rc->mousepoint_doc - nearest) * desktop->current_zoom();
 
-    double tolerance = (double) SP_EVENT_CONTEXT(rc)->tolerance;
+        double tolerance = (double) SP_EVENT_CONTEXT(rc)->tolerance;
 
-    bool close = (dist_screen < tolerance);
+        bool close = (dist_screen < tolerance);
 
-    return close;
+        return close;
+    }
+    return false;
 }
 
 static std::vector<Geom::Point>
@@ -232,13 +231,13 @@ sp_gradient_context_get_stop_intervals (GrDrag *drag, GSList **these_stops, GSLi
     std::vector<Geom::Point> coords;
 
     // for all selected draggers
-    for (GList *i = drag->selected; i != NULL; i = i->next) {
-        GrDragger *dragger = (GrDragger *) i->data;
+    for (std::set<GrDragger *>::const_iterator i = drag->selected.begin(); i != drag->selected.end() ; ++i ) {
+        GrDragger *dragger = *i;
         // remember the coord of the dragger to reselect it later
         coords.push_back(dragger->point);
         // for all draggables of dragger
-        for (GSList const* j = dragger->draggables; j != NULL; j = j->next) {
-            GrDraggable *d = (GrDraggable *) j->data;
+        for (std::vector<GrDraggable *>::const_iterator j = dragger->draggables.begin(); j != dragger->draggables.end(); ++j) {
+            GrDraggable *d = *j;
 
             // find the gradient
             SPGradient *gradient = getGradient(d->item, d->fill_or_stroke);
@@ -322,13 +321,13 @@ sp_gradient_context_add_stops_between_selected_stops (GradientTool *rc)
 
     if (g_slist_length(these_stops) == 0 && drag->numSelected() == 1) {
         // if a single stop is selected, add between that stop and the next one
-        GrDragger *dragger = (GrDragger *) drag->selected->data;
-        for (GSList const* j = dragger->draggables; j != NULL; j = j->next) {
-            GrDraggable *d = (GrDraggable *) j->data;
+        GrDragger *dragger = *(drag->selected.begin());
+        for (std::vector<GrDraggable *>::const_iterator j = dragger->draggables.begin(); j != dragger->draggables.end(); ++j) {
+            GrDraggable *d = *j;
             if (d->point_type == POINT_RG_FOCUS) {
                 /*
                  *  There are 2 draggables at the center (start) of a radial gradient
-                 *  To avoid creating 2 seperate stops, ignore this draggable point type
+                 *  To avoid creating 2 separate stops, ignore this draggable point type
                  */
                 continue;
             }
@@ -461,7 +460,7 @@ sp_gradient_context_add_stop_near_point (GradientTool *rc, SPItem *item,  Geom::
 
     SPStop *newstop = ec->get_drag()->addStopNearPoint (item, mouse_p, tolerance/desktop->current_zoom());
 
-    DocumentUndo::done(sp_desktop_document (desktop), SP_VERB_CONTEXT_GRADIENT,
+    DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_GRADIENT,
                        _("Add gradient stop"));
 
     ec->get_drag()->updateDraggers();
@@ -472,7 +471,7 @@ sp_gradient_context_add_stop_near_point (GradientTool *rc, SPItem *item,  Geom::
 bool GradientTool::root_handler(GdkEvent* event) {
     static bool dragging;
 
-    Inkscape::Selection *selection = sp_desktop_selection (desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
 
     this->tolerance = prefs->getIntLimited("/options/dragtolerance/value", 0, 0, 100);
@@ -489,9 +488,9 @@ bool GradientTool::root_handler(GdkEvent* event) {
             bool over_line = false;
             SPCtrlLine *line = NULL;
 
-            if (drag->lines) {
-                for (GSList *l = drag->lines; (l != NULL) && (!over_line); l = l->next) {
-                    line = (SPCtrlLine*) l->data;
+            if (!drag->lines.empty()) {
+                for (std::vector<SPCtrlLine *>::const_iterator l = drag->lines.begin(); l != drag->lines.end() && (!over_line); ++l) {
+                    line = *l;
                     over_line |= sp_gradient_context_is_over_line (this, (SPItem*) line, Geom::Point(event->motion.x, event->motion.y));
                 }
             }
@@ -499,20 +498,21 @@ bool GradientTool::root_handler(GdkEvent* event) {
             if (over_line) {
                 // we take the first item in selection, because with doubleclick, the first click
                 // always resets selection to the single object under cursor
-                sp_gradient_context_add_stop_near_point(this, SP_ITEM(selection->itemList()->data), this->mousepoint_doc, event->button.time);
+                sp_gradient_context_add_stop_near_point(this, SP_ITEM(selection->itemList().front()), this->mousepoint_doc, event->button.time);
             } else {
-                for (GSList const* i = selection->itemList(); i != NULL; i = i->next) {
-                    SPItem *item = SP_ITEM(i->data);
+            	std::vector<SPItem*>  items=selection->itemList();
+                for (std::vector<SPItem*>::const_iterator i = items.begin();i!=items.end();++i) {
+                    SPItem *item = *i;
                     SPGradientType new_type = (SPGradientType) prefs->getInt("/tools/gradient/newgradient", SP_GRADIENT_TYPE_LINEAR);
                     Inkscape::PaintTarget fsmode = (prefs->getInt("/tools/gradient/newfillorstroke", 1) != 0) ? Inkscape::FOR_FILL : Inkscape::FOR_STROKE;
 
-                    SPGradient *vector = sp_gradient_vector_for_object(sp_desktop_document(desktop), desktop, item, fsmode);
+                    SPGradient *vector = sp_gradient_vector_for_object(desktop->getDocument(), desktop, item, fsmode);
 
                     SPGradient *priv = sp_item_set_gradient(item, vector, new_type, fsmode);
                     sp_gradient_reset_to_userspace(priv, item);
                 }
 
-                DocumentUndo::done(sp_desktop_document (desktop), SP_VERB_CONTEXT_GRADIENT,
+                DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_GRADIENT,
                                    _("Create default gradient"));
             }
             ret = TRUE;
@@ -594,9 +594,9 @@ bool GradientTool::root_handler(GdkEvent* event) {
 
             bool over_line = false;
 
-            if (drag->lines) {
-                for (GSList *l = drag->lines; l != NULL; l = l->next) {
-                    over_line |= sp_gradient_context_is_over_line (this, (SPItem*) l->data, Geom::Point(event->motion.x, event->motion.y));
+            if (!drag->lines.empty()) {
+                for (std::vector<SPCtrlLine *>::const_iterator l = drag->lines.begin(); l != drag->lines.end(); ++l) {
+                    over_line |= sp_gradient_context_is_over_line (this, (SPItem*) (*l), Geom::Point(event->motion.x, event->motion.y));
                 }
             }
 
@@ -619,12 +619,10 @@ bool GradientTool::root_handler(GdkEvent* event) {
             bool over_line = false;
             SPCtrlLine *line = NULL;
 
-            if (drag->lines) {
-                for (GSList *l = drag->lines; (l != NULL) && (!over_line); l = l->next) {
-                    line = (SPCtrlLine*) l->data;
+            if (!drag->lines.empty()) {
+                for (std::vector<SPCtrlLine *>::const_iterator l = drag->lines.begin(); l != drag->lines.end() && (!over_line); ++l) {
+                    line = *l;
                     over_line = sp_gradient_context_is_over_line (this, (SPItem*) line, Geom::Point(event->motion.x, event->motion.y));
-                    if (over_line)
-                        break;
                 }
             }
 
@@ -669,7 +667,7 @@ bool GradientTool::root_handler(GdkEvent* event) {
                     }
                 } else {
                     // click in an empty space; do the same as Esc
-                    if (drag->selected) {
+                    if (!drag->selected.empty()) {
                         drag->deselectAll();
                     } else {
                         selection->clear();
@@ -725,7 +723,7 @@ bool GradientTool::root_handler(GdkEvent* event) {
             break;
 
         case GDK_KEY_Escape:
-            if (drag->selected) {
+            if (!drag->selected.empty()) {
                 drag->deselectAll();
             } else {
                 Inkscape::SelectionHelper::selectNone(desktop);
@@ -846,6 +844,16 @@ bool GradientTool::root_handler(GdkEvent* event) {
             ret = TRUE;
             break;
 
+        case GDK_KEY_i:
+        case GDK_KEY_I:
+            if (MOD__SHIFT_ONLY(event)) {
+                // Shift+I - insert stops (alternate keybinding for keyboards
+                //           that don't have the Insert key)
+                sp_gradient_context_add_stops_between_selected_stops (this);
+                ret = TRUE;
+            }
+            break;
+
         case GDK_KEY_Delete:
         case GDK_KEY_KP_Delete:
         case GDK_KEY_BackSpace:
@@ -886,11 +894,12 @@ bool GradientTool::root_handler(GdkEvent* event) {
     return ret;
 }
 
+// Creates a new linear or radial gradient.
 static void sp_gradient_drag(GradientTool &rc, Geom::Point const pt, guint /*state*/, guint32 etime)
 {
     SPDesktop *desktop = SP_EVENT_CONTEXT(&rc)->desktop;
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
-    SPDocument *document = sp_desktop_document(desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
+    SPDocument *document = desktop->getDocument();
     ToolBase *ec = SP_EVENT_CONTEXT(&rc);
 
     if (!selection->isEmpty()) {
@@ -905,32 +914,32 @@ static void sp_gradient_drag(GradientTool &rc, Geom::Point const pt, guint /*sta
         } else {
             // Starting from empty space:
             // Sort items so that the topmost comes last
-            GSList *items = g_slist_copy ((GSList *) selection->itemList());
-            items = g_slist_sort(items, (GCompareFunc) sp_item_repr_compare_position);
+        	std::vector<SPItem*> items(selection->itemList());
+            sort(items.begin(),items.end(),sp_item_repr_compare_position);
             // take topmost
-            vector = sp_gradient_vector_for_object(document, desktop, SP_ITEM(g_slist_last(items)->data), fill_or_stroke);
-            g_slist_free (items);
+            vector = sp_gradient_vector_for_object(document, desktop, SP_ITEM(items.back()), fill_or_stroke);
         }
 
         // HACK: reset fill-opacity - that 0.75 is annoying; BUT remove this when we have an opacity slider for all tabs
         SPCSSAttr *css = sp_repr_css_attr_new();
         sp_repr_css_set_property(css, "fill-opacity", "1.0");
 
-        for (GSList const *i = selection->itemList(); i != NULL; i = i->next) {
+        std::vector<SPItem*> itemlist = selection->itemList();
+        for (std::vector<SPItem*>::const_iterator i = itemlist.begin();i!=itemlist.end();++i) {
 
             //FIXME: see above
-            sp_repr_css_change_recursive(SP_OBJECT(i->data)->getRepr(), css, "style");
+            sp_repr_css_change_recursive((*i)->getRepr(), css, "style");
 
-            sp_item_set_gradient(SP_ITEM(i->data), vector, (SPGradientType) type, fill_or_stroke);
+            sp_item_set_gradient(*i, vector, (SPGradientType) type, fill_or_stroke);
 
             if (type == SP_GRADIENT_TYPE_LINEAR) {
-                sp_item_gradient_set_coords (SP_ITEM(i->data), POINT_LG_BEGIN, 0, rc.origin, fill_or_stroke, true, false);
-                sp_item_gradient_set_coords (SP_ITEM(i->data), POINT_LG_END, 0, pt, fill_or_stroke, true, false);
+                sp_item_gradient_set_coords (*i, POINT_LG_BEGIN, 0, rc.origin, fill_or_stroke, true, false);
+                sp_item_gradient_set_coords (*i, POINT_LG_END, 0, pt, fill_or_stroke, true, false);
             } else if (type == SP_GRADIENT_TYPE_RADIAL) {
-                sp_item_gradient_set_coords (SP_ITEM(i->data), POINT_RG_CENTER, 0, rc.origin, fill_or_stroke, true, false);
-                sp_item_gradient_set_coords (SP_ITEM(i->data), POINT_RG_R1, 0, pt, fill_or_stroke, true, false);
+                sp_item_gradient_set_coords (*i, POINT_RG_CENTER, 0, rc.origin, fill_or_stroke, true, false);
+                sp_item_gradient_set_coords (*i, POINT_RG_R1, 0, pt, fill_or_stroke, true, false);
             }
-            SP_OBJECT(i->data)->requestModified(SP_OBJECT_MODIFIED_FLAG);
+            (*i)->requestModified(SP_OBJECT_MODIFIED_FLAG);
         }
         if (ec->_grdrag) {
             ec->_grdrag->updateDraggers();
@@ -939,7 +948,7 @@ static void sp_gradient_drag(GradientTool &rc, Geom::Point const pt, guint /*sta
             ec->_grdrag->local_change = true;
             // give the grab out-of-bounds values of xp/yp because we're already dragging
             // and therefore are already out of tolerance
-            ec->_grdrag->grabKnot (SP_ITEM(selection->itemList()->data),
+            ec->_grdrag->grabKnot (selection->itemList()[0],
                                    type == SP_GRADIENT_TYPE_LINEAR? POINT_LG_END : POINT_RG_R1,
                                    -1, // ignore number (though it is always 1)
                                    fill_or_stroke, 99999, 99999, etime);
@@ -948,13 +957,13 @@ static void sp_gradient_drag(GradientTool &rc, Geom::Point const pt, guint /*sta
 
         // status text; we do not track coords because this branch is run once, not all the time
         // during drag
-        int n_objects = g_slist_length((GSList *) selection->itemList());
+        int n_objects = selection->itemList().size();
         rc.message_context->setF(Inkscape::NORMAL_MESSAGE,
                                   ngettext("<b>Gradient</b> for %d object; with <b>Ctrl</b> to snap angle",
                                            "<b>Gradient</b> for %d objects; with <b>Ctrl</b> to snap angle", n_objects),
                                   n_objects);
     } else {
-        sp_desktop_message_stack(desktop)->flash(Inkscape::WARNING_MESSAGE, _("Select <b>objects</b> on which to create gradient."));
+        desktop->getMessageStack()->flash(Inkscape::WARNING_MESSAGE, _("Select <b>objects</b> on which to create gradient."));
     }
 }
 

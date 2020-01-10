@@ -22,8 +22,9 @@
 using std::map;
 using std::pair;
 
-#include <glibmm/stringutils.h>
+#include <glibmm.h>
 #include "attributes.h"
+#include "display/nr-filter.h"
 #include "document.h"
 #include "sp-filter.h"
 #include "sp-filter-reference.h"
@@ -37,20 +38,9 @@ using std::pair;
 #define SP_MACROS_SILENT
 #include "macros.h"
 
-#include "display/nr-filter.h"
-
 static void filter_ref_changed(SPObject *old_ref, SPObject *ref, SPFilter *filter);
 static void filter_ref_modified(SPObject *href, guint flags, SPFilter *filter);
 
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createFilter() {
-		return new SPFilter();
-	}
-
-	bool filterRegistered = SPFactory::instance().registerObject("svg:filter", createFilter);
-}
 
 SPFilter::SPFilter()
     : SPObject(), filterUnits(SP_FILTER_UNITS_OBJECTBOUNDINGBOX), filterUnits_set(FALSE),
@@ -89,6 +79,7 @@ void SPFilter::build(SPDocument *document, Inkscape::XML::Node *repr) {
     this->readAttr( "height" );
     this->readAttr( "filterRes" );
     this->readAttr( "xlink:href" );
+    this->_refcount = 0;
 
 	SPObject::build(document, repr);
 
@@ -200,6 +191,15 @@ void SPFilter::set(unsigned int key, gchar const *value) {
     }
 }
 
+
+/**
+ * Returns the number of references to the filter.
+ */
+guint SPFilter::getRefCount() {
+	// NOTE: this is currently updated by sp_style_filter_ref_changed() in style.cpp
+	return _refcount;
+}
+
 /**
  * Receives update notifications.
  */
@@ -245,11 +245,9 @@ void SPFilter::update(SPCtx *ctx, guint flags) {
       childflags |= SP_OBJECT_PARENT_MODIFIED_FLAG;
     }
     childflags &= SP_OBJECT_MODIFIED_CASCADE;
-
-    GSList *l = g_slist_reverse(this->childList(true, SPObject::ActionUpdate));
-    while (l) {
-        SPObject *child = SP_OBJECT (l->data);
-        l = g_slist_remove (l, child);
+    std::vector<SPObject*> l(this->childList(true, SPObject::ActionUpdate));
+    for(std::vector<SPObject*>::const_iterator i=l.begin();i!=l.end();++i){
+        SPObject *child = *i;
         if( SP_IS_FILTER_PRIMITIVE( child ) ) {
             child->updateDisplay(ctx, childflags);
         }
@@ -466,6 +464,10 @@ int sp_filter_set_image_name(SPFilter *filter, gchar const *name) {
     pair<gchar*,int> new_pair(name_copy, value);
     pair<map<gchar*,int,ltstr>::iterator,bool> ret = filter->_image_name->insert(new_pair);
     if (ret.second == false) {
+        // The element is not inserted (because an element with the same key was already in the map) 
+        // Therefore, free the memory allocated for the new entry:
+        free(name_copy);
+
         return (*ret.first).second;
     }
     return value;

@@ -169,6 +169,11 @@ public:
      */
     void updateFitMarginsUI(Inkscape::XML::Node *nv_repr);
  
+    /**
+     * Updates the scale widgets. (Just changes the values of the ui widgets.)
+     */
+    void updateScaleUI();
+
 protected:
 
     /**
@@ -250,12 +255,47 @@ protected:
     Gtk::Button          _fitPageButton;
     bool                 _lockMarginUpdate;
 
+    // Document scale
+    Gtk::Frame           _scaleFrame;
+#if WITH_GTKMM_3_0
+    Gtk::Grid            _scaleTable;
+#else
+    Gtk::Table           _scaleTable;
+#endif
+
+    Gtk::Label           _scaleLabel;
+    Gtk::Label           _scaleWarning;
+    RegisteredScalar     _scaleX;
+    RegisteredScalar     _scaleY;
+    bool                 _lockScaleUpdate;
+
+    // Viewbox
+    Gtk::Expander        _viewboxExpander;
+#if WITH_GTKMM_3_0
+    Gtk::Grid            _viewboxTable;
+#else
+    Gtk::Table           _viewboxTable;
+#endif
+
+    RegisteredScalar     _viewboxX;
+    RegisteredScalar     _viewboxY;
+    RegisteredScalar     _viewboxW;
+    RegisteredScalar     _viewboxH;
+    bool                 _lockViewboxUpdate;
+
     //callback
     void on_value_changed();
     void on_units_changed();
+    void on_scale_changed();
+    void on_viewbox_changed();
     sigc::connection    _changedw_connection;
     sigc::connection    _changedh_connection;
     sigc::connection    _changedu_connection;
+    sigc::connection    _changeds_connection;
+    sigc::connection    _changedvx_connection;
+    sigc::connection    _changedvy_connection;
+    sigc::connection    _changedvw_connection;
+    sigc::connection    _changedvh_connection;
 
     Registry            *_widgetRegistry;
 
@@ -277,9 +317,9 @@ protected:
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0))
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

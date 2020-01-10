@@ -41,7 +41,7 @@ extern "C" {
 #include "document.h"
 #include "desktop.h"
 #include "desktop-style.h"
-#include "desktop-handles.h"
+
 #include "document-undo.h"
 #include "selection.h"
 #include "style.h"
@@ -51,7 +51,7 @@ extern "C" {
 #include "ui/icon-names.h"
 #include "preferences.h"
 #include "verbs.h"
-#include "interface.h"
+#include "ui/interface.h"
 #include "svg/css-ostringstream.h"
 #include "widgets/icon.h"
 #include "widgets/font-selector.h"
@@ -69,6 +69,7 @@ TextEdit::TextEdit()
       font_label(_("_Font"), true),
       layout_frame(),
       text_label(_("_Text"), true),
+      vari_label(_("_Variants"), true),
       setasdefault_button(_("Set as _default")),
       close_button(Gtk::Stock::CLOSE),
       apply_button(Gtk::Stock::APPLY),
@@ -112,9 +113,13 @@ TextEdit::TextEdit()
     text_sep.set_orientation(Gtk::ORIENTATION_VERTICAL);
 #endif
 
+    /* Separator before spacing_combo */
+    /* Commented out (not needed if spacing_combo is hidden)
     layout_hbox.pack_start(text_sep, false, false, 10);
+    */
 
     /* Line Spacing */
+    /* Commented out as this does not handle non-percentage values
     GtkWidget *px = sp_icon_new( Inkscape::ICON_SIZE_SMALL_TOOLBAR, INKSCAPE_ICON("text_line_spacing") );
     layout_hbox.pack_start(*Gtk::manage(Glib::wrap(px)), false, false);
 
@@ -126,9 +131,12 @@ TextEdit::TextEdit()
         gtk_combo_box_text_append_text((GtkComboBoxText *) spacing_combo, spacings[i]);
     }
 
-    gtk_widget_set_tooltip_text (px, _("Spacing between lines (percent of font size)"));
-    gtk_widget_set_tooltip_text (spacing_combo, _("Spacing between lines (percent of font size)"));
+    gtk_widget_set_tooltip_text (px, _("Spacing between baselines (percent of font size)"));
+    gtk_widget_set_tooltip_text (spacing_combo, _("Spacing between baselines (percent of font size)"));
     layout_hbox.pack_start(*Gtk::manage(Glib::wrap(spacing_combo)), false, false);
+    */
+
+    // add layout_hbox (with align and direction buttons, spacing_combo)
     layout_frame.set_padding(4,4,4,4);
     layout_frame.add(layout_hbox);
 
@@ -174,6 +182,19 @@ TextEdit::TextEdit()
     gtk_text_view_set_wrap_mode ((GtkTextView *) text_view, GTK_WRAP_WORD);
 
 #ifdef WITH_GTKSPELL
+#ifdef WITH_GTKMM_3_0
+/*
+       TODO: Use computed xml:lang attribute of relevant element, if present, to specify the
+       language (either as 2nd arg of gtkspell_new_attach, or with explicit
+       gtkspell_set_language call in; see advanced.c example in gtkspell docs).
+       onReadSelection looks like a suitable place.
+*/
+    GtkSpellChecker * speller = gtk_spell_checker_new();
+
+    if (! gtk_spell_checker_attach(speller, GTK_TEXT_VIEW(text_view))) {
+        g_print("gtkspell error:\n");
+    }
+#else
     GError *error = NULL;
 
 /*
@@ -187,6 +208,7 @@ TextEdit::TextEdit()
         g_error_free(error);
     }
 #endif
+#endif
 
     gtk_widget_set_size_request (text_view, -1, 64);
     gtk_text_view_set_editable (GTK_TEXT_VIEW (text_view), TRUE);
@@ -195,7 +217,8 @@ TextEdit::TextEdit()
 
     notebook.append_page(font_vbox, font_label);
     notebook.append_page(text_vbox, text_label);
-
+    notebook.append_page(vari_vbox, vari_label);
+    
     /* Buttons */
     setasdefault_button.set_use_underline(true);
     apply_button.set_can_default();
@@ -210,12 +233,13 @@ TextEdit::TextEdit()
 
     /* Signal handlers */
     g_signal_connect ( G_OBJECT (fontsel), "font_set", G_CALLBACK (onFontChange), this );
-    g_signal_connect ( G_OBJECT (spacing_combo), "changed", G_CALLBACK (onLineSpacingChange), this );
+    // g_signal_connect ( G_OBJECT (spacing_combo), "changed", G_CALLBACK (onLineSpacingChange), this );
     g_signal_connect ( G_OBJECT (text_buffer), "changed", G_CALLBACK (onTextChange), this );
     g_signal_connect(startOffset, "changed", G_CALLBACK(onStartOffsetChange), this);
     setasdefault_button.signal_clicked().connect(sigc::mem_fun(*this, &TextEdit::onSetDefault));
     apply_button.signal_clicked().connect(sigc::mem_fun(*this, &TextEdit::onApply));
     close_button.signal_clicked().connect(sigc::bind(_signal_response.make_slot(), GTK_RESPONSE_CLOSE));
+    fontVariantChangedConn = vari_vbox.connectChanged(sigc::bind(sigc::ptr_fun(&onFontVariantChange),  this));
 
     desktopChangeConn = deskTrack.connectDesktopChanged( sigc::mem_fun(*this, &TextEdit::setTargetDesktop) );
     deskTrack.connect(GTK_WIDGET(gobj()));
@@ -230,6 +254,7 @@ TextEdit::~TextEdit()
     selectChangedConn.disconnect();
     desktopChangeConn.disconnect();
     deskTrack.disconnect();
+    fontVariantChangedConn.disconnect();
 }
 
 void TextEdit::styleButton(Gtk::RadioButton *button, gchar const *tooltip, gchar const *icon_name, Gtk::RadioButton *group_button )
@@ -325,18 +350,18 @@ void TextEdit::onReadSelection ( gboolean dostyle, gboolean /*docontent*/ )
 
     if (dostyle) {
         // create temporary style
-        SPStyle *query = sp_style_new (SP_ACTIVE_DOCUMENT);
+        SPStyle query(SP_ACTIVE_DOCUMENT);
         // query style from desktop into it. This returns a result flag and fills query with the style of subselection, if any, or selection
-        //int result_fontspec = sp_desktop_query_style (SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_FONT_SPECIFICATION);
-        int result_family = sp_desktop_query_style (SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_FONTFAMILY);
-        int result_style = sp_desktop_query_style (SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_FONTSTYLE);
-        int result_numbers = sp_desktop_query_style (SP_ACTIVE_DESKTOP, query, QUERY_STYLE_PROPERTY_FONTNUMBERS);
+        //int result_fontspec = sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_FONT_SPECIFICATION);
+        int result_family = sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_FONTFAMILY);
+        int result_style = sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_FONTSTYLE);
+        int result_numbers = sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_FONTNUMBERS);
 
         // If querying returned nothing, read the style from the text tool prefs (default style for new texts)
         // (Ok to not get a font specification - must just rely on the family and style in that case)
         if (result_family == QUERY_STYLE_NOTHING || result_style == QUERY_STYLE_NOTHING
                 || result_numbers == QUERY_STYLE_NOTHING) {
-            sp_style_read_from_prefs(query, "/tools/text");
+            query.readFromPrefs("/tools/text");
         }
 
         // FIXME: process result_family/style == QUERY_STYLE_MULTIPLE_DIFFERENT by showing "Many" in the lists
@@ -344,47 +369,55 @@ void TextEdit::onReadSelection ( gboolean dostyle, gboolean /*docontent*/ )
         Inkscape::FontLister* fontlister = Inkscape::FontLister::get_instance();
 
         // This is normally done for us by text-toolbar but only when we are in text editing context
-        fontlister->update_font_list(sp_desktop_document(this->desktop));
+        fontlister->update_font_list(this->desktop->getDocument());
         fontlister->selection_update();
 
         Glib::ustring fontspec = fontlister->get_fontspec();
 
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         int unit = prefs->getInt("/options/font/unitType", SP_CSS_UNIT_PT);
-        double size = sp_style_css_size_px_to_units(query->font_size.computed, unit); 
+        double size = sp_style_css_size_px_to_units(query.font_size.computed, unit); 
         sp_font_selector_set_fontspec(fsel, fontspec, size );
 
         setPreviewText (fontspec, phrase);
 
-        if (query->text_anchor.computed == SP_CSS_TEXT_ANCHOR_START) {
-            if (query->text_align.computed == SP_CSS_TEXT_ALIGN_JUSTIFY) {
+        if (query.text_anchor.computed == SP_CSS_TEXT_ANCHOR_START) {
+            if (query.text_align.computed == SP_CSS_TEXT_ALIGN_JUSTIFY) {
                 align_justify.set_active();
             } else {
                 align_left.set_active();
             }
-        } else if (query->text_anchor.computed == SP_CSS_TEXT_ANCHOR_MIDDLE) {
+        } else if (query.text_anchor.computed == SP_CSS_TEXT_ANCHOR_MIDDLE) {
             align_center.set_active();
         } else {
             align_right.set_active();
         }
 
-        if (query->writing_mode.computed == SP_CSS_WRITING_MODE_LR_TB) {
+        if (query.writing_mode.computed == SP_CSS_WRITING_MODE_LR_TB) {
             text_horizontal.set_active();
         } else {
             text_vertical.set_active();
         }
 
+        /*
         double height;
-        if (query->line_height.normal) height = Inkscape::Text::Layout::LINE_HEIGHT_NORMAL;
-        else if (query->line_height.unit == SP_CSS_UNIT_PERCENT)
-            height = query->line_height.value;
-        else height = query->line_height.computed;
+        if (query.line_height.normal) height = Inkscape::Text::Layout::LINE_HEIGHT_NORMAL;
+        else if (query.line_height.unit == SP_CSS_UNIT_PERCENT)
+            height = query.line_height.value;
+        else height = query.line_height.computed;
         gchar *sstr = g_strdup_printf ("%d%%", (int) floor(height * 100 + 0.5));
 
         gtk_entry_set_text ((GtkEntry *) gtk_bin_get_child ((GtkBin *) spacing_combo), sstr);
         g_free(sstr);
+        */
 
-        sp_style_unref(query);
+        // Update font variant widget
+        //int result_variants =
+        sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_FONTVARIANTS);
+        int result_features =
+            sp_desktop_query_style (SP_ACTIVE_DESKTOP, &query, QUERY_STYLE_PROPERTY_FONTFEATURESETTINGS);
+        vari_vbox.update( &query, result_features == QUERY_STYLE_MULTIPLE_DIFFERENT, fontspec );
+
     }
     blocked = false;
 }
@@ -419,12 +452,11 @@ SPItem *TextEdit::getSelectedTextItem (void)
     if (!SP_ACTIVE_DESKTOP)
         return NULL;
 
-    for (const GSList *item = sp_desktop_selection(SP_ACTIVE_DESKTOP)->itemList();
-         item != NULL;
-         item = item->next)
+    std::vector<SPItem*> tmp=SP_ACTIVE_DESKTOP->getSelection()->itemList();
+	for(std::vector<SPItem*>::const_iterator i=tmp.begin();i!=tmp.end();++i)
     {
-        if (SP_IS_TEXT(item->data) || SP_IS_FLOWTEXT(item->data))
-            return SP_ITEM (item->data);
+        if (SP_IS_TEXT(*i) || SP_IS_FLOWTEXT(*i))
+            return *i;
     }
 
     return NULL;
@@ -438,11 +470,10 @@ unsigned TextEdit::getSelectedTextCount (void)
 
     unsigned int items = 0;
 
-    for (const GSList *item = sp_desktop_selection(SP_ACTIVE_DESKTOP)->itemList();
-         item != NULL;
-         item = item->next)
+    std::vector<SPItem*> tmp=SP_ACTIVE_DESKTOP->getSelection()->itemList();
+	for(std::vector<SPItem*>::const_iterator i=tmp.begin();i!=tmp.end();++i)
     {
-        if (SP_IS_TEXT(item->data) || SP_IS_FLOWTEXT(item->data))
+        if (SP_IS_TEXT(*i) || SP_IS_FLOWTEXT(*i))
             ++items;
     }
 
@@ -513,11 +544,12 @@ SPCSSAttr *TextEdit::fillTextStyle ()
             sp_repr_css_set_property (css, "writing-mode", "tb");
         }
 
-        // Note that CSS 1.1 does not support line-height; we set it for consistency, but also set
-        // sodipodi:linespacing for backwards compatibility; in 1.2 we use line-height for flowtext
+        // Note that SVG 1.1 does not support line-height but we use it.
+        // const gchar *sstr = gtk_combo_box_text_get_active_text ((GtkComboBoxText *) spacing_combo);
+        // sp_repr_css_set_property (css, "line-height", sstr);
 
-        const gchar *sstr = gtk_combo_box_text_get_active_text ((GtkComboBoxText *) spacing_combo);
-        sp_repr_css_set_property (css, "line-height", sstr);
+        // Font variants
+        vari_vbox.fill_css( css );
 
         return css;
 }
@@ -543,22 +575,15 @@ void TextEdit::onApply()
     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
 
     unsigned items = 0;
-    const GSList *item_list = sp_desktop_selection(desktop)->itemList();
+    const std::vector<SPItem*> item_list = desktop->getSelection()->itemList();
     SPCSSAttr *css = fillTextStyle ();
     sp_desktop_set_style(desktop, css, true);
 
-    for (; item_list != NULL; item_list = item_list->next) {
+    for(std::vector<SPItem*>::const_iterator i=item_list.begin();i!=item_list.end();++i){
         // apply style to the reprs of all text objects in the selection
-        if (SP_IS_TEXT (item_list->data)) {
-
-            // backwards compatibility:
-            reinterpret_cast<SPObject*>(item_list->data)->getRepr()->setAttribute("sodipodi:linespacing", sp_repr_css_property (css, "line-height", NULL));
-
+        if (SP_IS_TEXT (*i) || (SP_IS_FLOWTEXT (*i)) ) {
             ++items;
         }
-        else if (SP_IS_FLOWTEXT (item_list->data))
-            // no need to set sodipodi:linespacing, because Inkscape never supported it on flowtext
-            ++items;
     }
 
     if (items == 0) {
@@ -569,7 +594,7 @@ void TextEdit::onApply()
 
     } else if (items == 1) {
         // exactly one text object; now set its text, too
-        SPItem *item = sp_desktop_selection(SP_ACTIVE_DESKTOP)->singleItem();
+        SPItem *item = SP_ACTIVE_DESKTOP->getSelection()->singleItem();
         if (SP_IS_TEXT (item) || SP_IS_FLOWTEXT(item)) {
             updateObjectText (item);
         }
@@ -583,7 +608,7 @@ void TextEdit::onApply()
     }
 
     // complete the transaction
-    DocumentUndo::done(sp_desktop_document(SP_ACTIVE_DESKTOP), SP_VERB_CONTEXT_TEXT,
+    DocumentUndo::done(SP_ACTIVE_DESKTOP->getDocument(), SP_VERB_CONTEXT_TEXT,
                        _("Set text style"));
     apply_button.set_sensitive ( false );
 
@@ -649,6 +674,19 @@ void TextEdit::onFontChange(SPFontSelector * /*fontsel*/, gchar* fontspec, TextE
 
 }
 
+void TextEdit::onFontVariantChange(TextEdit *self)
+{
+    if( self->blocked )
+        return;
+
+    SPItem *text = self->getSelectedTextItem ();
+
+    if (text) {
+        self->apply_button.set_sensitive ( true );
+    }
+    self->setasdefault_button.set_sensitive ( true );
+}
+
 void TextEdit::onStartOffsetChange(GtkTextBuffer * /*text_buffer*/, TextEdit *self)
 {
     SPItem *text = self->getSelectedTextItem();
@@ -658,7 +696,7 @@ void TextEdit::onStartOffsetChange(GtkTextBuffer * /*text_buffer*/, TextEdit *se
         const gchar *sstr = gtk_combo_box_text_get_active_text(reinterpret_cast<GtkComboBoxText *>(self->startOffset));
         tp->setAttribute("startOffset", sstr);
 
-        DocumentUndo::maybeDone(sp_desktop_document(SP_ACTIVE_DESKTOP), "startOffset", SP_VERB_CONTEXT_TEXT, _("Set text style"));
+        DocumentUndo::maybeDone(SP_ACTIVE_DESKTOP->getDocument(), "startOffset", SP_VERB_CONTEXT_TEXT, _("Set text style"));
     }
 }
 

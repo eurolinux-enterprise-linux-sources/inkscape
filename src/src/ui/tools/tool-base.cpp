@@ -20,10 +20,6 @@
 
 #include "widgets/desktop-widget.h"
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include "shortcuts.h"
 #include "file.h"
 #include "ui/tools/tool-base.h"
@@ -39,14 +35,14 @@
 #include "xml/node-event-vector.h"
 #include "sp-cursor.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "desktop-events.h"
 #include "desktop-style.h"
 #include "sp-namedview.h"
 #include "selection.h"
-#include "interface.h"
+#include "ui/interface.h"
 #include "macros.h"
-#include "tools-switch.h"
+#include "ui/tools-switch.h"
 #include "preferences.h"
 #include "message-context.h"
 #include "gradient-drag.h"
@@ -55,10 +51,11 @@
 #include "selcue.h"
 #include "ui/tools/lpe-tool.h"
 #include "ui/tool/control-point.h"
-#include "shape-editor.h"
+#include "ui/shape-editor.h"
 #include "sp-guide.h"
 #include "color.h"
 #include "knot.h"
+#include "knot-ptr.h"
 
 // globals for temporary switching to selector by space
 static bool selector_toggled = FALSE;
@@ -148,7 +145,7 @@ ToolBase::~ToolBase() {
  */
 void ToolBase::sp_event_context_set_cursor(GdkCursorType cursor_type) {
 
-    GtkWidget *w = GTK_WIDGET(sp_desktop_canvas(this->desktop));
+    GtkWidget *w = GTK_WIDGET(this->desktop->getCanvas());
     GdkDisplay *display = gdk_display_get_default();
     GdkCursor *cursor = gdk_cursor_new_for_display(display, cursor_type);
 
@@ -168,7 +165,7 @@ void ToolBase::sp_event_context_set_cursor(GdkCursorType cursor_type) {
  * Recreates and draws cursor on desktop related to ToolBase.
  */
 void ToolBase::sp_event_context_update_cursor() {
-    GtkWidget *w = GTK_WIDGET(sp_desktop_canvas(this->desktop));
+    GtkWidget *w = GTK_WIDGET(this->desktop->getCanvas());
     if (gtk_widget_get_window (w)) {
     
         GtkStyle *style = gtk_widget_get_style(w);
@@ -361,7 +358,7 @@ bool ToolBase::root_handler(GdkEvent* event) {
 
     /// @todo REmove redundant /value in preference keys
     tolerance = prefs->getIntLimited("/options/dragtolerance/value", 0, 0, 100);
-
+    bool allow_panning = prefs->getBool("/options/spacebarpans/value");
     gint ret = FALSE;
 
     switch (event->type) {
@@ -529,7 +526,7 @@ bool ToolBase::root_handler(GdkEvent* event) {
 
         if (panning_cursor == 1) {
             panning_cursor = 0;
-            GtkWidget *w = GTK_WIDGET(sp_desktop_canvas(this->desktop));
+            GtkWidget *w = GTK_WIDGET(this->desktop->getCanvas());
             gdk_window_set_cursor(gtk_widget_get_window (w), this->cursor);
         }
 
@@ -585,7 +582,6 @@ bool ToolBase::root_handler(GdkEvent* event) {
     case GDK_KEY_PRESS: {
         double const acceleration = prefs->getDoubleLimited(
                 "/options/scrollingacceleration/value", 0, 0, 6);
-
         int const key_scroll = prefs->getIntLimited("/options/keyscroll/value",
                 10, 0, 1000);
 
@@ -640,7 +636,7 @@ bool ToolBase::root_handler(GdkEvent* event) {
         case GDK_KEY_KP_4:
             if (MOD__CTRL_ONLY(event)) {
                 int i = (int) floor(key_scroll * accelerate_scroll(event,
-                        acceleration, sp_desktop_canvas(desktop)));
+                        acceleration, desktop->getCanvas()));
 
                 gobble_key_events(get_group0_keyval(&event->key), GDK_CONTROL_MASK);
                 this->desktop->scroll_world(i, 0);
@@ -653,7 +649,7 @@ bool ToolBase::root_handler(GdkEvent* event) {
         case GDK_KEY_KP_8:
             if (MOD__CTRL_ONLY(event)) {
                 int i = (int) floor(key_scroll * accelerate_scroll(event,
-                        acceleration, sp_desktop_canvas(desktop)));
+                        acceleration, desktop->getCanvas()));
 
                 gobble_key_events(get_group0_keyval(&event->key), GDK_CONTROL_MASK);
                 this->desktop->scroll_world(0, i);
@@ -666,7 +662,7 @@ bool ToolBase::root_handler(GdkEvent* event) {
         case GDK_KEY_KP_6:
             if (MOD__CTRL_ONLY(event)) {
                 int i = (int) floor(key_scroll * accelerate_scroll(event,
-                        acceleration, sp_desktop_canvas(desktop)));
+                        acceleration, desktop->getCanvas()));
 
                 gobble_key_events(get_group0_keyval(&event->key), GDK_CONTROL_MASK);
                 this->desktop->scroll_world(-i, 0);
@@ -679,12 +675,17 @@ bool ToolBase::root_handler(GdkEvent* event) {
         case GDK_KEY_KP_2:
             if (MOD__CTRL_ONLY(event)) {
                 int i = (int) floor(key_scroll * accelerate_scroll(event,
-                        acceleration, sp_desktop_canvas(desktop)));
+                        acceleration, desktop->getCanvas()));
 
                 gobble_key_events(get_group0_keyval(&event->key), GDK_CONTROL_MASK);
                 this->desktop->scroll_world(0, -i);
                 ret = TRUE;
             }
+            break;
+
+        case GDK_KEY_Menu:
+            sp_event_root_menu_popup(desktop, NULL, event);
+            ret = TRUE;
             break;
 
         case GDK_KEY_F10:
@@ -695,10 +696,10 @@ bool ToolBase::root_handler(GdkEvent* event) {
             break;
 
         case GDK_KEY_space:
-            xp = yp = 0;
             within_tolerance = true;
+            xp = yp = 0;
+            if (!allow_panning) break;
             panning = 4;
-
             this->space_panning = true;
             this->message_context->set(Inkscape::INFORMATION_MESSAGE,
                     _("<b>Space+mouse move</b> to pan canvas"));
@@ -739,13 +740,13 @@ bool ToolBase::root_handler(GdkEvent* event) {
 
         if (panning_cursor == 1) {
             panning_cursor = 0;
-            GtkWidget *w = GTK_WIDGET(sp_desktop_canvas(this->desktop));
+            GtkWidget *w = GTK_WIDGET(this->desktop->getCanvas());
             gdk_window_set_cursor(gtk_widget_get_window (w), this->cursor);
         }
 
         switch (get_group0_keyval(&event->key)) {
         case GDK_KEY_space:
-            if (within_tolerance == true) {
+            if (within_tolerance) {
                 // Space was pressed, but not panned
                 sp_toggle_selector(desktop);
 
@@ -928,7 +929,7 @@ void ToolBase::enableGrDrag(bool enable) {
  */
 bool ToolBase::deleteSelectedDrag(bool just_one) {
 
-    if (_grdrag && _grdrag->selected) {
+    if (_grdrag && !_grdrag->selected.empty()) {
         _grdrag->deleteSelected(just_one);
         return TRUE;
     }
@@ -1082,7 +1083,7 @@ void sp_event_root_menu_popup(SPDesktop *desktop, SPItem *item, GdkEvent *event)
 
     /* fixme: This is not what I want but works for now (Lauris) */
     if (event->type == GDK_KEY_PRESS) {
-        item = sp_desktop_selection(desktop)->singleItem();
+        item = desktop->getSelection()->itemList().front();
     }
 
     ContextMenu* CM = new ContextMenu(desktop, item);
@@ -1177,11 +1178,9 @@ SPItem *sp_event_context_find_item(SPDesktop *desktop, Geom::Point const &p,
 SPItem *
 sp_event_context_over_item(SPDesktop *desktop, SPItem *item,
         Geom::Point const &p) {
-    GSList *temp = NULL;
-    temp = g_slist_prepend(temp, item);
+	std::vector<SPItem*> temp;
+    temp.push_back(item);
     SPItem *item_at_point = desktop->getItemFromListAtPointBottom(temp, p);
-    g_slist_free(temp);
-
     return item_at_point;
 }
 
@@ -1360,6 +1359,7 @@ gboolean sp_event_context_snap_watchdog_callback(gpointer data) {
         break;
     case DelayedSnapEvent::KNOT_HANDLER: {
         gpointer knot = dse->getItem2();
+        check_if_knot_deleted(knot);
         if (knot && SP_IS_KNOT(knot)) {
             sp_knot_handler_request_position(dse->getEvent(), SP_KNOT(knot));
         }

@@ -13,7 +13,7 @@
 #include "ui/tool/curve-drag-point.h"
 #include <glib/gi18n.h>
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "display/sp-canvas-group.h"
 #include "display/canvas-bpath.h"
 #include "display/curve.h"
@@ -23,7 +23,11 @@
 #include "live_effects/lpeobject.h"
 #include "message-context.h"
 #include "selection.h"
-#include "shape-editor.h" // temporary!
+#include "ui/shape-editor.h" // temporary!
+#include "live_effects/effect.h"
+#include "display/curve.h"
+#include "snap.h"
+#include "sp-namedview.h"
 #include "sp-clippath.h"
 #include "sp-item-group.h"
 #include "sp-mask.h"
@@ -73,7 +77,7 @@
  * - ControlPointSelection: keeps track of node selection and a set of nodes that can potentially
  *   be selected. There can be more than one selection. Performs actions that require no
  *   knowledge about the path, only about the nodes, like dragging and transforms. It is not
- *   specific to nodes and can accomodate any control point derived from SelectableControlPoint.
+ *   specific to nodes and can accommodate any control point derived from SelectableControlPoint.
  *   Transforms nodes in response to transform handle events.
  * - TransformHandleSet: displays nodeset transform handles and emits transform events. The aim
  *   is to eventually use a common class for object and control point transforms.
@@ -105,22 +109,12 @@
 
 using Inkscape::ControlManager;
 
-#include "tool-factory.h"
-
 namespace Inkscape {
 namespace UI {
 namespace Tools {
 
-namespace {
-	ToolBase* createNodesContext() {
-		return new NodeTool();
-	}
-
-	bool nodesContextRegistered = ToolFactory::instance().registerObject("/tools/nodes", createNodesContext);
-}
-
 const std::string& NodeTool::getPrefsPath() {
-	return NodeTool::prefsPath;
+    return NodeTool::prefsPath;
 }
 
 const std::string NodeTool::prefsPath = "/tools/nodes";
@@ -153,7 +147,7 @@ NodeTool::NodeTool()
 SPCanvasGroup *create_control_group(SPDesktop *d)
 {
     return reinterpret_cast<SPCanvasGroup*>(sp_canvas_item_new(
-        sp_desktop_controls(d), SP_TYPE_CANVAS_GROUP, NULL));
+        d->getControls(), SP_TYPE_CANVAS_GROUP, NULL));
 }
 
 void destroy_group(SPCanvasGroup *g)
@@ -170,7 +164,6 @@ NodeTool::~NodeTool() {
     if (this->helperpath_tmpitem) {
         this->desktop->remove_temporary_canvasitem(this->helperpath_tmpitem);
     }
-
     this->_selection_changed_connection.disconnect();
     //this->_selection_modified_connection.disconnect();
     this->_mouseover_changed_connection.disconnect();
@@ -209,7 +202,7 @@ void NodeTool::setup() {
     data.node_data.node_group = create_control_group(this->desktop);
     data.node_data.handle_group = create_control_group(this->desktop);
 
-    Inkscape::Selection *selection = sp_desktop_selection (this->desktop);
+    Inkscape::Selection *selection = this->desktop->getSelection();
 
     this->_selection_changed_connection.disconnect();
     this->_selection_changed_connection =
@@ -220,7 +213,7 @@ void NodeTool::setup() {
         Inkscape::UI::ControlPoint::signal_mouseover_change.connect(sigc::mem_fun(this, &NodeTool::mouseover_changed));
 
     this->_sizeUpdatedConn = ControlManager::getManager().connectCtrlSizeChanged(
-    		sigc::mem_fun(this, &NodeTool::handleControlUiStyleChange)
+            sigc::mem_fun(this, &NodeTool::handleControlUiStyleChange)
     );
     
     this->_selected_nodes = new Inkscape::UI::ControlPointSelection(this->desktop, this->_transform_handle_group);
@@ -239,15 +232,15 @@ void NodeTool::setup() {
         )
     );
 
-    this->_selected_nodes->signal_point_changed.connect(
-		// Hide both signal parameters and bind the function parameter to 0
-		// sigc::signal<void, SelectableControlPoint *, bool>
-		// <=>
-		// void update_tip(GdkEvent *event)
-		sigc::hide(sigc::hide(sigc::bind(
-				sigc::mem_fun(this, &NodeTool::update_tip),
-				(GdkEvent*)NULL
-		)))
+    this->_selected_nodes->signal_selection_changed.connect(
+        // Hide both signal parameters and bind the function parameter to 0
+        // sigc::signal<void, SelectableControlPoint *, bool>
+        // <=>
+        // void update_tip(GdkEvent *event)
+        sigc::hide(sigc::hide(sigc::bind(
+                sigc::mem_fun(this, &NodeTool::update_tip),
+                (GdkEvent*)NULL
+        )))
     );
 
     this->helperpath_tmpitem = NULL;
@@ -288,7 +281,7 @@ void NodeTool::setup() {
 
 // show helper paths of the applied LPE, if any
 void  NodeTool::update_helperpath () {
-    Inkscape::Selection *selection = sp_desktop_selection (this->desktop);
+    Inkscape::Selection *selection = this->desktop->getSelection();
 
     if (this->helperpath_tmpitem) {
         this->desktop->remove_temporary_canvasitem(this->helperpath_tmpitem);
@@ -298,6 +291,14 @@ void  NodeTool::update_helperpath () {
     if (SP_IS_LPE_ITEM(selection->singleItem())) {
         Inkscape::LivePathEffect::Effect *lpe = SP_LPE_ITEM(selection->singleItem())->getCurrentLPE();
         if (lpe && lpe->isVisible()/* && lpe->showOrigPath()*/) {
+            Inkscape::UI::ControlPointSelection *selectionNodes = _selected_nodes;
+            std::vector<Geom::Point> selectedNodesPositions;
+            for (Inkscape::UI::ControlPointSelection::iterator i = selectionNodes->begin(); i != selectionNodes->end(); ++i) {
+                Inkscape::UI::Node *n = dynamic_cast<Inkscape::UI::Node *>(*i);
+                selectedNodesPositions.push_back(n->position());
+            }
+            lpe->setSelectedNodePoints(selectedNodesPositions);
+            lpe->setCurrentZoom(this->desktop->current_zoom());
             SPCurve *c = new SPCurve();
             SPCurve *cc = new SPCurve();
             std::vector<Geom::PathVector> cs = lpe->getCanvasIndicators(SP_LPE_ITEM(selection->singleItem()));
@@ -307,7 +308,7 @@ void  NodeTool::update_helperpath () {
                 cc->reset();
             }
             if (!c->is_empty()) {
-                SPCanvasItem *helperpath = sp_canvas_bpath_new(sp_desktop_tempgroup(this->desktop), c);
+                SPCanvasItem *helperpath = sp_canvas_bpath_new(this->desktop->getTempGroup(), c, true);
                 sp_canvas_bpath_set_stroke(SP_CANVAS_BPATH(helperpath), 0x0000ff9A, 1.0, SP_STROKE_LINEJOIN_MITER, SP_STROKE_LINECAP_BUTT);
                 sp_canvas_bpath_set_fill(SP_CANVAS_BPATH(helperpath), 0, SP_WIND_RULE_NONZERO);
                 sp_canvas_item_affine_absolute(helperpath, selection->singleItem()->i2dt_affine());
@@ -352,7 +353,7 @@ void NodeTool::set(const Inkscape::Preferences::Entry& value) {
         this->edit_masks = value.getBool();
         this->selection_changed(this->desktop->selection);
     } else {
-    	ToolBase::set(value);
+        ToolBase::set(value);
     }
 }
 
@@ -363,7 +364,7 @@ void gather_items(NodeTool *nt, SPItem *base, SPObject *obj, Inkscape::UI::Shape
     using namespace Inkscape::UI;
 
     if (!obj) {
-    	return;
+        return;
     }
 
     //XML Tree being used directly here while it shouldn't be.
@@ -403,10 +404,9 @@ void NodeTool::selection_changed(Inkscape::Selection *sel) {
 
     std::set<ShapeRecord> shapes;
 
-    GSList const *ilist = sel->itemList();
-
-    for (GSList *i = const_cast<GSList*>(ilist); i; i = i->next) {
-        SPObject *obj = static_cast<SPObject*>(i->data);
+    std::vector<SPItem*> items=sel->itemList();
+    for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end();++i){
+        SPObject *obj = *i;
 
         if (SP_IS_ITEM(obj)) {
             gather_items(this, NULL, static_cast<SPItem*>(obj), SHAPE_ROLE_NORMAL, shapes);
@@ -435,10 +435,13 @@ void NodeTool::selection_changed(Inkscape::Selection *sel) {
             this->_shape_editors.find(r.item) == this->_shape_editors.end())
         {
             ShapeEditor *si = new ShapeEditor(this->desktop);
-            si->set_item(r.item, SH_KNOTHOLDER);
+            si->set_item(r.item);
             this->_shape_editors.insert(const_cast<SPItem*&>(r.item), si);
         }
     }
+
+    _previous_selection = _current_selection;
+    _current_selection = sel->itemList();
 
     this->_multipath->setItems(shapes);
     this->update_tip(NULL);
@@ -452,44 +455,59 @@ bool NodeTool::root_handler(GdkEvent* event) {
      * 3. some keybindings
      */
     using namespace Inkscape::UI; // pull in event helpers
-    
+
     Inkscape::Selection *selection = desktop->selection;
     static Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-    
+
     if (this->_multipath->event(this, event)) {
-    	return true;
+        return true;
     }
 
     if (this->_selector->event(this, event)) {
-    	return true;
+        return true;
     }
 
     if (this->_selected_nodes->event(this, event)) {
-    	return true;
+        return true;
     }
 
     switch (event->type)
     {
     case GDK_MOTION_NOTIFY: {
-	this->update_helperpath();
+        update_helperpath();
         combine_motion_events(desktop->canvas, event->motion, 0);
         SPItem *over_item = sp_event_context_find_item (desktop, event_point(event->button),
                 FALSE, TRUE);
+
+        Geom::Point const motion_w(event->motion.x, event->motion.y);
+        Geom::Point const motion_dt(this->desktop->w2d(motion_w));
+
+        SnapManager &m = this->desktop->namedview->snap_manager;
+
+        // We will show a pre-snap indication for when the user adds a node through double-clicking
+        // Adding a node will only work when a path has been selected; if that's not the case then snapping is useless
+        if (!this->desktop->selection->isEmpty()) {
+            if (!(event->motion.state & GDK_SHIFT_MASK)) {
+                m.setup(this->desktop);
+                Inkscape::SnapCandidatePoint scp(motion_dt, Inkscape::SNAPSOURCE_OTHER_HANDLE);
+                m.preSnap(scp, true);
+                m.unSetup();
+            }
+        }
 
         if (over_item != this->_last_over) {
             this->_last_over = over_item;
             //ink_node_tool_update_tip(nt, event);
             this->update_tip(event);
         }
-
         // create pathflash outline
         if (prefs->getBool("/tools/nodes/pathflash_enabled")) {
             if (over_item == this->flashed_item) {
-            	break;
+                break;
             }
 
             if (!prefs->getBool("/tools/nodes/pathflash_selected") && selection->includes(over_item)) {
-            	break;
+                break;
             }
 
             if (this->flash_tempitem) {
@@ -499,21 +517,22 @@ bool NodeTool::root_handler(GdkEvent* event) {
             }
 
             if (!SP_IS_SHAPE(over_item)) {
-            	break; // for now, handle only shapes
+                break; // for now, handle only shapes
             }
 
             this->flashed_item = over_item;
             SPCurve *c = SP_SHAPE(over_item)->getCurveBeforeLPE();
 
             if (!c) {
-            	break; // break out when curve doesn't exist
+                break; // break out when curve doesn't exist
             }
 
             c->transform(over_item->i2dt_affine());
-            SPCanvasItem *flash = sp_canvas_bpath_new(sp_desktop_tempgroup(desktop), c);
+            SPCanvasItem *flash = sp_canvas_bpath_new(desktop->getTempGroup(), c, true);
 
             sp_canvas_bpath_set_stroke(SP_CANVAS_BPATH(flash),
-                prefs->getInt("/tools/nodes/highlight_color", 0xff0000ff), 1.0,
+                //prefs->getInt("/tools/nodes/highlight_color", 0xff0000ff), 1.0,
+                over_item->highlight_color(), 1.0,
                 SP_STROKE_LINEJOIN_MITER, SP_STROKE_LINECAP_BUTT);
 
             sp_canvas_bpath_set_fill(SP_CANVAS_BPATH(flash), 0, SP_WIND_RULE_NONZERO);
@@ -568,11 +587,42 @@ bool NodeTool::root_handler(GdkEvent* event) {
 
     case GDK_KEY_RELEASE:
         //ink_node_tool_update_tip(nt, event);
-    	this->update_tip(event);
+        this->update_tip(event);
+        break;
+
+    case GDK_BUTTON_RELEASE:
+        if (this->_selector->doubleClicked()) {
+            // If the selector received the doubleclick event, then we're at some distance from
+            // the path; otherwise, the doubleclick event would have been received by
+            // CurveDragPoint; we will insert nodes into the path anyway but only if we can snap
+            // to the path. Otherwise the position would not be very well defined.
+            if (!(event->motion.state & GDK_SHIFT_MASK)) {
+                Geom::Point const motion_w(event->motion.x, event->motion.y);
+                Geom::Point const motion_dt(this->desktop->w2d(motion_w));
+
+                SnapManager &m = this->desktop->namedview->snap_manager;
+                m.setup(this->desktop);
+                Inkscape::SnapCandidatePoint scp(motion_dt, Inkscape::SNAPSOURCE_OTHER_HANDLE);
+                Inkscape::SnappedPoint sp = m.freeSnap(scp, Geom::OptRect(), true);
+                m.unSetup();
+
+                if (sp.getSnapped()) {
+                    // The first click of the double click will have cleared the path selection, because
+                    // we clicked aside of the path. We need to undo this on double click
+                    Inkscape::Selection *selection = desktop->getSelection();
+                    selection->addList(_previous_selection);
+
+                    // The selection has been restored, and the signal selection_changed has been emitted,
+                    // which has again forced a restore of the _mmap variable of the MultiPathManipulator (this->_multipath)
+                    // Now we can insert the new nodes as if nothing has happened!
+                    this->_multipath->insertNode(this->desktop->d2w(sp.getPoint()));
+                }
+            }
+        }
         break;
 
     default:
-    	break;
+        break;
     }
     
     return ToolBase::root_handler(event);
@@ -585,7 +635,7 @@ void NodeTool::update_tip(GdkEvent *event) {
         unsigned new_state = state_after_event(event);
 
         if (new_state == event->key.state) {
-        	return;
+            return;
         }
 
         if (state_held_shift(new_state)) {
@@ -606,9 +656,27 @@ void NodeTool::update_tip(GdkEvent *event) {
     unsigned total = this->_selected_nodes->allPoints().size();
 
     if (sz != 0) {
-        char *nodestring = g_strdup_printf(
-            ngettext("<b>%u of %u</b> node selected.", "<b>%u of %u</b> nodes selected.", total),
-            sz, total);
+        char *nodestring; 
+        if (sz == 2) {
+            // if there are only two nodes selected, display the angle
+            // of a line going through them relative to the X axis.
+            Inkscape::UI::ControlPointSelection::Set &selection_nodes = this->_selected_nodes->allPoints();
+            std::vector<Geom::Point> positions;
+            for (Inkscape::UI::ControlPointSelection::Set::iterator i = selection_nodes.begin(); i != selection_nodes.end(); ++i) {
+                if ((*i)->selected()) {
+                    Inkscape::UI::Node *n = dynamic_cast<Inkscape::UI::Node *>(*i);
+                    positions.push_back(n->position());
+                }
+            }
+            g_assert(positions.size() == 2);
+            const double angle = Geom::deg_from_rad(Geom::Line(positions[0], positions[1]).angle());
+            nodestring = g_strdup_printf("<b>%u of %u</b> nodes selected, angle: %.2f°.", sz, total, angle);
+        }
+        else {
+            nodestring = g_strdup_printf(
+                ngettext("<b>%u of %u</b> node selected.", "<b>%u of %u</b> nodes selected.", total),
+                sz, total);
+        }
 
         if (this->_last_over) {
             // TRANSLATORS: The %s below is where the "%u of %u nodes selected" sentence gets put
@@ -650,12 +718,11 @@ void NodeTool::select_area(Geom::Rect const &sel, GdkEventButton *event) {
     if (this->_multipath->empty()) {
         // if multipath is empty, select rubberbanded items rather than nodes
         Inkscape::Selection *selection = this->desktop->selection;
-        GSList *items = sp_desktop_document(this->desktop)->getItemsInBox(this->desktop->dkey, sel);
+        std::vector<SPItem*> items = this->desktop->getDocument()->getItemsInBox(this->desktop->dkey, sel);
         selection->setList(items);
-        g_slist_free(items);
     } else {
         if (!held_shift(*event)) {
-        	this->_selected_nodes->clear();
+            this->_selected_nodes->clear();
         }
 
         this->_selected_nodes->selectArea(sel);
@@ -666,13 +733,13 @@ void NodeTool::select_point(Geom::Point const &/*sel*/, GdkEventButton *event) {
     using namespace Inkscape::UI; // pull in event helpers
 
     if (!event) {
-    	return;
+        return;
     }
 
     if (event->button != 1) {
-    	return;
+        return;
     }
-
+    
     Inkscape::Selection *selection = this->desktop->selection;
 
     SPItem *item_clicked = sp_event_context_find_item (this->desktop, event_point(*event),

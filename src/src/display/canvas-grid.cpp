@@ -17,10 +17,6 @@
 # include "config.h"
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
 
@@ -35,8 +31,8 @@
 #include "ui/widget/registered-widget.h"
 #include "desktop.h"
 #include "sp-canvas-util.h"
-#include "util/mathfns.h"
-#include "desktop-handles.h"
+#include "helper/mathfns.h"
+
 #include "display/cairo-utils.h"
 #include "display/canvas-axonomgrid.h"
 #include "display/canvas-grid.h"
@@ -50,7 +46,7 @@
 #include "sp-root.h"
 #include "svg/svg-color.h"
 #include "svg/stringstream.h"
-#include "util/mathfns.h"
+#include "helper/mathfns.h"
 #include "xml/node-event-vector.h"
 #include "verbs.h"
 #include "display/sp-canvas.h"
@@ -72,41 +68,15 @@ static gchar const *const grid_svgname[] = {
 
 // ##########################################################
 // Grid CanvasItem
-static void grid_canvasitem_class_init (GridCanvasItemClass *klass);
-static void grid_canvasitem_init (GridCanvasItem *grid);
 static void grid_canvasitem_destroy(SPCanvasItem *object);
 static void grid_canvasitem_update (SPCanvasItem *item, Geom::Affine const &affine, unsigned int flags);
 static void grid_canvasitem_render (SPCanvasItem *item, SPCanvasBuf *buf);
 
-static SPCanvasItemClass * parent_class;
-
-GType
-grid_canvasitem_get_type (void)
-{
-    static GType grid_canvasitem_type = 0;
-
-    if (!grid_canvasitem_type) {
-	GTypeInfo grid_canvasitem_info = {
-            sizeof (GridCanvasItemClass),
-	    NULL, NULL,
-            (GClassInitFunc) grid_canvasitem_class_init,
-	    NULL, NULL,
-            sizeof (GridCanvasItem),
-	    0,
-            (GInstanceInitFunc) grid_canvasitem_init,
-	    NULL
-	};
-        
-	grid_canvasitem_type = g_type_register_static(SPCanvasItem::getType(), "GridCanvasItem", &grid_canvasitem_info, GTypeFlags(0));
-    }
-    return grid_canvasitem_type;
-}
+G_DEFINE_TYPE(GridCanvasItem, grid_canvasitem, SP_TYPE_CANVAS_ITEM);
 
 static void grid_canvasitem_class_init(GridCanvasItemClass *klass)
 {
     SPCanvasItemClass *item_class = (SPCanvasItemClass *) klass;
-
-    parent_class = (SPCanvasItemClass*)g_type_class_peek_parent (klass);
 
     item_class->destroy = grid_canvasitem_destroy;
     item_class->update = grid_canvasitem_update;
@@ -124,8 +94,8 @@ static void grid_canvasitem_destroy(SPCanvasItem *object)
     g_return_if_fail (object != NULL);
     g_return_if_fail (INKSCAPE_IS_GRID_CANVASITEM (object));
 
-    if (SP_CANVAS_ITEM_CLASS(parent_class)->destroy)
-        (* SP_CANVAS_ITEM_CLASS(parent_class)->destroy) (object);
+    if (SP_CANVAS_ITEM_CLASS(grid_canvasitem_parent_class)->destroy)
+        (* SP_CANVAS_ITEM_CLASS(grid_canvasitem_parent_class)->destroy) (object);
 }
 
 /**
@@ -146,8 +116,8 @@ grid_canvasitem_update (SPCanvasItem *item, Geom::Affine const &affine, unsigned
 {
     GridCanvasItem *gridcanvasitem = INKSCAPE_GRID_CANVASITEM (item);
 
-    if (parent_class->update)
-        (* parent_class->update) (item, affine, flags);
+    if (SP_CANVAS_ITEM_CLASS(grid_canvasitem_parent_class)->update)
+        SP_CANVAS_ITEM_CLASS(grid_canvasitem_parent_class)->update(item, affine, flags);
 
     if (gridcanvasitem->grid) {
         gridcanvasitem->grid->Update(affine, flags);
@@ -174,7 +144,7 @@ grid_canvasitem_update (SPCanvasItem *item, Geom::Affine const &affine, unsigned
     };
 
 CanvasGrid::CanvasGrid(SPNamedView * nv, Inkscape::XML::Node * in_repr, SPDocument *in_doc, GridType type)
-    : visible(true), gridtype(type)
+    : visible(true), gridtype(type), legacy(false), pixel(false)
 {
     repr = in_repr;
     doc = in_doc;
@@ -311,12 +281,12 @@ CanvasGrid::createCanvasItem(SPDesktop * desktop)
 
     // check if there is already a canvasitem on this desktop linking to this grid
     for (GSList *l = canvasitems; l != NULL; l = l->next) {
-        if ( sp_desktop_gridgroup(desktop) == SP_CANVAS_GROUP(SP_CANVAS_ITEM(l->data)->parent) ) {
+        if ( desktop->getGridGroup() == SP_CANVAS_GROUP(SP_CANVAS_ITEM(l->data)->parent) ) {
             return NULL;
         }
     }
 
-    GridCanvasItem * item = INKSCAPE_GRID_CANVASITEM( sp_canvas_item_new(sp_desktop_gridgroup(desktop), INKSCAPE_TYPE_GRID_CANVASITEM, NULL) );
+    GridCanvasItem * item = INKSCAPE_GRID_CANVASITEM( sp_canvas_item_new(desktop->getGridGroup(), INKSCAPE_TYPE_GRID_CANVASITEM, NULL) );
     item->grid = this;
     sp_canvas_item_show(SP_CANVAS_ITEM(item));
 
@@ -570,6 +540,14 @@ CanvasXYGrid::readRepr()
     if( root->viewBox_set ) {
         scale_x = root->width.computed  / root->viewBox.width();
         scale_y = root->height.computed / root->viewBox.height();
+        if (Geom::are_near(scale_x / scale_y, 1.0, Geom::EPSILON)) {
+            // scaling is uniform, try to reduce numerical error
+            scale_x = (scale_x + scale_y)/2.0;
+            double scale_none = Inkscape::Util::Quantity::convert(1, doc->getDisplayUnit(), "px");
+            if (Geom::are_near(scale_x / scale_none, 1.0, Geom::EPSILON))
+                scale_x = scale_none; // objects are same size, reduce numerical error
+            scale_y = scale_x;
+        }
     }
 
     gchar const *value;
@@ -581,6 +559,10 @@ CanvasXYGrid::readRepr()
         if( q.unit->type == UNIT_TYPE_LINEAR ) {
             // Legacy grid not in 'user units'
             origin[Geom::X] = q.value("px");
+            legacy = true;
+            if (q.unit->abbr == "px" ) {
+                pixel = true;
+            }
         } else {
             // Grid in 'user units'
             origin[Geom::X] = q.quantity * scale_x;
@@ -594,6 +576,10 @@ CanvasXYGrid::readRepr()
         if( q.unit->type == UNIT_TYPE_LINEAR ) {
             // Legacy grid not in 'user units'
             origin[Geom::Y] = q.value("px");
+            legacy = true;
+            if (q.unit->abbr == "px" ) {
+                pixel = true;
+            }
         } else {
             // Grid in 'user units'
             origin[Geom::Y] = q.quantity * scale_y;
@@ -612,6 +598,10 @@ CanvasXYGrid::readRepr()
             if( q.unit->type == UNIT_TYPE_LINEAR ) {
                 // Legacy grid not in 'user units'
                 spacing[Geom::X] = q.value("px");
+                legacy = true;
+                if (q.unit->abbr == "px" ) {
+                    pixel = true;
+                }
             } else {
                 // Grid in 'user units'
                 spacing[Geom::X] = q.quantity * scale_x;
@@ -631,6 +621,10 @@ CanvasXYGrid::readRepr()
             if( q.unit->type == UNIT_TYPE_LINEAR ) {
                 // Legacy grid not in 'user units'
                 spacing[Geom::Y] = q.value("px");
+                legacy = true;
+                if (q.unit->abbr == "px" ) {
+                    pixel = true;
+                }
             } else {
                 // Grid in 'user units'
                 spacing[Geom::Y] = q.quantity * scale_y;
@@ -856,7 +850,23 @@ CanvasXYGrid::updateWidgets()
 */
 }
 
+// For correcting old SVG Inkscape files
+void
+CanvasXYGrid::Scale (Geom::Scale const &scale ) {
+    origin *= scale;
+    spacing *= scale;
 
+    // Write out in 'user-units'
+    Inkscape::SVGOStringStream os_x, os_y, ss_x, ss_y;
+    os_x << origin[Geom::X];
+    os_y << origin[Geom::Y];
+    ss_x << spacing[Geom::X];
+    ss_y << spacing[Geom::Y];
+    repr->setAttribute("originx",  os_x.str().c_str());
+    repr->setAttribute("originy",  os_y.str().c_str());
+    repr->setAttribute("spacingx", ss_x.str().c_str());
+    repr->setAttribute("spacingy", ss_y.str().c_str());
+}
 
 void
 CanvasXYGrid::Update (Geom::Affine const &affine, unsigned int /*flags*/)
@@ -928,7 +938,7 @@ CanvasXYGrid::Render (SPCanvasBuf *buf)
     gdouble const syg = floor ((buf->rect.top() - ow[Geom::Y]) / sw[Geom::Y]) * sw[Geom::Y] + ow[Geom::Y];
     gint const  ylinestart = round((syg - ow[Geom::Y]) / sw[Geom::Y]);
 
-    //set correct coloring, depending preference (when zoomed out, always major coloring or minor coloring)
+    // no_emphasize_when_zoomedout determines color (minor or major) when only major grid lines/dots shown.
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     guint32 _empcolor;
     bool no_emp_when_zoomed_out = prefs->getBool("/options/grids/no_emphasize_when_zoomedout", false);
@@ -944,6 +954,7 @@ CanvasXYGrid::Render (SPCanvasBuf *buf)
     cairo_set_line_cap(buf->ct, CAIRO_LINE_CAP_SQUARE);
 
     if (!render_dotted) {
+        // Line grid
         gint ylinenum;
         gdouble y;
         for (y = syg, ylinenum = ylinestart; y < buf->rect.bottom(); y += sw[Geom::Y], ylinenum++) {
@@ -966,8 +977,23 @@ CanvasXYGrid::Render (SPCanvasBuf *buf)
             }
         }
     } else {
+        // Dotted grid
         gint ylinenum;
         gdouble y;
+
+        // alpha needs to be larger than in the line case to maintain a similar visual impact but
+        // setting it to the maximal value makes the dots dominant in some cases. Solution,
+        // increase the alpha by a factor of 4. This then allows some user adjustment.
+        guint32 _empdot = (_empcolor & 0xff) << 2;
+        if (_empdot > 0xff)
+            _empdot = 0xff;
+        _empdot += (_empcolor & 0xffffff00);
+
+        guint32 _colordot = (color & 0xff) << 2;
+        if (_colordot > 0xff)
+            _colordot = 0xff;
+        _colordot += (color & 0xffffff00);
+
         for (y = syg, ylinenum = ylinestart; y < buf->rect.bottom(); y += sw[Geom::Y], ylinenum++) {
             gint const iy = round(y);
 
@@ -979,13 +1005,15 @@ CanvasXYGrid::Render (SPCanvasBuf *buf)
                      || (!scaled[Geom::Y] && (ylinenum % empspacing) != 0)
                      || ((scaled[Geom::X] || scaled[Geom::Y]) && no_emp_when_zoomed_out) )
                 {
-                    grid_dot (buf, ix, iy, color | (guint32)0x000000FF); // put alpha to max value
+                    // Minor point: dot only
+                    grid_dot (buf, ix, iy, _colordot); // | (guint32)0x000000FF); // put alpha to max value
                 } else {
+                    // Major point: small cross
                     gint const pitch = 1;
                     grid_dot (buf, ix-pitch, iy, _empcolor);
                     grid_dot (buf, ix+pitch, iy, _empcolor);
 
-                    grid_dot (buf, ix, iy, _empcolor | (guint32)0x000000FF);  // put alpha to max value
+                    grid_dot (buf, ix, iy, _empdot ); // | (guint32)0x000000FF);  // put alpha to max value
 
                     grid_dot (buf, ix, iy-pitch, _empcolor);
                     grid_dot (buf, ix, iy+pitch, _empcolor);

@@ -247,12 +247,19 @@ if ! pkg-config --exists poppler; then
 	exit 1
 fi
 
+if [ ! -e "$LIBPREFIX/lib/libpotrace.dylib" ]; then
+	echo "Missing potrace -- please install potrace and try again." >&2
+	exit 1
+fi
+
 if ! pkg-config --exists ImageMagick; then
 	echo "Missing ImageMagick -- please install ImageMagick and try again." >&2
 	exit 1
 fi
 
-if [ ! -e "$LIBPREFIX/lib/aspell-0.60/en.dat" ]; then
+# FIXME: retrieve aspell version from installed files (no pkg-config support)
+ASPELL_VERSION="0.60"
+if [ ! -e "$LIBPREFIX/lib/aspell-$ASPELL_VERSION/en.dat" ]; then
 	echo "Missing aspell en dictionary -- please install at least 'aspell-dict-en', but" >&2
 	echo "preferably more dictionaries ('aspell-dict-*') and try again." >&2
 	exit 1
@@ -279,20 +286,25 @@ OSXVERSION="$(/usr/bin/sw_vers | grep ProductVersion | cut -f2)"
 OSXMINORVER="$(cut -d. -f 1,2 <<< $OSXVERSION)"
 OSXMINORNO="$(cut -d. -f2 <<< $OSXVERSION)"
 OSXPOINTNO="$(cut -d. -f3 <<< $OSXVERSION)"
-ARCH="$(uname -a | awk '{print $NF;}')"
+HOSTARCH="$(uname -a | awk '{print $NF;}')"
 
-# guess default build_arch (MacPorts)
-if [ "$OSXMINORNO" -ge "6" ]; then
-	if [ "$(sysctl -n hw.cpu64bit_capable 2>/dev/null)" = "1" ]; then
-		_build_arch="x86_64"
-	else
-		_build_arch="i386"
-	fi
+if [ "$ARCH" != "" ]; then
+	# explicit build_arch
+	_build_arch="$ARCH"
 else
-	if [ $ARCH = "powerpc" ]; then
-		_build_arch="ppc"
+	# guess default build_arch (MacPorts)
+	if [ "$OSXMINORNO" -ge "6" ]; then
+		if [ "$(sysctl -n hw.cpu64bit_capable 2>/dev/null)" = "1" ]; then
+			_build_arch="x86_64"
+		else
+			_build_arch="i386"
+		fi
 	else
-		_build_arch="i386"
+		if [ $HOSTARCH = "powerpc" ]; then
+			_build_arch="ppc"
+		else
+			_build_arch="i386"
+		fi
 	fi
 fi
 
@@ -417,6 +429,7 @@ $cp_cmd "$plist" "$package/Contents/Info.plist"
 if [ $_backend = "quartz" ]; then
 	/usr/libexec/PlistBuddy -x -c "Set :CGDisableCoalescedUpdates 1" "${package}/Contents/Info.plist"
 fi
+/usr/libexec/PlistBuddy -x -c "Set :LSMinimumSystemVersion $OSXMINORVER" "${package}/Contents/Info.plist"
 
 # Share files
 $rsync_cmd "$binary_dir/../share/$binary_name"/* "$pkgshare/$binary_name"
@@ -479,10 +492,17 @@ if [ ${add_python} = "true" ]; then
 			$cp_cmd -RL "$packages_path/_imagingcms.so" "$pkgpython"
 			$cp_cmd -RL "$packages_path/_imagingft.so" "$pkgpython"
 			$cp_cmd -RL "$packages_path/_imagingmath.so" "$pkgpython"
+		else  # we build Pillow with +tkinter
+			$cp_cmd -RL "$packages_path/_tkinter.so" "$pkgpython"
 		fi
 		$cp_cmd -RL "$packages_path/sk1libs" "$pkgpython"
 		$cp_cmd -RL "$packages_path/uniconvertor" "$pkgpython"
-		# PyGTK (Sozi)
+		# pySerial for HPGL plotting
+		$cp_cmd -RL "$packages_path/serial" "$pkgpython"
+		# scour and its dependency six
+		$cp_cmd -RL "$packages_path/scour" "$pkgpython"
+		$cp_cmd -RL "$packages_path/six.py" "$pkgpython"
+		# PyGTK (optional)
 		$cp_cmd -RL "$packages_path/cairo" "$pkgpython"
 		$cp_cmd -RL "$packages_path/glib" "$pkgpython"
 		$cp_cmd -RL "$packages_path/gobject" "$pkgpython"
@@ -535,8 +555,15 @@ sed -e "s,__build_arch__,$_build_arch,g" -i "" "$scrpath"
 echo "APPLInks" > $package/Contents/PkgInfo
 
 # Pull in extra requirements for Pango and GTK
-mkdir -p $pkgetc/pango
-touch "$pkgetc/pango/pangorc"
+PANGOVERSION=$(pkg-config --modversion pango)
+PANGOVERSION_MINOR="$(cut -d. -f2 <<< $PANGOVERSION)"
+
+if [ $PANGOVERSION_MINOR -lt 37 ]; then
+	mkdir -p $pkgetc/pango
+	touch "$pkgetc/pango/pangorc"
+else
+	echo "Newer pango version found, modules are built-in"
+fi
 
 # We use a modified fonts.conf file so only need the dtd
 mkdir -p $pkgshare/xml/fontconfig
@@ -548,9 +575,12 @@ $cp_cmd -r $LIBPREFIX/share/fontconfig/conf.avail $pkgshare/fontconfig/
 (cd $pkgetc/fonts/conf.d && $ln_cmd ../../../share/fontconfig/conf.avail/10-autohint.conf)
 (cd $pkgetc/fonts/conf.d && $ln_cmd ../../../share/fontconfig/conf.avail/70-no-bitmaps.conf)
 
-pango_version=`pkg-config --variable=pango_module_version pango`
-mkdir -p $pkglib/pango/$pango_version/modules
-$cp_cmd $LIBPREFIX/lib/pango/$pango_version/modules/*.so $pkglib/pango/$pango_version/modules/
+if [ $PANGOVERSION_MINOR -lt 37 ]; then
+	# Pull in modules
+	pango_mod_version=`pkg-config --variable=pango_module_version pango`
+	mkdir -p $pkglib/pango/$pango_mod_version/modules
+	$cp_cmd $LIBPREFIX/lib/pango/$pango_mod_version/modules/*.so $pkglib/pango/$pango_mod_version/modules/
+fi
 
 gtk_version=`pkg-config --variable=gtk_binary_version gtk+-2.0`
 mkdir -p $pkglib/gtk-2.0/$gtk_version/{engines,immodules,printbackends}
@@ -569,9 +599,11 @@ sed -e "s,__gdk_pixbuf_version__,$gdk_pixbuf_version,g" -i "" "$scrpath"
 # recreate loaders and modules caches based on actually included modules
 
 # Pango modules
-pango-querymodules "$pkglib/pango/$pango_version"/modules/*.so \
-    | sed -e "s,$PWD/$pkgresources,@loader_path/..,g" \
-    > "$pkgetc"/pango/pango.modules
+if [ $PANGOVERSION_MINOR -lt 37 ]; then
+	pango-querymodules "$pkglib/pango/$pango_mod_version"/modules/*.so \
+		| sed -e "s,$PWD/$pkgresources,@loader_path/..,g" \
+		> "$pkgetc"/pango/pango.modules
+fi
 
 # Gtk immodules
 gtk-query-immodules-2.0 "$pkglib/gtk-2.0/$gtk_version"/immodules/*.so \
@@ -623,7 +655,8 @@ sed -e "s,IMAGEMAGICKVER,$IMAGEMAGICKVER,g" -i "" "$scrpath"
 sed -e "s,IMAGEMAGICKVER_MAJOR,$IMAGEMAGICKVER_MAJOR,g" -i "" "$scrpath"
 
 # Copy aspell dictionary files:
-$cp_cmd -r "$LIBPREFIX/share/aspell" "$pkgresources/share/"
+$cp_cmd -r "$LIBPREFIX/lib/aspell-$ASPELL_VERSION" "$pkglib/"
+$cp_cmd -r "$LIBPREFIX/share/aspell" "$pkgshare/"
 
 # Copy Poppler data:
 $cp_cmd -r "$LIBPREFIX/share/poppler" "$pkgshare"
@@ -832,6 +865,20 @@ else
 
 fi    
 
+# Patch files in app bundle
+#----------------------------------------------------------
+
+PATCH_FILE_DIR="app_patches"
+
+if [ -d "$PATCH_FILE_DIR" ]; then
+	echo "Applying patches in '$PATCH_FILE_DIR'"
+	for PATCH in ${PATCH_FILE_DIR}/*.patch; do
+		patch -d ${package} -p0 < $PATCH || {
+			echo "Patch failed!"
+			exit 1
+		}
+	done
+fi
 
 # All done.
 #----------------------------------------------------------

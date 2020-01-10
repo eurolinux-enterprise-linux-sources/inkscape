@@ -22,10 +22,6 @@
 #include <iostream>
 #include <vector>
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/filechooserbutton.h>
 #include "ui/widget/spinbutton.h"
 #include <stddef.h>
@@ -63,6 +59,7 @@ class PrefCheckButton : public Gtk::CheckButton
 public:
     void init(Glib::ustring const &label, Glib::ustring const &prefs_path,
               bool default_value);
+    sigc::signal<void, bool> changed_signal;
 protected:
     Glib::ustring _prefs_path;
     void on_toggled();
@@ -306,9 +303,9 @@ public:
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0))
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

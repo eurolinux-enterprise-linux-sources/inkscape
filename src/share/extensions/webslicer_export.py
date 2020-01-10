@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 # standard library
 import os
@@ -23,8 +23,6 @@ import tempfile
 # local library
 from webslicer_effect import *
 import inkex
-
-inkex.localize()
 
 
 class WebSlicer_Export(WebSlicer_Effect):
@@ -72,7 +70,13 @@ class WebSlicer_Export(WebSlicer_Effect):
             else:
                 inkex.errormsg(_('The directory "%s" does not exists.') % self.options.dir)
                 return
-        self.unique_html_id( self.get_slicer_layer() )
+        # Check whether slicer layer exists (bug #1198826)
+        slicer_layer = self.get_slicer_layer()
+        if slicer_layer is None:
+            inkex.errormsg(_('No slicer layer found.'))
+            return {'error':'No slicer layer found.'}
+        else:
+            self.unique_html_id( slicer_layer )
         return None
 
 

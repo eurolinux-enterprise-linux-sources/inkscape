@@ -21,9 +21,11 @@
 #include <config.h>
 #endif
 
+#include <iostream>
+
 #include "filedialogimpl-gtkmm.h"
-#include "dialogs/dialog-events.h"
-#include "interface.h"
+#include "ui/dialog-events.h"
+#include "ui/interface.h"
 #include "io/sys.h"
 #include "path-prefix.h"
 #include "preferences.h"
@@ -40,6 +42,9 @@
 #include <glibmm/i18n.h>
 #include <glibmm/miscutils.h>
 
+#include <glibmm/regex.h>
+
+#include "document.h"
 #include "extension/input.h"
 #include "extension/output.h"
 #include "extension/db.h"
@@ -190,6 +195,12 @@ void SVGPreview::showImage(Glib::ustring &theFileName)
 {
     Glib::ustring fileName = theFileName;
 
+    // Let's get real width and height from SVG file. These are template
+    // files so we assume they are well formed.
+
+    // std::cout << "SVGPreview::showImage: " << theFileName << std::endl;
+    std::string width;
+    std::string height;
 
     /*#####################################
     # LET'S HAVE SOME FUN WITH SVG!
@@ -226,6 +237,46 @@ void SVGPreview::showImage(Glib::ustring &theFileName)
 
     gint imgWidth = img->get_width();
     gint imgHeight = img->get_height();
+    
+    Glib::ustring svg = ".svg";
+    if (hasSuffix(fileName, svg)) {
+        std::ifstream input(theFileName.c_str());
+        if( !input ) {
+            std::cerr << "SVGPreview::showImage: Failed to open file: " << theFileName << std::endl;
+        } else {
+
+            std::string token;
+
+            Glib::MatchInfo match_info;
+            Glib::RefPtr<Glib::Regex> regex1 = Glib::Regex::create("width=\"(.*)\"");
+            Glib::RefPtr<Glib::Regex> regex2 = Glib::Regex::create("height=\"(.*)\"");
+     
+            while( !input.eof() && (height.empty() || width.empty()) ) {
+
+                input >> token;
+                // std::cout << "|" << token << "|" << std::endl;
+
+                if (regex1->match(token, match_info)) {
+                    width = match_info.fetch(1).raw();
+                }
+
+                if (regex2->match(token, match_info)) {
+                    height = match_info.fetch(1).raw();
+                }
+
+            }
+        }
+    }
+    
+    // TODO: replace int to string conversion with std::to_string when fully C++11 compliant
+    if (height.empty() || width.empty()) {
+        std::ostringstream s_width;
+        std::ostringstream s_height;
+        s_width << imgWidth;
+        s_height << imgHeight;
+        width = s_width.str();
+        height = s_height.str();
+    }
 
     // Find the minimum scale to fit the image inside the preview area
     double scaleFactorX = (0.9 * (double)previewWidth) / ((double)imgWidth);
@@ -269,7 +320,7 @@ void SVGPreview::showImage(Glib::ustring &theFileName)
                            "  style=\"font-size:24.000000;font-style:normal;font-weight:normal;"
                            "    fill:#000000;fill-opacity:1.0000000;stroke:none;"
                            "    font-family:Sans\"\n"
-                           "  x=\"10\" y=\"26\">%d x %d</text>\n" //# VALUES HERE
+                           "  x=\"10\" y=\"26\">%s x %s</text>\n" //# VALUES HERE
                            "</svg>\n\n";
 
     // if (!Glib::get_charset()) //If we are not utf8
@@ -279,7 +330,7 @@ void SVGPreview::showImage(Glib::ustring &theFileName)
     /* FIXME: Do proper XML quoting for fileName. */
     gchar *xmlBuffer =
         g_strdup_printf(xformat, previewWidth, previewHeight, imgX, imgY, scaledImgWidth, scaledImgHeight,
-                        fileName.c_str(), rectX, rectY, rectWidth, rectHeight, imgWidth, imgHeight);
+                        fileName.c_str(), rectX, rectY, rectWidth, rectHeight, width.c_str(), height.c_str() );
 
     // g_message("%s\n", xmlBuffer);
 
@@ -504,7 +555,7 @@ bool SVGPreview::set(Glib::ustring &fileName, int dialogType)
         Glib::ustring fileNameUtf8 = Glib::filename_to_utf8(fileName);
         gchar *fName = const_cast<gchar *>(
             fileNameUtf8.c_str()); // const-cast probably not necessary? (not necessary on Windows version of stat())
-        struct stat info;
+        GStatBuf info;
         if (g_stat(fName, &info)) // stat returns 0 upon success
         {
             g_warning("SVGPreview::set() : %s : %s", fName, strerror(errno));
@@ -538,8 +589,9 @@ bool SVGPreview::set(Glib::ustring &fileName, int dialogType)
 
 SVGPreview::SVGPreview()
 {
-    if (!INKSCAPE)
-        inkscape_application_init("", false);
+    // \FIXME Why?!!??
+    if (!Inkscape::Application::exists())
+        Inkscape::Application::create("", false);
     document = NULL;
     viewerGtk = NULL;
     set_size_request(150, 150);
@@ -1044,7 +1096,7 @@ FileSaveDialogImplGtk::FileSaveDialogImplGtk(Gtk::Window &parentWindow, const Gl
     }
 
     // allow easy access to the user's own templates folder
-    gchar *templates = profile_path("templates");
+    gchar *templates = Inkscape::Application::profile_path("templates");
     if (Inkscape::IO::file_test(templates, G_FILE_TEST_EXISTS) &&
         Inkscape::IO::file_test(templates, G_FILE_TEST_IS_DIR) && g_path_is_absolute(templates)) {
         add_shortcut_folder(templates);

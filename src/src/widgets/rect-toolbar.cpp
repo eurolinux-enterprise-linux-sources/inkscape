@@ -31,12 +31,12 @@
 #include <glibmm/i18n.h>
 
 #include "rect-toolbar.h"
-#include "desktop-handles.h"
+
 #include "desktop.h"
 #include "document-undo.h"
-#include "ege-adjustment-action.h"
-#include "ege-output-action.h"
-#include "ink-action.h"
+#include "widgets/ege-adjustment-action.h"
+#include "widgets/ege-output-action.h"
+#include "widgets/ink-action.h"
 #include "inkscape.h"
 #include "preferences.h"
 #include "selection.h"
@@ -44,6 +44,7 @@
 #include "sp-rect.h"
 #include "toolbox.h"
 #include "ui/icon-names.h"
+#include "ui/tools/rect-tool.h"
 #include "ui/uxmanager.h"
 #include "ui/widget/unit-tracker.h"
 #include "util/units.h"
@@ -87,8 +88,9 @@ static void sp_rtb_value_changed(GtkAdjustment *adj, GObject *tbl, gchar const *
 
     UnitTracker* tracker = reinterpret_cast<UnitTracker*>(g_object_get_data( tbl, "tracker" ));
     Unit const *unit = tracker->getActiveUnit();
+    g_return_if_fail(unit != NULL);
 
-    if (DocumentUndo::getUndoSensitive(sp_desktop_document(desktop))) {
+    if (DocumentUndo::getUndoSensitive(desktop->getDocument())) {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
         prefs->setDouble(Glib::ustring("/tools/shapes/rect/") + value_name,
             Quantity::convert(gtk_adjustment_get_value(adj), unit, "px"));
@@ -103,13 +105,14 @@ static void sp_rtb_value_changed(GtkAdjustment *adj, GObject *tbl, gchar const *
     g_object_set_data( tbl, "freeze", GINT_TO_POINTER(TRUE));
 
     bool modmade = false;
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
-    for (GSList const *items = selection->itemList(); items != NULL; items = items->next) {
-        if (SP_IS_RECT(items->data)) {
+    Inkscape::Selection *selection = desktop->getSelection();
+    std::vector<SPItem*> itemlist=selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i){
+        if (SP_IS_RECT(*i)) {
             if (gtk_adjustment_get_value(adj) != 0) {
-                (SP_RECT(items->data)->*setter)(Quantity::convert(gtk_adjustment_get_value(adj), unit, sp_desktop_namedview(desktop)->svg_units));
+                (SP_RECT(*i)->*setter)(Quantity::convert(gtk_adjustment_get_value(adj), unit, "px"));
             } else {
-                SP_OBJECT(items->data)->getRepr()->setAttribute(value_name, NULL);
+                (*i)->getRepr()->setAttribute(value_name, NULL);
             }
             modmade = true;
         }
@@ -118,7 +121,7 @@ static void sp_rtb_value_changed(GtkAdjustment *adj, GObject *tbl, gchar const *
     sp_rtb_sensitivize( tbl );
 
     if (modmade) {
-        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_RECT,
+        DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_RECT,
                            _("Change rectangle"));
     }
 
@@ -179,7 +182,6 @@ static void rect_tb_event_attr_changed(Inkscape::XML::Node * /*repr*/, gchar con
 
     UnitTracker* tracker = reinterpret_cast<UnitTracker*>( g_object_get_data( tbl, "tracker" ) );
     Unit const *unit = tracker->getActiveUnit();
-    Unit const *svg_unit = sp_desktop_namedview(SP_ACTIVE_DESKTOP)->svg_units;
     g_return_if_fail(unit != NULL);
 
     gpointer item = g_object_get_data( tbl, "item" );
@@ -188,28 +190,28 @@ static void rect_tb_event_attr_changed(Inkscape::XML::Node * /*repr*/, gchar con
             GtkAdjustment *adj = GTK_ADJUSTMENT( g_object_get_data( tbl, "rx" ) );
 
             gdouble rx = SP_RECT(item)->getVisibleRx();
-            gtk_adjustment_set_value(adj, Quantity::convert(rx, svg_unit, unit));
+            gtk_adjustment_set_value(adj, Quantity::convert(rx, "px", unit));
         }
 
         {
             GtkAdjustment *adj = GTK_ADJUSTMENT( g_object_get_data( tbl, "ry" ) );
 
             gdouble ry = SP_RECT(item)->getVisibleRy();
-            gtk_adjustment_set_value(adj, Quantity::convert(ry, svg_unit, unit));
+            gtk_adjustment_set_value(adj, Quantity::convert(ry, "px", unit));
         }
 
         {
             GtkAdjustment *adj = GTK_ADJUSTMENT( g_object_get_data( tbl, "width" ) );
 
             gdouble width = SP_RECT(item)->getVisibleWidth();
-            gtk_adjustment_set_value(adj, Quantity::convert(width, svg_unit, unit));
+            gtk_adjustment_set_value(adj, Quantity::convert(width, "px", unit));
         }
 
         {
             GtkAdjustment *adj = GTK_ADJUSTMENT( g_object_get_data( tbl, "height" ) );
 
             gdouble height = SP_RECT(item)->getVisibleHeight();
-            gtk_adjustment_set_value(adj, Quantity::convert(height, svg_unit, unit));
+            gtk_adjustment_set_value(adj, Quantity::convert(height, "px", unit));
         }
     }
 
@@ -241,12 +243,11 @@ static void sp_rect_toolbox_selection_changed(Inkscape::Selection *selection, GO
     }
     purge_repr_listener( tbl, tbl );
 
-    for (GSList const *items = selection->itemList();
-         items != NULL;
-         items = items->next) {
-        if (SP_IS_RECT(reinterpret_cast<SPItem *>(items->data))) {
+    std::vector<SPItem*> itemlist=selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i){
+        if (SP_IS_RECT(*i)) {
             n_selected++;
-            item = reinterpret_cast<SPItem *>(items->data);
+            item = *i;
             repr = item->getRepr();
         }
     }
@@ -287,6 +288,7 @@ static void sp_rect_toolbox_selection_changed(Inkscape::Selection *selection, GO
     }
 }
 
+static void rect_toolbox_watch_ec(SPDesktop* dt, Inkscape::UI::Tools::ToolBase* ec, GObject* holder);
 
 void sp_rect_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GObject* holder)
 {
@@ -304,7 +306,7 @@ void sp_rect_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GObje
     UnitTracker* tracker = new UnitTracker(Inkscape::Util::UNIT_TYPE_LINEAR);
     //tracker->addUnit( SP_UNIT_PERCENT, 0 );
     // fixme: add % meaning per cent of the width/height
-    tracker->setActiveUnit( sp_desktop_namedview(desktop)->display_units );
+    tracker->setActiveUnit(unit_table.getUnit("px"));
     g_object_set_data( holder, "tracker", tracker );
 
     /* W */
@@ -393,13 +395,30 @@ void sp_rect_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GObje
     g_object_set_data( holder, "single", GINT_TO_POINTER(TRUE) );
     sp_rtb_sensitivize( holder );
 
-    sigc::connection *connection = new sigc::connection(
-        sp_desktop_selection(desktop)->connectChanged(sigc::bind(sigc::ptr_fun(sp_rect_toolbox_selection_changed), holder))
-        );
-    g_signal_connect( holder, "destroy", G_CALLBACK(delete_connection), connection );
+    desktop->connectEventContextChanged(sigc::bind(sigc::ptr_fun(rect_toolbox_watch_ec), holder));
     g_signal_connect( holder, "destroy", G_CALLBACK(purge_repr_listener), holder );
 }
 
+static void rect_toolbox_watch_ec(SPDesktop* desktop, Inkscape::UI::Tools::ToolBase* ec, GObject* holder)
+{
+    static sigc::connection changed;
+
+    // use of dynamic_cast<> seems wrong here -- we just need to check the current tool
+
+    if (dynamic_cast<Inkscape::UI::Tools::RectTool *>(ec)) {
+        Inkscape::Selection *sel = desktop->getSelection();
+
+        changed = sel->connectChanged(sigc::bind(sigc::ptr_fun(sp_rect_toolbox_selection_changed), holder));
+
+        // Synthesize an emission to trigger the update
+        sp_rect_toolbox_selection_changed(sel, holder);
+    } else {
+        if (changed) {
+            changed.disconnect();
+            purge_repr_listener(NULL, holder);
+        }
+    }
+}
 
 /*
   Local Variables:
@@ -410,4 +429,4 @@ void sp_rect_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GObje
   fill-column:99
   End:
 */
-// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8 :

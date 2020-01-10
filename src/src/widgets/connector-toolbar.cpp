@@ -32,13 +32,13 @@
 
 #include "connector-toolbar.h"
 #include "conn-avoid-ref.h"
-#include "desktop-handles.h"
+
 #include "desktop.h"
 #include "document-undo.h"
-#include "ege-adjustment-action.h"
+#include "widgets/ege-adjustment-action.h"
 #include "enums.h"
 #include "graphlayout.h"
-#include "ink-action.h"
+#include "widgets/ink-action.h"
 #include "inkscape.h"
 #include "preferences.h"
 #include "selection.h"
@@ -76,8 +76,7 @@ static void sp_connector_path_set_ignore(void)
 static void sp_connector_orthogonal_toggled( GtkToggleAction* act, GObject *tbl )
 {
     SPDesktop *desktop = static_cast<SPDesktop *>(g_object_get_data( tbl, "desktop" ));
-    Inkscape::Selection * selection = sp_desktop_selection(desktop);
-    SPDocument *doc = sp_desktop_document(desktop);
+    SPDocument *doc = desktop->getDocument();
 
     if (!DocumentUndo::getUndoSensitive(doc)) {
         return;
@@ -98,9 +97,9 @@ static void sp_connector_orthogonal_toggled( GtkToggleAction* act, GObject *tbl 
     gchar *value = is_orthog ? orthog_str : polyline_str ;
 
     bool modmade = false;
-    GSList *l = (GSList *) selection->itemList();
-    while (l) {
-        SPItem *item = SP_ITEM(l->data);
+    std::vector<SPItem*> itemlist=desktop->getSelection()->itemList();
+    for(std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i){
+        SPItem *item = *i;
 
         if (Inkscape::UI::Tools::cc_item_is_connector(item)) {
             item->setAttribute( "inkscape:connector-type",
@@ -108,7 +107,6 @@ static void sp_connector_orthogonal_toggled( GtkToggleAction* act, GObject *tbl 
             item->avoidRef->handleSettingChange();
             modmade = true;
         }
-        l = l->next;
     }
 
     if (!modmade) {
@@ -126,8 +124,7 @@ static void sp_connector_orthogonal_toggled( GtkToggleAction* act, GObject *tbl 
 static void connector_curvature_changed(GtkAdjustment *adj, GObject* tbl)
 {
     SPDesktop *desktop = static_cast<SPDesktop *>(g_object_get_data( tbl, "desktop" ));
-    Inkscape::Selection * selection = sp_desktop_selection(desktop);
-    SPDocument *doc = sp_desktop_document(desktop);
+    SPDocument *doc = desktop->getDocument();
 
     if (!DocumentUndo::getUndoSensitive(doc)) {
         return;
@@ -147,9 +144,9 @@ static void connector_curvature_changed(GtkAdjustment *adj, GObject* tbl)
     g_ascii_dtostr(value, G_ASCII_DTOSTR_BUF_SIZE, newValue);
 
     bool modmade = false;
-    GSList *l = (GSList *) selection->itemList();
-    while (l) {
-        SPItem *item = SP_ITEM(l->data);
+    std::vector<SPItem*> itemlist=desktop->getSelection()->itemList();
+    for(std::vector<SPItem*>::const_iterator i=itemlist.begin();i!=itemlist.end();++i){
+        SPItem *item = *i;
 
         if (Inkscape::UI::Tools::cc_item_is_connector(item)) {
             item->setAttribute( "inkscape:connector-curvature",
@@ -157,7 +154,6 @@ static void connector_curvature_changed(GtkAdjustment *adj, GObject* tbl)
             item->avoidRef->handleSettingChange();
             modmade = true;
         }
-        l = l->next;
     }
 
     if (!modmade) {
@@ -176,7 +172,7 @@ static void connector_curvature_changed(GtkAdjustment *adj, GObject* tbl)
 static void connector_spacing_changed(GtkAdjustment *adj, GObject* tbl)
 {
     SPDesktop *desktop = static_cast<SPDesktop *>(g_object_get_data( tbl, "desktop" ));
-    SPDocument *doc = sp_desktop_document(desktop);
+    SPDocument *doc = desktop->getDocument();
 
     if (!DocumentUndo::getUndoSensitive(doc)) {
         return;
@@ -204,17 +200,15 @@ static void connector_spacing_changed(GtkAdjustment *adj, GObject* tbl)
     desktop->namedview->updateRepr();
     bool modmade = false;
 
-    GSList *items = get_avoided_items(NULL, desktop->currentRoot(), desktop);
-    for ( GSList const *iter = items ; iter != NULL ; iter = iter->next ) {
-        SPItem *item = reinterpret_cast<SPItem *>(iter->data);
+    std::vector<SPItem *> items;
+    items = get_avoided_items(items, desktop->currentRoot(), desktop);
+    for (std::vector<SPItem *>::const_iterator iter = items.begin(); iter != items.end(); ++iter ) {
+        SPItem *item = *iter;
         Geom::Affine m = Geom::identity();
         avoid_item_move(&m, item);
         modmade = true;
     }
 
-    if (items) {
-        g_slist_free(items);
-    }
     if(modmade) {
         DocumentUndo::done(doc, SP_VERB_CONTEXT_CONNECTOR,
                        _("Change connector spacing"));
@@ -233,11 +227,11 @@ static void sp_connector_graph_layout(void)
     int saved_compensation = prefs->getInt("/options/clonecompensation/value", SP_CLONE_COMPENSATION_UNMOVED);
     prefs->setInt("/options/clonecompensation/value", SP_CLONE_COMPENSATION_UNMOVED);
 
-    graphlayout(sp_desktop_selection(SP_ACTIVE_DESKTOP)->itemList());
+    graphlayout(SP_ACTIVE_DESKTOP->getSelection()->itemList());
 
     prefs->setInt("/options/clonecompensation/value", saved_compensation);
 
-    DocumentUndo::done(sp_desktop_document(SP_ACTIVE_DESKTOP), SP_VERB_DIALOG_ALIGN_DISTRIBUTE, _("Arrange connector network"));
+    DocumentUndo::done(SP_ACTIVE_DESKTOP->getDocument(), SP_VERB_DIALOG_ALIGN_DISTRIBUTE, _("Arrange connector network"));
 }
 
 static void sp_directed_graph_layout_toggled( GtkToggleAction* act, GObject * /*tbl*/ )
@@ -402,7 +396,7 @@ void sp_connector_toolbox_prep( SPDesktop *desktop, GtkActionGroup* mainActions,
         gtk_toggle_action_set_active(GTK_TOGGLE_ACTION(act), ( tbuttonstate ? TRUE : FALSE ));
 
         g_signal_connect_after( G_OBJECT(act), "toggled", G_CALLBACK(sp_directed_graph_layout_toggled), holder );
-        sp_desktop_selection(desktop)->connectChanged(sigc::bind(sigc::ptr_fun(sp_connector_toolbox_selection_changed), holder));
+        desktop->getSelection()->connectChanged(sigc::bind(sigc::ptr_fun(sp_connector_toolbox_selection_changed), holder));
     }
 
     // Avoid overlaps toggle button

@@ -27,7 +27,7 @@ SPPaintServer *SPPaintServerReference::getObject() const
 
 bool SPPaintServerReference::_acceptObject(SPObject *obj) const
 {
-    return SP_IS_PAINT_SERVER(obj);
+    return SP_IS_PAINT_SERVER(obj) && URIReference::_acceptObject(obj);
 }
 
 SPPaintServer::SPPaintServer() : SPObject() {
@@ -39,7 +39,9 @@ SPPaintServer::~SPPaintServer() {
 
 bool SPPaintServer::isSwatch() const
 {
-    return swatch;
+    if( this ) // Protect against assumption that "vector" always exists.
+        return swatch;
+    return( false );
 }
 
 
@@ -80,7 +82,6 @@ cairo_pattern_t* SPPaintServer::pattern_new(cairo_t * /*ct*/, Geom::OptRect cons
 {
     return NULL;
 }
-
 
 /*
   Local Variables:

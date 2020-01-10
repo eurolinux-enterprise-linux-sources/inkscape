@@ -12,15 +12,14 @@
  *    Released under GNU GPL, read the file 'COPYING' for more information.
  */
 
-#include <map>
-#include <list>
 #include <boost/optional.hpp>
-#include <glib.h> // for g_assert
+#include <cstdio>
+#include <list>
 
+#include "snap-candidate.h"
 #include "snapped-point.h"
 #include "snapped-line.h"
 #include "snapped-curve.h"
-#include "snap-candidate.h"
 
 struct IntermSnapResults {
     std::list<Inkscape::SnappedPoint> points;
@@ -77,6 +76,8 @@ public:
         SnapConstraint(Geom::Point const &d) : _point(), _direction(d), _radius(0), _type(DIRECTION) {}
         // Constructs a linear constraint
         SnapConstraint(Geom::Point const &p, Geom::Point const &d) : _point(p), _direction(d), _radius(0), _type(LINE) {}
+        // Orthogonal version
+        SnapConstraint(Geom::Point const &p, Geom::Dim2 const &d) : _point(p), _direction(), _radius(0), _type(LINE) {_direction[d] = 1.;}
         SnapConstraint(Geom::Line const &l) : _point(l.origin()), _direction(l.versor()), _radius(0), _type(LINE) {}
         // Constructs a circular constraint
         SnapConstraint(Geom::Point const &p, Geom::Point const &d, Geom::Coord const &r) : _point(p), _direction(d), _radius(r), _type(CIRCLE) {}
@@ -86,7 +87,7 @@ public:
         bool hasPoint() const {return _type != DIRECTION && _type != UNDEFINED;}
 
         Geom::Point getPoint() const {
-            g_assert(_type != DIRECTION && _type != UNDEFINED);
+            assert(_type != DIRECTION && _type != UNDEFINED);
             return _point;
         }
 
@@ -95,7 +96,7 @@ public:
         }
 
         Geom::Coord getRadius() const {
-            g_assert(_type == CIRCLE);
+            assert(_type == CIRCLE);
             return _radius;
         }
 
@@ -121,7 +122,7 @@ public:
                 Geom::Point const p2_on_cl = p1_on_cl + _direction;
                 return Geom::projection(p, Geom::Line(p1_on_cl, p2_on_cl));
             } else {
-                g_warning("Bug: trying to find the projection onto an undefined constraint");
+                printf("WARNING: Bug: trying to find the projection onto an undefined constraint");
                 return Geom::Point();
             }
         }

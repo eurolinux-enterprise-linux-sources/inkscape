@@ -29,7 +29,7 @@
 #include "message-stack.h"
 #include "selection.h"
 #include "style.h"
-#include "desktop-handles.h"
+
 #include "text-editing.h"
 #include "text-chemistry.h"
 #include "sp-flowtext.h"
@@ -43,11 +43,10 @@ using Inkscape::DocumentUndo;
 static SPItem *
 flowtext_in_selection(Inkscape::Selection *selection)
 {
-    for (GSList *items = (GSList *) selection->itemList();
-         items != NULL;
-         items = items->next) {
-        if (SP_IS_FLOWTEXT(items->data))
-            return ((SPItem *) items->data);
+	std::vector<SPItem*> items = selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end();++i){
+        if (SP_IS_FLOWTEXT(*i))
+            return *i;
     }
     return NULL;
 }
@@ -55,11 +54,10 @@ flowtext_in_selection(Inkscape::Selection *selection)
 static SPItem *
 text_or_flowtext_in_selection(Inkscape::Selection *selection)
 {
-    for (GSList *items = (GSList *) selection->itemList();
-         items != NULL;
-         items = items->next) {
-        if (SP_IS_TEXT(items->data) || SP_IS_FLOWTEXT(items->data))
-            return ((SPItem *) items->data);
+	std::vector<SPItem*> items = selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end();++i){
+        if (SP_IS_TEXT(*i) || SP_IS_FLOWTEXT(*i))
+            return *i;
     }
     return NULL;
 }
@@ -67,11 +65,10 @@ text_or_flowtext_in_selection(Inkscape::Selection *selection)
 static SPItem *
 shape_in_selection(Inkscape::Selection *selection)
 {
-    for (GSList *items = (GSList *) selection->itemList();
-         items != NULL;
-         items = items->next) {
-        if (SP_IS_SHAPE(items->data))
-            return ((SPItem *) items->data);
+	std::vector<SPItem*> items = selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end();++i){
+        if (SP_IS_SHAPE(*i))
+            return *i;
     }
     return NULL;
 }
@@ -83,26 +80,26 @@ text_put_on_path()
     if (!desktop)
         return;
 
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
 
     SPItem *text = text_or_flowtext_in_selection(selection);
     SPItem *shape = shape_in_selection(selection);
 
     Inkscape::XML::Document *xml_doc = desktop->doc()->getReprDoc();
 
-    if (!text || !shape || g_slist_length((GSList *) selection->itemList()) != 2) {
-        sp_desktop_message_stack(desktop)->flash(Inkscape::WARNING_MESSAGE, _("Select <b>a text and a path</b> to put text on path."));
+    if (!text || !shape || selection->itemList().size() != 2) {
+        desktop->getMessageStack()->flash(Inkscape::WARNING_MESSAGE, _("Select <b>a text and a path</b> to put text on path."));
         return;
     }
 
     if (SP_IS_TEXT_TEXTPATH(text)) {
-        sp_desktop_message_stack(desktop)->flash(Inkscape::ERROR_MESSAGE, _("This text object is <b>already put on a path</b>. Remove it from the path first. Use <b>Shift+D</b> to look up its path."));
+        desktop->getMessageStack()->flash(Inkscape::ERROR_MESSAGE, _("This text object is <b>already put on a path</b>. Remove it from the path first. Use <b>Shift+D</b> to look up its path."));
         return;
     }
 
     if (SP_IS_RECT(shape)) {
         // rect is the only SPShape which is not <path> yet, and thus SVG forbids us from putting text on it
-        sp_desktop_message_stack(desktop)->flash(Inkscape::ERROR_MESSAGE, _("You cannot put text on a rectangle in this version. Convert rectangle to path first."));
+        desktop->getMessageStack()->flash(Inkscape::ERROR_MESSAGE, _("You cannot put text on a rectangle in this version. Convert rectangle to path first."));
         return;
     }
 
@@ -110,7 +107,7 @@ text_put_on_path()
     if (SP_IS_FLOWTEXT(text)) {
 
         if (!SP_FLOWTEXT(text)->layout.outputExists()) {
-            sp_desktop_message_stack(desktop)->
+            desktop->getMessageStack()->
                 flash(Inkscape::WARNING_MESSAGE, 
                       _("The flowed text(s) must be <b>visible</b> in order to be put on a path."));
         }
@@ -122,14 +119,14 @@ text_put_on_path()
         Inkscape::XML::Node *parent = text->getRepr()->parent();
         parent->appendChild(repr);
 
-        SPItem *new_item = (SPItem *) sp_desktop_document(desktop)->getObjectByRepr(repr);
+        SPItem *new_item = (SPItem *) desktop->getDocument()->getObjectByRepr(repr);
         new_item->doWriteTransform(repr, text->transform);
         new_item->updateRepr();
 
         Inkscape::GC::release(repr);
         text->deleteObject(); // delete the orignal flowtext
 
-        sp_desktop_document(desktop)->ensureUpToDate();
+        desktop->getDocument()->ensureUpToDate();
 
         selection->clear();
 
@@ -181,7 +178,7 @@ text_put_on_path()
     text->getRepr()->setAttribute("x", NULL);
     text->getRepr()->setAttribute("y", NULL);
 
-    DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_TEXT, 
+    DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_TEXT, 
                        _("Put text on path"));
     g_slist_free(text_reprs);
 }
@@ -191,19 +188,17 @@ text_remove_from_path()
 {
     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
 
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
 
     if (selection->isEmpty()) {
-        sp_desktop_message_stack(desktop)->flash(Inkscape::WARNING_MESSAGE, _("Select <b>a text on path</b> to remove it from path."));
+        desktop->getMessageStack()->flash(Inkscape::WARNING_MESSAGE, _("Select <b>a text on path</b> to remove it from path."));
         return;
     }
 
     bool did = false;
-
-    for (GSList *items = g_slist_copy((GSList *) selection->itemList());
-         items != NULL;
-         items = items->next) {
-        SPObject *obj = SP_OBJECT(items->data);
+    std::vector<SPItem*> items(selection->itemList());
+    for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end();++i){
+        SPObject *obj = *i;
 
         if (SP_IS_TEXT_TEXTPATH(obj)) {
             SPObject *tp = obj->firstChild();
@@ -215,11 +210,11 @@ text_remove_from_path()
     }
 
     if (!did) {
-        sp_desktop_message_stack(desktop)->flash(Inkscape::ERROR_MESSAGE, _("<b>No texts-on-paths</b> in the selection."));
+        desktop->getMessageStack()->flash(Inkscape::ERROR_MESSAGE, _("<b>No texts-on-paths</b> in the selection."));
     } else {
-        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_TEXT, 
+        DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_TEXT, 
                            _("Remove text from path"));
-        selection->setList(g_slist_copy((GSList *) selection->itemList())); // reselect to update statusbar description
+        selection->setList(selection->itemList()); // reselect to update statusbar description
     }
 }
 
@@ -256,19 +251,18 @@ text_remove_all_kerns()
 {
     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
 
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
 
     if (selection->isEmpty()) {
-        sp_desktop_message_stack(desktop)->flash(Inkscape::WARNING_MESSAGE, _("Select <b>text(s)</b> to remove kerns from."));
+        desktop->getMessageStack()->flash(Inkscape::WARNING_MESSAGE, _("Select <b>text(s)</b> to remove kerns from."));
         return;
     }
 
     bool did = false;
 
-    for (GSList *items = g_slist_copy((GSList *) selection->itemList());
-         items != NULL;
-         items = items->next) {
-        SPObject *obj = SP_OBJECT(items->data);
+    std::vector<SPItem*> items = selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end();++i){
+        SPObject *obj = *i;
 
         if (!SP_IS_TEXT(obj) && !SP_IS_TSPAN(obj) && !SP_IS_FLOWTEXT(obj)) {
             continue;
@@ -280,9 +274,9 @@ text_remove_all_kerns()
     }
 
     if (!did) {
-        sp_desktop_message_stack(desktop)->flash(Inkscape::ERROR_MESSAGE, _("Select <b>text(s)</b> to remove kerns from."));
+        desktop->getMessageStack()->flash(Inkscape::ERROR_MESSAGE, _("Select <b>text(s)</b> to remove kerns from."));
     } else {
-        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_TEXT, 
+        DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_TEXT, 
                            _("Remove manual kerns"));
     }
 }
@@ -294,16 +288,16 @@ text_flow_into_shape()
     if (!desktop)
         return;
 
-    SPDocument *doc = sp_desktop_document (desktop);
+    SPDocument *doc = desktop->getDocument();
     Inkscape::XML::Document *xml_doc = doc->getReprDoc();
 
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
 
     SPItem *text = text_or_flowtext_in_selection(selection);
     SPItem *shape = shape_in_selection(selection);
 
-    if (!text || !shape || g_slist_length((GSList *) selection->itemList()) < 2) {
-        sp_desktop_message_stack(desktop)->flash(Inkscape::WARNING_MESSAGE, _("Select <b>a text</b> and one or more <b>paths or shapes</b> to flow text into frame."));
+    if (!text || !shape || selection->itemList().size() < 2) {
+        desktop->getMessageStack()->flash(Inkscape::WARNING_MESSAGE, _("Select <b>a text</b> and one or more <b>paths or shapes</b> to flow text into frame."));
         return;
     }
 
@@ -326,10 +320,9 @@ text_flow_into_shape()
     g_return_if_fail(SP_IS_FLOWREGION(object));
 
     /* Add clones */
-    for (GSList *items = (GSList *) selection->itemList();
-         items != NULL;
-         items = items->next) {
-        SPItem *item = SP_ITEM(items->data);
+    std::vector<SPItem*> items = selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end();++i){
+        SPItem *item = *i;
         if (SP_IS_SHAPE(item)){
             Inkscape::XML::Node *clone = xml_doc->createElement("svg:use");
             clone->setAttribute("x", "0");
@@ -375,7 +368,7 @@ text_flow_into_shape()
     DocumentUndo::done(doc, SP_VERB_CONTEXT_TEXT,
                        _("Flow text into shape"));
 
-    sp_desktop_selection(desktop)->set(SP_ITEM(root_object));
+    desktop->getSelection()->set(SP_ITEM(root_object));
 
     Inkscape::GC::release(root_repr);
     Inkscape::GC::release(region_repr);
@@ -388,29 +381,28 @@ text_unflow ()
     if (!desktop)
         return;
 
-    SPDocument *doc = sp_desktop_document (desktop);
+    SPDocument *doc = desktop->getDocument();
     Inkscape::XML::Document *xml_doc = doc->getReprDoc();
 
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
 
 
-    if (!flowtext_in_selection(selection) || g_slist_length((GSList *) selection->itemList()) < 1) {
-        sp_desktop_message_stack(desktop)->flash(Inkscape::WARNING_MESSAGE, _("Select <b>a flowed text</b> to unflow it."));
+    if (!flowtext_in_selection(selection) || selection->itemList().size() < 1) {
+        desktop->getMessageStack()->flash(Inkscape::WARNING_MESSAGE, _("Select <b>a flowed text</b> to unflow it."));
         return;
     }
 
-    GSList *new_objs = NULL;
+    std::vector<SPItem*> new_objs;
     GSList *old_objs = NULL;
 
-    for (GSList *items = g_slist_copy((GSList *) selection->itemList());
-         items != NULL;
-         items = items->next) {
+    std::vector<SPItem*> items = selection->itemList();
+    for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end();++i){
 
-        if (!SP_IS_FLOWTEXT(SP_OBJECT(items->data))) {
+        if (!SP_IS_FLOWTEXT(*i)) {
             continue;
         }
 
-        SPItem *flowtext = SP_ITEM(items->data);
+        SPItem *flowtext = *i;
 
         // we discard transform when unflowing, but we must preserve expansion which is visible as
         // font size multiplier
@@ -451,7 +443,7 @@ text_unflow ()
         SPText *text = SP_TEXT(text_object);
         text->_adjustFontsizeRecursive(text, ex);
 
-        new_objs = g_slist_prepend (new_objs, text_object);
+        new_objs.push_back((SPItem*)text_object);
         old_objs = g_slist_prepend (old_objs, flowtext);
 
         Inkscape::GC::release(rtext);
@@ -460,13 +452,13 @@ text_unflow ()
     }
 
     selection->clear();
+    reverse(new_objs.begin(),new_objs.end());
     selection->setList(new_objs);
     for (GSList *i = old_objs; i; i = i->next) {
         SP_OBJECT(i->data)->deleteObject (true);
     }
 
     g_slist_free (old_objs);
-    g_slist_free (new_objs);
 
     DocumentUndo::done(doc, SP_VERB_CONTEXT_TEXT, 
                        _("Unflow flowed text"));
@@ -477,27 +469,27 @@ flowtext_to_text()
 {
     SPDesktop *desktop = SP_ACTIVE_DESKTOP;
 
-    Inkscape::Selection *selection = sp_desktop_selection(desktop);
+    Inkscape::Selection *selection = desktop->getSelection();
 
     if (selection->isEmpty()) {
-        sp_desktop_message_stack(desktop)->flash(Inkscape::WARNING_MESSAGE, 
+        desktop->getMessageStack()->flash(Inkscape::WARNING_MESSAGE, 
                                                  _("Select <b>flowed text(s)</b> to convert."));
         return;
     }
 
     bool did = false;
 
-    GSList *reprs = NULL;
-    GSList *items = g_slist_copy((GSList *) selection->itemList());
-    for (; items != NULL; items = items->next) {
+    std::vector<Inkscape::XML::Node*> reprs;
+    std::vector<SPItem*> items(selection->itemList());
+    for(std::vector<SPItem*>::const_iterator i=items.begin();i!=items.end();++i){
         
-        SPItem *item = (SPItem *) items->data;
+        SPItem *item = *i;
 
         if (!SP_IS_FLOWTEXT(item))
             continue;
 
         if (!SP_FLOWTEXT(item)->layout.outputExists()) {
-            sp_desktop_message_stack(desktop)->
+            desktop->getMessageStack()->
                 flash(Inkscape::WARNING_MESSAGE, 
                       _("The flowed text(s) must be <b>visible</b> in order to be converted."));
             return;
@@ -512,30 +504,28 @@ flowtext_to_text()
         Inkscape::XML::Node *parent = item->getRepr()->parent();
         parent->addChild(repr, item->getRepr());
 
-        SPItem *new_item = reinterpret_cast<SPItem *>(sp_desktop_document(desktop)->getObjectByRepr(repr));
+        SPItem *new_item = reinterpret_cast<SPItem *>(desktop->getDocument()->getObjectByRepr(repr));
         new_item->doWriteTransform(repr, item->transform);
         new_item->updateRepr();
     
         Inkscape::GC::release(repr);
         item->deleteObject();
 
-        reprs = g_slist_prepend(reprs, repr);
+        reprs.push_back(repr);
     }
 
-    g_slist_free(items);
 
     if (did) {
-        DocumentUndo::done(sp_desktop_document(desktop), 
+        DocumentUndo::done(desktop->getDocument(), 
                            SP_VERB_OBJECT_FLOWTEXT_TO_TEXT,
                            _("Convert flowed text to text"));
         selection->setReprList(reprs);        
     } else {
-        sp_desktop_message_stack(desktop)->
+        desktop->getMessageStack()->
             flash(Inkscape::ERROR_MESSAGE,
                   _("<b>No flowed text(s)</b> to convert in the selection."));
     }
 
-    g_slist_free(reprs);
 }
 
 

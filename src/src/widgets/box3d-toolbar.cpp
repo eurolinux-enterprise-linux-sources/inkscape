@@ -32,17 +32,18 @@
 
 #include "box3d-toolbar.h"
 #include "box3d.h"
-#include "desktop-handles.h"
+
 #include "desktop.h"
 #include "document-undo.h"
 #include "document.h"
-#include "ege-adjustment-action.h"
-#include "ink-action.h"
+#include "widgets/ege-adjustment-action.h"
+#include "widgets/ink-action.h"
 #include "inkscape.h"
 #include "persp3d.h"
 #include "selection.h"
 #include "toolbox.h"
 #include "ui/icon-names.h"
+#include "ui/tools/box3d-tool.h"
 #include "ui/uxmanager.h"
 #include "verbs.h"
 #include "xml/node-event-vector.h"
@@ -182,9 +183,9 @@ static void box3d_toolbox_selection_changed(Inkscape::Selection *selection, GObj
     purge_repr_listener(tbl, tbl);
 
     SPItem *item = selection->singleItem();
-    if (item && SP_IS_BOX3D(item)) {
+    SPBox3D *box = dynamic_cast<SPBox3D *>(item);
+    if (box) {
         // FIXME: Also deal with multiple selected boxes
-        SPBox3D *box = SP_BOX3D(item);
         Persp3D *persp = box3d_get_perspective(box);
         persp_repr = persp->getRepr();
         if (persp_repr) {
@@ -192,22 +193,22 @@ static void box3d_toolbox_selection_changed(Inkscape::Selection *selection, GObj
             Inkscape::GC::anchor(persp_repr);
             sp_repr_add_listener(persp_repr, &box3d_persp_tb_repr_events, tbl);
             sp_repr_synthesize_events(persp_repr, &box3d_persp_tb_repr_events, tbl);
+
+            SP_ACTIVE_DOCUMENT->setCurrentPersp3D(persp3d_get_from_repr(persp_repr));
+            Inkscape::Preferences *prefs = Inkscape::Preferences::get();
+            prefs->setString("/tools/shapes/3dbox/persp", persp_repr->attribute("id"));
+
+            g_object_set_data(tbl, "freeze", GINT_TO_POINTER(TRUE));
+            box3d_resync_toolbar(persp_repr, tbl);
+            g_object_set_data(tbl, "freeze", GINT_TO_POINTER(FALSE));
         }
-
-        inkscape_active_document()->setCurrentPersp3D(persp3d_get_from_repr(persp_repr));
-        Inkscape::Preferences *prefs = Inkscape::Preferences::get();
-        prefs->setString("/tools/shapes/3dbox/persp", persp_repr->attribute("id"));
-
-        g_object_set_data(tbl, "freeze", GINT_TO_POINTER(TRUE));
-        box3d_resync_toolbar(persp_repr, tbl);
-        g_object_set_data(tbl, "freeze", GINT_TO_POINTER(FALSE));
     }
 }
 
 static void box3d_angle_value_changed(GtkAdjustment *adj, GObject *dataKludge, Proj::Axis axis)
 {
     SPDesktop *desktop = static_cast<SPDesktop *>(g_object_get_data( dataKludge, "desktop" ));
-    SPDocument *document = sp_desktop_document(desktop);
+    SPDocument *document = desktop->getDocument();
 
     // quit if run by the attr_changed or selection changed listener
     if (g_object_get_data( dataKludge, "freeze" )) {
@@ -217,7 +218,7 @@ static void box3d_angle_value_changed(GtkAdjustment *adj, GObject *dataKludge, P
     // in turn, prevent listener from responding
     g_object_set_data(dataKludge, "freeze", GINT_TO_POINTER(TRUE));
 
-    std::list<Persp3D *> sel_persps = sp_desktop_selection(desktop)->perspList();
+    std::list<Persp3D *> sel_persps = desktop->getSelection()->perspList();
     if (sel_persps.empty()) {
         // this can happen when the document is created; we silently ignore it
         return;
@@ -254,7 +255,7 @@ static void box3d_angle_z_value_changed(GtkAdjustment *adj, GObject *dataKludge)
 static void box3d_vp_state_changed( GtkToggleAction *act, GtkAction * /*box3d_angle*/, Proj::Axis axis )
 {
     // TODO: Take all selected perspectives into account
-    std::list<Persp3D *> sel_persps = sp_desktop_selection(inkscape_active_desktop())->perspList();
+    std::list<Persp3D *> sel_persps = SP_ACTIVE_DESKTOP->getSelection()->perspList();
     if (sel_persps.empty()) {
         // this can happen when the document is created; we silently ignore it
         return;
@@ -280,11 +281,13 @@ static void box3d_vp_z_state_changed( GtkToggleAction *act, GtkAction *box3d_ang
     box3d_vp_state_changed(act, box3d_angle, Proj::Z);
 }
 
+static void box3d_toolbox_check_ec(SPDesktop* dt, Inkscape::UI::Tools::ToolBase* ec, GObject* holder);
+
 void box3d_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GObject* holder)
 {
     Inkscape::Preferences *prefs = Inkscape::Preferences::get();
     EgeAdjustmentAction* eact = 0;
-    SPDocument *document = sp_desktop_document (desktop);
+    SPDocument *document = desktop->getDocument();
     Persp3DImpl *persp_impl = document->getCurrentPersp3DImpl();
 
     EgeAdjustmentAction* box3d_angle_x = 0;
@@ -409,11 +412,20 @@ void box3d_toolbox_prep(SPDesktop *desktop, GtkActionGroup* mainActions, GObject
         gtk_toggle_action_set_active( GTK_TOGGLE_ACTION(act), prefs->getBool("/tools/shapes/3dbox/vp_z_state", true) );
     }
 
-    sigc::connection *connection = new sigc::connection(
-        sp_desktop_selection(desktop)->connectChanged(sigc::bind(sigc::ptr_fun(box3d_toolbox_selection_changed), G_OBJECT(holder)))
-       );
-    g_signal_connect(holder, "destroy", G_CALLBACK(delete_connection), connection);
+    desktop->connectEventContextChanged(sigc::bind(sigc::ptr_fun(box3d_toolbox_check_ec), holder));
     g_signal_connect(holder, "destroy", G_CALLBACK(purge_repr_listener), holder);
+}
+
+static void box3d_toolbox_check_ec(SPDesktop* desktop, Inkscape::UI::Tools::ToolBase* ec, GObject* holder)
+{
+    static sigc::connection changed;
+    if (SP_IS_BOX3D_CONTEXT(ec)) {
+        changed = desktop->getSelection()->connectChanged(sigc::bind(sigc::ptr_fun(box3d_toolbox_selection_changed), holder));
+        box3d_toolbox_selection_changed(desktop->getSelection(), holder);
+    } else {
+        if (changed)
+            changed.disconnect();
+    }
 }
 
 /*

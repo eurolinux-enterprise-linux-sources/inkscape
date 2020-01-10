@@ -1,5 +1,5 @@
 Name:           inkscape
-Version:        0.91
+Version:        0.92.2
 Release:        2%{?dist}
 Summary:        Vector-based drawing program using SVG
 
@@ -7,12 +7,6 @@ Group:          Applications/Productivity
 License:        GPLv2+
 URL:            http://inkscape.sourceforge.net/
 Source0:        http://downloads.sourceforge.net/inkscape/%{name}-%{version}.tar.bz2
-Patch0:         inkscape-0.48.2-types.patch
-Patch15:        inkscape-0.91-desktop.patch
-
-%if 0%{?fedora} && 0%{?fedora} < 18
-%define desktop_vendor fedora
-%endif
 
 BuildRequires:  atk-devel
 BuildRequires:  desktop-file-utils
@@ -41,6 +35,7 @@ BuildRequires:  intltool
 BuildRequires:  popt-devel
 # We detect new poppler in inkscape-0.48.2-poppler_020.patch
 BuildRequires:  automake 
+BuildRequires:  cmake
 
 # Disable all for now. TODO: Be smarter
 %if 0
@@ -101,6 +96,7 @@ Summary:        Viewing program for SVG files
 Group:          Applications/Productivity
 # the package requires libperl.so, so it also has to require this:
 Requires:  perl(:MODULE_COMPAT_%(eval "`%{__perl} -V:version`"; echo $version))
+Requires:  inkscape = %{version}-%{release}
 
 %description view
 Viewer for files in W3C standard Scalable Vector Graphics (SVG) file
@@ -119,8 +115,6 @@ graphics in W3C standard Scalable Vector Graphics (SVG) file format.
 
 %prep
 %setup -q
-%patch0 -p1 -b .types
-%patch15 -p1 -b .desktop
 
 # https://bugs.launchpad.net/inkscape/+bug/314381
 # A couple of files have executable bits set,
@@ -142,20 +136,16 @@ export RPM_OPT_FLAGS="$RPM_OPT_FLAGS -std=c++11 -fno-strict-overflow"
 export CFLAGS="$RPM_OPT_FLAGS -fno-strict-aliasing"
 export CXXFLAGS="$RPM_OPT_FLAGS -fno-strict-aliasing"
 
-%configure                      \
-        --with-python           \
-        --with-perl             \
-        --without-gnome-vfs        \
-        --with-xft              \
-        --enable-lcms           \
-        --enable-poppler-cairo 
+cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -DWITH_GNOME_VFS:BOOL=OFF .
 
 make %{?_smp_mflags}
 
 
 %install
 rm -rf $RPM_BUILD_ROOT
-make install DESTDIR=$RPM_BUILD_ROOT
+make install VERBOSE=1 DESTDIR=$RPM_BUILD_ROOT
+sed -i 's/Drawing Shortcut Group/X-Drawing Shortcut Group/g' $RPM_BUILD_ROOT%{_datadir}/applications/%{name}.desktop
+find $RPM_BUILD_ROOT -type f -name 'lib*.a' | xargs rm -f
 
 desktop-file-install --vendor="%{?desktop_vendor}" --delete-original  \
         --dir $RPM_BUILD_ROOT%{_datadir}/applications   \
@@ -211,8 +201,9 @@ fi
 %{_datadir}/inkscape/ui
 %{_datadir}/applications/*inkscape.desktop
 %{_datadir}/icons/hicolor/*/*/inkscape*
+%dir %{_prefix}/lib/inkscape
+%{_prefix}/lib/inkscape/lib*.so
 %{_mandir}/*/*gz
-%{_mandir}/*/*/*gz
 %exclude %{_mandir}/man1/inkview.1*
 %doc AUTHORS COPYING ChangeLog NEWS README
 
@@ -232,6 +223,9 @@ fi
 
 
 %changelog
+* Thu Aug 24 2017 Jan Horak <jhorak@redhat.com> - 0.92.2-2
+- Rebase to version 0.92.2
+
 * Fri Apr  1 2016 Jan Horak <jhorak@redhat.com> - 0.91-2
 - Rebase to version 0.91
 

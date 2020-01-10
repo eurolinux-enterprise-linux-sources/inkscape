@@ -17,21 +17,20 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
+#include <2geom/forward.h>
 #include "sp-item.h"
-#include "2geom/forward.h"
-
-namespace Inkscape { class Selection; }
-
-namespace Inkscape {
-namespace LivePathEffect {
-    class PathParam;
-}
-}
 
 class SPCSSAttr;
 class SPDesktop;
 
 namespace Inkscape {
+
+class Selection;
+
+namespace LivePathEffect {
+    class PathParam;
+}
+
     class SelectionHelper {
     public:
         static void selectAll(SPDesktop *desktop);
@@ -52,7 +51,7 @@ namespace Inkscape {
 } // namespace Inkscape
 
 void sp_selection_delete(SPDesktop *desktop);
-void sp_selection_duplicate(SPDesktop *desktop, bool suppressDone = false);
+void sp_selection_duplicate(SPDesktop *desktop, bool suppressDone = false, bool duplicateLayer = false);
 void sp_edit_clear_all(Inkscape::Selection *selection);
 
 void sp_edit_select_all(SPDesktop *desktop);
@@ -75,13 +74,15 @@ void sp_selection_unsymbol(SPDesktop *desktop);
 void sp_selection_tile(SPDesktop *desktop, bool apply = true);
 void sp_selection_untile(SPDesktop *desktop);
 
-//void sp_selection_group_impl(GSList const *reprs_to_group, Inkscape::XML::Node *group, Inkscape::XML::Document *xml_doc, SPDocument *doc);
 void sp_selection_group(Inkscape::Selection *selection, SPDesktop *desktop);
 void sp_selection_ungroup(Inkscape::Selection *selection, SPDesktop *desktop);
+void sp_selection_ungroup_pop_selection(Inkscape::Selection *selection, SPDesktop *desktop);
 
 void sp_selection_raise(Inkscape::Selection *selection, SPDesktop *desktop);
+void sp_selection_stack_up(Inkscape::Selection *selection, SPDesktop *desktop);
 void sp_selection_raise_to_top(Inkscape::Selection *selection, SPDesktop *desktop);
 void sp_selection_lower(Inkscape::Selection *selection, SPDesktop *desktop);
+void sp_selection_stack_down(Inkscape::Selection *selection, SPDesktop *desktop);
 void sp_selection_lower_to_bottom(Inkscape::Selection *selection, SPDesktop *desktop);
 
 SPCSSAttr *take_style_from_item (SPObject *object);
@@ -108,21 +109,21 @@ void sp_selection_apply_affine(Inkscape::Selection *selection, Geom::Affine cons
 void sp_selection_remove_transform (SPDesktop *desktop);
 void sp_selection_scale_absolute (Inkscape::Selection *selection, double x0, double x1, double y0, double y1);
 void sp_selection_scale_relative(Inkscape::Selection *selection, Geom::Point const &align, Geom::Scale const &scale);
-void sp_selection_rotate_relative (Inkscape::Selection *selection, Geom::Point const &center, gdouble angle);
+void sp_selection_rotate_relative (Inkscape::Selection *selection, Geom::Point const &center, double angle);
 void sp_selection_skew_relative (Inkscape::Selection *selection, Geom::Point const &align, double dx, double dy);
 void sp_selection_move_relative (Inkscape::Selection *selection, Geom::Point const &move, bool compensate = true);
 void sp_selection_move_relative (Inkscape::Selection *selection, double dx, double dy);
 
 void sp_selection_rotate_90 (SPDesktop *desktop, bool ccw);
-void sp_selection_rotate (Inkscape::Selection *selection, gdouble angle);
-void sp_selection_rotate_screen (Inkscape::Selection *selection, gdouble angle);
+void sp_selection_rotate (Inkscape::Selection *selection, double angle);
+void sp_selection_rotate_screen (Inkscape::Selection *selection, double angle);
 
-void sp_selection_scale (Inkscape::Selection *selection, gdouble grow);
-void sp_selection_scale_screen (Inkscape::Selection *selection, gdouble grow_pixels);
-void sp_selection_scale_times (Inkscape::Selection *selection, gdouble times);
+void sp_selection_scale (Inkscape::Selection *selection, double grow);
+void sp_selection_scale_screen (Inkscape::Selection *selection, double grow_pixels);
+void sp_selection_scale_times (Inkscape::Selection *selection, double times);
 
-void sp_selection_move (Inkscape::Selection *selection, gdouble dx, gdouble dy);
-void sp_selection_move_screen (Inkscape::Selection *selection, gdouble dx, gdouble dy);
+void sp_selection_move (Inkscape::Selection *selection, double dx, double dy);
+void sp_selection_move_screen (Inkscape::Selection *selection, double dx, double dy);
 
 void sp_selection_item_next (SPDesktop *desktop);
 void sp_selection_item_prev (SPDesktop *desktop);
@@ -136,15 +137,16 @@ enum SPSelectStrokeStyleType {
     SP_STROKE_COLOR  = 1,
     SP_STROKE_STYLE_WIDTH = 2,
     SP_STROKE_STYLE_DASHES = 3,
-    SP_STROKE_STYLE_MARKERS = 4
+    SP_STROKE_STYLE_MARKERS = 4,
+    SP_STROKE_STYLE_ALL = 5,
+    SP_STYLE_ALL = 6
 };
 
 void sp_select_same_fill_stroke_style(SPDesktop *desktop, gboolean fill, gboolean strok, gboolean style);
-void sp_select_same_stroke_style(SPDesktop *desktop);
 void sp_select_same_object_type(SPDesktop *desktop);
-GSList *sp_get_same_fill_or_stroke_color(SPItem *sel, GSList *src, SPSelectStrokeStyleType type);
-GSList *sp_get_same_stroke_style(SPItem *sel, GSList *src, SPSelectStrokeStyleType type);
-GSList *sp_get_same_object_type(SPItem *sel, GSList *src);
+
+std::vector<SPItem*> sp_get_same_style(SPItem *sel, std::vector<SPItem*> &src, SPSelectStrokeStyleType type=SP_STYLE_ALL);
+std::vector<SPItem*> sp_get_same_object_type(SPItem *sel, std::vector<SPItem*> &src);
 
 void scroll_to_show_item(SPDesktop *desktop, SPItem *item);
 
@@ -156,6 +158,7 @@ void sp_document_get_export_hints (SPDocument * doc, Glib::ustring &filename, fl
 
 void sp_selection_create_bitmap_copy (SPDesktop *desktop);
 
+void sp_selection_set_clipgroup(SPDesktop *desktop);
 void sp_selection_set_mask(SPDesktop *desktop, bool apply_clip_path, bool apply_to_layer);
 void sp_selection_unset_mask(SPDesktop *desktop, bool apply_clip_path);
 
@@ -170,9 +173,9 @@ void unlock_all_in_all_layers(SPDesktop *dt);
 void unhide_all(SPDesktop *dt);
 void unhide_all_in_all_layers(SPDesktop *dt);
 
-GSList *get_all_items(GSList *list, SPObject *from, SPDesktop *desktop, bool onlyvisible, bool onlysensitive, bool ingroups, GSList const *exclude);
+std::vector<SPItem*> &get_all_items(std::vector<SPItem*> &list, SPObject *from, SPDesktop *desktop, bool onlyvisible, bool onlysensitive, bool ingroups, std::vector<SPItem*> const &exclude);
 
-GSList *sp_degroup_list (GSList *items);
+std::vector<SPItem*> sp_degroup_list (std::vector<SPItem*> &items);
 
 /* selection cycling */
 typedef enum

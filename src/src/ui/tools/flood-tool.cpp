@@ -21,6 +21,7 @@
 #include "config.h"
 #endif
 
+#include <cmath>
 #include "trace/potrace/inkscape-potrace.h"
 #include <2geom/pathvector.h>
 #include <gdk/gdkkeysyms.h>
@@ -31,7 +32,7 @@
 #include "color.h"
 #include "context-fns.h"
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "desktop-style.h"
 #include "display/cairo-utils.h"
 #include "display/drawing-context.h"
@@ -50,7 +51,7 @@
 #include "preferences.h"
 #include "rubberband.h"
 #include "selection.h"
-#include "shape-editor.h"
+#include "ui/shape-editor.h"
 #include "sp-defs.h"
 #include "sp-item.h"
 #include "splivarot.h"
@@ -74,25 +75,37 @@ using Inkscape::Display::ExtractARGB32;
 using Inkscape::Display::ExtractRGB32;
 using Inkscape::Display::AssembleARGB32;
 
-#include "tool-factory.h"
-
 namespace Inkscape {
 namespace UI {
 namespace Tools {
-
-namespace {
-	ToolBase* createPaintbucketContext() {
-		return new FloodTool();
-	}
-
-	bool paintbucketContextRegistered = ToolFactory::instance().registerObject("/tools/paintbucket", createPaintbucketContext);
-}
 
 const std::string& FloodTool::getPrefsPath() {
 	return FloodTool::prefsPath;
 }
 
 const std::string FloodTool::prefsPath = "/tools/paintbucket";
+
+// TODO: Replace by C++11 initialization
+// Must match PaintBucketChannels enum
+Glib::ustring ch_init[8] = {
+    _("Visible Colors"),
+    _("Red"),
+    _("Green"),
+    _("Blue"),
+    _("Hue"),
+    _("Saturation"),
+    _("Lightness"),
+    _("Alpha"),
+};
+const std::vector<Glib::ustring> FloodTool::channel_list( ch_init, ch_init+8 );
+
+Glib::ustring gap_init[4] = {
+    NC_("Flood autogap", "None"),
+    NC_("Flood autogap", "Small"),
+    NC_("Flood autogap", "Medium"),
+    NC_("Flood autogap", "Large")
+};
+const std::vector<Glib::ustring> FloodTool::gap_list( gap_init, gap_init+4 );
 
 FloodTool::FloodTool()
     : ToolBase(cursor_paintbucket_xpm, 11, 30)
@@ -119,8 +132,8 @@ FloodTool::~FloodTool() {
  * destroys old and creates new knotholder.
  */
 void FloodTool::selection_changed(Inkscape::Selection* selection) {
-    this->shape_editor->unset_item(SH_KNOTHOLDER);
-    this->shape_editor->set_item(selection->singleItem(), SH_KNOTHOLDER);
+    this->shape_editor->unset_item();
+    this->shape_editor->set_item(selection->singleItem());
 }
 
 void FloodTool::setup() {
@@ -128,13 +141,13 @@ void FloodTool::setup() {
 
     this->shape_editor = new ShapeEditor(this->desktop);
 
-    SPItem *item = sp_desktop_selection(this->desktop)->singleItem();
+    SPItem *item = this->desktop->getSelection()->singleItem();
     if (item) {
-        this->shape_editor->set_item(item, SH_KNOTHOLDER);
+        this->shape_editor->set_item(item);
     }
 
     this->sel_changed_connection.disconnect();
-    this->sel_changed_connection = sp_desktop_selection(this->desktop)->connectChanged(
+    this->sel_changed_connection = this->desktop->getSelection()->connectChanged(
     	sigc::mem_fun(this, &FloodTool::selection_changed)
     );
 
@@ -184,35 +197,18 @@ inline unsigned char * get_trace_pixel(guchar *trace_px, int x, int y, int width
 }
 
 /**
- * Generate the list of trace channel selection entries.
+ * \brief Check whether two unsigned integers are close to each other
+ *
+ * \param[in] a The 1st unsigned int
+ * \param[in] b The 2nd unsigned int
+ * \param[in] d The threshold for comparison
+ *
+ * \return true if |a-b| <= d; false otherwise
  */
-GList * flood_channels_dropdown_items_list() {
-    GList *glist = NULL;
-
-    glist = g_list_append (glist, _("Visible Colors"));
-    glist = g_list_append (glist, _("Red"));
-    glist = g_list_append (glist, _("Green"));
-    glist = g_list_append (glist, _("Blue"));
-    glist = g_list_append (glist, _("Hue"));
-    glist = g_list_append (glist, _("Saturation"));
-    glist = g_list_append (glist, _("Lightness"));
-    glist = g_list_append (glist, _("Alpha"));
-
-    return glist;
-}
-
-/**
- * Generate the list of autogap selection entries.
- */
-GList * flood_autogap_dropdown_items_list() {
-    GList *glist = NULL;
-
-    glist = g_list_append (glist, (void*) C_("Flood autogap", "None"));
-    glist = g_list_append (glist, (void*) C_("Flood autogap", "Small"));
-    glist = g_list_append (glist, (void*) C_("Flood autogap", "Medium"));
-    glist = g_list_append (glist, (void*) C_("Flood autogap", "Large"));
-
-    return glist;
+static bool compare_guint32(guint32 const a, guint32 const b, guint32 const d)
+{
+    const int difference = std::abs(static_cast<int>(a) - static_cast<int>(b));
+    return difference <= d;
 }
 
 /**
@@ -226,7 +222,6 @@ GList * flood_autogap_dropdown_items_list() {
  */
 static bool compare_pixels(guint32 check, guint32 orig, guint32 merged_orig_pixel, guint32 dtc, int threshold, PaintBucketChannels method)
 {
-    int diff = 0;
     float hsl_check[3] = {0,0,0}, hsl_orig[3] = {0,0,0};
 
     guint32 ac = 0, rc = 0, gc = 0, bc = 0;
@@ -252,27 +247,35 @@ static bool compare_pixels(guint32 check, guint32 orig, guint32 merged_orig_pixe
     
     switch (method) {
         case FLOOD_CHANNELS_ALPHA:
-            return abs(static_cast<int>(ac) - ao) <= threshold;
+            return compare_guint32(ac, ao, threshold);
         case FLOOD_CHANNELS_R:
-            return abs(static_cast<int>(ac ? unpremul_alpha(rc, ac) : 0) - (ao ? unpremul_alpha(ro, ao) : 0)) <= threshold;
+            return compare_guint32(ac ? unpremul_alpha(rc, ac) : 0,
+                                   ao ? unpremul_alpha(ro, ao) : 0,
+                                   threshold);
         case FLOOD_CHANNELS_G:
-            return abs(static_cast<int>(ac ? unpremul_alpha(gc, ac) : 0) - (ao ? unpremul_alpha(go, ao) : 0)) <= threshold;
+            return compare_guint32(ac ? unpremul_alpha(gc, ac) : 0,
+                                   ao ? unpremul_alpha(go, ao) : 0,
+                                   threshold);
         case FLOOD_CHANNELS_B:
-            return abs(static_cast<int>(ac ? unpremul_alpha(bc, ac) : 0) - (ao ? unpremul_alpha(bo, ao) : 0)) <= threshold;
+            return compare_guint32(ac ? unpremul_alpha(bc, ac) : 0,
+                                   ao ? unpremul_alpha(bo, ao) : 0,
+                                   threshold);
         case FLOOD_CHANNELS_RGB:
-            guint32 amc, rmc, bmc, gmc;
-            //amc = 255*255 - (255-ac)*(255-ad); amc = (amc + 127) / 255;
-            //amc = (255-ac)*ad + 255*ac; amc = (amc + 127) / 255;
-            amc = 255; // Why are we looking at desktop? Cairo version ignores destop alpha
-            rmc = (255-ac)*rd + 255*rc; rmc = (rmc + 127) / 255;
-            gmc = (255-ac)*gd + 255*gc; gmc = (gmc + 127) / 255;
-            bmc = (255-ac)*bd + 255*bc; bmc = (bmc + 127) / 255;
+            {
+                guint32 amc, rmc, bmc, gmc;
+                //amc = 255*255 - (255-ac)*(255-ad); amc = (amc + 127) / 255;
+                //amc = (255-ac)*ad + 255*ac; amc = (amc + 127) / 255;
+                amc = 255; // Why are we looking at desktop? Cairo version ignores destop alpha
+                rmc = (255-ac)*rd + 255*rc; rmc = (rmc + 127) / 255;
+                gmc = (255-ac)*gd + 255*gc; gmc = (gmc + 127) / 255;
+                bmc = (255-ac)*bd + 255*bc; bmc = (bmc + 127) / 255;
 
-            diff += abs(static_cast<int>(amc ? unpremul_alpha(rmc, amc) : 0) - (amop ? unpremul_alpha(rmop, amop) : 0));
-            diff += abs(static_cast<int>(amc ? unpremul_alpha(gmc, amc) : 0) - (amop ? unpremul_alpha(gmop, amop) : 0));
-            diff += abs(static_cast<int>(amc ? unpremul_alpha(bmc, amc) : 0) - (amop ? unpremul_alpha(bmop, amop) : 0));
-            return ((diff / 3) <= ((threshold * 3) / 4));
-        
+                int diff = 0; // The total difference between each of the 3 color components
+                diff += std::abs(static_cast<int>(amc ? unpremul_alpha(rmc, amc) : 0) - static_cast<int>(amop ? unpremul_alpha(rmop, amop) : 0));
+                diff += std::abs(static_cast<int>(amc ? unpremul_alpha(gmc, amc) : 0) - static_cast<int>(amop ? unpremul_alpha(gmop, amop) : 0));
+                diff += std::abs(static_cast<int>(amc ? unpremul_alpha(bmc, amc) : 0) - static_cast<int>(amop ? unpremul_alpha(bmop, amop) : 0));
+                return ((diff / 3) <= ((threshold * 3) / 4));
+            }
         case FLOOD_CHANNELS_H:
             return ((int)(fabs(hsl_check[0] - hsl_orig[0]) * 100.0) <= threshold);
         case FLOOD_CHANNELS_S:
@@ -360,7 +363,7 @@ inline static bool check_if_pixel_is_paintable(guchar *px, unsigned char *trace_
  * @param union_with_selection If true, merge the final SVG path with the current selection.
  */
 static void do_trace(bitmap_coords_info bci, guchar *trace_px, SPDesktop *desktop, Geom::Affine transform, unsigned int min_x, unsigned int max_x, unsigned int min_y, unsigned int max_y, bool union_with_selection) {
-    SPDocument *document = sp_desktop_document(desktop);
+    SPDocument *document = desktop->getDocument();
 
     unsigned char *trace_t;
 
@@ -467,7 +470,7 @@ static void do_trace(bitmap_coords_info bci, guchar *trace_px, SPDesktop *deskto
                 g_free(affinestr);
             }
 
-            Inkscape::Selection *selection = sp_desktop_selection(desktop);
+            Inkscape::Selection *selection = desktop->getSelection();
 
             pathRepr->setPosition(-1);
 
@@ -476,7 +479,7 @@ static void do_trace(bitmap_coords_info bci, guchar *trace_px, SPDesktop *deskto
                     ngettext("Area filled, path with <b>%d</b> node created and unioned with selection.","Area filled, path with <b>%d</b> nodes created and unioned with selection.",
                     SP_PATH(reprobj)->nodesInPath()), SP_PATH(reprobj)->nodesInPath() );
                 selection->add(reprobj);
-                sp_selected_path_union_skip_undo(sp_desktop_selection(desktop), desktop);
+                sp_selected_path_union_skip_undo(desktop->getSelection(), desktop);
             } else {
                 desktop->messageStack()->flashF( Inkscape::WARNING_MESSAGE,
                     ngettext("Area filled, path with <b>%d</b> node created.","Area filled, path with <b>%d</b> nodes created.",
@@ -621,7 +624,7 @@ static ScanlineCheckResult perform_bitmap_scanline_check(std::deque<Geom::Point>
     bool currently_painting_top = false;
     bool currently_painting_bottom = false;
 
-    unsigned int top_ty = bci.y - 1;
+    unsigned int top_ty = (bci.y > 0) ? bci.y - 1 : 0;
     unsigned int bottom_ty = bci.y + 1;
 
     bool can_paint_top = (top_ty > 0);
@@ -740,7 +743,7 @@ static bool sort_fill_queue_horizontal(Geom::Point a, Geom::Point b) {
  */
 static void sp_flood_do_flood_fill(ToolBase *event_context, GdkEvent *event, bool union_with_selection, bool is_point_fill, bool is_touch_fill) {
     SPDesktop *desktop = event_context->desktop;
-    SPDocument *document = sp_desktop_document(desktop);
+    SPDocument *document = desktop->getDocument();
 
     document->ensureUpToDate();
     
@@ -792,7 +795,7 @@ static void sp_flood_do_flood_fill(ToolBase *event_context, GdkEvent *event, boo
         Inkscape::DrawingContext dc(s, Geom::Point(0,0));
         // cairo_translate not necessary here - surface origin is at 0,0
 
-        SPNamedView *nv = sp_desktop_namedview(desktop);
+        SPNamedView *nv = desktop->getNamedView();
         bgcolor = nv->pagecolor;
         // bgcolor is 0xrrggbbaa, we need 0xaarrggbb
         dtc = (bgcolor >> 8) | (bgcolor << 24);
@@ -952,7 +955,7 @@ static void sp_flood_do_flood_fill(ToolBase *event_context, GdkEvent *event, boo
                         std::deque<Geom::Point>::iterator start_sort = fill_queue.begin();
                         std::deque<Geom::Point>::iterator end_sort = fill_queue.begin();
                         unsigned int sort_y = (unsigned int)cp[Geom::Y];
-                        unsigned int current_y = sort_y;
+                        unsigned int current_y;
                         
                         for (std::deque<Geom::Point>::iterator i = fill_queue.begin(); i != fill_queue.end(); ++i) {
                             Geom::Point current = *i;
@@ -1096,9 +1099,9 @@ bool FloodTool::item_handler(SPItem* item, GdkEvent* event) {
             // Set style
             desktop->applyCurrentOrToolStyle(item, "/tools/paintbucket", false);
 
-            DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_PAINTBUCKET, _("Set style on object"));
-
-            ret = TRUE;
+            DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_PAINTBUCKET, _("Set style on object"));
+            // Dead assignment: Value stored to 'ret' is never read
+            //ret = TRUE;
         }
         break;
 
@@ -1229,9 +1232,9 @@ void FloodTool::finishItem() {
 
         desktop->canvas->endForcedFullRedraws();
 
-        sp_desktop_selection(desktop)->set(this->item);
+        desktop->getSelection()->set(this->item);
 
-        DocumentUndo::done(sp_desktop_document(desktop), SP_VERB_CONTEXT_PAINTBUCKET, _("Fill bounded area"));
+        DocumentUndo::done(desktop->getDocument(), SP_VERB_CONTEXT_PAINTBUCKET, _("Fill bounded area"));
 
         this->item = NULL;
     }

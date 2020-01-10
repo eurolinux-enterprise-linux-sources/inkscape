@@ -5,9 +5,11 @@
  * SPRadialGradient: SVG <radialgradient> implementtion.
  */
 
-#include <glib.h>
 #include "sp-gradient.h"
 #include "svg/svg-length.h"
+
+typedef struct _cairo cairo_t;
+typedef struct _cairo_pattern cairo_pattern_t;
 
 #define SP_RADIALGRADIENT(obj) (dynamic_cast<SPRadialGradient*>((SPObject*)obj))
 #define SP_IS_RADIALGRADIENT(obj) (dynamic_cast<const SPRadialGradient*>((SPObject*)obj) != NULL)
@@ -23,13 +25,14 @@ public:
     SVGLength r;
     SVGLength fx;
     SVGLength fy;
+    SVGLength fr; // Focus radius. Added in SVG 2
 
     virtual cairo_pattern_t* pattern_new(cairo_t *ct, Geom::OptRect const &bbox, double opacity);
 
 protected:
 	virtual void build(SPDocument *document, Inkscape::XML::Node *repr);
-	virtual void set(unsigned key, gchar const *value);
-	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, guint flags);
+	virtual void set(unsigned key, char const *value);
+	virtual Inkscape::XML::Node* write(Inkscape::XML::Document *xml_doc, Inkscape::XML::Node *repr, unsigned int flags);
 };
 
 #endif /* !SP_RADIAL_GRADIENT_H */

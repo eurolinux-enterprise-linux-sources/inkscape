@@ -29,14 +29,13 @@
 #endif
 
 
-#include "2geom/sbasis-to-bezier.h"
-#include "2geom/svg-elliptical-arc.h"
+#include <2geom/sbasis-to-bezier.h>
+#include <2geom/elliptical-arc.h>
 
-#include "2geom/path.h"
-#include "2geom/pathvector.h"
-#include "2geom/rect.h"
-#include "2geom/bezier-curve.h"
-#include "2geom/hvlinesegment.h"
+#include <2geom/path.h>
+#include <2geom/pathvector.h>
+#include <2geom/rect.h>
+#include <2geom/curves.h>
 #include "helper/geom.h"
 #include "helper/geom-curves.h"
 #include "sp-item.h"
@@ -59,8 +58,9 @@
 #include "display/cairo-utils.h"
 
 #include "splivarot.h"             // pieces for union on shapes
-#include "2geom/svg-path-parser.h" // to get from SVG text to Geom::Path
+#include <2geom/svg-path-parser.h> // to get from SVG text to Geom::Path
 #include "display/canvas-bpath.h"  // for SPWindRule
+#include "display/cairo-utils.h"  // for Inkscape::Pixbuf::PF_CAIRO
 
 #include "wmf-print.h"
 
@@ -312,7 +312,7 @@ unsigned int PrintWmf::finish(Inkscape::Extension::Print * /*mod*/)
         g_error("Fatal programming error in PrintWmf::finish");
     }
     (void) wmf_finish(wt); // Finalize and write out the WMF
-    wmf_free(&wt);              // clean up
+    uwmf_free(&wt);              // clean up
     wmf_htable_free(&wht);          // clean up
 
     return 0;
@@ -366,11 +366,12 @@ int PrintWmf::create_brush(SPStyle const *style, U_COLORREF *fcolor)
     if (!fcolor && style) {
         if (style->fill.isColor()) {
             fill_mode = DRAW_PAINT;
+            /* Dead assignment: Value stored to 'opacity' is never read
             float opacity = SP_SCALE24_TO_FLOAT(style->fill_opacity.value);
             if (opacity <= 0.0) {
                 opacity = 0.0;    // basically the same as no fill
             }
-
+            */
             sp_color_get_rgb_floatv(&style->fill.value.color, rgb);
             hatchColor = U_RGB(255 * rgb[0], 255 * rgb[1], 255 * rgb[2]);
 
@@ -378,8 +379,8 @@ int PrintWmf::create_brush(SPStyle const *style, U_COLORREF *fcolor)
         } else if (SP_IS_PATTERN(SP_STYLE_FILL_SERVER(style))) { // must be paint-server
             SPPaintServer *paintserver = style->fill.value.href->getObject();
             SPPattern *pat = SP_PATTERN(paintserver);
-            double dwidth  = pattern_width(pat);
-            double dheight = pattern_height(pat);
+            double dwidth  = pat->width();
+            double dheight = pat->height();
             width  = dwidth;
             height = dheight;
             brush_classify(pat, 0, &pixbuf, &hatchType, &hatchColor, &bkColor);
@@ -470,9 +471,8 @@ int PrintWmf::create_brush(SPStyle const *style, U_COLORREF *fcolor)
         rgba_px = (char *) pixbuf->pixels(); // Do NOT free this!!!
         colortype = U_BCBM_COLOR32;
         (void) RGBA_to_DIB(&px, &cbPx, &ct, &numCt,  rgba_px,  width, height, width * 4, colortype, 0, 1);
-        // Not sure why the next swap is needed because the preceding does it, and the code is identical
-        // to that in stretchdibits_set, which does not need this.
-        swapRBinRGBA(px, width * height);
+        // pixbuf can be either PF_CAIRO or PF_GDK, and these have R and B bytes swapped
+        if (pixbuf->pixelFormat() == Inkscape::Pixbuf::PF_CAIRO) { swapRBinRGBA(px, width * height); }
         Bmih = bitmapinfoheader_set(width, height, 1, colortype, U_BI_RGB, 0, PXPERMETER, PXPERMETER, numCt, 0);
         Bmi = bitmapinfo_set(Bmih, ct);
         rec = wcreatedibpatternbrush_srcdib_set(&brush, wht, U_DIB_RGB_COLORS, Bmi, cbPx, px);
@@ -983,7 +983,7 @@ bool PrintWmf::print_simple_shape(Geom::PathVector const &pathv, const Geom::Aff
                 lpPoints[i].y = y1;
                 i = i + 1;
             } else if (Geom::CubicBezier const *cubic = dynamic_cast<Geom::CubicBezier const *>(&*cit)) {
-                std::vector<Geom::Point> points = cubic->points();
+                std::vector<Geom::Point> points = cubic->controlPoints();
                 //Geom::Point p0 = points[0];
                 Geom::Point p1 = points[1];
                 Geom::Point p2 = points[2];
@@ -1325,7 +1325,7 @@ unsigned int PrintWmf::print_pathv(Geom::PathVector const &pathv, const Geom::Af
 unsigned int PrintWmf::text(Inkscape::Extension::Print * /*mod*/, char const *text, Geom::Point const &p,
                             SPStyle const *const style)
 {
-    if (!wt) {
+    if (!wt || !text) {
         return 0;
     }
 
@@ -1368,6 +1368,9 @@ unsigned int PrintWmf::text(Inkscape::Extension::Print * /*mod*/, char const *te
     // else down into latin1, which is all WMF can handle.  If the language isn't English expect terrible results.
     char *latin1_text = U_Utf16leToLatin1(unicode_text, 0, NULL);
     free(unicode_text);
+
+    // in some cases a UTF string may reduce to NO latin1 characters, which returns NULL
+    if(!latin1_text){ return 0; }
 
     //PPT gets funky with text within +-1 degree of a multiple of 90, but only for SOME fonts.Snap those to the central value
     //Some funky ones:  Arial, Times New Roman

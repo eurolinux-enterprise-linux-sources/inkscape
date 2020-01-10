@@ -41,28 +41,18 @@
 #endif
 
 #include <gtkmm/alignment.h>
-#include <gtkmm/comboboxtext.h>
-#include <gtkmm/drawingarea.h>
-#include <gtkmm/frame.h>
-#include <gtkmm/scale.h>
+#include <gtkmm/spinbutton.h>
 
 #include "extension/system.h"
 #include "extension/input.h"
-#include "document.h"
 
+#include "document.h"
 #include "document-private.h"
-#include "document-undo.h"
 #include "inkscape.h"
 
-#include "dialogs/dialog-events.h"
-#include <gtk/gtk.h>
-#include "ui/widget/spinbutton.h"
-#include "ui/widget/frame.h"
+#include "ui/dialog-events.h"
 #include <glibmm/i18n.h>
 
-#include <gdkmm/general.h>
-
-#include "svg-view.h"
 #include "svg-view-widget.h"
 
 #include "util/units.h"
@@ -82,102 +72,99 @@ public:
      void getImportSettings(Inkscape::XML::Node *prefs);
 
 private:
-     void _setPreviewPage(unsigned page);
+     void _setPreviewPage();
 
      // Signal handlers
-#if !WITH_GTKMM_3_0
-     bool _onExposePreview(GdkEventExpose *event);
-#endif
-
      void _onPageNumberChanged();
+     void _onSpinButtonPress(GdkEventButton* button_event);
+     void _onSpinButtonRelease(GdkEventButton* button_event);
 
+     class Gtk::VBox * vbox1;
+     class Gtk::Widget * _previewArea;
      class Gtk::Button * cancelbutton;
      class Gtk::Button * okbutton;
      class Gtk::Label * _labelSelect;
-     class Inkscape::UI::Widget::SpinButton * _pageNumberSpin;
      class Gtk::Label * _labelTotalPages;
-     class Gtk::VBox * vbox1;
-     class Gtk::VBox * vbox2;
-     class Gtk::Widget * _previewArea;
+     class Gtk::SpinButton * _pageNumberSpin;
 
-     const std::vector<RVNGString> &_vec;   // Document to be imported
-     unsigned _current_page;  // Current selected page
-     int _preview_width, _preview_height;    // Size of the preview area
+     const std::vector<RVNGString> &_vec;  // Document to be imported
+     unsigned _current_page;               // Current selected page
+     bool _spinning;                       // whether SpinButton is pressed (i.e. we're "spinning")
 };
 
 CdrImportDialog::CdrImportDialog(const std::vector<RVNGString> &vec)
-     : _vec(vec), _current_page(1)
+     : _vec(vec), _current_page(1), _spinning(false)
 {
      int num_pages = _vec.size();
      if ( num_pages <= 1 )
           return;
-     cancelbutton = Gtk::manage(new class Gtk::Button(Gtk::StockID("gtk-cancel")));
-     okbutton = Gtk::manage(new class Gtk::Button(Gtk::StockID("gtk-ok")));
-     _labelSelect = Gtk::manage(new class Gtk::Label(_("Select page:")));
 
-     // Page number
-#if WITH_GTKMM_3_0
-     Glib::RefPtr<Gtk::Adjustment> _pageNumberSpin_adj = Gtk::Adjustment::create(1, 1, _vec.size(), 1, 10, 0);
-     _pageNumberSpin = Gtk::manage(new Inkscape::UI::Widget::SpinButton(_pageNumberSpin_adj, 1, 1));
-#else
-     Gtk::Adjustment *_pageNumberSpin_adj = Gtk::manage(
-               new class Gtk::Adjustment(1, 1, _vec.size(), 1, 10, 0));
-     _pageNumberSpin = Gtk::manage(new class Inkscape::UI::Widget::SpinButton(*_pageNumberSpin_adj, 1, 1));
-#endif
-     _labelTotalPages = Gtk::manage(new class Gtk::Label());
-     gchar *label_text = g_strdup_printf(_("out of %i"), num_pages);
-     _labelTotalPages->set_label(label_text);
-     g_free(label_text);
-
-     vbox1 = Gtk::manage(new class Gtk::VBox(false, 4));
-     SPDocument *doc = SPDocument::createNewDocFromMem(_vec[0].cstr(), strlen(_vec[0].cstr()), 0);
-     _previewArea = Glib::wrap(sp_svg_view_widget_new(doc));
-
-     vbox2 = Gtk::manage(new class Gtk::VBox(false, 4));
-     cancelbutton->set_can_focus();
-     cancelbutton->set_can_default();
-     cancelbutton->set_relief(Gtk::RELIEF_NORMAL);
-     okbutton->set_can_focus();
-     okbutton->set_can_default();
-     okbutton->set_relief(Gtk::RELIEF_NORMAL);
-     this->get_action_area()->property_layout_style().set_value(Gtk::BUTTONBOX_END);
-     _labelSelect->set_line_wrap(false);
-     _labelSelect->set_use_markup(false);
-     _labelSelect->set_selectable(false);
-     _pageNumberSpin->set_can_focus();
-     _pageNumberSpin->set_update_policy(Gtk::UPDATE_ALWAYS);
-     _pageNumberSpin->set_numeric(true);
-     _pageNumberSpin->set_digits(0);
-     _pageNumberSpin->set_wrap(false);
-     _labelTotalPages->set_line_wrap(false);
-     _labelTotalPages->set_use_markup(false);
-     _labelTotalPages->set_selectable(false);
-     vbox2->pack_start(*_previewArea, Gtk::PACK_SHRINK, 0);
-     this->get_vbox()->set_homogeneous(false);
-     this->get_vbox()->set_spacing(0);
-     this->get_vbox()->pack_start(*vbox2);
+     // Dialog settings
      this->set_title(_("Page Selector"));
      this->set_modal(true);
      sp_transientize(GTK_WIDGET(this->gobj()));  //Make transient
      this->property_window_position().set_value(Gtk::WIN_POS_NONE);
      this->set_resizable(true);
      this->property_destroy_with_parent().set_value(false);
+
+     // Preview area
+     _previewArea = Gtk::manage(new class Gtk::VBox());
+     vbox1 = Gtk::manage(new class Gtk::VBox());
+     vbox1->pack_start(*_previewArea, Gtk::PACK_EXPAND_WIDGET, 0);
+#if WITH_GTKMM_3_0
+     this->get_content_area()->pack_start(*vbox1);
+#else
+     this->get_vbox()->pack_start(*vbox1);
+#endif
+
+     // CONTROLS
+
+     // Buttons
+     cancelbutton = Gtk::manage(new class Gtk::Button(Gtk::StockID("gtk-cancel")));
+     okbutton = Gtk::manage(new class Gtk::Button(Gtk::StockID("gtk-ok")));
+
+     // Labels
+     _labelSelect = Gtk::manage(new class Gtk::Label(_("Select page:")));
+     _labelTotalPages = Gtk::manage(new class Gtk::Label());
+     _labelSelect->set_line_wrap(false);
+     _labelSelect->set_use_markup(false);
+     _labelSelect->set_selectable(false);
+     _labelTotalPages->set_line_wrap(false);
+     _labelTotalPages->set_use_markup(false);
+     _labelTotalPages->set_selectable(false);
+     gchar *label_text = g_strdup_printf(_("out of %i"), num_pages);
+     _labelTotalPages->set_label(label_text);
+     g_free(label_text);
+
+     // Adjustment + spinner
+#if WITH_GTKMM_3_0
+     Glib::RefPtr<Gtk::Adjustment> _pageNumberSpin_adj = Gtk::Adjustment::create(1, 1, _vec.size(), 1, 10, 0);
+     _pageNumberSpin = Gtk::manage(new Gtk::SpinButton(_pageNumberSpin_adj, 1, 0));
+#else
+     Gtk::Adjustment *_pageNumberSpin_adj = Gtk::manage(new class Gtk::Adjustment(1, 1, _vec.size(), 1, 10, 0));
+     _pageNumberSpin = Gtk::manage(new Gtk::SpinButton(*_pageNumberSpin_adj, 1, 0));
+#endif
+     _pageNumberSpin->set_can_focus();
+     _pageNumberSpin->set_update_policy(Gtk::UPDATE_ALWAYS);
+     _pageNumberSpin->set_numeric(true);
+     _pageNumberSpin->set_wrap(false);
+
+     this->get_action_area()->property_layout_style().set_value(Gtk::BUTTONBOX_END);
      this->get_action_area()->add(*_labelSelect);
-     this->add_action_widget(*_pageNumberSpin, -7);
+     this->add_action_widget(*_pageNumberSpin, Gtk::RESPONSE_ACCEPT);
      this->get_action_area()->add(*_labelTotalPages);
-     this->add_action_widget(*cancelbutton, -6);
-     this->add_action_widget(*okbutton, -5);
-     cancelbutton->show();
-     okbutton->show();
-     _labelSelect->show();
-     _pageNumberSpin->show();
-     _labelTotalPages->show();
-     vbox1->show();
-     _previewArea->show();
-     vbox2->show();
+     this->add_action_widget(*cancelbutton, Gtk::RESPONSE_CANCEL);
+     this->add_action_widget(*okbutton, Gtk::RESPONSE_OK);
+
+     // Show all widgets in dialog
+     this->show_all();
 
      // Connect signals
-     _pageNumberSpin_adj->signal_value_changed().connect(sigc::mem_fun(*this, &CdrImportDialog::_onPageNumberChanged));
+     _pageNumberSpin->signal_value_changed().connect(sigc::mem_fun(*this, &CdrImportDialog::_onPageNumberChanged));
+     _pageNumberSpin->signal_button_press_event().connect_notify(sigc::mem_fun(*this, &CdrImportDialog::_onSpinButtonPress));
+     _pageNumberSpin->signal_button_release_event().connect_notify(sigc::mem_fun(*this, &CdrImportDialog::_onSpinButtonRelease));
+
+     _setPreviewPage();
 }
 
 CdrImportDialog::~CdrImportDialog() {}
@@ -187,7 +174,7 @@ bool CdrImportDialog::showDialog()
      show();
      gint b = run();
      hide();
-     if ( b == Gtk::RESPONSE_OK ) {
+     if (b == Gtk::RESPONSE_OK || b == Gtk::RESPONSE_ACCEPT) {
           return TRUE;
      } else {
           return FALSE;
@@ -203,28 +190,62 @@ void CdrImportDialog::_onPageNumberChanged()
 {
      unsigned page = static_cast<unsigned>(_pageNumberSpin->get_value_as_int());
      _current_page = CLAMP(page, 1U, _vec.size());
-     _setPreviewPage(_current_page);
+     _setPreviewPage();
+}
+
+void CdrImportDialog::_onSpinButtonPress(GdkEventButton* /*button_event*/)
+{
+     _spinning = true;
+}
+
+void CdrImportDialog::_onSpinButtonRelease(GdkEventButton* /*button_event*/)
+{
+     _spinning = false;
+     _setPreviewPage();
 }
 
 /**
  * \brief Renders the given page's thumbnail
  */
-void CdrImportDialog::_setPreviewPage(unsigned page)
+void CdrImportDialog::_setPreviewPage()
 {
-     SPDocument *doc = SPDocument::createNewDocFromMem(_vec[page-1].cstr(), strlen(_vec[page-1].cstr()), 0);
+     if (_spinning) {
+         return;
+     }
+
+     SPDocument *doc = SPDocument::createNewDocFromMem(_vec[_current_page-1].cstr(), strlen(_vec[_current_page-1].cstr()), 0);
+     if(!doc) {
+           g_warning("CDR import: Could not create preview for page %d", _current_page);
+           gchar const *no_preview_template =
+                "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+                "  <path style='fill:none;stroke:#ff0000;stroke-width:2px;' d='M 82,10 18,74 m 0,-64 64,64' />"
+                "  <rect style='fill:none;stroke:#000000;stroke-width:1.5px;' width='64' height='64' x='18' y='10' />"
+                "  <text x='50' y='92' style='font-size:10px;text-anchor:middle;font-family:sans-serif;'>%s</text>"
+                "</svg>";
+           gchar * no_preview = g_strdup_printf(no_preview_template, _("No preview"));
+           doc = SPDocument::createNewDocFromMem(no_preview, strlen(no_preview), 0);
+           g_free(no_preview);
+     }
+
      Gtk::Widget * tmpPreviewArea = Glib::wrap(sp_svg_view_widget_new(doc));
      std::swap(_previewArea, tmpPreviewArea);
-     if (tmpPreviewArea) {
-          _previewArea->set_size_request( tmpPreviewArea->get_width(), tmpPreviewArea->get_height() );
-          delete tmpPreviewArea;
-     }
-     vbox2->pack_start(*_previewArea, Gtk::PACK_SHRINK, 0);
+     delete tmpPreviewArea;
+     vbox1->pack_start(*_previewArea, Gtk::PACK_EXPAND_WIDGET, 0);
      _previewArea->show_now();
 }
 
 SPDocument *CdrInput::open(Inkscape::Extension::Input * /*mod*/, const gchar * uri)
 {
-     RVNGFileStream input(uri);
+     #ifdef WIN32
+          // RVNGFileStream uses fopen() internally which unfortunately only uses ANSI encoding on Windows
+          // therefore attempt to convert uri to the system codepage
+          // even if this is not possible the alternate short (8.3) file name will be used if available
+          gchar * converted_uri = g_win32_locale_filename_from_utf8(uri);
+          RVNGFileStream input(converted_uri);
+          g_free(converted_uri);
+     #else
+          RVNGFileStream input(uri);
+     #endif
 
      if (!libcdr::CDRDocument::isSupported(&input)) {
           return NULL;
@@ -257,7 +278,7 @@ SPDocument *CdrInput::open(Inkscape::Extension::Input * /*mod*/, const gchar * u
      // If only one page is present, import that one without bothering user
      if (tmpSVGOutput.size() > 1) {
           CdrImportDialog *dlg = 0;
-          if (inkscape_use_gui()) {
+          if (INKSCAPE.use_gui()) {
                dlg = new CdrImportDialog(tmpSVGOutput);
                if (!dlg->showDialog()) {
                     delete dlg;
@@ -279,7 +300,7 @@ SPDocument *CdrInput::open(Inkscape::Extension::Input * /*mod*/, const gchar * u
 
      // Set viewBox if it doesn't exist
      if (doc && !doc->getRoot()->viewBox_set) {
-         doc->setViewBox(Geom::Rect::from_xywh(0, 0, doc->getWidth().value(doc->getDefaultUnit()), doc->getHeight().value(doc->getDefaultUnit())));
+         doc->setViewBox(Geom::Rect::from_xywh(0, 0, doc->getWidth().value(doc->getDisplayUnit()), doc->getHeight().value(doc->getDisplayUnit())));
      }
      return doc;
 }

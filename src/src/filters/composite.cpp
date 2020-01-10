@@ -12,28 +12,14 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
 #include "attributes.h"
 #include "svg/svg.h"
-#include "filters/composite.h"
 #include "helper-fns.h"
 #include "xml/repr.h"
 #include "display/nr-filter.h"
 #include "display/nr-filter-composite.h"
 #include "sp-filter.h"
-
-#include "sp-factory.h"
-
-namespace {
-	SPObject* createComposite() {
-		return new SPFeComposite();
-	}
-
-	bool compositeRegistered = SPFactory::instance().registerObject("svg:feComposite", createComposite);
-}
+#include "filters/composite.h"
 
 SPFeComposite::SPFeComposite()
     : SPFilterPrimitive(), composite_operator(COMPOSITE_DEFAULT),

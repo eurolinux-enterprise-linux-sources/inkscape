@@ -14,7 +14,7 @@
 #include "display/snap-indicator.h"
 
 #include "desktop.h"
-#include "desktop-handles.h"
+
 #include "display/sodipodi-ctrl.h"
 #include "display/sodipodi-ctrlrect.h"
 #include "display/canvas-text.h"
@@ -22,7 +22,7 @@
 #include "knot.h"
 #include "preferences.h"
 #include <glibmm/i18n.h>
-#include "tools-switch.h"
+#include "ui/tools-switch.h"
 #include "enums.h"
 
 namespace Inkscape {
@@ -246,7 +246,7 @@ SnapIndicator::set_new_snaptarget(Inkscape::SnappedPoint const &p, bool pre_snap
 
         // Display the snap indicator (i.e. the cross)
         SPCanvasItem * canvasitem = NULL;
-        canvasitem = sp_canvas_item_new(sp_desktop_tempgroup (_desktop),
+        canvasitem = sp_canvas_item_new(_desktop->getTempGroup(),
                                         SP_TYPE_CTRL,
                                         "anchor", SP_ANCHOR_CENTER,
                                         "size", 10.0,
@@ -256,10 +256,28 @@ SnapIndicator::set_new_snaptarget(Inkscape::SnappedPoint const &p, bool pre_snap
                                         "shape", SP_KNOT_SHAPE_CROSS,
                                         NULL );
 
-        const int timeout_val = 1200; // TODO add preference for snap indicator timeout?
+        double timeout_val = prefs->getDouble("/options/snapindicatorpersistence/value", 2.0);
+        if (timeout_val < 0.1) {
+            timeout_val = 0.1; // a zero value would mean infinite persistence (i.e. until new snap occurs)
+            // Besides, negatives values would ....?
+        }
+
+
+        // The snap indicator will be deleted after some time-out, and sp_canvas_item_dispose
+        // will be called. This will set canvas->current_item to NULL if the snap indicator was
+        // the current item, after which any events will go to the root handler instead of any
+        // item handler. Dragging an object which has just snapped might therefore not be possible
+        // without selecting / repicking it again. To avoid this, we make sure here that the
+        // snap indicator will never be picked, and will therefore never be the current item.
+        // Reported bugs:
+        //   - scrolling when hovering above a pre-snap indicator won't work (for example)
+        //     (https://bugs.launchpad.net/inkscape/+bug/522335/comments/8)
+        //   - dragging doesn't work without repicking
+        //     (https://bugs.launchpad.net/inkscape/+bug/1420301/comments/15)
+        SP_CTRL(canvasitem)->pickable = false;
 
         SP_CTRL(canvasitem)->moveto(p.getPoint());
-        _snaptarget = _desktop->add_temporary_canvasitem(canvasitem, timeout_val);
+        _snaptarget = _desktop->add_temporary_canvasitem(canvasitem, timeout_val*1000.0);
         _snaptarget_is_presnap = pre_snap;
 
         // Display the tooltip, which reveals the type of snap source and the type of snap target
@@ -269,7 +287,7 @@ SnapIndicator::set_new_snaptarget(Inkscape::SnappedPoint const &p, bool pre_snap
         } else if (p.getSource() != SNAPSOURCE_UNDEFINED) {
             tooltip_str = g_strdup(source_name);
         }
-        double fontsize = prefs->getInt("/tools/measure/fontsize");
+        double fontsize = prefs->getDouble("/tools/measure/fontsize", 10.0);
 
         if (tooltip_str) {
             Geom::Point tooltip_pos = p.getPoint();
@@ -280,8 +298,9 @@ SnapIndicator::set_new_snaptarget(Inkscape::SnappedPoint const &p, bool pre_snap
                 tooltip_pos += _desktop->w2d(Geom::Point(0, -2*fontsize));
             }
 
-            SPCanvasItem *canvas_tooltip = sp_canvastext_new(sp_desktop_tempgroup(_desktop), _desktop, tooltip_pos, tooltip_str);
+            SPCanvasItem *canvas_tooltip = sp_canvastext_new(_desktop->getTempGroup(), _desktop, tooltip_pos, tooltip_str);
             sp_canvastext_set_fontsize(SP_CANVASTEXT(canvas_tooltip), fontsize);
+            SP_CANVASTEXT(canvas_tooltip)->pickable = false; // See the extensive comment above
             SP_CANVASTEXT(canvas_tooltip)->rgba = 0xffffffff;
             SP_CANVASTEXT(canvas_tooltip)->outline = false;
             SP_CANVASTEXT(canvas_tooltip)->background = true;
@@ -293,21 +312,22 @@ SnapIndicator::set_new_snaptarget(Inkscape::SnappedPoint const &p, bool pre_snap
             SP_CANVASTEXT(canvas_tooltip)->anchor_position = TEXT_ANCHOR_CENTER;
             g_free(tooltip_str);
 
-            _snaptarget_tooltip = _desktop->add_temporary_canvasitem(canvas_tooltip, timeout_val);
+            _snaptarget_tooltip = _desktop->add_temporary_canvasitem(canvas_tooltip, timeout_val*1000.0);
         }
 
         // Display the bounding box, if we snapped to one
         Geom::OptRect const bbox = p.getTargetBBox();
         if (bbox) {
-            SPCanvasItem* box = sp_canvas_item_new(sp_desktop_tempgroup (_desktop),
+            SPCanvasItem* box = sp_canvas_item_new(_desktop->getTempGroup(),
                                                      SP_TYPE_CTRLRECT,
                                                      NULL);
 
             SP_CTRLRECT(box)->setRectangle(*bbox);
             SP_CTRLRECT(box)->setColor(pre_snap ? 0x7f7f7fff : 0xff0000ff, 0, 0);
             SP_CTRLRECT(box)->setDashed(true);
+            SP_CTRLRECT(box)->pickable = false;  // See the extensive comment above
             sp_canvas_item_move_to_z(box, 0);
-            _snaptarget_bbox = _desktop->add_temporary_canvasitem(box, timeout_val);
+            _snaptarget_bbox = _desktop->add_temporary_canvasitem(box, timeout_val*1000.0);
         }
     }
 }
@@ -348,7 +368,7 @@ SnapIndicator::set_new_snapsource(Inkscape::SnapCandidatePoint const &p)
     bool value = prefs->getBool("/options/snapindicator/value", true);
 
     if (value) {
-        SPCanvasItem * canvasitem = sp_canvas_item_new( sp_desktop_tempgroup (_desktop),
+        SPCanvasItem * canvasitem = sp_canvas_item_new( _desktop->getTempGroup(),
                                                         SP_TYPE_CTRL,
                                                         "anchor", SP_ANCHOR_CENTER,
                                                         "size", 6.0,
@@ -367,7 +387,7 @@ void
 SnapIndicator::set_new_debugging_point(Geom::Point const &p)
 {
     g_assert(_desktop != NULL);
-    SPCanvasItem * canvasitem = sp_canvas_item_new( sp_desktop_tempgroup (_desktop),
+    SPCanvasItem * canvasitem = sp_canvas_item_new( _desktop->getTempGroup(),
                                                     SP_TYPE_CTRL,
                                                     "anchor", SP_ANCHOR_CENTER,
                                                     "size", 10.0,

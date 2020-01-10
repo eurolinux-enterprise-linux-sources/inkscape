@@ -27,18 +27,12 @@ void pathv_matrix_point_bbox_wind_distance ( Geom::PathVector const & pathv, Geo
 
 Geom::PathVector pathv_to_linear_and_cubic_beziers( Geom::PathVector const &pathv );
 Geom::PathVector pathv_to_linear( Geom::PathVector const &pathv, double maxdisp );
+Geom::PathVector pathv_to_cubicbezier( Geom::PathVector const &pathv);
 void recursive_bezier4(const double x1, const double y1, const double x2, const double y2, 
                        const double x3, const double y3, const double x4, const double y4,
                        std::vector<Geom::Point> &pointlist,
                        int level);
 
-void round_rectangle_outwards(Geom::Rect & rect);
-
-namespace Geom{
-bool transform_equalp(Geom::Affine const &m0, Geom::Affine const &m1, Geom::Coord const epsilon);
-bool translate_equalp(Geom::Affine const &m0, Geom::Affine const &m1, Geom::Coord const epsilon);
-bool matrix_equalp(Geom::Affine const &m0, Geom::Affine const &m1, Geom::Coord const epsilon);
-}
 #endif  // INKSCAPE_HELPER_GEOM_H
 
 /*

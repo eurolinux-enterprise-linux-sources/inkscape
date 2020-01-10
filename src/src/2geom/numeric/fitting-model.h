@@ -39,7 +39,7 @@
 #include <2geom/sbasis.h>
 #include <2geom/bezier.h>
 #include <2geom/bezier-curve.h>
-#include <2geom/poly.h>
+#include <2geom/polynomial.h>
 #include <2geom/ellipse.h>
 #include <2geom/circle.h>
 #include <2geom/utils.h>
@@ -298,7 +298,7 @@ class LFMEllipse
   public:
     void instance(Ellipse & e, ConstVectorView const& coeff) const
     {
-        e.set(1, coeff[0], coeff[1], coeff[2], coeff[3], coeff[4]);
+        e.setCoefficients(1, coeff[0], coeff[1], coeff[2], coeff[3], coeff[4]);
     }
 };
 
@@ -333,7 +333,7 @@ class LFMCircle
   public:
     void instance(Circle & c, ConstVectorView const& coeff) const
     {
-        c.set(1, coeff[0], coeff[1], coeff[2]);
+        c.setCoefficients(1, coeff[0], coeff[1], coeff[2]);
     }
 };
 
@@ -372,7 +372,6 @@ class LFMSBasis
 
     void instance(SBasis & sb, ConstVectorView const& raw_data) const
     {
-        sb.clear();
         sb.resize(m_order+1);
         for (unsigned int i = 0, k = 0; i < raw_data.size(); i+=2, ++k)
         {

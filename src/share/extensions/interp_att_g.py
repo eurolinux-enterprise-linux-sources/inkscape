@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 # standard library
 import math
@@ -23,8 +23,8 @@ import string
 # local library
 import inkex
 import simplestyle
+from pathmodifier import zSort
 
-inkex.localize()
 
 class InterpAttG(inkex.Effect):
 
@@ -58,6 +58,10 @@ class InterpAttG(inkex.Effect):
                         action="store", type="string",
                         dest="unit", default="color",
                         help="Values unit.")
+        self.OptionParser.add_option("--zsort",
+                        action="store", type="inkbool",
+                        dest="zsort", default=True,
+                        help="use z-order instead of selection order")
         self.OptionParser.add_option("--tab",
                         action="store", type="string",
                         dest="tab",
@@ -116,8 +120,12 @@ class InterpAttG(inkex.Effect):
         return False
       if len( self.selected ) > 1:
         # multiple selection
-        self.collection = self.options.ids
-        for i in self.options.ids:
+        if self.options.zsort:
+            sorted_ids = zSort(self.document.getroot(),self.selected.keys())
+        else:
+            sorted_ids = self.options.ids
+        self.collection = list(sorted_ids)
+        for i in sorted_ids:
           path = '//*[@id="%s"]' % i
           self.collection[self.tot_el] = self.document.xpath(path, namespaces=inkex.NSS)[0]
           self.tot_el += 1

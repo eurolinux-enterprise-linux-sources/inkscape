@@ -116,7 +116,10 @@ FILE *Inkscape::IO::fopen_utf8name( char const *utf8name, char const *mode )
     }
 #else
     Glib::ustring how( mode );
-    how.append("b");
+    if ( how.find("b") == Glib::ustring::npos )
+    {
+        how.append("b");
+    }
     DEBUG_MESSAGE( dumpOne, "   calling is_os_wide()       ( '%s', '%s' )[%d]", utf8name, mode, (counter++) );
 
     fp = g_fopen(utf8name, how.c_str());
@@ -226,7 +229,7 @@ bool Inkscape::IO::file_is_writable( char const *utf8name)
             filename = g_filename_from_utf8 ( utf8name, -1, NULL, NULL, NULL );
         }
         if ( filename ) {
-            struct stat st;
+            GStatBuf st;
             if (g_file_test (filename, G_FILE_TEST_EXISTS)){ 
                 if (g_lstat (filename, &st) == 0) {
                     success = ((st.st_mode & S_IWRITE) != 0);

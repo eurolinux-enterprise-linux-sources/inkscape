@@ -12,10 +12,6 @@
 # include <config.h>
 #endif
 
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
@@ -28,7 +24,8 @@
 #include "inkscape.h"
 #include "document.h"
 #include "document-undo.h"
-#include "desktop-handles.h"
+#include "desktop.h"
+
 #include "sp-namedview.h"
 
 #include "registry.h"
@@ -195,10 +192,10 @@ void ToleranceSlider::update (double val)
 
     _wr->setUpdating (true);
 
-    SPDocument *doc = sp_desktop_document(dt);
+    SPDocument *doc = dt->getDocument();
     bool saved = DocumentUndo::getUndoSensitive(doc);
     DocumentUndo::setUndoSensitive(doc, false);
-    Inkscape::XML::Node *repr = sp_desktop_namedview(dt)->getRepr();
+    Inkscape::XML::Node *repr = dt->getNamedView()->getRepr();
     repr->setAttribute(_key.c_str(), os.str().c_str());
     DocumentUndo::setUndoSensitive(doc, saved);
 
@@ -216,9 +213,9 @@ void ToleranceSlider::update (double val)
   Local Variables:
   mode:c++
   c-file-style:"stroustrup"
-  c-file-offsets:((innamespace . 0)(inline-open . 0))
+  c-file-offsets:((innamespace . 0)(inline-open . 0)(case-label . +))
   indent-tabs-mode:nil
   fill-column:99
   End:
 */
-// vim: filetype=c++:expandtab:shiftwidth=4:tabstop=8:softtabstop=4 :
+// vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=8:softtabstop=4:fileencoding=utf-8:textwidth=99 :

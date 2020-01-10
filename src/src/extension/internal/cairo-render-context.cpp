@@ -42,6 +42,7 @@
 #include "sp-hatch.h"
 #include "sp-linear-gradient.h"
 #include "sp-radial-gradient.h"
+#include "sp-mesh-gradient.h"
 #include "sp-pattern.h"
 #include "sp-mask.h"
 #include "sp-clippath.h"
@@ -127,16 +128,15 @@ CairoRenderContext::CairoRenderContext(CairoRenderer *parent) :
     _renderer(parent),
     _render_mode(RENDER_MODE_NORMAL),
     _clip_mode(CLIP_MODE_MASK),
-    _omittext_state(EMPTY)
+    _omittext_state(EMPTY),
+    _omittext_missing_pages(0)
 {
-    font_table = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, font_data_free);
 }
 
 CairoRenderContext::~CairoRenderContext(void)
 {
-    if(font_table != NULL) {
-        g_hash_table_remove_all(font_table);
-    }
+    for (std::map<gpointer, cairo_font_face_t *>::const_iterator iter = font_table.begin(); iter != font_table.end(); ++iter)
+        font_data_free(iter->second);
 
     if (_cr) cairo_destroy(_cr);
     if (_surface) cairo_surface_destroy(_surface);
@@ -658,12 +658,12 @@ CairoRenderContext::popLayer(void)
             CairoRenderContext *mask_ctx = _renderer->createContext();
 
             // Fix Me: This is a kludge. PDF and PS output is set to 72 dpi but the
-            // Cairo surface is expecting the mask to be 90 dpi.
+            // Cairo surface is expecting the mask to be 96 dpi.
             float surface_width = _width;
             float surface_height = _height;
             if( _vector_based_target ) {
-                surface_width *= 1.25;
-                surface_height *= 1.25;
+                surface_width *= 4.0/3.0;
+                surface_height *= 4.0/3.0;
             }
             if (!mask_ctx->setupSurface( surface_width, surface_height )) {
                 TRACE(("mask: setupSurface failed\n"));
@@ -885,6 +885,13 @@ CairoRenderContext::finish(void)
     if (_vector_based_target)
         cairo_show_page(_cr);
 
+    // PDF+TeX Output, see CairoRenderContext::_prepareRenderGraphic()
+    while (_omittext_missing_pages > 0) {
+            _omittext_missing_pages--;
+            g_warning("PDF+TeX output: issuing blank PDF page at end (workaround for previous error)");
+            cairo_show_page(_cr);
+    }
+
     cairo_destroy(_cr);
     cairo_surface_finish(_surface);
     cairo_status_t status = cairo_surface_status(_surface);
@@ -1007,17 +1014,16 @@ CairoRenderContext::_createPatternPainter(SPPaintServer const *const paintserver
     ps2user = Geom::identity();
     pcs2dev = Geom::identity();
 
-    double x = pattern_x(pat);
-    double y = pattern_y(pat);
-    double width = pattern_width(pat);
-    double height = pattern_height(pat);
+    double x = pat->x();
+    double y = pat->y();
+    double width = pat->width();
+    double height = pat->height();
     double bbox_width_scaler;
     double bbox_height_scaler;
 
     TRACE(("%f x %f pattern\n", width, height));
 
-    if (pbox && pattern_patternUnits(pat) == SP_PATTERN_UNITS_OBJECTBOUNDINGBOX) {
-        //Geom::Affine bbox2user (pbox->x1 - pbox->x0, 0.0, 0.0, pbox->y1 - pbox->y0, pbox->x0, pbox->y0);
+    if (pbox && pat->patternUnits() == SPPattern::UNITS_OBJECTBOUNDINGBOX) {
         bbox_width_scaler = pbox->width();
         bbox_height_scaler = pbox->height();
         ps2user[4] = x * bbox_width_scaler + pbox->left();
@@ -1030,13 +1036,13 @@ CairoRenderContext::_createPatternPainter(SPPaintServer const *const paintserver
     }
 
     // apply pattern transformation
-    Geom::Affine pattern_transform(pattern_patternTransform(pat));
+    Geom::Affine pattern_transform(pat->getTransform());
     ps2user *= pattern_transform;
     Geom::Point ori (ps2user[4], ps2user[5]);
 
     // create pattern contents coordinate system
     if (pat->viewBox_set) {
-        Geom::Rect view_box = *pattern_viewBox(pat);
+        Geom::Rect view_box = *pat->viewbox();
 
         double x, y, w, h;
         x = 0;
@@ -1049,7 +1055,7 @@ CairoRenderContext::_createPatternPainter(SPPaintServer const *const paintserver
         pcs2dev[3] = h / view_box.height();
         pcs2dev[4] = x - view_box.left() * pcs2dev[0];
         pcs2dev[5] = y - view_box.top() * pcs2dev[3];
-    } else if (pbox && pattern_patternContentUnits(pat) == SP_PATTERN_UNITS_OBJECTBOUNDINGBOX) {
+    } else if (pbox && pat->patternContentUnits() == SPPattern::UNITS_OBJECTBOUNDINGBOX) {
         pcs2dev[0] = pbox->width();
         pcs2dev[3] = pbox->height();
     }
@@ -1182,7 +1188,7 @@ CairoRenderContext::_createHatchPainter(SPPaintServer const *const paintserver, 
     std::vector<SPHatchPath *> children(evil->hatchPaths());
 
     for (int i = 0; i < overflow_steps; i++) {
-        for (std::vector<SPHatchPath *>::iterator iter = children.begin(); iter != children.end(); iter++) {
+        for (std::vector<SPHatchPath *>::iterator iter = children.begin(); iter != children.end(); ++iter) {
             SPHatchPath *path = *iter;
             _renderer->renderHatchPath(pattern_ctx, *path, dkey);
         }
@@ -1247,11 +1253,12 @@ CairoRenderContext::_createPatternForPaintServer(SPPaintServer const *const pain
         Geom::Point c (rg->cx.computed, rg->cy.computed);
         Geom::Point f (rg->fx.computed, rg->fy.computed);
         double r = rg->r.computed;
+        double fr = rg->fr.computed;
         if (pbox && SP_GRADIENT(rg)->getUnits() == SP_GRADIENT_UNITS_OBJECTBOUNDINGBOX)
             apply_bbox2user = true;
 
         // create radial gradient pattern
-        pattern = cairo_pattern_create_radial(f[Geom::X], f[Geom::Y], 0, c[Geom::X], c[Geom::Y], r);
+        pattern = cairo_pattern_create_radial(f[Geom::X], f[Geom::Y], fr, c[Geom::X], c[Geom::Y], r);
 
         // add stops
         for (gint i = 0; unsigned(i) < rg->vector.stops.size(); i++) {
@@ -1259,6 +1266,10 @@ CairoRenderContext::_createPatternForPaintServer(SPPaintServer const *const pain
             sp_color_get_rgb_floatv(&rg->vector.stops[i].color, rgb);
             cairo_pattern_add_color_stop_rgba(pattern, rg->vector.stops[i].offset, rgb[0], rgb[1], rgb[2], rg->vector.stops[i].opacity * alpha);
         }
+    } else if (SP_IS_MESHGRADIENT (paintserver)) {
+        SPMeshGradient *mg = SP_MESHGRADIENT(paintserver);
+
+        pattern = mg->pattern_new(_cr, pbox, 1.0);
     } else if (SP_IS_PATTERN (paintserver)) {
         pattern = _createPatternPainter(paintserver, pbox);
     } else if ( dynamic_cast<SPHatch const *>(paintserver) ) {
@@ -1388,6 +1399,7 @@ CairoRenderContext::_setStrokeStyle(SPStyle const *style, Geom::OptRect const &p
             dashes[i] = style->stroke_dasharray.values[i];
         }
         cairo_set_dash(_cr, dashes, ndashes, style->stroke_dashoffset.value);
+        free(dashes);
     } else {
         cairo_set_dash(_cr, NULL, 0, 0.0);  // disable dashing
     }
@@ -1432,8 +1444,29 @@ CairoRenderContext::_prepareRenderGraphic()
     // Only PDFLaTeX supports importing a single page of a graphics file,
     // so only PDF backend gets interleaved text/graphics
     if (_is_omittext && _target == CAIRO_SURFACE_TYPE_PDF) {
-        if (_omittext_state == NEW_PAGE_ON_GRAPHIC)
-            cairo_show_page(_cr);
+        if (_omittext_state == NEW_PAGE_ON_GRAPHIC) {
+            if (cairo_get_group_target(_cr) != cairo_get_target(_cr)) {
+                // we are in the middle of a group, i. e., between cairo_push_group() and cairo_pop_group().
+                // cairo_show_page() has no effect here!
+                // To ensure that the the generated TeX source doesn't try to include non-existing pages,
+                // we will later output an extra blank page.
+                // This is a workaround for bug #1417470.
+                g_warning("PDF+TeX output: Found text inside a clipped/masked group. This is not supported, the Z-order will be incorrect. Blank pages will be added to the PDF output to work around bug #1417470.");
+                _omittext_missing_pages++;
+            } else {
+                // no group is active, create new page
+                cairo_show_page(_cr);
+                // Output missing pages (workaround for the 'if' case above).
+                // With this solution, the Z-order is more wrong than necessary.
+                // It would be better to print the blank pages first, and then the actual current page.
+                // However, this isn't easily possible with cairo.
+                while (_omittext_missing_pages > 0) {
+                    _omittext_missing_pages--;
+                    g_warning("PDF+TeX output: issuing blank PDF page (workaround for previous error)");
+                    cairo_show_page(_cr);
+                }
+            }
+        }
         _omittext_state = GRAPHIC_ON_TOP;
     }
 }
@@ -1449,8 +1482,11 @@ CairoRenderContext::_prepareRenderText()
     }
 }
 
+/*  We need CairoPaintOrder as markers are rendered in a separate step and may be rendered
+ *  inbetween fill and stroke.
+ */
 bool
-CairoRenderContext::renderPathVector(Geom::PathVector const & pathv, SPStyle const *style, Geom::OptRect const &pbox)
+CairoRenderContext::renderPathVector(Geom::PathVector const & pathv, SPStyle const *style, Geom::OptRect const &pbox, CairoPaintOrder order)
 {
     g_assert( _is_valid );
 
@@ -1472,9 +1508,10 @@ CairoRenderContext::renderPathVector(Geom::PathVector const & pathv, SPStyle con
         return true;
     }
 
-    bool no_fill = style->fill.isNone() || style->fill_opacity.value == 0;
+    bool no_fill = style->fill.isNone() || style->fill_opacity.value == 0 ||
+        order == STROKE_ONLY;
     bool no_stroke = style->stroke.isNone() || style->stroke_width.computed < 1e-9 ||
-                    style->stroke_opacity.value == 0;
+                    style->stroke_opacity.value == 0 || order == FILL_ONLY;
 
     if (no_fill && no_stroke)
         return true;
@@ -1488,14 +1525,17 @@ CairoRenderContext::renderPathVector(Geom::PathVector const & pathv, SPStyle con
         pushLayer();
 
     if (!no_fill) {
-        _setFillStyle(style, pbox);
-        setPathVector(pathv);
-
         if (style->fill_rule.computed == SP_WIND_RULE_EVENODD) {
             cairo_set_fill_rule(_cr, CAIRO_FILL_RULE_EVEN_ODD);
         } else {
             cairo_set_fill_rule(_cr, CAIRO_FILL_RULE_WINDING);
         }
+    }
+
+    setPathVector(pathv);
+
+    if (!no_fill && (order == STROKE_OVER_FILL || order == FILL_ONLY)) {
+        _setFillStyle(style, pbox);
 
         if (no_stroke)
             cairo_fill(_cr);
@@ -1505,10 +1545,17 @@ CairoRenderContext::renderPathVector(Geom::PathVector const & pathv, SPStyle con
 
     if (!no_stroke) {
         _setStrokeStyle(style, pbox);
-        if (no_fill)
-            setPathVector(pathv);
 
-        cairo_stroke(_cr);
+        if (no_fill || order == STROKE_OVER_FILL)
+            cairo_stroke(_cr);
+        else
+            cairo_stroke_preserve(_cr);
+    }
+
+    if (!no_fill && order == FILL_OVER_STROKE) {
+        _setFillStyle(style, pbox);
+
+            cairo_fill(_cr);
     }
 
     if (need_layer)
@@ -1563,13 +1610,13 @@ bool CairoRenderContext::renderImage(Inkscape::Pixbuf *pb,
         //      http://www.w3.org/TR/css4-images/#the-image-rendering
         //      style.h/style.cpp
         switch (style->image_rendering.computed) {
-            case SP_CSS_COLOR_RENDERING_AUTO:
-                // Do nothing
-                break;
-            case SP_CSS_COLOR_RENDERING_OPTIMIZEQUALITY:
+            case SP_CSS_IMAGE_RENDERING_AUTO:
+            case SP_CSS_IMAGE_RENDERING_OPTIMIZEQUALITY:
+            case SP_CSS_IMAGE_RENDERING_CRISPEDGES:
                 cairo_pattern_set_filter(cairo_get_source(_cr), CAIRO_FILTER_BEST );
                 break;
-            case SP_CSS_COLOR_RENDERING_OPTIMIZESPEED:
+            case SP_CSS_IMAGE_RENDERING_OPTIMIZESPEED:
+            case SP_CSS_IMAGE_RENDERING_PIXELATED:
             default:
                 cairo_pattern_set_filter(cairo_get_source(_cr), CAIRO_FILTER_NEAREST );
                 break;
@@ -1638,9 +1685,11 @@ CairoRenderContext::renderGlyphtext(PangoFont *font, Geom::Affine const &font_ma
         return true;
 
     // create a cairo_font_face from PangoFont
-    double size = style->font_size.computed; /// \fixme why is this variable never used?
+    // double size = style->font_size.computed; /// \fixme why is this variable never used?
     gpointer fonthash = (gpointer)font;
-    cairo_font_face_t *font_face = (cairo_font_face_t *)g_hash_table_lookup(font_table, fonthash);
+    cairo_font_face_t *font_face = NULL;
+    if(font_table.find(fonthash)!=font_table.end())
+        font_face = font_table[fonthash];
 
     FcPattern *fc_pattern = NULL;
 
@@ -1655,7 +1704,7 @@ CairoRenderContext::renderGlyphtext(PangoFont *font, Geom::Affine const &font_ma
 
     if(font_face == NULL) {
         font_face = cairo_win32_font_face_create_for_logfontw(&lfw);
-        g_hash_table_insert(font_table, fonthash, font_face);
+        font_table[fonthash] = font_face;
     }
 # endif
 #else
@@ -1664,7 +1713,7 @@ CairoRenderContext::renderGlyphtext(PangoFont *font, Geom::Affine const &font_ma
     fc_pattern = fc_font->font_pattern;
     if(font_face == NULL) {
         font_face = cairo_ft_font_face_create_for_pattern(fc_pattern);
-        g_hash_table_insert(font_table, fonthash, font_face);
+        font_table[fonthash] = font_face;
     }
 # endif
 #endif
@@ -1672,8 +1721,8 @@ CairoRenderContext::renderGlyphtext(PangoFont *font, Geom::Affine const &font_ma
     cairo_save(_cr);
     cairo_set_font_face(_cr, font_face);
 
-    if (fc_pattern && FcPatternGetDouble(fc_pattern, FC_PIXEL_SIZE, 0, &size) != FcResultMatch)
-        size = 12.0;
+    //if (fc_pattern && FcPatternGetDouble(fc_pattern, FC_PIXEL_SIZE, 0, &size) != FcResultMatch)
+    //    size = 12.0;
 
     // set the given font matrix
     cairo_matrix_t matrix;
@@ -1693,30 +1742,72 @@ CairoRenderContext::renderGlyphtext(PangoFont *font, Geom::Affine const &font_ma
             _showGlyphs(_cr, font, glyphtext, TRUE);
         }
     } else {
-        bool fill = false, stroke = false, have_path = false;
+
+        bool fill = false;
         if (style->fill.isColor() || style->fill.isPaintserver()) {
             fill = true;
         }
 
+        bool stroke = false;
         if (style->stroke.isColor() || style->stroke.isPaintserver()) {
             stroke = true;
         }
-        if (fill) {
+
+        // Text never has markers
+        bool stroke_over_fill = true;
+        if ( (style->paint_order.layer[0] == SP_CSS_PAINT_ORDER_STROKE &&
+              style->paint_order.layer[1] == SP_CSS_PAINT_ORDER_FILL)   ||
+
+             (style->paint_order.layer[0] == SP_CSS_PAINT_ORDER_STROKE &&
+              style->paint_order.layer[2] == SP_CSS_PAINT_ORDER_FILL)   ||
+
+             (style->paint_order.layer[1] == SP_CSS_PAINT_ORDER_STROKE &&
+              style->paint_order.layer[2] == SP_CSS_PAINT_ORDER_FILL) ) {
+            stroke_over_fill = false;
+        }
+
+        bool have_path = false;
+        if (fill && stroke_over_fill) {
             _setFillStyle(style, Geom::OptRect());
             if (_is_texttopath) {
                 _showGlyphs(_cr, font, glyphtext, true);
-                have_path = true;
-                if (stroke) cairo_fill_preserve(_cr);
-                else cairo_fill(_cr);
+                if (stroke) {
+                    cairo_fill_preserve(_cr);
+                    have_path = true;
+                } else {
+                    cairo_fill(_cr);
+                }
             } else {
                 _showGlyphs(_cr, font, glyphtext, false);
             }
         }
+
         if (stroke) {
             _setStrokeStyle(style, Geom::OptRect());
-            if (!have_path) _showGlyphs(_cr, font, glyphtext, true);
-            cairo_stroke(_cr);
+            if (!have_path) {
+                _showGlyphs(_cr, font, glyphtext, true);
+            }
+            if (fill && _is_texttopath && !stroke_over_fill) {
+                cairo_stroke_preserve(_cr);
+                have_path = true;
+            } else {
+                cairo_stroke(_cr);
+            }
         }
+
+        if (fill && !stroke_over_fill) {
+            _setFillStyle(style, Geom::OptRect());
+            if (_is_texttopath) {
+                if (!have_path) {
+                    // Could happen if both 'stroke' and 'stroke_over_fill' are false
+                    _showGlyphs(_cr, font, glyphtext, true);
+                }
+                cairo_fill(_cr);
+            } else {
+                _showGlyphs(_cr, font, glyphtext, false);
+            }
+        }
+            
     }
 
     cairo_restore(_cr);

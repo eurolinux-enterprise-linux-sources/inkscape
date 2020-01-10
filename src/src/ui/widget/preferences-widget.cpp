@@ -14,14 +14,6 @@
 # include <config.h>
 #endif
 
-#ifdef WIN32
-#include <windows.h>
-#endif
-
-#if GLIBMM_DISABLE_DEPRECATED && HAVE_GLIBMM_THREADS_H
-#include <glibmm/threads.h>
-#endif
-
 #include <gtkmm/box.h>
 #include <gtkmm/frame.h>
 #include <gtkmm/alignment.h>
@@ -38,7 +30,7 @@
 #include "desktop.h"
 #include "enums.h"
 #include "inkscape.h"
-#include "desktop-handles.h"
+
 #include "message-stack.h"
 #include "style.h"
 #include "selection.h"
@@ -48,6 +40,10 @@
 
 #include <glibmm/convert.h>
 #include <glibmm/i18n.h>
+
+#ifdef WIN32
+#include <windows.h>
+#endif
 
 using namespace Inkscape::UI::Widget;
 
@@ -209,6 +205,7 @@ void PrefCheckButton::init(Glib::ustring const &label, Glib::ustring const &pref
 
 void PrefCheckButton::on_toggled()
 {
+    this->changed_signal.emit(this->get_active());
     if (this->get_visible()) //only take action if the user toggled it
     {
         Inkscape::Preferences *prefs = Inkscape::Preferences::get();
@@ -471,12 +468,8 @@ ZoomCorrRuler::on_draw(const Cairo::RefPtr<Cairo::Context>& cr) {
     Glib::ustring abbr = prefs->getString("/options/zoomcorrection/unit");
     if (abbr == "cm") {
         draw_marks(cr, 0.1, 10);
-    } else if (abbr == "ft") {
-        draw_marks(cr, 1/12.0, 12);
     } else if (abbr == "in") {
         draw_marks(cr, 0.25, 4);
-    } else if (abbr == "m") {
-        draw_marks(cr, 1/10.0, 10);
     } else if (abbr == "mm") {
         draw_marks(cr, 10, 10);
     } else if (abbr == "pc") {

@@ -9,25 +9,23 @@
  * Released under GNU GPL, read the file 'COPYING' for more information
  */
 
-#include "display/cairo-utils.h"
 #include "display/drawing.h"
 #include "display/drawing-context.h"
 #include "display/drawing-item.h"
 #include "display/drawing-group.h"
 #include "style.h"
 
+#include "display/cairo-utils.h"
+
 namespace Inkscape {
 
 DrawingGroup::DrawingGroup(Drawing &drawing)
     : DrawingItem(drawing)
-    , _style(NULL)
     , _child_transform(NULL)
 {}
 
 DrawingGroup::~DrawingGroup()
 {
-    if (_style)
-        sp_style_unref(_style);
     delete _child_transform; // delete NULL; is safe
 }
 
@@ -39,12 +37,6 @@ void
 DrawingGroup::setPickChildren(bool p)
 {
     _pick_children = p;
-}
-
-void
-DrawingGroup::setStyle(SPStyle *style)
-{
-    _setStyleCommon(_style, style);
 }
 
 /**

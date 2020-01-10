@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 '''
 # standard library
 import copy
@@ -33,8 +33,7 @@ import simplestyle
 import render_alphabetsoup_config
 import bezmisc
 import simplepath
-
-inkex.localize()
+import simpletransform
 
 syntax   = render_alphabetsoup_config.syntax
 alphabet = render_alphabetsoup_config.alphabet
@@ -532,6 +531,12 @@ class AlphabetSoup(inkex.Effect):
 
 			new.set('d', simplepath.formatPath(image))
 			self.current_layer.append(new)
+
+			# compensate preserved transforms of parent layer
+			if self.current_layer.getparent() is not None:
+				mat = simpletransform.composeParents(self.current_layer, [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+				simpletransform.applyTransformToNode(simpletransform.invertTransform(mat), new)
+
 
 if __name__ == '__main__':
     e = AlphabetSoup()

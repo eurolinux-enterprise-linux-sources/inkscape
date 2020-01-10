@@ -21,6 +21,8 @@
 #include "guide-snapper.h"
 #include "object-snapper.h"
 #include "snap-preferences.h"
+//#include "pure-transform.h"
+
 
 // Guides
 enum SPGuideDragType { // used both here and in desktop-events.cpp
@@ -32,6 +34,11 @@ enum SPGuideDragType { // used both here and in desktop-events.cpp
 
 class SPGuide;
 class SPNamedView;
+
+namespace Inkscape {
+    class PureTransform;
+}
+
 
 /**
  * Class to coordinate snapping operations.
@@ -135,7 +142,7 @@ public:
                               std::vector<Inkscape::SnapCandidatePoint> *unselected_nodes = NULL,
                               SPGuide *guide_to_ignore = NULL);
 
-    void unSetup() {_rotation_center_source_items = NULL;
+    void unSetup() {_rotation_center_source_items.clear();
                     _guide_to_ignore = NULL;
                     _desktop = NULL;
                     _unselected_nodes = NULL;}
@@ -144,8 +151,8 @@ public:
     // of this rotation center; this reference is used to make sure that we do not snap a rotation
     // center to itself
     // NOTE: Must be called after calling setup(), not before!
-    void setRotationCenterSource(GSList *items) {_rotation_center_source_items = items;}
-    GSList const *getRotationCenterSource() {return _rotation_center_source_items;}
+    void setRotationCenterSource(const std::vector<SPItem*> &items) {_rotation_center_source_items = items;}
+    const std::vector<SPItem*> &getRotationCenterSource() {return _rotation_center_source_items;}
 
     // freeSnapReturnByRef() is preferred over freeSnap(), because it only returns a
     // point if snapping has occurred (by overwriting p); otherwise p is untouched
@@ -191,12 +198,15 @@ public:
      *
      * @param p Source point to be snapped.
      * @param bbox_to_snap Bounding box hulling the set of points, all from the same selection and having the same transformation.
+     * @param to_path_only Only snap to points on a path, such as path intersections with itself or with grids/guides. This is used for
+     *        example when adding nodes to a path. We will not snap for example to grid intersections
      * @return An instance of the SnappedPoint class, which holds data on the snap source, snap target, and various metrics.
      */
     Inkscape::SnappedPoint freeSnap(Inkscape::SnapCandidatePoint const &p,
-                                    Geom::OptRect const &bbox_to_snap = Geom::OptRect() ) const;
+                                    Geom::OptRect const &bbox_to_snap = Geom::OptRect(),
+                                    bool to_path_only = false) const;
 
-    void preSnap(Inkscape::SnapCandidatePoint const &p);
+    void preSnap(Inkscape::SnapCandidatePoint const &p, bool to_path_only = false);
 
     /**
      * Snap to the closest multiple of a grid pitch.
@@ -323,110 +333,6 @@ public:
      */
     void guideConstrainedSnap(Geom::Point &p, SPGuide const &guideline) const;
 
-    /**
-     * Apply a translation to a set of points and try to snap freely in 2 degrees-of-freedom.
-     *
-     * @param p Collection of points to snap (snap sources), at their untransformed position, all points undergoing the same transformation. Paired with an identifier of the type of the snap source.
-     * @param pointer Location of the mouse pointer at the time dragging started (i.e. when the selection was still untransformed).
-     * @param tr Proposed translation; the final translation can only be calculated after snapping has occurred.
-     * @return An instance of the SnappedPoint class, which holds data on the snap source, snap target, and various metrics.
-     */
-    Inkscape::SnappedPoint freeSnapTranslate(std::vector<Inkscape::SnapCandidatePoint> const &p,
-                                               Geom::Point const &pointer,
-                                               Geom::Point const &tr);
-
-    /**
-     * Apply a translation to a set of points and try to snap along a constraint.
-     *
-     * @param p Collection of points to snap (snap sources), at their untransformed position, all points undergoing the same transformation. Paired with an identifier of the type of the snap source.
-     * @param pointer Location of the mouse pointer at the time dragging started (i.e. when the selection was still untransformed).
-     * @param constraint The direction or line along which snapping must occur.
-     * @param tr Proposed translation; the final translation can only be calculated after snapping has occurred.
-     * @return An instance of the SnappedPoint class, which holds data on the snap source, snap target, and various metrics.
-     */
-    Inkscape::SnappedPoint constrainedSnapTranslate(std::vector<Inkscape::SnapCandidatePoint> const &p,
-                                                      Geom::Point const &pointer,
-                                                      Inkscape::Snapper::SnapConstraint const &constraint,
-                                                      Geom::Point const &tr);
-
-    /**
-     * Apply a scaling to a set of points and try to snap freely in 2 degrees-of-freedom.
-     *
-     * @param p Collection of points to snap (snap sources), at their untransformed position, all points undergoing the same transformation. Paired with an identifier of the type of the snap source.
-     * @param pointer Location of the mouse pointer at the time dragging started (i.e. when the selection was still untransformed).
-     * @param s Proposed scaling; the final scaling can only be calculated after snapping has occurred.
-     * @param o Origin of the scaling.
-     * @return An instance of the SnappedPoint class, which holds data on the snap source, snap target, and various metrics.
-     */
-    Inkscape::SnappedPoint freeSnapScale(std::vector<Inkscape::SnapCandidatePoint> const &p,
-                                         Geom::Point const &pointer,
-                                         Geom::Scale const &s,
-                                         Geom::Point const &o);
-
-    /**
-     * Apply a scaling to a set of points and snap such that the aspect ratio of the selection is preserved.
-     *
-     * @param p Collection of points to snap (snap sources), at their untransformed position, all points undergoing the same transformation. Paired with an identifier of the type of the snap source.
-     * @param pointer Location of the mouse pointer at the time dragging started (i.e. when the selection was still untransformed).
-     * @param s Proposed scaling; the final scaling can only be calculated after snapping has occurred.
-     * @param o Origin of the scaling.
-     * @return An instance of the SnappedPoint class, which holds data on the snap source, snap target, and various metrics.
-     */
-    Inkscape::SnappedPoint constrainedSnapScale(std::vector<Inkscape::SnapCandidatePoint> const &p,
-                                                Geom::Point const &pointer,
-                                                Geom::Scale const &s,
-                                                Geom::Point const &o);
-
-    /**
-     * Apply a stretch to a set of points and snap such that the direction of the stretch is preserved.
-     *
-     * @param p Collection of points to snap (snap sources), at their untransformed position, all points undergoing the same transformation. Paired with an identifier of the type of the snap source.
-     * @param pointer Location of the mouse pointer at the time dragging started (i.e. when the selection was still untransformed).
-     * @param s Proposed stretch; the final stretch can only be calculated after snapping has occurred.
-     * @param o Origin of the stretching.
-     * @param d Dimension in which to apply proposed stretch.
-     * @param u true if the stretch should be uniform (i.e. to be applied equally in both dimensions).
-     * @return An instance of the SnappedPoint class, which holds data on the snap source, snap target, and various metrics.
-     */
-    Inkscape::SnappedPoint constrainedSnapStretch(std::vector<Inkscape::SnapCandidatePoint> const &p,
-                                                  Geom::Point const &pointer,
-                                                  Geom::Coord const &s,
-                                                  Geom::Point const &o,
-                                                  Geom::Dim2 d,
-                                                  bool uniform);
-
-    /**
-     * Apply a skew to a set of points and snap such that the direction of the skew is preserved.
-     *
-     * @param p Collection of points to snap (snap sources), at their untransformed position, all points undergoing the same transformation. Paired with an identifier of the type of the snap source.
-     * @param pointer Location of the mouse pointer at the time dragging started (i.e. when the selection was still untransformed).
-     * @param constraint The direction or line along which snapping must occur.
-     * @param s Proposed skew; the final skew can only be calculated after snapping has occurred.
-     * @param o Origin of the proposed skew.
-     * @param d Dimension in which to apply proposed skew.
-     * @return An instance of the SnappedPoint class, which holds data on the snap source, snap target, and various metrics.
-     */
-    Inkscape::SnappedPoint constrainedSnapSkew(std::vector<Inkscape::SnapCandidatePoint> const &p,
-                                               Geom::Point const &pointer,
-                                               Inkscape::Snapper::SnapConstraint const &constraint,
-                                               Geom::Point const &s, // s[0] = skew factor, s[1] = scale factor
-                                               Geom::Point const &o,
-                                               Geom::Dim2 d);
-
-    /**
-     * Apply a rotation to a set of points and snap, without scaling.
-     *
-     * @param p Collection of points to snap (snap sources), at their untransformed position, all points undergoing the same transformation. Paired with an identifier of the type of the snap source.
-     * @param pointer Location of the mouse pointer at the time dragging started (i.e. when the selection was still untransformed).
-     * @param angle Proposed rotation (in radians); the final rotation can only be calculated after snapping has occurred.
-     * @param o Origin of the rotation.
-     * @return An instance of the SnappedPoint class, which holds data on the snap source, snap target, and various metrics.
-     */
-    Inkscape::SnappedPoint constrainedSnapRotate(std::vector<Inkscape::SnapCandidatePoint> const &p,
-                                                    Geom::Point const &pointer,
-                                                    Geom::Coord const &angle,
-                                                    Geom::Point const &o);
-
     Inkscape::GuideSnapper guide;      ///< guide snapper
     Inkscape::ObjectSnapper object;    ///< snapper to other objects
     Inkscape::SnapPreferences snapprefs;
@@ -472,9 +378,11 @@ public:
      * @param isr A structure holding all snap targets that have been found so far.
      * @param constrained True if the snap is constrained, e.g. for stretching or for purely horizontal translation.
      * @param allowOffScreen If true, then snapping to points which are off the screen is allowed (needed for example when pasting to the grid).
+     * @param to_path_only Only snap to points on a path, such as path intersections with itself or with grids/guides. This is used for
+     *        example when adding nodes to a path. We will not snap for example to grid intersections
      * @return An instance of the SnappedPoint class, which holds data on the snap source, snap target, and various metrics.
      */
-    Inkscape::SnappedPoint findBestSnap(Inkscape::SnapCandidatePoint const &p, IntermSnapResults const &isr, bool constrained, bool allowOffScreen = false) const;
+    Inkscape::SnappedPoint findBestSnap(Inkscape::SnapCandidatePoint const &p, IntermSnapResults const &isr, bool constrained, bool allowOffScreen = false, bool to_paths_only = false) const;
 
     /**
      * Mark the location of the snap source (not the snap target!) on the canvas by drawing a symbol.
@@ -483,17 +391,6 @@ public:
      * @param p The transformed position of the source point, paired with an identifier of the type of the snap source.
      */
     void displaySnapsource(Inkscape::SnapCandidatePoint const &p) const;
-
-protected:
-    SPNamedView const *_named_view;
-
-private:
-    std::vector<SPItem const *> _items_to_ignore; ///< Items that should not be snapped to, for example the items that are currently being dragged. Set using the setup() method
-    GSList *_rotation_center_source_items; // to avoid snapping a rotation center to itself
-    SPGuide *_guide_to_ignore; ///< A guide that should not be snapped to, e.g. the guide that is currently being dragged
-    SPDesktop const *_desktop;
-    bool _snapindicator; ///< When true, an indicator will be drawn at the position that was being snapped to
-    std::vector<Inkscape::SnapCandidatePoint> *_unselected_nodes; ///< Nodes of the path that is currently being edited and which have not been selected and which will therefore be stationary. Only these nodes will be considered for snapping to. Of each unselected node both the position (Geom::Point) and the type (Inkscape::SnapTargetType) will be stored
 
     /**
      * Method for snapping sets of points while they are being transformed.
@@ -512,42 +409,22 @@ private:
      *
      * @param points Collection of points to snap (snap sources), at their untransformed position, all points undergoing the same transformation. Paired with an identifier of the type of the snap source.
      * @param pointer Location of the mouse pointer at the time dragging started (i.e. when the selection was still untransformed).
-     * @param constrained true if the snap is constrained, e.g. for stretching or for purely horizontal translation.
-     * @param constraint The direction or line along which snapping must occur, if 'constrained' is true; otherwise undefined.
-     * @param transformation_type Type of transformation to apply to points before trying to snap them.
-     * @param transformation Description of the transformation; details depend on the type.
-     * @param origin Origin of the transformation, if applicable.
-     * @param dim Dimension to which the transformation applies, if applicable.
-     * @param uniform true if the transformation should be uniform; only applicable for stretching and scaling.
-     * @return An instance of the SnappedPoint class, which holds data on the snap source, snap target, and various metrics.
+     * @param transform Describes the type of transformation, it's parameters, and any additional constraints
      */
-    Inkscape::SnappedPoint _snapTransformed(std::vector<Inkscape::SnapCandidatePoint> const &points,
+    void snapTransformed(std::vector<Inkscape::SnapCandidatePoint> const &points,
                                             Geom::Point const &pointer,
-                                            bool constrained,
-                                            Inkscape::Snapper::SnapConstraint const &constraint,
-                                            Transformation transformation_type,
-                                            Geom::Point const &transformation,
-                                            Geom::Point const &origin,
-                                            Geom::Dim2 dim,
-                                            bool uniform);
+                                            Inkscape::PureTransform &transform);
 
-    /**
-     * Takes an untransformed point, applies the given transformation, and returns the transformed point. Eliminates lots of duplicated code.
-     *
-     * @param p The untransformed position of the point, paired with an identifier of the type of the snap source.
-     * @param transformation_type Type of transformation to apply.
-     * @param transformation Mathematical description of the transformation; details depend on the type.
-     * @param origin Origin of the transformation, if applicable.
-     * @param dim Dimension to which the transformation applies, if applicable.
-     * @param uniform true if the transformation should be uniform; only applicable for stretching and scaling.
-     * @return The position of the point after transformation.
-     */
-    Geom::Point _transformPoint(Inkscape::SnapCandidatePoint const &p,
-                                            Transformation const transformation_type,
-                                            Geom::Point const &transformation,
-                                            Geom::Point const &origin,
-                                            Geom::Dim2 const dim,
-                                            bool const uniform) const;
+protected:
+    SPNamedView const *_named_view;
+
+private:
+    std::vector<SPItem const *> _items_to_ignore; ///< Items that should not be snapped to, for example the items that are currently being dragged. Set using the setup() method
+    std::vector<SPItem*> _rotation_center_source_items; // to avoid snapping a rotation center to itself
+    SPGuide *_guide_to_ignore; ///< A guide that should not be snapped to, e.g. the guide that is currently being dragged
+    SPDesktop const *_desktop;
+    bool _snapindicator; ///< When true, an indicator will be drawn at the position that was being snapped to
+    std::vector<Inkscape::SnapCandidatePoint> *_unselected_nodes; ///< Nodes of the path that is currently being edited and which have not been selected and which will therefore be stationary. Only these nodes will be considered for snapping to. Of each unselected node both the position (Geom::Point) and the type (Inkscape::SnapTargetType) will be stored
 
 };
 

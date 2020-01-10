@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <libuemf/symbol_convert.h>
 
+#include "document.h"
 #include "sp-root.h" // even though it is included indirectly by wmf-inout.h
 #include "sp-path.h"
 #include "print.h"
@@ -94,7 +95,6 @@ Wmf::print_document_to_file(SPDocument *doc, const gchar *filename)
     SPPrintContext context;
     const gchar *oldconst;
     gchar *oldoutput;
-    unsigned int ret;
 
     doc->ensureUpToDate();
 
@@ -113,13 +113,12 @@ Wmf::print_document_to_file(SPDocument *doc, const gchar *filename)
     mod->root = mod->base->invoke_show(drawing, mod->dkey, SP_ITEM_SHOW_DISPLAY);
     drawing.setRoot(mod->root);
     /* Print document */
-    ret = mod->begin(doc);
-    if (ret) {
+    if (mod->begin(doc)) {
         g_free(oldoutput);
         throw Inkscape::Extension::Output::save_failed();
     }
     mod->base->invoke_print(&context);
-    ret = mod->finish();
+    mod->finish();
     /* Release arena */
     mod->base->invoke_hide(mod->dkey);
     mod->base = NULL;
@@ -162,7 +161,15 @@ Wmf::save(Inkscape::Extension::Output *mod, SPDocument *doc, gchar const *filena
     ext->set_param_bool("FixPPTPatternAsHatch",new_FixPPTPatternAsHatch);
     ext->set_param_bool("textToPath", new_val);
 
+    // ensure usage of dot as decimal separator in scanf/printf functions (indepentendly of current locale)
+    char *oldlocale = g_strdup(setlocale(LC_NUMERIC, NULL));
+    setlocale(LC_NUMERIC, "C");
+
     print_document_to_file(doc, filename);
+
+    // restore decimal separator used in scanf/printf functions to initial value
+    setlocale(LC_NUMERIC, oldlocale);
+    g_free(oldlocale);
 
     return;
 }
@@ -175,7 +182,7 @@ double Wmf::current_scale(PWMF_CALLBACK_DATA /*d*/){
 
 /* WMF has no worldTransform, so this always returns an Identity rotation matrix, but the offsets may have values.*/
 std::string Wmf::current_matrix(PWMF_CALLBACK_DATA d, double x, double y, int useoffset){
-    std::stringstream cxform;
+    SVGOStringStream cxform;
     double scale = current_scale(d);
     cxform << "\"matrix(";
     cxform << 1.0/scale;   cxform << ",";
@@ -450,7 +457,8 @@ uint32_t Wmf::add_dib_image(PWMF_CALLBACK_DATA d, const char *dib, uint32_t iUsa
     char            *rgba_px = NULL;     // RGBA pixels
     const char      *px      = NULL;     // DIB pixels
     const U_RGBQUAD *ct      = NULL;     // DIB color table
-    int32_t  width, height, colortype, numCt, invert; // if needed these values will be set by wget_DIB_params
+    uint32_t numCt;
+    int32_t  width, height, colortype, invert; // if needed these values will be set by wget_DIB_params
     if(iUsage == U_DIB_RGB_COLORS){
         // next call returns pointers and values, but allocates no memory
         dibparams = wget_DIB_params(dib, &px, &ct, &numCt, &width, &height, &colortype, &invert);
@@ -947,7 +955,7 @@ Wmf::pix_to_abs_size(PWMF_CALLBACK_DATA d, double px)
 /* returns "x,y" (without the quotes) in inkscape coordinates for a pair of WMF x,y coordinates
 */
 std::string Wmf::pix_to_xy(PWMF_CALLBACK_DATA d, double x, double y){
-    std::stringstream cxform;
+    SVGOStringStream cxform;
     cxform << pix_to_x_point(d,x,y);
     cxform << ",";
     cxform << pix_to_y_point(d,x,y);
@@ -1307,6 +1315,9 @@ void Wmf::common_dib_to_image(PWMF_CALLBACK_DATA d, const char *dib,
     int  dibparams = U_BI_UNKNOWN;  // type of image not yet determined
 
     tmp_image << "\n\t <image\n";
+    if (d->dc[d->level].clip_id){
+        tmp_image << "\tclip-path=\"url(#clipWmfPath" << d->dc[d->level].clip_id << ")\"\n";
+    }
     tmp_image << " y=\"" << dy << "\"\n x=\"" << dx <<"\"\n ";
 
     MEMPNG mempng; // PNG in memory comes back in this
@@ -1316,7 +1327,8 @@ void Wmf::common_dib_to_image(PWMF_CALLBACK_DATA d, const char *dib,
     char            *sub_px  = NULL;        // RGBA pixels, subarray
     const char      *px      = NULL;        // DIB pixels
     const U_RGBQUAD *ct      = NULL;        // color table
-    int32_t width, height, colortype, numCt, invert;  // if needed these values will be set in wget_DIB_params
+    uint32_t numCt;
+    int32_t width, height, colortype, invert;  // if needed these values will be set in wget_DIB_params
     if(iUsage == U_DIB_RGB_COLORS){
         // next call returns pointers and values, but allocates no memory
         dibparams = wget_DIB_params(dib, &px, &ct, &numCt, &width, &height, &colortype, &invert);
@@ -1404,6 +1416,9 @@ void Wmf::common_bm16_to_image(PWMF_CALLBACK_DATA d, U_BITMAP16 Bm16, const char
     SVGOStringStream tmp_image;
 
     tmp_image << "\n\t <image\n";
+    if (d->dc[d->level].clip_id){
+        tmp_image << "\tclip-path=\"url(#clipWmfPath" << d->dc[d->level].clip_id << ")\"\n";
+    }
     tmp_image << " y=\"" << dy << "\"\n x=\"" << dx <<"\"\n ";
 
     MEMPNG mempng; // PNG in memory comes back in this
@@ -1490,6 +1505,7 @@ int Wmf::myMetaFileProc(const char *contents, unsigned int length, PWMF_CALLBACK
     uint32_t         off=0;
     uint32_t         wmr_mask;
     int              OK =1;
+    int              file_status=1;
     TCHUNK_SPECS     tsp;
     uint8_t          iType;
     int              nSize;   // size of the current record, in bytes, or an error value if <=0
@@ -1519,6 +1535,17 @@ int Wmf::myMetaFileProc(const char *contents, unsigned int length, PWMF_CALLBACK
 
     uint16_t         tbkMode  = U_TRANSPARENT;          // holds proposed change to bkMode, if text is involved saving these to the DC must wait until the text is written
     U_COLORREF       tbkColor = U_RGB(255, 255, 255);   // holds proposed change to bkColor
+
+    // code for end user debugging
+    int  wDbgRecord=0;
+    int  wDbgComment=0;
+    int  wDbgFinal=0;
+    char const* wDbgString = getenv( "INKSCAPE_DBG_WMF" );
+    if ( wDbgString != NULL ) {
+        if(strstr(wDbgString,"RECORD")){  wDbgRecord  = 1; }
+        if(strstr(wDbgString,"COMMENT")){ wDbgComment = 1; }
+        if(strstr(wDbgString,"FINAL")){   wDbgFinal   = 1; }
+    }
 
     /* initialize the tsp for text reassembly */
     tsp.string     = NULL;
@@ -1555,7 +1582,9 @@ int Wmf::myMetaFileProc(const char *contents, unsigned int length, PWMF_CALLBACK
         U_WMRHEADER Header;
         off = 0;
         nSize = wmfheader_get(contents, blimit, &Placeable, &Header);
-        if(!nSize)return(0);
+        if (!nSize) {
+            return(0);
+        }
         if(!Header.nObjects){  Header.nObjects = 256; }// there _may_ be WMF files with no objects, more likely it is corrupt.  Try to use it anyway.
         d->n_obj     = Header.nObjects;
         d->wmf_obj   = new WMF_OBJECT[d->n_obj];
@@ -1595,7 +1624,10 @@ int Wmf::myMetaFileProc(const char *contents, unsigned int length, PWMF_CALLBACK
                     else {
                         off += nSize;
                     }
-                  }
+                }
+                else {
+                    return(0);
+                }
             }
             off=0;
             nSize = hold_nSize;
@@ -1658,27 +1690,35 @@ int Wmf::myMetaFileProc(const char *contents, unsigned int length, PWMF_CALLBACK
 
 
     while(OK){
-    if(off>=length)return(0);  //normally should exit from while after WMREOF sets OK to false.
+    if (off>=length) {
+        return(0);  //normally should exit from while after WMREOF sets OK to false.
+    }
     contents += nSize;         // pointer to the start of the next record
     off      += nSize;         // offset from beginning of buffer to the start of the next record
 
-    SVGOStringStream tmp_path;
-    SVGOStringStream tmp_str;
-
-    /*  Check that the current record size is OK, abort if not.
-        Pointer math might wrap, so check both sides of the range.
-        Some of the records will reset this with the same value,others will not
-        return a value at this time. */
+    /*  Currently this is a weaker check than for EMF, it only checks the size of the constant part
+        of the record */
     nSize = U_WMRRECSAFE_get(contents, blimit);
-    if(!nSize)break;
+    if(!nSize) {
+        file_status = 0;
+        break;
+    }
 
     iType     = *(uint8_t *)(contents + offsetof(U_METARECORD, iType )  );
 
-//  Uncomment the following to track down toxic records
-// std::cout << "record type: " << (int) iType << " name " << U_wmr_names(iType) << " length: " << nSize << " offset: " << off <<std::endl;
-
     wmr_mask = U_wmr_properties(iType);
-    if(wmr_mask == U_WMR_INVALID){ throw "Inkscape fatal programming error at U_wmr_properties"; }
+    if (wmr_mask == U_WMR_INVALID) { 
+        file_status = 0;
+        break;
+    }
+//  At run time define environment variable INKSCAPE_DBG_WMF to include string RECORD.
+//  Users may employ this to track down toxic records
+    if(wDbgRecord){
+       std::cout << "record type: " << iType  << " name " << U_wmr_names(iType) << " length: " << nSize << " offset: " << off <<std::endl;
+    }
+
+    SVGOStringStream tmp_path;
+    SVGOStringStream tmp_str;
 
 /* Uncomment the following to track down text problems */
 //std::cout << "tri->dirty:"<< d->tri->dirty << " wmr_mask: " << std::hex << wmr_mask << std::dec << std::endl;
@@ -1730,11 +1770,20 @@ std::cout << "BEFORE DRAW"
  << " test0 " << ( d->mask & U_DRAW_VISIBLE)
  << " test1 " << ( d->mask & U_DRAW_FORCE)
  << " test2 " << (wmr_mask & U_DRAW_ALTERS)
+ << " test2.5 " << ((d->mask & U_DRAW_NOFILL) != (wmr_mask & U_DRAW_NOFILL)  )
  << " test3 " << (wmr_mask & U_DRAW_VISIBLE)
  << " test4 " << !(d->mask & U_DRAW_ONLYTO)
  << " test5 " << ((d->mask & U_DRAW_ONLYTO) && !(wmr_mask & U_DRAW_ONLYTO)  )
  << std::endl;
 */
+    /* spurious moveto records should not affect the drawing.  However, they set the NOFILL
+       bit and that messes up the logic about when to emit a path.  So prune out any
+       stray moveto records.  That is those which were never followed by a lineto.
+    */
+    if((d->mask & U_DRAW_NOFILL) && !(d->mask & U_DRAW_VISIBLE) &&
+       !(wmr_mask & U_DRAW_ONLYTO) && (wmr_mask & U_DRAW_VISIBLE)){
+       d->mask ^= U_DRAW_NOFILL;
+    }
 
     if(
         (wmr_mask != U_WMR_INVALID)                             &&              // next record is valid type
@@ -1742,6 +1791,7 @@ std::cout << "BEFORE DRAW"
         (
             (d->mask & U_DRAW_FORCE)                            ||              // This draw is forced by STROKE/FILL/STROKEANDFILL PATH
             (wmr_mask & U_DRAW_ALTERS)                          ||              // Next record would alter the drawing environment in some way
+            ((d->mask & U_DRAW_NOFILL) != (wmr_mask & U_DRAW_NOFILL)) ||        // Fill<->!Fill requires a draw between
             (  (wmr_mask & U_DRAW_VISIBLE)                      &&              // Next record is visible...
                 (
                     ( !(d->mask & U_DRAW_ONLYTO) )              ||              //   Non *TO records cannot be followed by any Visible
@@ -1751,13 +1801,15 @@ std::cout << "BEFORE DRAW"
         )
     ){
 //  std::cout << "PATH DRAW at TOP <<+++++++++++++++++++++++++++++++++++++" << std::endl;
-        d->outsvg += "   <path ";    // this is the ONLY place <path should be used!!!!
-        output_style(d);
-        d->outsvg += "\n\t";
-        d->outsvg += "\n\td=\"";      // this is the ONLY place d=" should be used!!!!
-        d->outsvg += d->path;
-        d->outsvg += " \" /> \n";
-        d->path = ""; //reset the path
+        if(!(d->path.empty())){
+            d->outsvg += "   <path ";    // this is the ONLY place <path should be used!!!!
+            output_style(d);
+            d->outsvg += "\n\t";
+            d->outsvg += "\n\td=\"";      // this is the ONLY place d=" should be used!!!!
+            d->outsvg += d->path;
+            d->outsvg += " \" /> \n";
+            d->path = ""; //reset the path
+        }
         // reset the flags
         d->mask = 0;
         d->drawtype = 0;
@@ -2599,9 +2651,9 @@ std::cout << "BEFORE DRAW"
                 if(status==-1){ // change of escapement, emit what we have and reset
                     TR_layout_analyze(d->tri);
                     if (d->dc[d->level].clip_id){
-                       SVGOStringStream tmp_clip;
-                       tmp_clip << "\n<g\n\tclip-path=\"url(#clipWmfPath" << d->dc[d->level].clip_id << ")\"\n>";
-                       d->outsvg += tmp_clip.str().c_str();
+                        SVGOStringStream tmp_clip;
+                        tmp_clip << "\n<g\n\tclip-path=\"url(#clipWmfPath" << d->dc[d->level].clip_id << ")\"\n>";
+                        d->outsvg += tmp_clip.str().c_str();
                     }
                     TR_layout_2_svg(d->tri);
                     ts << d->tri->out;
@@ -2609,7 +2661,7 @@ std::cout << "BEFORE DRAW"
                     d->tri = trinfo_clear(d->tri);
                     (void) trinfo_load_textrec(d->tri, &tsp, tsp.ori,TR_EMFBOT); // ignore return status, it must work
                     if (d->dc[d->level].clip_id){
-                       d->outsvg += "\n</g>\n";
+                        d->outsvg += "\n</g>\n";
                     }        
                 }
 
@@ -3014,17 +3066,26 @@ std::cout << "BEFORE DRAW"
             dbg_str << "<!-- U_WMR_??? -->\n";
             break;
     }  //end of switch
-// When testing, uncomment the following to place a comment for each processed WMR record in the SVG
-//    d->outsvg += dbg_str.str().c_str();
+//  At run time define environment variable INKSCAPE_DBG_WMF to include string COMMENT.
+//  Users may employ this to to place a comment for each processed WMR record in the SVG
+    if(wDbgComment){
+       d->outsvg += dbg_str.str().c_str();
+    }
     d->path   += tmp_path.str().c_str();
-    if(!nSize){ OK=0; std::cout << "nSize == 0, oops!!!" << std::endl; }     // There was some problem with this record, it is not safe to continue
+    if(!nSize){ // There was some problem with the processing of this record, it is not safe to continue
+        file_status = 0;
+        break;
+    } 
 
-    }  //end of while
-// When testing, uncomment the following to show the final SVG derived from the WMF
-// std::cout << d->outsvg << std::endl;
+    }  //end of while on OK
+//  At run time define environment variable INKSCAPE_DBG_WMF to include string FINAL
+//  Users may employ this to to show the final SVG derived from the WMF
+    if(wDbgFinal){
+       std::cout << d->outsvg << std::endl;
+    }
     (void) U_wmr_properties(U_WMR_INVALID);  // force the release of the lookup table memory, returned value is irrelevant
 
-    return 1;
+    return(file_status);
 }
 
 void Wmf::free_wmf_strings(WMF_STRINGS name){
@@ -3040,7 +3101,18 @@ SPDocument *
 Wmf::open( Inkscape::Extension::Input * /*mod*/, const gchar *uri )
 {
 
+    if (uri == NULL) {
+        return NULL;
+    }
+
+    // ensure usage of dot as decimal separator in scanf/printf functions (indepentendly of current locale)
+    char *oldlocale = g_strdup(setlocale(LC_NUMERIC, NULL));
+    setlocale(LC_NUMERIC, "C");
+
     WMF_CALLBACK_DATA d;
+    
+    d.n_obj = 0;     //these might not be set otherwise if the input file is corrupt
+    d.wmf_obj=NULL; 
 
     // Default font, WMF spec says device can pick whatever it wants. 
     // WMF files that do not specify a  font are unlikely to look very good!
@@ -3055,12 +3127,12 @@ Wmf::open( Inkscape::Extension::Input * /*mod*/, const gchar *uri )
     d.dc[0].style.stroke_dasharray.set         = 0;
     d.dc[0].style.stroke_linecap.computed      = 2; // U_PS_ENDCAP_SQUARE;
     d.dc[0].style.stroke_linejoin.computed     = 0; // U_PS_JOIN_MITER;
-    d.dc[0].style.stroke_width.value           = 1.0; // will be reset to something reasonable once WMF draying size is known
+    d.dc[0].style.stroke_width.value           = 1.0; // will be reset to something reasonable once WMF drawing size is known
     d.dc[0].style.stroke.value.color.set( 0, 0, 0 );
+    d.dc[0].stroke_set                         = true;
 
-    if (uri == NULL) {
-        return NULL;
-    }
+    // Default brush is none - no fill. WMF files that do not specify a brush are unlikely to look very good!
+    d.dc[0].fill_set                           = false;
 
     d.dc[0].font_name = strdup("Arial"); // Default font, set only on lowest level, it copies up from there WMF spec says device can pick whatever it wants
 
@@ -3086,12 +3158,15 @@ Wmf::open( Inkscape::Extension::Input * /*mod*/, const gchar *uri )
       FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING  | FT_LOAD_NO_BITMAP,
       FT_KERNING_UNSCALED);
 
-    (void) myMetaFileProc(contents,length, &d);
+    int good = myMetaFileProc(contents,length, &d);
     free(contents);
 
 //    std::cout << "SVG Output: " << std::endl << d.outsvg << std::endl;
 
-    SPDocument *doc = SPDocument::createNewDocFromMem(d.outsvg.c_str(), strlen(d.outsvg.c_str()), TRUE);
+    SPDocument *doc = NULL;
+    if (good) {
+        doc = SPDocument::createNewDocFromMem(d.outsvg.c_str(), strlen(d.outsvg.c_str()), TRUE);
+    }
 
     free_wmf_strings(d.hatches);
     free_wmf_strings(d.images);
@@ -3112,7 +3187,11 @@ Wmf::open( Inkscape::Extension::Input * /*mod*/, const gchar *uri )
 
     d.tri = trinfo_release_except_FC(d.tri);
 
-    setViewBoxIfMissing(doc);
+    // in earlier versions no viewbox was generated and a call to setViewBoxIfMissing() was needed here.
+
+    // restore decimal separator used in scanf/printf functions to initial value
+    setlocale(LC_NUMERIC, oldlocale);
+    g_free(oldlocale);
 
     return doc;
 }
@@ -3140,15 +3219,15 @@ Wmf::init (void)
         "<inkscape-extension xmlns=\"" INKSCAPE_EXTENSION_URI "\">\n"
             "<name>" N_("WMF Output") "</name>\n"
             "<id>org.inkscape.output.wmf</id>\n"
-            "<param name=\"textToPath\" gui-text=\"" N_("Convert texts to paths") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"TnrToSymbol\" gui-text=\"" N_("Map Unicode to Symbol font") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"TnrToWingdings\" gui-text=\"" N_("Map Unicode to Wingdings") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"TnrToZapfDingbats\" gui-text=\"" N_("Map Unicode to Zapf Dingbats") "\" type=\"boolean\">true</param>\n"
-            "<param name=\"UsePUA\" gui-text=\"" N_("Use MS Unicode PUA (0xF020-0xF0FF) for converted characters") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"FixPPTCharPos\" gui-text=\"" N_("Compensate for PPT font bug") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"FixPPTDashLine\" gui-text=\"" N_("Convert dashed/dotted lines to single lines") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"FixPPTGrad2Polys\" gui-text=\"" N_("Convert gradients to colored polygon series") "\" type=\"boolean\">false</param>\n"
-            "<param name=\"FixPPTPatternAsHatch\" gui-text=\"" N_("Map all fill patterns to standard WMF hatches") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"textToPath\" _gui-text=\"" N_("Convert texts to paths") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"TnrToSymbol\" _gui-text=\"" N_("Map Unicode to Symbol font") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"TnrToWingdings\" _gui-text=\"" N_("Map Unicode to Wingdings") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"TnrToZapfDingbats\" _gui-text=\"" N_("Map Unicode to Zapf Dingbats") "\" type=\"boolean\">true</param>\n"
+            "<param name=\"UsePUA\" _gui-text=\"" N_("Use MS Unicode PUA (0xF020-0xF0FF) for converted characters") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"FixPPTCharPos\" _gui-text=\"" N_("Compensate for PPT font bug") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"FixPPTDashLine\" _gui-text=\"" N_("Convert dashed/dotted lines to single lines") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"FixPPTGrad2Polys\" _gui-text=\"" N_("Convert gradients to colored polygon series") "\" type=\"boolean\">false</param>\n"
+            "<param name=\"FixPPTPatternAsHatch\" _gui-text=\"" N_("Map all fill patterns to standard WMF hatches") "\" type=\"boolean\">false</param>\n"
             "<output>\n"
                 "<extension>.wmf</extension>\n"
                 "<mimetype>image/x-wmf</mimetype>\n"
